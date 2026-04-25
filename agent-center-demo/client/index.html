@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgentCenter - DevOps 智能中枢</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      height: 100vh;
+      overflow: hidden;
+    }
+    
+    #root { height: 100%; }
+    
+    .app-container {
+      display: flex;
+      height: 100%;
+    }
+    
+    .bubble-wall {
+      width: 300px;
+      background: #1e293b;
+      border-right: 1px solid #334155;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: #475569 #1e293b;
+    }
+    
+    .bubble-wall::-webkit-scrollbar { width: 6px; }
+    .bubble-wall::-webkit-scrollbar-track { background: #1e293b; }
+    .bubble-wall::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+    
+    .bubble-card {
+      background: #334155;
+      border-radius: 12px;
+      padding: 14px 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: 1px solid transparent;
+    }
+    
+    .bubble-card:hover { 
+      background: #475569; 
+      transform: translateY(-2px);
+      border-color: #64748b;
+    }
+    
+    .bubble-card-icon { font-size: 22px; margin-bottom: 6px; }
+    
+    .bubble-card-label { font-size: 12px; color: #94a3b8; margin-bottom: 2px; }
+    
+    .bubble-card-value { font-size: 26px; font-weight: 700; line-height: 1.2; }
+    
+    .bubble-card-sub { font-size: 11px; color: #64748b; margin-top: 4px; }
+    
+    .bubble-card.alert-active .bubble-card-value { color: #ef4444; }
+    .bubble-card.alert-ok .bubble-card-value { color: #22c55e; }
+    .bubble-card.test-failed .bubble-card-value { color: #ef4444; }
+    
+    .quick-commands {
+      margin-top: 8px;
+      padding-top: 16px;
+      border-top: 1px solid #334155;
+    }
+    
+    .quick-commands-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    
+    .quick-cmd-card {
+      background: #0f172a;
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      border: 1px solid #334155;
+    }
+    
+    .quick-cmd-card:hover {
+      background: #1e293b;
+      border-color: #3b82f6;
+    }
+    
+    .quick-cmd-icon { font-size: 16px; }
+    .quick-cmd-label { color: #cbd5e1; }
+    
+    .main-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .header {
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    
+    .header-logo { font-size: 28px; }
+    
+    .header-title { 
+      font-size: 20px; 
+      font-weight: 700;
+      background: linear-gradient(135deg, #60a5fa, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    
+    .header-status {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: #64748b;
+    }
+    
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #22c55e;
+      animation: pulse 2s infinite;
+    }
+    
+    .status-dot.disconnected { background: #ef4444; animation: none; }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    .chat-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    
+    .messages-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      scrollbar-width: thin;
+      scrollbar-color: #475569 #0f172a;
+    }
+    
+    .messages-area::-webkit-scrollbar { width: 8px; }
+    .messages-area::-webkit-scrollbar-track { background: #0f172a; }
+    .messages-area::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+    
+    .message {
+      max-width: 80%;
+      animation: fadeIn 0.3s ease;
+    }
+    
+    @keyframes fadeIn { 
+      from { opacity: 0; transform: translateY(10px); } 
+      to { opacity: 1; transform: translateY(0); } 
+    }
+    
+    .message-user { align-self: flex-end; }
+    .message-bot { align-self: flex-start; }
+    
+    .message-bubble {
+      padding: 12px 16px;
+      border-radius: 16px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      font-size: 14px;
+    }
+    
+    .message-user .message-bubble {
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      color: white;
+      border-bottom-right-radius: 4px;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
+    
+    .message-bot .message-bubble {
+      background: #334155;
+      color: #e2e8f0;
+      border-bottom-left-radius: 4px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
+    
+    .execution-card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 20px;
+      min-width: 420px;
+      max-width: 500px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    }
+    
+    .execution-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #334155;
+    }
+    
+    .execution-title { font-weight: 600; font-size: 16px; }
+    .execution-subtitle { font-size: 12px; color: #64748b; margin-left: auto; }
+    
+    .execution-steps { display: flex; flex-direction: column; gap: 10px; }
+    
+    .step-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      background: #0f172a;
+      border-radius: 8px;
+      font-size: 14px;
+      transition: all 0.3s;
+    }
+    
+    .step-icon { font-size: 18px; width: 24px; text-align: center; }
+    .step-label { flex: 1; }
+    .step-message { font-size: 12px; color: #94a3b8; margin-left: auto; }
+    
+    .step-pending { color: #64748b; }
+    .step-running { color: #f59e0b; background: rgba(245, 158, 11, 0.1); }
+    .step-completed { color: #22c55e; }
+    .step-failed { color: #ef4444; }
+    
+    .confirmation-card {
+      background: #1e293b;
+      border: 1px solid #3b82f6;
+      border-radius: 12px;
+      padding: 20px;
+      min-width: 400px;
+      max-width: 450px;
+      box-shadow: 0 4px 20px rgba(59, 130, 246, 0.2);
+    }
+    
+    .confirmation-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      color: #3b82f6;
+      font-weight: 600;
+      font-size: 15px;
+    }
+    
+    .confirmation-content {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 8px 16px;
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+    
+    .confirmation-label { color: #94a3b8; }
+    .confirmation-value { color: #e2e8f0; font-weight: 500; }
+    
+    .confirmation-actions { display: flex; gap: 12px; }
+    
+    .btn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      border: none;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .btn-primary {
+      background: #3b82f6;
+      color: white;
+    }
+    
+    .btn-primary:hover { background: #2563eb; transform: translateY(-1px); }
+    
+    .btn-secondary {
+      background: #334155;
+      color: #e2e8f0;
+    }
+    
+    .btn-secondary:hover { background: #475569; }
+    
+    .input-area {
+      background: #1e293b;
+      border-top: 1px solid #334155;
+      padding: 16px 24px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    
+    .input-field {
+      flex: 1;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 24px;
+      padding: 14px 20px;
+      color: #e2e8f0;
+      font-size: 15px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    
+    .input-field:focus { 
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+    }
+    
+    .input-field::placeholder { color: #64748b; }
+    
+    .send-btn {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      border: none;
+      color: white;
+      font-size: 20px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
+    
+    .send-btn:hover { 
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      transform: scale(1.05);
+    }
+    
+    .send-btn:active { transform: scale(0.95); }
+    
+    .typing-indicator {
+      display: flex;
+      gap: 4px;
+      padding: 8px 0;
+      align-items: center;
+    }
+    
+    .typing-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #64748b;
+      animation: typing 1.4s infinite;
+    }
+    
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+    
+    @keyframes typing {
+      0%, 60%, 100% { transform: translateY(0); }
+      30% { transform: translateY(-6px); }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+    
+    const socket = io('http://localhost:4000');
+    
+    const STEP_LABELS = {
+      analyze: '需求分析',
+      create: '创建工单',
+      build: '构建镜像',
+      deploy: '部署到环境',
+      prepare: '准备测试环境',
+      test: '运行测试',
+      report: '生成报告',
+      health_check: '健康检查',
+      verify: '验证部署',
+      notify: '发送通知'
+    };
+    
+    const WELCOME_MESSAGE = `👋 欢迎使用 AgentCenter！
+
+我可以帮你完成全流程 DevOps 操作：
+
+📋 需求 → "创建需求：用户登录支持二维码"
+📅 计划 → "Sprint 进度"
+🔨 开发 → "代码审查"
+⚙️ 构建 → "构建 user-service"
+🧪 测试 → "跑一下回归测试"
+🚀 部署 → "部署 user-service v2.4.0 到 test"
+📡 监控 → "检查 user-service"
+📊 总览 → "总览"
+
+试试说吧！👇`;
+
+    function App() {
+      const [messages, setMessages] = useState([]);
+      const [inputValue, setInputValue] = useState('');
+      const [stats, setStats] = useState(null);
+      const [executions, setExecutions] = useState({});
+      const [isTyping, setIsTyping] = useState(false);
+      const [connected, setConnected] = useState(false);
+      const messagesEndRef = useRef(null);
+      
+      useEffect(() => {
+        socket.on('connect', () => {
+          setConnected(true);
+          socket.emit('get_stats');
+        });
+        
+        socket.on('disconnect', () => {
+          setConnected(false);
+        });
+        
+        socket.on('stats_update', (data) => {
+          setStats(data);
+        });
+        
+        socket.on('bot_response', (data) => {
+          setIsTyping(false);
+          if (data.type === 'confirmation') {
+            const msgId = 'msg_' + Date.now();
+            setMessages(prev => [...prev, { 
+              id: msgId,
+              type: 'bot', 
+              content: data.message, 
+              confirmation: data.data,
+              msgType: 'confirmation'
+            }]);
+          } else if (data.type === 'execution_start') {
+            const execId = 'exec_' + Date.now();
+            const msgId = 'msg_' + Date.now();
+            setExecutions(prev => ({ 
+              ...prev, 
+              [execId]: { 
+                id: execId,
+                message: data.message,
+                steps: data.steps || Object.keys(STEP_LABELS).map(key => ({ name: key, status: 'pending' })),
+                status: 'running' 
+              } 
+            }));
+            setMessages(prev => [...prev, { 
+              id: msgId,
+              type: 'bot', 
+              content: data.message, 
+              executionId: execId,
+              msgType: 'execution'
+            }]);
+          } else {
+            const msgId = 'msg_' + Date.now();
+            setMessages(prev => [...prev, { id: msgId, type: 'bot', content: data.message, msgType: 'text' }]);
+          }
+        });
+        
+        socket.on('step_update', (data) => {
+          setExecutions(prev => {
+            const execId = Object.keys(prev).find(id => prev[id].status === 'running');
+            if (!execId) return prev;
+            
+            const updated = { ...prev };
+            const execution = { ...updated[execId] };
+            const steps = execution.steps.map(s => 
+              s.name === data.step ? { ...s, status: data.status, message: data.message } : s
+            );
+            execution.steps = steps;
+            updated[execId] = execution;
+            return updated;
+          });
+        });
+        
+        socket.on('execution_complete', (data) => {
+          setExecutions(prev => {
+            const execId = Object.keys(prev).find(id => prev[id].status === 'running');
+            if (!execId) return prev;
+            return { ...prev, [execId]: { ...prev[execId], status: data.success ? 'completed' : 'failed', result: data } };
+          });
+          socket.emit('get_stats');
+        });
+        
+        return () => {
+          socket.off('connect');
+          socket.off('disconnect');
+          socket.off('stats_update');
+          socket.off('bot_response');
+          socket.off('step_update');
+          socket.off('execution_complete');
+        };
+      }, []);
+      
+      useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, [messages]);
+      
+      const handleSend = useCallback(() => {
+        if (!inputValue.trim()) return;
+        setMessages(prev => [...prev, { id: 'msg_' + Date.now(), type: 'user', content: inputValue, msgType: 'text' }]);
+        setIsTyping(true);
+        socket.emit('user_message', { message: inputValue });
+        setInputValue('');
+      }, [inputValue]);
+      
+      const handleKeyPress = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          handleSend();
+        }
+      };
+      
+      const handleQuickCmd = (message) => {
+        setMessages(prev => [...prev, { id: 'msg_' + Date.now(), type: 'user', content: message, msgType: 'text' }]);
+        setIsTyping(true);
+        socket.emit('user_message', { message });
+      };
+      
+      const handleConfirm = (data) => {
+        socket.emit('confirm_deploy', { service: data.service, version: data.version, environment: data.environment });
+      };
+      
+      return (
+        <div className="app-container">
+          <BubbleWall stats={stats} onQuickCmd={handleQuickCmd} />
+          
+          <div className="main-area">
+            <header className="header">
+              <span className="header-logo">🤖</span>
+              <span className="header-title">AgentCenter</span>
+              <div className="header-status">
+                <span className={`status-dot ${connected ? '' : 'disconnected'}`}></span>
+                <span>{connected ? '已连接' : '未连接'}</span>
+              </div>
+            </header>
+            
+            <div className="chat-container">
+              <div className="messages-area">
+                <div className="message message-bot">
+                  <div className="message-bubble">{WELCOME_MESSAGE}</div>
+                </div>
+                
+                {messages.map((msg) => (
+                  <Message 
+                    key={msg.id} 
+                    {...msg} 
+                    executions={executions} 
+                    onConfirm={handleConfirm}
+                    onQuickCmd={handleQuickCmd}
+                  />
+                ))}
+                
+                {isTyping && (
+                  <div className="message message-bot">
+                    <div className="message-bubble">
+                      <div className="typing-indicator">
+                        <span className="typing-dot"></span>
+                        <span className="typing-dot"></span>
+                        <span className="typing-dot"></span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                <div ref={messagesEndRef} />
+              </div>
+              
+              <div className="input-area">
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder="输入命令或问题..."
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                />
+                <button className="send-btn" onClick={handleSend}>➤</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    
+    function Message({ type, content, confirmation, executionId, msgType, executions, onConfirm }) {
+      if (type === 'user') {
+        return (
+          <div className="message message-user">
+            <div className="message-bubble">{content}</div>
+          </div>
+        );
+      }
+      
+      return (
+        <div className="message message-bot">
+          {msgType === 'confirmation' && confirmation && <ConfirmationCard data={confirmation} onConfirm={onConfirm} />}
+          {msgType === 'execution' && executionId && executions[executionId] && (
+            <ExecutionCard execution={executions[executionId]} />
+          )}
+          {msgType === 'text' && content && (
+            <div className="message-bubble">{content}</div>
+          )}
+        </div>
+      );
+    }
+    
+    function ConfirmationCard({ data, onConfirm }) {
+      return (
+        <div className="confirmation-card">
+          <div className="confirmation-header">
+            <span>⚠️</span>
+            <span>{data.message}</span>
+          </div>
+          <div className="confirmation-content">
+            <span className="confirmation-label">服务</span>
+            <span className="confirmation-value">{data.service}</span>
+            <span className="confirmation-label">版本</span>
+            <span className="confirmation-value">{data.version}</span>
+            <span className="confirmation-label">环境</span>
+            <span className="confirmation-value">{data.environment}</span>
+          </div>
+          <div className="confirmation-actions">
+            <button className="btn btn-primary" onClick={() => onConfirm(data)}>确认执行</button>
+            <button className="btn btn-secondary">取消</button>
+          </div>
+        </div>
+      );
+    }
+    
+    function ExecutionCard({ execution }) {
+      const getStepIcon = (status) => {
+        switch(status) {
+          case 'completed': return '✓';
+          case 'running': return '⏳';
+          case 'failed': return '✗';
+          default: return '○';
+        }
+      };
+      
+      return (
+        <div className="execution-card">
+          <div className="execution-header">
+            <span>🔧</span>
+            <span className="execution-title">执行流程</span>
+            <span className="execution-subtitle">{execution.status === 'completed' ? '✓ 完成' : execution.status === 'failed' ? '✗ 失败' : '进行中...'}</span>
+          </div>
+          <div className="execution-steps">
+            {execution.steps.map((step, idx) => (
+              <div key={idx} className={`step-item step-${step.status}`}>
+                <span className="step-icon">{getStepIcon(step.status)}</span>
+                <span className="step-label">{STEP_LABELS[step.name] || step.name}</span>
+                {step.message && step.status === 'running' && (
+                  <span className="step-message">{step.message}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    
+    function BubbleWall({ stats, onQuickCmd }) {
+      const defaultStats = {
+        requirements: { total: 0, done: 0, completion_rate: 0 },
+        sprint: { name: '-', total: 0, done: 0, in_progress: 0, delayed: 0, progress: 0 },
+        development: { in_progress: 0, code_reviews_pending: 0, todo: 0 },
+        builds: { today: 0, success_rate: 0 },
+        tests: { total_suites: 0, pass_rate: 0, failed: 0 },
+        deployments: { today: 0, total: 0, success_rate: 0 },
+        monitoring: { active_alerts: 0, healthy_services: 0, total_services: 0, sla: 0 },
+        alerts: { active_alerts: 0 }
+      };
+      
+      const s = stats || defaultStats;
+      const alerts = s.alerts?.active_alerts ?? s.monitoring?.active_alerts ?? 0;
+      
+      return (
+        <div className="bubble-wall">
+          <div className="bubble-card">
+            <div className="bubble-card-icon">📋</div>
+            <div className="bubble-card-label">需求</div>
+            <div className="bubble-card-value">{s.requirements.completion_rate}%</div>
+            <div className="bubble-card-sub">{s.requirements.done}/{s.requirements.total} 已完成</div>
+          </div>
+          
+          <div className="bubble-card">
+            <div className="bubble-card-icon">📅</div>
+            <div className="bubble-card-label">Sprint</div>
+            <div className="bubble-card-value">{s.sprint.progress}%</div>
+            <div className="bubble-card-sub">
+              {s.sprint.name}
+              {s.sprint.delayed > 0 && <span style={{color: '#f59e0b'}}> ⚠️ {s.sprint.delayed} 延期</span>}
+            </div>
+          </div>
+          
+          <div className="bubble-card">
+            <div className="bubble-card-icon">🔨</div>
+            <div className="bubble-card-label">开发</div>
+            <div className="bubble-card-value">{s.development.in_progress} 进行中</div>
+            <div className="bubble-card-sub">{s.development.code_reviews_pending} 个 CR 待审</div>
+          </div>
+          
+          <div className="bubble-card">
+            <div className="bubble-card-icon">⚙️</div>
+            <div className="bubble-card-label">构建</div>
+            <div className="bubble-card-value">{s.builds.today} 次</div>
+            <div className="bubble-card-sub">成功率 {s.builds.success_rate}%</div>
+          </div>
+          
+          <div className={`bubble-card ${s.tests.failed > 0 ? 'test-failed' : ''}`}>
+            <div className="bubble-card-icon">🧪</div>
+            <div className="bubble-card-label">测试</div>
+            <div className="bubble-card-value">{s.tests.pass_rate}%</div>
+            <div className="bubble-card-sub">{s.tests.failed} 个失败</div>
+          </div>
+          
+          <div className="bubble-card">
+            <div className="bubble-card-icon">🚀</div>
+            <div className="bubble-card-label">部署</div>
+            <div className="bubble-card-value">{s.deployments.today} 次</div>
+            <div className="bubble-card-sub">总计 {s.deployments.total} | 成功率 {s.deployments.success_rate}%</div>
+          </div>
+          
+          <div className="bubble-card">
+            <div className="bubble-card-icon">📡</div>
+            <div className="bubble-card-label">监控</div>
+            <div className="bubble-card-value">{s.monitoring.healthy_services}/{s.monitoring.total_services}</div>
+            <div className="bubble-card-sub">SLA {s.monitoring.sla}%</div>
+          </div>
+          
+          <div className={`bubble-card ${alerts > 0 ? 'alert-active' : 'alert-ok'}`}>
+            <div className="bubble-card-icon">⚠️</div>
+            <div className="bubble-card-label">告警</div>
+            <div className="bubble-card-value">{alerts} 条</div>
+            <div className="bubble-card-sub">{alerts > 0 ? '需要关注' : '无活跃告警'}</div>
+          </div>
+          
+          <div className="quick-commands">
+            <div className="quick-commands-title">💡 快捷命令</div>
+            
+            <div className="quick-cmd-card" onClick={() => onQuickCmd('总览')}>
+              <span className="quick-cmd-icon">🔍</span>
+              <span className="quick-cmd-label">总览</span>
+            </div>
+            
+            <div className="quick-cmd-card" onClick={() => onQuickCmd('需求进度')}>
+              <span className="quick-cmd-icon">📋</span>
+              <span className="quick-cmd-label">需求进度</span>
+            </div>
+            
+            <div className="quick-cmd-card" onClick={() => onQuickCmd('Sprint 进度')}>
+              <span className="quick-cmd-icon">📅</span>
+              <span className="quick-cmd-label">Sprint</span>
+            </div>
+            
+            <div className="quick-cmd-card" onClick={() => onQuickCmd('跑一下回归测试')}>
+              <span className="quick-cmd-icon">🧪</span>
+              <span className="quick-cmd-label">跑测试</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

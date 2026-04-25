@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>AgentCenter 信息流泳道图</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: "Microsoft YaHei", sans-serif; background: #f5f5f5; padding: 20px; }
+.slide { width: 1200px; height: 700px; background: #FAFAFA; position: relative; margin: 0 auto; border: 1px solid #e0e0e0; overflow: hidden; }
+.title { font-size: 24px; font-weight: bold; color: #0a0a0a; position: absolute; top: 12px; left: 25px; }
+.title-line { position: absolute; top: 42px; left: 25px; width: 100px; height: 3px; background: #0070F3; }
+
+.lanes-area { position: absolute; top: 58px; left: 25px; width: 780px; }
+.lane-row { height: 76px; position: relative; display: flex; }
+.lane-row::after { content: ""; position: absolute; bottom: 0; left: 0; right: 0; border-bottom: 1px dashed #B0BEC5; }
+.lane-label { width: 85px; height: 76px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: bold; color: #37474F; background: #E3F2FD; border-right: 1px solid #90A4AE; position: relative; z-index: 10; }
+.lane-label::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: #1976D2; }
+.lane-row:nth-child(even) .lane-label { background: #E8F5E9; }
+.lane-content { flex: 1; position: relative; height: 76px; }
+.lane-connector { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 3; }
+.cross-lane-connector { position: absolute; left: 25px; top: 58px; width: 780px; height: 608px; pointer-events: none; z-index: 10; }
+
+.node-box { position: absolute; width: 48px; height: 18px; background: white; border: 1.5px solid #1976D2; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 7px; color: #37474F; font-weight: 500; z-index: 5; }
+
+/* 泳道1: 靠左聚集 */
+.lane-row.lane-1 .node-1 { left: 10px; top: 8px; }
+.lane-row.lane-1 .node-2 { left: 65px; top: 28px; }
+.lane-row.lane-1 .node-3 { left: 120px; top: 50px; }
+.lane-row.lane-1 .node-4 { left: 175px; top: 18px; }
+
+/* 泳道2: 波浪型 - 上下波动 */
+.lane-row.lane-2 .node-1 { left: 420px; top: 8px; }
+.lane-row.lane-2 .node-2 { left: 475px; top: 50px; }
+.lane-row.lane-2 .node-3 { left: 530px; top: 8px; }
+.lane-row.lane-2 .node-4 { left: 585px; top: 50px; }
+
+/* 泳道3: 中间聚集型 - 两端高中间低 */
+.lane-row.lane-3 .node-1 { left: 140px; top: 8px; }
+.lane-row.lane-3 .node-2 { left: 195px; top: 48px; }
+.lane-row.lane-3 .node-3 { left: 250px; top: 48px; }
+.lane-row.lane-3 .node-4 { left: 305px; top: 8px; }
+
+/* 泳道4: 倒波浪型 - 下上波动 */
+.lane-row.lane-4 .node-1 { left: 350px; top: 50px; }
+.lane-row.lane-4 .node-2 { left: 405px; top: 8px; }
+.lane-row.lane-4 .node-3 { left: 460px; top: 50px; }
+.lane-row.lane-4 .node-4 { left: 515px; top: 8px; }
+
+/* 泳道5: V字型 - 先降后升 */
+.lane-row.lane-5 .node-1 { left: 20px; top: 8px; }
+.lane-row.lane-5 .node-2 { left: 75px; top: 52px; }
+.lane-row.lane-5 .node-3 { left: 130px; top: 52px; }
+.lane-row.lane-5 .node-4 { left: 185px; top: 8px; }
+
+/* 泳道6: 倒V字型 - 先升后降 */
+.lane-row.lane-6 .node-1 { left: 320px; top: 52px; }
+.lane-row.lane-6 .node-2 { left: 375px; top: 8px; }
+.lane-row.lane-6 .node-3 { left: 430px; top: 8px; }
+.lane-row.lane-6 .node-4 { left: 485px; top: 52px; }
+
+/* 泳道7: 随机分散型 - 自然错落 */
+.lane-row.lane-7 .node-1 { left: 480px; top: 12px; }
+.lane-row.lane-7 .node-2 { left: 535px; top: 48px; }
+.lane-row.lane-7 .node-3 { left: 590px; top: 20px; }
+.lane-row.lane-7 .node-4 { left: 645px; top: 40px; }
+
+/* 泳道8: 中间聚集 */
+.lane-row.lane-8 .node-1 { left: 200px; top: 12px; }
+.lane-row.lane-8 .node-2 { left: 255px; top: 32px; }
+.lane-row.lane-8 .node-3 { left: 310px; top: 52px; }
+.lane-row.lane-8 .node-4 { left: 365px; top: 16px; }
+
+.agent-panel { position: absolute; right: 15px; top: 58px; width: 300px; height: 608px; background: #ECEFF1; border: 2px dashed #607D8B; border-radius: 12px; z-index: 20; }
+.agent-title { height: 45px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: bold; color: #0a0a0a; border-bottom: 2px dashed #607D8B; }
+.agent-node { width: 200px; height: 55px; background: #0070F3; border: 2px solid #0a0a0a; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold; color: white; margin: 85px auto; position: relative; }
+.agent-node::after { content: ""; position: absolute; bottom: -22px; left: 50%; transform: translateX(-50%); border-left: 8px solid transparent; border-right: 8px solid transparent; border-top: 10px solid #78909C; }
+.agent-node:last-child::after { display: none; }
+
+.interaction-line { position: absolute; height: 2px; background: #78909C; z-index: 25; }
+.line-1 { left: 815px; top: 100px; width: 60px; }
+.line-1::before { content: "调度指令"; position: absolute; left: 50%; transform: translateX(-50%); top: -16px; font-size: 9px; color: #78909C; font-weight: bold; white-space: nowrap; }
+.line-1::after { content: ""; position: absolute; left: -6px; top: -4px; border-right: 8px solid #78909C; border-top: 5px solid transparent; border-bottom: 5px solid transparent; }
+
+.line-2 { left: 815px; top: 170px; width: 60px; }
+.line-2::before { content: "配置变更"; position: absolute; left: 50%; transform: translateX(-50%); top: -16px; font-size: 9px; color: #78909C; font-weight: bold; white-space: nowrap; }
+.line-2::after { content: ""; position: absolute; left: -6px; top: -4px; border-right: 8px solid #78909C; border-top: 5px solid transparent; border-bottom: 5px solid transparent; }
+
+.line-3 { left: 815px; top: 240px; width: 60px; }
+.line-3::before { content: "任务分配"; position: absolute; left: 50%; transform: translateX(-50%); top: -16px; font-size: 9px; color: #78909C; font-weight: bold; white-space: nowrap; }
+.line-3::after { content: ""; position: absolute; left: -6px; top: -4px; border-right: 8px solid #78909C; border-top: 5px solid transparent; border-bottom: 5px solid transparent; }
+
+.line-4 { left: 815px; top: 350px; width: 60px; }
+.line-4::before { content: "状态数据"; position: absolute; left: 50%; transform: translateX(-50%); top: -16px; font-size: 9px; color: #78909C; font-weight: bold; white-space: nowrap; }
+.line-4::after { content: ""; position: absolute; right: -6px; top: -4px; border-left: 8px solid #78909C; border-top: 5px solid transparent; border-bottom: 5px solid transparent; }
+
+.line-5 { left: 815px; top: 420px; width: 60px; }
+.line-5::before { content: "告警信息"; position: absolute; left: 50%; transform: translateX(-50%); top: -16px; font-size: 9px; color: #78909C; font-weight: bold; white-space: nowrap; }
+.line-5::after { content: ""; position: absolute; right: -6px; top: -4px; border-left: 8px solid #78909C; border-top: 5px solid transparent; border-bottom: 5px solid transparent; }
+
+.line-6 { left: 815px; top: 490px; width: 60px; }
+.line-6::before { content: "质量指标"; position: absolute; left: 50%; transform: translateX(-50%); top: -16px; font-size: 9px; color: #78909C; font-weight: bold; white-space: nowrap; }
+.line-6::after { content: ""; position: absolute; right: -6px; top: -4px; border-left: 8px solid #78909C; border-top: 5px solid transparent; border-bottom: 5px solid transparent; }
+
+.page-num { position: absolute; bottom: 12px; right: 20px; width: 34px; height: 34px; background: #0070F3; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 13px; font-weight: bold; z-index: 30; }
+</style>
+</head>
+<body>
+<div class="slide">
+<div class="title">AgentCenter 信息流泳道图</div>
+<div class="title-line"></div>
+
+<div class="lanes-area">
+<div class="lane-row lane-1"><div class="lane-label">需求系统</div><div class="lane-content"><svg class="lane-connector" width="100%" height="76"><defs><marker id="arrow1" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z" fill="#607D8B"/></marker></defs><polyline points="34,26 34,37 65,37" stroke="#607D8B" stroke-width="1.5" fill="none" marker-end="url(#arrow1)"/><polyline points="89,46 89,59 120,59" stroke="#607D8B" stroke-width="1.5" fill="none" marker-end="url(#arrow1)"/><polyline points="144,68 144,27 175,27" stroke="#607D8B" stroke-width="1.5" fill="none" marker-end="url(#arrow1)"/></svg><div class="node-box node-1">提出需求</div><div class="node-box node-2">需求评审</div><div class="node-box node-3">需求分配</div><div class="node-box node-4">需求确认</div></div></div>
+<div class="lane-row lane-2"><div class="lane-label">开发环境</div><div class="lane-content"><svg class="lane-connector" width="100%" height="76"><defs><marker id="arrow2" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z" fill="#607D8B"/></marker></defs><polyline points="444,26 444,50 475,50" stroke="#607D8B" stroke-width="1.5" fill="none" marker-end="url(#arrow2)"/><polyline points="499,59 499,26 530,26" stroke="#607D8B" stroke-width="1.5" fill="none" marker-end="url(#arrow2)"/><polyline points="554,26 554,50 585,50" stroke="#607D8B" stroke-width="1.5" fill="none" marker-end="url(#arrow2)"/></svg><div class="node-box node-1">技术方案</div><div class="node-box node-2">代码编写</div><div class="node-box node-3">代码评审</div><div class="node-box node-4">方案确认</div></div></div>
+<div class="lane-row lane-3"><div class="lane-label">代码仓库</div><div class="lane-content"><svg class="lane-connector" width="100%" height="76"><defs><marker id="arrow3" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z" fill="#607D8B"/></marker></defs><polyline points="164,26 164,57 195,57" stroke="#607D8B" stroke-width="1.5" fill="none" marker-end="url(#arrow3)"/><polyline points="219,66 219,57 250,57" stroke="#607D8B" stroke-width="1.5" fill="none"/><polyline points="274,48 274,17 305,17" stroke="#607D8B" stroke-width="1.5" fill="none" marker-end="url(#arrow3)"/></svg><div class="node-box node-1">提交代码</div><div class="node-box node-2">发起MR</div><div class="node-box node-3">代码审查</div><div class="node-box node-4">合并代码</div></div></div>
+<div class="lane-row lane-4"><div class="lane-label">CI/CD</div><div class="lane-content"><svg class="lane-connector" width="100%" height="76"><defs><marker id="arrow4" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z" fill="#607D8B"/></marker></defs><polyline points="374,68 374,17 405,17" stroke="#607D8B" stroke-width="1.5" fill="none" marker-end="url(#arrow4)"/><polyline points="429,26 429,59 460,59" stroke="#607D8B" stroke-width="1.5" fill="none" marker-end="url(#arrow4)"/><polyline points="484,68 484,17 515,17" stroke="#607D8B" stroke-width="1.5" fill="none" marker-end="url(#arrow4)"/></svg><div class="node-box node-1">触发构建</div><div class="node-box node-2">执行测试</div><div class="node-box node-3">生成报告</div><div class="node-box node-4">镜像构建</div></div></div>
+<div class="lane-row lane-5"><div class="lane-label">部署环境</div><div class="lane-content"><svg class="lane-connector" width="100%" height="76"><defs><marker id="arrow5" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z" fill="#607D8B"/></marker></defs><polyline points="44,26 44,61 75,61" stroke="#607D8B" stroke-width="1.5" fill="none" marker-end="url(#arrow5)"/><polyline points="99,61 130,61" stroke="#607D8B" stroke-width="1.5" fill="none"/><polyline points="154,61 154,17 185,17" stroke="#607D8B" stroke-width="1.5" fill="none" marker-end="url(#arrow5)"/></svg><div class="node-box node-1">部署测试</div><div class="node-box node-2">预发布</div><div class="node-box node-3">发布生产</div><div class="node-box node-4">健康检查</div></div></div>
+<div class="lane-row lane-6"><div class="lane-label">运维管理</div><div class="lane-content"><svg class="lane-connector" width="100%" height="76"><defs><marker id="arrow6" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z" fill="#607D8B"/></marker></defs><polyline points="344,61 344,17 375,17" stroke="#607D8B" stroke-width="1.5" fill="none" marker-end="url(#arrow6)"/><polyline points="399,17 430,17" stroke="#607D8B" stroke-width="1.5" fill="none"/><polyline points="454,17 454,61 485,61" stroke="#607D8B" stroke-width="1.5" fill="none" marker-end="url(#arrow6)"/></svg><div class="node-box node-1">故障检测</div><div class="node-box node-2">问题定位</div><div class="node-box node-3">自动修复</div><div class="node-box node-4">运维操作</div></div></div>
+<div class="lane-row lane-7"><div class="lane-label">监控告警</div><div class="lane-content"><svg class="lane-connector" width="100%" height="76"><defs><marker id="arrow7" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z" fill="#607D8B"/></marker></defs><polyline points="504,30 504,66 535,66" stroke="#607D8B" stroke-width="1.5" fill="none" marker-end="url(#arrow7)"/><polyline points="559,66 559,29 590,29" stroke="#607D8B" stroke-width="1.5" fill="none" marker-end="url(#arrow7)"/><polyline points="614,38 614,58 645,58" stroke="#607D8B" stroke-width="1.5" fill="none" marker-end="url(#arrow7)"/></svg><div class="node-box node-1">指标采集</div><div class="node-box node-2">阈值检测</div><div class="node-box node-3">触发告警</div><div class="node-box node-4">告警确认</div></div></div>
+<div class="lane-row lane-8"><div class="lane-label">通知协作</div><div class="lane-content"><svg class="lane-connector" width="100%" height="76"><defs><marker id="arrow8" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z" fill="#607D8B"/></marker></defs><polyline points="224,30 224,41 255,41" stroke="#607D8B" stroke-width="1.5" fill="none" marker-end="url(#arrow8)"/><polyline points="279,50 279,70 310,70" stroke="#607D8B" stroke-width="1.5" fill="none" marker-end="url(#arrow8)"/><polyline points="334,70 334,25 365,25" stroke="#607D8B" stroke-width="1.5" fill="none" marker-end="url(#arrow8)"/></svg><div class="node-box node-1">推送通知</div><div class="node-box node-2">任务协作</div><div class="node-box node-3">进度同步</div><div class="node-box node-4">流程完成</div></div></div>
+</div>
+
+<svg class="cross-lane-connector">
+<defs>
+<marker id="cross-arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+<path d="M0,0 L0,8 L8,4 z" fill="#455A64"/>
+</marker>
+</defs>
+
+</svg>
+
+<div class="interaction-line line-1"></div>
+<div class="interaction-line line-2"></div>
+<div class="interaction-line line-3"></div>
+<div class="interaction-line line-4"></div>
+<div class="interaction-line line-5"></div>
+<div class="interaction-line line-6"></div>
+
+<div class="agent-panel">
+<div class="agent-title">AgentCenter</div>
+<div class="agent-node">信息感知</div>
+<div class="agent-node">智能分析</div>
+<div class="agent-node">任务调度</div>
+<div class="agent-node">执行反馈</div>
+</div>
+
+<div class="page-num">5</div>
+</div>
+</body>
+</html>

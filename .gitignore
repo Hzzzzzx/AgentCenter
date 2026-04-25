@@ -31,3 +31,12 @@ dist/
 build/
 *.pyc
 __pycache__/
+
+# Qoder
+.qoder/
+
+# Screenshots (generated locally)
+docs/prototype/screenshot-*.png
+
+# Dependencies
+node_modules/
