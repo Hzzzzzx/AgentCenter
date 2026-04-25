@@ -4,403 +4,2027 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AgentCenter - DevOps 智能中枢</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    
-    body {
-      font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-      background: #0f172a;
-      color: #e2e8f0;
-      height: 100vh;
-      overflow: hidden;
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg-primary: #0f172a;
+      --bg-secondary: #1e293b;
+      --bg-tertiary: #0c1222;
+      --bg-card: rgba(30, 41, 59, 0.7);
+      --bg-card-hover: rgba(30, 41, 59, 0.9);
+      --border-color: rgba(148, 163, 184, 0.1);
+      --border-color-hover: rgba(148, 163, 184, 0.2);
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent-blue: #3b82f6;
+      --accent-purple: #8b5cf6;
+      --accent-gradient: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+      --success: #10b981;
+      --warning: #f59e0b;
+      --error: #ef4444;
+      --info: #06b6d4;
+      --glow-blue: rgba(59, 130, 246, 0.3);
+      --glow-purple: rgba(139, 92, 246, 0.3);
     }
-    
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
     #root { height: 100%; }
-    
+
     .app-container {
       display: flex;
-      height: 100%;
+      min-height: 100vh;
     }
-    
-    .bubble-wall {
-      width: 300px;
-      background: #1e293b;
-      border-right: 1px solid #334155;
-      padding: 20px;
+
+    /* Sidebar */
+    .sidebar {
+      width: 260px;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border-color);
       display: flex;
       flex-direction: column;
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      z-index: 100;
+      transition: transform 0.3s ease;
+    }
+
+    .sidebar-header {
+      height: 60px;
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      border-bottom: 1px solid var(--border-color);
+      background: var(--bg-secondary);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
       gap: 12px;
-      overflow-y: auto;
-      scrollbar-width: thin;
-      scrollbar-color: #475569 #1e293b;
     }
-    
-    .bubble-wall::-webkit-scrollbar { width: 6px; }
-    .bubble-wall::-webkit-scrollbar-track { background: #1e293b; }
-    .bubble-wall::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
-    
-    .bubble-card {
-      background: #334155;
-      border-radius: 12px;
-      padding: 14px 16px;
-      cursor: pointer;
-      transition: all 0.2s;
-      border: 1px solid transparent;
+
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: var(--accent-gradient);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 20px var(--glow-blue);
     }
-    
-    .bubble-card:hover { 
-      background: #475569; 
-      transform: translateY(-2px);
-      border-color: #64748b;
+
+    .logo-icon svg { width: 20px; height: 20px; color: white; }
+
+    .logo-text { font-size: 18px; font-weight: 600; color: var(--text-primary); }
+
+    .version-badge {
+      background: var(--bg-tertiary);
+      color: var(--accent-blue);
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-left: 8px;
+      font-weight: 500;
     }
-    
-    .bubble-card-icon { font-size: 22px; margin-bottom: 6px; }
-    
-    .bubble-card-label { font-size: 12px; color: #94a3b8; margin-bottom: 2px; }
-    
-    .bubble-card-value { font-size: 26px; font-weight: 700; line-height: 1.2; }
-    
-    .bubble-card-sub { font-size: 11px; color: #64748b; margin-top: 4px; }
-    
-    .bubble-card.alert-active .bubble-card-value { color: #ef4444; }
-    .bubble-card.alert-ok .bubble-card-value { color: #22c55e; }
-    .bubble-card.test-failed .bubble-card-value { color: #ef4444; }
-    
-    .quick-commands {
-      margin-top: 8px;
-      padding-top: 16px;
-      border-top: 1px solid #334155;
-    }
-    
-    .quick-commands-title {
+
+    .sidebar-content { flex: 1; overflow-y: auto; padding: 16px 0; }
+
+    .sidebar-section { margin-bottom: 24px; }
+
+    .sidebar-section-title {
       font-size: 11px;
       font-weight: 600;
-      color: #64748b;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
-      margin-bottom: 10px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    
-    .quick-cmd-card {
-      background: #0f172a;
-      border-radius: 8px;
-      padding: 10px 12px;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      padding: 0 20px;
       margin-bottom: 8px;
-      cursor: pointer;
-      transition: all 0.2s;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 13px;
-      border: 1px solid #334155;
     }
-    
-    .quick-cmd-card:hover {
-      background: #1e293b;
-      border-color: #3b82f6;
-    }
-    
-    .quick-cmd-icon { font-size: 16px; }
-    .quick-cmd-label { color: #cbd5e1; }
-    
-    .main-area {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-    }
-    
-    .header {
-      background: #1e293b;
-      border-bottom: 1px solid #334155;
-      padding: 16px 24px;
+
+    .nav-item {
       display: flex;
       align-items: center;
       gap: 12px;
+      padding: 10px 20px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border-left: 3px solid transparent;
     }
-    
-    .header-logo { font-size: 28px; }
-    
-    .header-title { 
-      font-size: 20px; 
-      font-weight: 700;
-      background: linear-gradient(135deg, #60a5fa, #a78bfa);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+
+    .nav-item:hover {
+      background: rgba(59, 130, 246, 0.1);
+      color: var(--text-primary);
     }
-    
-    .header-status {
-      margin-left: auto;
+
+    .nav-item.active {
+      background: rgba(59, 130, 246, 0.15);
+      color: var(--accent-blue);
+      border-left-color: var(--accent-blue);
+    }
+
+    .nav-item i { width: 18px; height: 18px; opacity: 0.8; }
+    .nav-item span { font-size: 14px; }
+
+    /* Tool Status */
+    .tool-item {
       display: flex;
       align-items: center;
-      gap: 8px;
-      font-size: 13px;
-      color: #64748b;
+      justify-content: space-between;
+      padding: 8px 20px;
+      cursor: pointer;
+      transition: all 0.2s ease;
     }
-    
-    .status-dot {
+
+    .tool-item:hover { background: rgba(255, 255, 255, 0.03); }
+
+    .tool-info { display: flex; align-items: center; gap: 10px; }
+
+    .tool-status-dot {
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      background: #22c55e;
       animation: pulse 2s infinite;
     }
-    
-    .status-dot.disconnected { background: #ef4444; animation: none; }
-    
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
+
+    .tool-status-dot.connected { background: var(--success); box-shadow: 0 0 8px var(--success); }
+    .tool-status-dot.delayed { background: var(--warning); box-shadow: 0 0 8px var(--warning); }
+    .tool-status-dot.error { background: var(--error); box-shadow: 0 0 8px var(--error); }
+
+    .tool-name { font-size: 13px; color: var(--text-secondary); }
+    .tool-status-text { font-size: 11px; color: var(--text-muted); }
+
+    /* Agent Status */
+    .agent-item {
+      padding: 10px 20px;
+      cursor: pointer;
+      transition: all 0.2s ease;
     }
-    
-    .chat-container {
+
+    .agent-item:hover { background: rgba(255, 255, 255, 0.03); }
+
+    .agent-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+
+    .agent-name { font-size: 13px; color: var(--text-secondary); }
+
+    .agent-status {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .agent-status.idle { background: rgba(16, 185, 129, 0.15); color: var(--success); }
+    .agent-status.working { background: rgba(59, 130, 246, 0.15); color: var(--accent-blue); }
+    .agent-status.alert { background: rgba(245, 158, 11, 0.15); color: var(--warning); animation: alertPulse 1.5s infinite; }
+
+    .agent-status .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+    .agent-status.working .dot { animation: breathe 1.5s infinite; }
+
+    .agent-task { font-size: 11px; color: var(--text-muted); margin-left: 18px; }
+
+    .sidebar-footer { padding: 16px 20px; border-top: 1px solid var(--border-color); }
+
+    .system-settings {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text-muted);
+      font-size: 13px;
+      cursor: pointer;
+      padding: 8px 0;
+      transition: color 0.2s ease;
+    }
+
+    .system-settings:hover { color: var(--text-primary); }
+
+    /* Main Content */
+    .main-content {
       flex: 1;
+      margin-left: 260px;
+      min-height: 100vh;
       display: flex;
       flex-direction: column;
+    }
+
+    /* Top Navigation */
+    .top-nav {
+      height: 60px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .nav-left { display: flex; align-items: center; gap: 16px; }
+
+    .collapse-btn {
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      transition: all 0.2s ease;
+    }
+
+    .collapse-btn:hover { background: rgba(255, 255, 255, 0.05); color: var(--text-primary); }
+
+    .nav-center { flex: 1; max-width: 480px; margin: 0 40px; }
+
+    .search-bar {
+      display: flex;
+      align-items: center;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 0 16px;
+      height: 40px;
+      transition: all 0.2s ease;
+    }
+
+    .search-bar:focus-within {
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    }
+
+    .search-bar i { color: var(--text-muted); width: 18px; height: 18px; }
+
+    .search-bar input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text-primary);
+      font-size: 14px;
+      margin-left: 10px;
+    }
+
+    .search-bar input::placeholder { color: var(--text-muted); }
+
+    .nav-right { display: flex; align-items: center; gap: 8px; }
+
+    .nav-icon-btn {
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .nav-icon-btn:hover { background: rgba(255, 255, 255, 0.05); color: var(--text-primary); }
+    .nav-icon-btn i { width: 20px; height: 20px; }
+
+    .alert-badge {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      width: 16px;
+      height: 16px;
+      background: var(--error);
+      border-radius: 50%;
+      font-size: 10px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      animation: alertPulse 2s infinite;
+    }
+
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-left: 8px;
+    }
+
+    .user-info:hover { background: rgba(255, 255, 255, 0.05); }
+
+    .user-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: var(--accent-gradient);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 600;
+      color: white;
+    }
+
+    .user-details { display: flex; flex-direction: column; }
+    .user-name { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+    .user-role { font-size: 11px; color: var(--text-muted); }
+
+    /* Role Switcher */
+    .role-switcher {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .role-switcher:hover { border-color: var(--border-color-hover); }
+
+    .role-switcher i { width: 16px; height: 16px; color: var(--accent-purple); }
+
+    .role-switcher-text { font-size: 13px; color: var(--text-secondary); }
+
+    /* Dashboard Content */
+    .dashboard-content {
+      flex: 1;
+      padding: 24px;
+      background: var(--bg-primary);
+    }
+
+    /* Metrics Strip */
+    .metrics-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+
+    .metric-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 20px;
+      transition: all 0.3s ease;
+    }
+
+    .metric-card:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-color-hover);
+      transform: translateY(-2px);
+    }
+
+    .metric-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .metric-label { font-size: 13px; color: var(--text-muted); }
+
+    .metric-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .metric-icon.blue { background: rgba(59, 130, 246, 0.15); color: var(--accent-blue); }
+    .metric-icon.green { background: rgba(16, 185, 129, 0.15); color: var(--success); }
+    .metric-icon.red { background: rgba(239, 68, 68, 0.15); color: var(--error); }
+    .metric-icon.amber { background: rgba(245, 158, 11, 0.15); color: var(--warning); }
+    .metric-icon i { width: 18px; height: 18px; }
+
+    .metric-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+
+    .metric-trend { display: flex; align-items: center; gap: 8px; }
+
+    .trend-badge {
+      font-size: 12px;
+      font-weight: 500;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+
+    .trend-badge.up { background: rgba(16, 185, 129, 0.15); color: var(--success); }
+    .trend-badge.down { background: rgba(239, 68, 68, 0.15); color: var(--error); }
+
+    .trend-text { font-size: 12px; color: var(--text-muted); }
+
+    .sparkline {
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+      height: 24px;
+      margin-top: 8px;
+    }
+
+    .sparkline-bar {
+      width: 4px;
+      background: var(--accent-blue);
+      border-radius: 2px;
+      opacity: 0.6;
+    }
+
+    .sparkline-bar:nth-child(1) { height: 40%; }
+    .sparkline-bar:nth-child(2) { height: 60%; }
+    .sparkline-bar:nth-child(3) { height: 35%; }
+    .sparkline-bar:nth-child(4) { height: 80%; }
+    .sparkline-bar:nth-child(5) { height: 55%; }
+    .sparkline-bar:nth-child(6) { height: 70%; }
+    .sparkline-bar:nth-child(7) { height: 100%; }
+
+    /* Progress Bar */
+    .progress-container { margin-top: 8px; }
+
+    .progress-header { display: flex; justify-content: space-between; margin-bottom: 6px; }
+    .progress-label { font-size: 12px; color: var(--text-muted); }
+    .progress-value { font-size: 12px; color: var(--text-secondary); font-weight: 500; }
+
+    .progress-bar {
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
       overflow: hidden;
     }
-    
-    .messages-area {
-      flex: 1;
-      overflow-y: auto;
-      padding: 24px;
+
+    .progress-fill {
+      height: 100%;
+      background: var(--accent-gradient);
+      border-radius: 3px;
+      transition: width 0.5s ease;
+    }
+
+    /* Two Column Layout */
+    .two-column {
+      display: grid;
+      grid-template-columns: 1.5fr 1fr;
+      gap: 24px;
+      margin-bottom: 24px;
+    }
+
+    .card {
+      background: var(--bg-card);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .card-title { display: flex; flex-direction: column; }
+    .card-title-main { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+    .card-title-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+    .card-badge {
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--error);
+      font-size: 11px;
+      font-weight: 500;
+      padding: 4px 10px;
+      border-radius: 10px;
+    }
+
+    .card-body { padding: 20px; }
+
+    .card-actions { display: flex; gap: 8px; }
+
+    .card-action-btn {
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: 1px solid var(--border-color);
+      background: transparent;
+      color: var(--text-secondary);
+    }
+
+    .card-action-btn:hover { background: rgba(255, 255, 255, 0.05); color: var(--text-primary); }
+
+    /* AI Conversation Panel */
+    .conversation-panel {
       display: flex;
       flex-direction: column;
-      gap: 16px;
-      scrollbar-width: thin;
-      scrollbar-color: #475569 #0f172a;
+      height: 520px;
     }
-    
-    .messages-area::-webkit-scrollbar { width: 8px; }
-    .messages-area::-webkit-scrollbar-track { background: #0f172a; }
-    .messages-area::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
-    
-    .message {
-      max-width: 80%;
-      animation: fadeIn 0.3s ease;
+
+    .conversation-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0 20px 20px;
     }
-    
-    @keyframes fadeIn { 
-      from { opacity: 0; transform: translateY(10px); } 
-      to { opacity: 1; transform: translateY(0); } 
-    }
-    
-    .message-user { align-self: flex-end; }
-    .message-bot { align-self: flex-start; }
-    
+
+    .message { margin-bottom: 16px; }
+    .message.user { display: flex; justify-content: flex-end; }
+
     .message-bubble {
+      max-width: 85%;
       padding: 12px 16px;
-      border-radius: 16px;
-      line-height: 1.6;
-      white-space: pre-wrap;
-      font-size: 14px;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.5;
     }
-    
-    .message-user .message-bubble {
-      background: linear-gradient(135deg, #3b82f6, #2563eb);
+
+    .message.user .message-bubble {
+      background: var(--accent-gradient);
       color: white;
       border-bottom-right-radius: 4px;
-      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
     }
-    
-    .message-bot .message-bubble {
-      background: #334155;
-      color: #e2e8f0;
+
+    .message.ai .message-bubble {
+      background: rgba(59, 130, 246, 0.1);
+      border: 1px solid rgba(59, 130, 246, 0.2);
+      color: var(--text-primary);
       border-bottom-left-radius: 4px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
     }
-    
-    .execution-card {
-      background: #1e293b;
-      border: 1px solid #334155;
+
+    /* AI Response Card */
+    .ai-response-card {
+      background: rgba(59, 130, 246, 0.05);
+      border: 1px solid rgba(59, 130, 246, 0.15);
       border-radius: 12px;
-      padding: 20px;
-      min-width: 420px;
-      max-width: 500px;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      padding: 16px;
+      margin-top: 12px;
     }
-    
+
+    .ai-response-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .ai-response-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+
+    .stage-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--warning);
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .stage-badge::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: pulse 1.5s infinite;
+    }
+
+    /* Pipeline Visualization */
+    .pipeline-viz { margin: 16px 0; }
+
+    .pipeline-stage {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .pipeline-node {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: var(--bg-secondary);
+      border-radius: 8px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .pipeline-node.completed { background: rgba(16, 185, 129, 0.15); color: var(--success); }
+    .pipeline-node.current {
+      background: rgba(59, 130, 246, 0.15);
+      color: var(--accent-blue);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+
+    .pipeline-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+    .pipeline-node.current .pipeline-dot { animation: pulse 1s infinite; }
+
+    .pipeline-arrow { color: var(--text-muted); font-size: 16px; }
+
+    /* Blocker */
+    .blocker-card {
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px solid rgba(245, 158, 11, 0.2);
+      border-radius: 8px;
+      padding: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 12px 0;
+    }
+
+    .blocker-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--warning);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .blocker-icon i { width: 16px; height: 16px; }
+
+    .blocker-content { flex: 1; }
+    .blocker-title { font-size: 13px; font-weight: 500; color: var(--warning); }
+    .blocker-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+    .assignees { display: flex; gap: -8px; margin-top: 12px; }
+
+    .assignee {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--accent-gradient);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 600;
+      color: white;
+      border: 2px solid var(--bg-primary);
+      margin-left: -8px;
+    }
+
+    .assignee:first-child { margin-left: 0; }
+
+    .action-buttons { display: flex; gap: 8px; margin-top: 12px; }
+
+    .action-btn {
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: none;
+    }
+
+    .action-btn.primary { background: var(--accent-gradient); color: white; }
+    .action-btn.primary:hover { opacity: 0.9; transform: translateY(-1px); }
+
+    .action-btn.secondary {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-secondary);
+      border: 1px solid var(--border-color);
+    }
+
+    .action-btn.secondary:hover { background: rgba(255, 255, 255, 0.1); color: var(--text-primary); }
+
+    /* Execution Card */
+    .execution-card {
+      background: var(--bg-secondary);
+      border-radius: 12px;
+      padding: 16px;
+      margin-top: 12px;
+    }
+
     .execution-header {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
       margin-bottom: 16px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid #334155;
     }
-    
-    .execution-title { font-weight: 600; font-size: 16px; }
-    .execution-subtitle { font-size: 12px; color: #64748b; margin-left: auto; }
-    
-    .execution-steps { display: flex; flex-direction: column; gap: 10px; }
-    
-    .step-item {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 10px 14px;
-      background: #0f172a;
-      border-radius: 8px;
-      font-size: 14px;
-      transition: all 0.3s;
-    }
-    
-    .step-icon { font-size: 18px; width: 24px; text-align: center; }
-    .step-label { flex: 1; }
-    .step-message { font-size: 12px; color: #94a3b8; margin-left: auto; }
-    
-    .step-pending { color: #64748b; }
-    .step-running { color: #f59e0b; background: rgba(245, 158, 11, 0.1); }
-    .step-completed { color: #22c55e; }
-    .step-failed { color: #ef4444; }
-    
-    .confirmation-card {
-      background: #1e293b;
-      border: 1px solid #3b82f6;
-      border-radius: 12px;
-      padding: 20px;
-      min-width: 400px;
-      max-width: 450px;
-      box-shadow: 0 4px 20px rgba(59, 130, 246, 0.2);
-    }
-    
-    .confirmation-header {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 16px;
-      color: #3b82f6;
-      font-weight: 600;
-      font-size: 15px;
-    }
-    
-    .confirmation-content {
-      display: grid;
-      grid-template-columns: auto 1fr;
-      gap: 8px 16px;
-      margin-bottom: 20px;
-      font-size: 14px;
-    }
-    
-    .confirmation-label { color: #94a3b8; }
-    .confirmation-value { color: #e2e8f0; font-weight: 500; }
-    
-    .confirmation-actions { display: flex; gap: 12px; }
-    
-    .btn {
-      padding: 10px 20px;
-      border-radius: 8px;
-      border: none;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    
-    .btn-primary {
-      background: #3b82f6;
-      color: white;
-    }
-    
-    .btn-primary:hover { background: #2563eb; transform: translateY(-1px); }
-    
-    .btn-secondary {
-      background: #334155;
-      color: #e2e8f0;
-    }
-    
-    .btn-secondary:hover { background: #475569; }
-    
-    .input-area {
-      background: #1e293b;
-      border-top: 1px solid #334155;
-      padding: 16px 24px;
-      display: flex;
-      gap: 12px;
-      align-items: center;
-    }
-    
-    .input-field {
-      flex: 1;
-      background: #0f172a;
-      border: 1px solid #334155;
-      border-radius: 24px;
-      padding: 14px 20px;
-      color: #e2e8f0;
-      font-size: 15px;
-      outline: none;
-      transition: border-color 0.2s, box-shadow 0.2s;
-    }
-    
-    .input-field:focus { 
-      border-color: #3b82f6;
-      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
-    }
-    
-    .input-field::placeholder { color: #64748b; }
-    
-    .send-btn {
-      width: 48px;
-      height: 48px;
+
+    .execution-spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(59, 130, 246, 0.3);
+      border-top-color: var(--accent-blue);
       border-radius: 50%;
-      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      animation: spin 1s linear infinite;
+    }
+
+    .execution-title { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+
+    .execution-steps { display: flex; flex-direction: column; gap: 10px; }
+
+    .execution-step {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .step-icon { width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; }
+    .step-icon.check { color: var(--success); }
+    .step-icon.progress { color: var(--accent-blue); }
+    .step-icon.pending { color: var(--text-muted); }
+    .step-icon i { width: 14px; height: 14px; }
+
+    .step-text { flex: 1; }
+    .step-text span { color: var(--text-muted); margin-left: 6px; }
+
+    .execution-progress { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color); }
+
+    .execution-progress-text { font-size: 11px; color: var(--text-muted); margin-bottom: 6px; }
+
+    .execution-progress-bar {
+      height: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .execution-progress-fill {
+      height: 100%;
+      background: var(--accent-gradient);
+      border-radius: 2px;
+      width: 40%;
+      transition: width 0.5s ease;
+    }
+
+    /* Conversation Input */
+    .conversation-input {
+      padding: 16px 20px;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .input-wrapper {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 0 16px;
+      height: 42px;
+      transition: all 0.2s ease;
+    }
+
+    .input-wrapper:focus-within {
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    }
+
+    .input-wrapper input {
+      flex: 1;
+      background: transparent;
       border: none;
-      color: white;
-      font-size: 20px;
+      outline: none;
+      color: var(--text-primary);
+      font-size: 13px;
+    }
+
+    .input-wrapper input::placeholder { color: var(--text-muted); }
+
+    .input-btn {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--text-muted);
+      transition: all 0.2s ease;
+    }
+
+    .input-btn:hover { background: rgba(255, 255, 255, 0.05); color: var(--text-primary); }
+    .input-btn i { width: 18px; height: 18px; }
+
+    .send-btn {
+      width: 42px;
+      height: 42px;
+      background: var(--accent-gradient);
+      border: none;
+      border-radius: 10px;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: all 0.2s;
-      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+      color: white;
+      transition: all 0.2s ease;
     }
-    
-    .send-btn:hover { 
-      background: linear-gradient(135deg, #2563eb, #1d4ed8);
-      transform: scale(1.05);
+
+    .send-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px var(--glow-blue); }
+    .send-btn i { width: 18px; height: 18px; }
+
+    /* Right Column */
+    .right-column { display: flex; flex-direction: column; gap: 24px; }
+
+    /* Alerts Panel */
+    .alerts-panel { flex: 1; }
+    .alerts-list { display: flex; flex-direction: column; gap: 12px; }
+
+    .alert-card {
+      background: var(--bg-secondary);
+      border-radius: 10px;
+      padding: 14px;
+      border-left: 3px solid;
+      transition: all 0.2s ease;
+      cursor: pointer;
     }
-    
-    .send-btn:active { transform: scale(0.95); }
-    
-    .typing-indicator {
+
+    .alert-card:hover { background: rgba(30, 41, 59, 0.9); }
+    .alert-card.critical { border-left-color: var(--error); }
+    .alert-card.warning { border-left-color: var(--warning); }
+    .alert-card.info { border-left-color: var(--info); }
+
+    .alert-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .alert-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+
+    .alert-type {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .alert-type.critical { background: rgba(239, 68, 68, 0.15); color: var(--error); }
+    .alert-type.warning { background: rgba(245, 158, 11, 0.15); color: var(--warning); }
+    .alert-type.info { background: rgba(6, 182, 212, 0.15); color: var(--info); }
+
+    .alert-meta { font-size: 12px; color: var(--text-muted); margin-bottom: 10px; }
+    .alert-actions { display: flex; gap: 8px; }
+
+    .alert-btn {
+      padding: 4px 10px;
+      border-radius: 5px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: none;
+    }
+
+    .alert-btn.view { background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); }
+    .alert-btn.handle { background: rgba(59, 130, 246, 0.15); color: var(--accent-blue); }
+    .alert-btn:hover { opacity: 0.8; }
+
+    /* Agent Collaboration Panel */
+    .collaboration-panel { flex: 1; }
+
+    .task-header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+
+    .task-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: rgba(139, 92, 246, 0.15);
+      color: var(--accent-purple);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .task-icon i { width: 18px; height: 18px; }
+    .task-info { flex: 1; }
+    .task-title { font-size: 14px; font-weight: 500; color: var(--text-primary); }
+    .task-subtitle { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+    .agent-pipeline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
+
+    .agent-node { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+
+    .agent-node-circle {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 600;
+      border: 2px solid;
+      transition: all 0.3s ease;
+    }
+
+    .agent-node-circle.completed { background: rgba(16, 185, 129, 0.15); border-color: var(--success); color: var(--success); }
+    .agent-node-circle.current {
+      background: rgba(59, 130, 246, 0.15);
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
+      box-shadow: 0 0 20px var(--glow-blue);
+      animation: currentAgent 2s infinite;
+    }
+    .agent-node-circle.pending { background: rgba(255, 255, 255, 0.03); border-color: var(--border-color); color: var(--text-muted); }
+
+    .agent-node-label { font-size: 9px; color: var(--text-muted); text-align: center; max-width: 50px; }
+    .agent-arrow { color: var(--text-muted); font-size: 16px; }
+
+    .agent-current-status { background: var(--bg-secondary); border-radius: 8px; padding: 12px; text-align: center; }
+    .agent-current-text { font-size: 12px; color: var(--accent-blue); }
+
+    .agent-progress { margin-top: 12px; display: flex; align-items: center; gap: 12px; }
+
+    .agent-progress-bar {
+      flex: 1;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .agent-progress-fill {
+      height: 100%;
+      background: var(--accent-gradient);
+      border-radius: 3px;
+      width: 40%;
+    }
+
+    .agent-progress-text { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+
+    /* Pipeline Visualization Full Width */
+    .pipeline-full { margin-bottom: 24px; }
+
+    .pipeline-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+    .pipeline-title { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+
+    .pipeline-filters {
       display: flex;
       gap: 4px;
-      padding: 8px 0;
+      background: var(--bg-secondary);
+      padding: 4px;
+      border-radius: 8px;
+    }
+
+    .filter-btn {
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: none;
+      background: transparent;
+    }
+
+    .filter-btn.active { background: var(--accent-gradient); color: white; }
+    .filter-btn:hover:not(.active) { color: var(--text-primary); }
+
+    .pipeline-stages {
+      display: flex;
+      align-items: flex-start;
+      gap: 0;
+      background: var(--bg-card);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 24px;
+      overflow-x: auto;
+    }
+
+    .stage-item {
+      flex: 1;
+      min-width: 100px;
+      display: flex;
+      flex-direction: column;
       align-items: center;
+      position: relative;
     }
-    
-    .typing-dot {
-      width: 8px;
-      height: 8px;
+
+    .stage-circle {
+      width: 56px;
+      height: 56px;
       border-radius: 50%;
-      background: #64748b;
-      animation: typing 1.4s infinite;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 12px;
+      position: relative;
+      z-index: 1;
+      transition: all 0.3s ease;
     }
-    
+
+    .stage-circle.healthy { background: rgba(16, 185, 129, 0.15); border: 2px solid var(--success); color: var(--success); }
+    .stage-circle.warning { background: rgba(245, 158, 11, 0.15); border: 2px solid var(--warning); color: var(--warning); }
+    .stage-circle.error { background: rgba(239, 68, 68, 0.15); border: 2px solid var(--error); color: var(--error); }
+
+    .stage-count { font-size: 18px; font-weight: 700; }
+    .stage-label { font-size: 12px; font-weight: 500; color: var(--text-secondary); text-align: center; }
+
+    .stage-connector {
+      position: absolute;
+      top: 28px;
+      left: calc(50% + 28px);
+      width: calc(100% - 56px);
+      height: 2px;
+      z-index: 0;
+    }
+
+    .stage-connector-line { height: 2px; background: var(--border-color); position: relative; }
+
+    .stage-connector-line::after {
+      content: '';
+      position: absolute;
+      right: -6px;
+      top: -4px;
+      width: 0;
+      height: 0;
+      border-left: 8px solid var(--border-color);
+      border-top: 5px solid transparent;
+      border-bottom: 5px solid transparent;
+    }
+
+    .stage-connector-line.active { background: var(--success); }
+    .stage-connector-line.active::after { border-left-color: var(--success); }
+
+    /* Timeline */
+    .pipeline-timeline { margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border-color); }
+
+    .timeline-header { font-size: 12px; font-weight: 500; color: var(--text-muted); margin-bottom: 16px; }
+
+    .timeline-events {
+      display: flex;
+      gap: 16px;
+      overflow-x: auto;
+      padding-bottom: 8px;
+    }
+
+    .timeline-event { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+
+    .event-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .event-dot.success { background: var(--success); }
+    .event-dot.warning { background: var(--warning); }
+    .event-dot.error { background: var(--error); }
+    .event-dot.info { background: var(--info); }
+
+    .event-text { font-size: 11px; color: var(--text-secondary); }
+    .event-time { font-size: 10px; color: var(--text-muted); margin-left: 4px; }
+
+    /* Command Deck */
+    .command-deck { margin-bottom: 24px; }
+
+    .command-deck-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .command-deck-title { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+
+    .command-chips { display: flex; gap: 12px; flex-wrap: wrap; }
+
+    .command-chip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      background: var(--bg-card);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .command-chip:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--accent-blue);
+      transform: translateY(-2px);
+    }
+
+    .command-chip-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: rgba(59, 130, 246, 0.15);
+      color: var(--accent-blue);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .command-chip-icon i { width: 16px; height: 16px; }
+
+    .command-chip-text { font-size: 13px; color: var(--text-primary); }
+    .command-chip-desc { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+    /* Footer Status Bar */
+    .footer-status {
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--border-color);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .status-left { display: flex; align-items: center; gap: 20px; }
+    .status-item { display: flex; align-items: center; gap: 6px; }
+
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; }
+    .status-dot.green { background: var(--success); box-shadow: 0 0 6px var(--success); }
+
+    .status-right { font-size: 11px; }
+
+    /* Animations */
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    @keyframes breathe { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.2); opacity: 0.7; } }
+    @keyframes alertPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes currentAgent { 0%, 100% { box-shadow: 0 0 20px var(--glow-blue); } 50% { box-shadow: 0 0 30px var(--glow-blue), 0 0 40px var(--glow-purple); } }
+
+    /* Typing indicator */
+    .typing-indicator { display: flex; gap: 4px; padding: 8px 0; align-items: center; }
+    .typing-dot { width: 6px; height: 6px; background: var(--text-muted); border-radius: 50%; animation: typing 1.4s infinite; }
     .typing-dot:nth-child(2) { animation-delay: 0.2s; }
     .typing-dot:nth-child(3) { animation-delay: 0.4s; }
-    
-    @keyframes typing {
-      0%, 60%, 100% { transform: translateY(0); }
-      30% { transform: translateY(-6px); }
+
+    @keyframes typing { 0%, 60%, 100% { transform: translateY(0); opacity: 0.3; } 30% { transform: translateY(-6px); opacity: 1; } }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+
+    /* Chat message animation */
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .message { animation: fadeIn 0.3s ease; }
+
+    /* Toast alert */
+    .toast {
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px 20px;
+      font-size: 13px;
+      color: var(--text-primary);
+      z-index: 1000;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      animation: toastIn 0.3s ease;
+    }
+
+    @keyframes toastIn { from { opacity: 0; transform: translateX(-50%) translateY(20px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+
+    /* Story Mode Overlay */
+    .story-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(15, 23, 42, 0.95);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(8px);
+    }
+
+    .story-modal {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      width: 90%;
+      max-width: 900px;
+      max-height: 85vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+
+    .story-modal-header {
+      padding: 24px 28px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .story-modal-title {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .story-modal-title i {
+      color: var(--accent-blue);
+    }
+
+    .story-close-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text-muted);
+      transition: all 0.2s ease;
+      background: transparent;
+      border: none;
+    }
+
+    .story-close-btn:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-primary);
+    }
+
+    .story-modal-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 28px;
+    }
+
+    .story-storylines {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .storyline-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 20px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .storyline-card:hover {
+      border-color: var(--accent-blue);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(59, 130, 246, 0.15);
+    }
+
+    .storyline-card.selected {
+      border-color: var(--accent-blue);
+      background: rgba(59, 130, 246, 0.1);
+    }
+
+    .storyline-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: rgba(59, 130, 246, 0.15);
+      color: var(--accent-blue);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+
+    .storyline-icon i {
+      width: 24px;
+      height: 24px;
+    }
+
+    .storyline-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+
+    .storyline-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      line-height: 1.5;
+    }
+
+    .storyline-roles {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .storyline-role-tag {
+      font-size: 10px;
+      padding: 3px 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 4px;
+      color: var(--text-secondary);
+    }
+
+    .story-step-container {
+      background: var(--bg-primary);
+      border-radius: 12px;
+      padding: 24px;
+    }
+
+    .story-step-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .story-step-info {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .story-step-badge {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--accent-gradient);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 600;
+      color: white;
+    }
+
+    .story-step-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .story-step-role {
+      font-size: 12px;
+      color: var(--accent-blue);
+      margin-top: 4px;
+    }
+
+    .story-step-count {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .story-step-content {
+      margin-bottom: 20px;
+    }
+
+    .story-step-section {
+      margin-bottom: 16px;
+    }
+
+    .story-step-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .story-step-value {
+      font-size: 14px;
+      color: var(--text-primary);
+      line-height: 1.6;
+    }
+
+    .story-step-highlight {
+      background: rgba(59, 130, 246, 0.1);
+      border: 1px solid rgba(59, 130, 246, 0.2);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: var(--accent-blue);
+    }
+
+    .story-step-explanation {
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      border-radius: 8px;
+      padding: 12px 16px;
+    }
+
+    .story-step-explanation .story-step-label {
+      color: var(--success);
+    }
+
+    .story-step-explanation .story-step-value {
+      color: var(--success);
+    }
+
+    .story-controls {
+      display: flex;
+      gap: 12px;
+      padding: 20px 28px;
+      border-top: 1px solid var(--border-color);
+      background: var(--bg-secondary);
+    }
+
+    .story-btn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border: none;
+    }
+
+    .story-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .story-btn-prev {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-secondary);
+      border: 1px solid var(--border-color);
+    }
+
+    .story-btn-prev:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-primary);
+    }
+
+    .story-btn-next {
+      background: var(--accent-gradient);
+      color: white;
+    }
+
+    .story-btn-next:hover:not(:disabled) {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+
+    .story-btn-exit {
+      background: transparent;
+      color: var(--text-muted);
+      margin-left: auto;
+      border: 1px solid var(--border-color);
+    }
+
+    .story-btn-exit:hover {
+      background: rgba(239, 68, 68, 0.1);
+      color: var(--error);
+      border-color: rgba(239, 68, 68, 0.3);
+    }
+
+    .story-event-feed {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 16px;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
+    .story-event-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      font-size: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .story-event-item:last-child {
+      border-bottom: none;
+    }
+
+    .story-event-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .story-event-dot.info { background: var(--info); }
+    .story-event-dot.success { background: var(--success); }
+    .story-event-dot.warning { background: var(--warning); }
+    .story-event-dot.error { background: var(--error); }
+
+    .story-event-text {
+      color: var(--text-secondary);
+      flex: 1;
+    }
+
+    .story-event-time {
+      color: var(--text-muted);
+      font-size: 10px;
+    }
+
+    .story-highlight-pulse {
+      animation: storyPulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes storyPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+      50% { box-shadow: 0 0 0 8px rgba(59, 130, 246, 0); }
+    }
+
+    .story-start-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      background: var(--accent-gradient);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .story-start-btn:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+
+    /* Architecture View Overlay */
+    .architecture-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(15, 23, 42, 0.95);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(8px);
+    }
+
+    .architecture-modal {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      width: 95%;
+      max-width: 1100px;
+      max-height: 90vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+
+    .architecture-modal-header {
+      padding: 24px 28px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .architecture-modal-title {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .architecture-modal-title i {
+      color: var(--accent-blue);
+    }
+
+    .architecture-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      color: var(--warning);
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-left: 12px;
+    }
+
+    .architecture-badge i {
+      width: 14px;
+      height: 14px;
+    }
+
+    .architecture-close-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text-muted);
+      transition: all 0.2s ease;
+      background: transparent;
+      border: none;
+    }
+
+    .architecture-close-btn:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-primary);
+    }
+
+    .architecture-modal-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 28px;
+    }
+
+    .architecture-intro {
+      background: rgba(59, 130, 246, 0.08);
+      border: 1px solid rgba(59, 130, 246, 0.2);
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+    }
+
+    .architecture-intro-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--accent-blue);
+      margin-bottom: 8px;
+    }
+
+    .architecture-intro-title i {
+      width: 16px;
+      height: 16px;
+    }
+
+    .architecture-intro-text {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    .architecture-layers {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .architecture-layer-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 20px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .architecture-layer-card:hover {
+      border-color: var(--accent-blue);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(59, 130, 246, 0.15);
+    }
+
+    .architecture-layer-card.expanded {
+      border-color: var(--accent-purple);
+      grid-column: span 2;
+    }
+
+    .architecture-layer-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+    }
+
+    .architecture-layer-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .architecture-layer-icon i {
+      width: 22px;
+      height: 22px;
+    }
+
+    .architecture-layer-icon.blue { background: rgba(59, 130, 246, 0.15); color: var(--accent-blue); }
+    .architecture-layer-icon.purple { background: rgba(139, 92, 246, 0.15); color: var(--accent-purple); }
+    .architecture-layer-icon.green { background: rgba(16, 185, 129, 0.15); color: var(--success); }
+    .architecture-layer-icon.amber { background: rgba(245, 158, 11, 0.15); color: var(--warning); }
+    .architecture-layer-icon.cyan { background: rgba(6, 182, 212, 0.15); color: var(--info); }
+    .architecture-layer-icon.red { background: rgba(239, 68, 68, 0.15); color: var(--error); }
+
+    .architecture-layer-info {
+      flex: 1;
+    }
+
+    .architecture-layer-number {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+
+    .architecture-layer-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+
+    .architecture-layer-name-en {
+      font-size: 12px;
+      color: var(--accent-blue);
+      font-weight: 500;
+    }
+
+    .architecture-layer-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 8px;
+      line-height: 1.5;
+    }
+
+    .architecture-layer-expand-icon {
+      color: var(--text-muted);
+      transition: transform 0.3s ease;
+    }
+
+    .architecture-layer-card.expanded .architecture-layer-expand-icon {
+      transform: rotate(180deg);
+    }
+
+    .architecture-layer-details {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+
+    .architecture-layer-card.expanded .architecture-layer-details {
+      max-height: 300px;
+    }
+
+    .architecture-layer-details-inner {
+      padding-top: 16px;
+      margin-top: 16px;
+      border-top: 1px solid var(--border-color);
+    }
+
+    .architecture-detail-section {
+      margin-bottom: 12px;
+    }
+
+    .architecture-detail-section:last-child {
+      margin-bottom: 0;
+    }
+
+    .architecture-detail-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .architecture-detail-items {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .architecture-detail-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 6px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .architecture-detail-item i {
+      width: 12px;
+      height: 12px;
+      color: var(--accent-blue);
+    }
+
+    .architecture-runtime-section {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 20px;
+    }
+
+    .architecture-runtime-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .architecture-runtime-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: rgba(139, 92, 246, 0.15);
+      color: var(--accent-purple);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .architecture-runtime-icon i {
+      width: 20px;
+      height: 20px;
+    }
+
+    .architecture-runtime-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .architecture-runtime-subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .architecture-runtime-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
+    .architecture-runtime-card {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 16px;
+    }
+
+    .architecture-runtime-card.current {
+      border-color: rgba(245, 158, 11, 0.4);
+      background: rgba(245, 158, 11, 0.05);
+    }
+
+    .architecture-runtime-card.future {
+      border-color: rgba(16, 185, 129, 0.3);
+      background: rgba(16, 185, 129, 0.03);
+    }
+
+    .architecture-runtime-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .architecture-runtime-badge.current {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--warning);
+    }
+
+    .architecture-runtime-badge.future {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--success);
+    }
+
+    .architecture-runtime-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 6px;
+    }
+
+    .architecture-runtime-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .architecture-modal-footer {
+      padding: 16px 28px;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .architecture-mock-notice {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--warning);
+    }
+
+    .architecture-mock-notice i {
+      width: 14px;
+      height: 14px;
+    }
+
+    .architecture-close-action {
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      background: var(--accent-gradient);
+      color: white;
+      border: none;
+    }
+
+    .architecture-close-action:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
     }
   </style>
 </head>
 <body>
   <div id="root"></div>
-  
+
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
-    
+
     const socket = io('http://localhost:4000');
-    
+
     const STEP_LABELS = {
       analyze: '需求分析',
       create: '创建工单',
@@ -413,21 +2037,228 @@
       verify: '验证部署',
       notify: '发送通知'
     };
-    
-    const WELCOME_MESSAGE = `👋 欢迎使用 AgentCenter！
+
+    const WELCOME_MESSAGE = `欢迎使用 AgentCenter！
 
 我可以帮你完成全流程 DevOps 操作：
 
-📋 需求 → "创建需求：用户登录支持二维码"
-📅 计划 → "Sprint 进度"
-🔨 开发 → "代码审查"
-⚙️ 构建 → "构建 user-service"
-🧪 测试 → "跑一下回归测试"
-🚀 部署 → "部署 user-service v2.4.0 到 test"
-📡 监控 → "检查 user-service"
-📊 总览 → "总览"
+• 需求 → "创建需求：用户登录支持二维码"
+• 计划 → "Sprint 进度"
+• 开发 → "代码审查"
+• 构建 → "构建镜像"
+• 测试 → "跑一下回归测试"
+• 部署 → "部署到测试环境"
+• 监控 → "检查服务状态"
+• 总览 → "总览"
 
-试试说吧！👇`;
+试试说吧！`;
+
+    // Role data from registry
+    const ROLES = [
+      { id: 'management', name_zh: '管理层', icon: 'Crown', description: '全局视角，关注交付效率、资源分配与风险把控' },
+      { id: 'product', name_zh: '产品团队', icon: 'Lightbulb', description: '需求全生命周期管理' },
+      { id: 'development', name_zh: '研发团队', icon: 'Code2', description: '代码编写、评审、构建与日常开发协作' },
+      { id: 'ops', name_zh: '运维团队', icon: 'Server', description: '部署管理、环境运维、监控告警处理' },
+      { id: 'quality', name_zh: '质量团队', icon: 'CheckCircle2', description: '测试执行、质量度量、回归保障' },
+      { id: 'architecture', name_zh: '架构团队', icon: 'Network', description: '技术架构决策、系统设计与规范治理' }
+    ];
+
+    // Role-specific dashboard content
+    const ROLE_CONTENT = {
+      management: {
+        headline: '战略驾驶舱',
+        headlineSub: '全局视角 · 资源分配 · 风险把控',
+        metrics: {
+          deployments: { label: '交付效率', value: '94.7%', trend: '+2.3%', trendDir: 'up', icon: 'rocket' },
+          builds: { label: '资源利用率', value: '78%', trend: '+5%', trendDir: 'up', icon: 'cpu' },
+          alerts: { label: '风险指数', value: '低', trend: '2个关注项', trendDir: 'down', icon: 'shield' },
+          sprint: { label: '团队效能', value: '87分', trend: '+8', trendDir: 'up', icon: 'trending-up' }
+        },
+        commands: [
+          { icon: 'bar-chart-2', text: '成本分析', desc: '资源消耗分布' },
+          { icon: 'users', text: '团队绩效', desc: '效能度量' },
+          { icon: 'alert-triangle', text: '风险总览', desc: '全局风险监控' }
+        ]
+      },
+      product: {
+        headline: '需求管理中枢',
+        headlineSub: '需求全生命周期 · 优先级管理',
+        metrics: {
+          deployments: { label: '需求完成率', value: '68%', trend: '+12%', trendDir: 'up', icon: 'check-circle' },
+          builds: { label: 'Backlog', value: '156条', trend: '-8', trendDir: 'down', icon: 'list' },
+          alerts: { label: 'Sprint进度', value: '72%', trend: '+5%', trendDir: 'up', icon: 'target' },
+          sprint: { label: '用户反馈', value: '23条', trend: '+6', trendDir: 'up', icon: 'message-circle' }
+        },
+        commands: [
+          { icon: 'clipboard-list', text: '需求列表', desc: '查看所有需求' },
+          { icon: 'arrow-up-circle', text: '优先级排序', desc: '调整需求优先级' },
+          { icon: 'map', text: '用户故事地图', desc: '可视化需求' }
+        ]
+      },
+      development: {
+        headline: '开发工作台',
+        headlineSub: '代码编写 · 评审协作 · 构建部署',
+        metrics: {
+          deployments: { label: '代码提交', value: '127次', trend: '+15', trendDir: 'up', icon: 'git-commit' },
+          builds: { label: '构建成功率', value: '89%', trend: '+3%', trendDir: 'up', icon: 'check-circle' },
+          alerts: { label: '代码覆盖', value: '76%', trend: '+8%', trendDir: 'up', icon: 'file-code' },
+          sprint: { label: 'PR数量', value: '34个', trend: '+6', trendDir: 'up', icon: 'git-pull-request' }
+        },
+        commands: [
+          { icon: 'code', text: '代码审查', desc: '发起Code Review' },
+          { icon: 'git-branch', text: '分支管理', desc: '查看分支状态' },
+          { icon: 'clock', text: '提交记录', desc: '查看最近提交' }
+        ]
+      },
+      ops: {
+        headline: '运维监控台',
+        headlineSub: '部署管理 · 环境运维 · 告警处理',
+        metrics: {
+          deployments: { label: '服务可用性', value: '99.9%', trend: '+0.1%', trendDir: 'up', icon: 'server' },
+          builds: { label: '告警数量', value: '3条', trend: '-2', trendDir: 'down', icon: 'alert-triangle' },
+          alerts: { label: '部署频率', value: '12次/天', trend: '+3', trendDir: 'up', icon: 'rocket' },
+          sprint: { label: '响应时间', value: '230ms', trend: '-15ms', trendDir: 'down', icon: 'activity' }
+        },
+        commands: [
+          { icon: 'monitor', text: '服务监控', desc: '查看服务状态' },
+          { icon: 'file-text', text: '日志分析', desc: '追踪问题' },
+          { icon: 'plus-circle', text: '扩缩容', desc: '调整服务容量' }
+        ]
+      },
+      quality: {
+        headline: '质量保障中心',
+        headlineSub: '测试执行 · 质量度量 · 回归保障',
+        metrics: {
+          deployments: { label: '测试覆盖率', value: '85%', trend: '+5%', trendDir: 'up', icon: 'shield' },
+          builds: { label: '缺陷修复率', value: '92%', trend: '+3%', trendDir: 'up', icon: 'bug' },
+          alerts: { label: '用例通过率', value: '94%', trend: '+2%', trendDir: 'up', icon: 'check-square' },
+          sprint: { label: '回归测试', value: '128个', trend: '+12', trendDir: 'up', icon: 'rotate-ccw' }
+        },
+        commands: [
+          { icon: 'file-text', text: '测试报告', desc: '查看测试结果' },
+          { icon: 'list-ordered', text: '缺陷列表', desc: '待处理缺陷' },
+          { icon: 'play', text: '回归测试', desc: '触发测试执行' }
+        ]
+      },
+      architecture: {
+        headline: '架构设计中心',
+        headlineSub: '技术决策 · 系统设计 · 规范治理',
+        metrics: {
+          deployments: { label: '系统复杂度', value: '中等', trend: '3个优化点', trendDir: 'down', icon: 'git-branch' },
+          builds: { label: '技术债务', value: '12项', trend: '-2', trendDir: 'down', icon: 'code-2' },
+          alerts: { label: '规范遵循', value: '88%', trend: '+4%', trendDir: 'up', icon: 'check-circle' },
+          sprint: { label: '设计评审', value: '5个', trend: '+2', trendDir: 'up', icon: 'file-code' }
+        },
+        commands: [
+          { icon: 'network', text: '架构图', desc: '查看系统架构' },
+          { icon: 'file-text', text: '技术方案', desc: '评审中的方案' },
+          { icon: 'book-open', text: '规范文档', desc: '技术规范' }
+        ]
+      }
+    };
+
+    // Client-side interaction responses (mirrors server mock-events.js)
+    const INTERACTION_RESPONSES = {
+      'click:metric:deployment': { type: 'drawer', title_zh: '部署指标', data: { metric: 'deployment', period: 'today' } },
+      'click:tool:build_engine': { type: 'drawer', title_zh: '构建引擎', data: { toolId: 'build_engine' } },
+      'click:tool:test_platform': { type: 'drawer', title_zh: '测试平台', data: { toolId: 'test_platform' } },
+      'click:agent:ops': { type: 'drawer', title_zh: '运维智能体', data: { roleId: 'ops' } },
+      'click:alert:critical': { type: 'modal', title_zh: '严重告警', data: { severity: 'critical' } },
+      'click:alert:warning': { type: 'drawer', title_zh: '警告告警', data: { severity: 'warning' } },
+      'story:start:incident': { type: 'modal', title_zh: '故障处置故事', data: { storyId: 'incident' } },
+      'story:start:release': { type: 'modal', title_zh: '发布流程故事', data: { storyId: 'release' } },
+      'story:start:requirement': { type: 'modal', title_zh: '需求流程故事', data: { storyId: 'requirement' } },
+      'role:switch:management': { type: 'toast', title_zh: '角色已切换', data: { roleId: 'management' } },
+      'role:switch:product': { type: 'toast', title_zh: '角色已切换', data: { roleId: 'product' } },
+      'role:switch:development': { type: 'toast', title_zh: '角色已切换', data: { roleId: 'development' } },
+      'role:switch:ops': { type: 'toast', title_zh: '角色已切换', data: { roleId: 'ops' } },
+      'role:switch:quality': { type: 'toast', title_zh: '角色已切换', data: { roleId: 'quality' } },
+      'role:switch:architecture': { type: 'toast', title_zh: '角色已切换', data: { roleId: 'architecture' } },
+      'click:sidebar:architecture': { type: 'drawer', title_zh: '架构视图', data: { view: 'architecture' } },
+      'click:search': { type: 'drawer', title_zh: '搜索结果', data: { view: 'search' } },
+      'click:message_feed': { type: 'drawer', title_zh: '通知列表', data: { view: 'message_feed' } },
+      'click:sidebar:nav:overview': { type: 'toast', title_zh: '导航: 总览', data: {} },
+      'click:sidebar:nav:conversation': { type: 'toast', title_zh: '导航: 对话', data: {} },
+      'click:sidebar:nav:workflow': { type: 'toast', title_zh: '导航: 工作流', data: {} },
+      'click:sidebar:nav:agents': { type: 'toast', title_zh: '导航: Agent管理', data: {} },
+      'click:sidebar:tool:需求管理平台': { type: 'drawer', title_zh: '需求管理平台', data: { toolId: 'requirement_platform' } },
+      'click:sidebar:tool:设计协作平台': { type: 'drawer', title_zh: '设计协作平台', data: { toolId: 'design_collaboration' } },
+      'click:sidebar:tool:代码仓库': { type: 'drawer', title_zh: '代码仓库', data: { toolId: 'code_repository' } },
+      'click:sidebar:tool:代码质量平台': { type: 'drawer', title_zh: '代码质量平台', data: { toolId: 'code_quality' } },
+      'click:sidebar:tool:构建引擎': { type: 'drawer', title_zh: '构建引擎', data: { toolId: 'build_engine' } },
+      'click:sidebar:tool:测试平台': { type: 'drawer', title_zh: '测试平台', data: { toolId: 'test_platform' } },
+      'click:sidebar:tool:制品仓库': { type: 'drawer', title_zh: '制品仓库', data: { toolId: 'artifact_registry' } },
+      'click:sidebar:tool:部署平台': { type: 'drawer', title_zh: '部署平台', data: { toolId: 'deployment_platform' } },
+      'click:sidebar:tool:可观测性平台': { type: 'drawer', title_zh: '可观测性平台', data: { toolId: 'observability_platform' } },
+      'click:sidebar:tool:告警通道': { type: 'drawer', title_zh: '告警通道', data: { toolId: 'alert_channel' } },
+      'click:sidebar:agent:需求分析 Agent': { type: 'drawer', title_zh: '需求分析 Agent', data: { agentName: '需求分析 Agent' } },
+      'click:sidebar:agent:代码审查 Agent': { type: 'drawer', title_zh: '代码审查 Agent', data: { agentName: '代码审查 Agent' } },
+      'click:sidebar:agent:部署编排 Agent': { type: 'drawer', title_zh: '部署编排 Agent', data: { agentName: '部署编排 Agent' } },
+      'click:sidebar:agent:监控预警 Agent': { type: 'drawer', title_zh: '监控预警 Agent', data: { agentName: '监控预警 Agent' } },
+      'click:sidebar:role:management': { type: 'toast', title_zh: '角色已切换: 管理', data: { roleId: 'management' } },
+      'click:sidebar:role:product': { type: 'toast', title_zh: '角色已切换: 产品', data: { roleId: 'product' } },
+      'click:sidebar:role:development': { type: 'toast', title_zh: '角色已切换: 开发', data: { roleId: 'development' } },
+      'click:sidebar:role:ops': { type: 'toast', title_zh: '角色已切换: 运维', data: { roleId: 'ops' } },
+      'click:sidebar:role:quality': { type: 'toast', title_zh: '角色已切换: 质量', data: { roleId: 'quality' } },
+      'click:sidebar:role:architecture': { type: 'toast', title_zh: '角色已切换: 架构', data: { roleId: 'architecture' } },
+      'click:topnav:settings': { type: 'drawer', title_zh: '设置', data: { view: 'settings' } },
+      'click:topnav:user': { type: 'drawer', title_zh: '用户菜单', data: { view: 'user_menu' } },
+      'click:notification:bell': { type: 'drawer', title_zh: '通知面板', data: { view: 'notifications' } },
+      'click:input:mic': { type: 'toast', title_zh: '语音输入', data: {} },
+      'click:search:submit': { type: 'drawer', title_zh: '搜索结果', data: { view: 'search' } },
+      'click:footer:system': { type: 'drawer', title_zh: '系统状态', data: { view: 'system_status' } },
+      'click:footer:tools': { type: 'drawer', title_zh: '工具状态', data: { view: 'tools_status' } },
+      'click:footer:agents': { type: 'drawer', title_zh: '智能体状态', data: { view: 'agents_status' } },
+      'click:pipeline:stage:代码提交': { type: 'drawer', title_zh: '代码提交', data: { stage: '代码提交' } },
+      'click:pipeline:stage:构建验证': { type: 'drawer', title_zh: '构建验证', data: { stage: '构建验证' } },
+      'click:pipeline:stage:测试验证': { type: 'drawer', title_zh: '测试验证', data: { stage: '测试验证' } },
+      'click:pipeline:stage:部署确认': { type: 'drawer', title_zh: '部署确认', data: { stage: '部署确认' } },
+      'click:pipeline:stage:部署执行': { type: 'drawer', title_zh: '部署执行', data: { stage: '部署执行' } },
+      'click:agent:需求': { type: 'drawer', title_zh: '需求阶段', data: { stage: '需求' } },
+      'click:agent:设计': { type: 'drawer', title_zh: '设计阶段', data: { stage: '设计' } },
+      'click:agent:检查': { type: 'drawer', title_zh: '检查阶段', data: { stage: '检查' } },
+      'click:agent:部署': { type: 'drawer', title_zh: '部署阶段', data: { stage: '部署' } },
+      'click:metric:deployments': { type: 'drawer', title_zh: '部署指标', data: { metric: 'deployments' } },
+      'click:metric:builds': { type: 'drawer', title_zh: '构建指标', data: { metric: 'builds' } },
+      'click:metric:alerts': { type: 'drawer', title_zh: '告警指标', data: { metric: 'alerts' } },
+      'click:metric:sprint': { type: 'drawer', title_zh: 'Sprint进度', data: { metric: 'sprint' } },
+      'click:alerts:构建失败 — 某服务': { type: 'modal', title_zh: '构建失败', data: { alertId: 1 } },
+      'click:alerts:部署审批超时': { type: 'drawer', title_zh: '部署审批', data: { alertId: 2 } },
+      'click:alerts:Sprint 14 即将结束': { type: 'toast', title_zh: 'Sprint 14 即将结束', data: { alertId: 3 } },
+      'click:sidebar:role_switcher': { type: 'drawer', title_zh: '角色列表', data: { view: 'role_list' } },
+      'click:sidebar:system_settings': { type: 'drawer', title_zh: '系统设置', data: { view: 'system_settings' } },
+      'click:quick_cmd:部署服务': { type: 'toast', title_zh: '快捷命令: 部署服务', data: {} },
+      'click:quick_cmd:查询服务': { type: 'toast', title_zh: '快捷命令: 查询服务', data: {} },
+      'click:quick_cmd:查看部署记录': { type: 'drawer', title_zh: '部署记录', data: { view: 'deployment_history' } },
+      'click:quick_cmd:健康检查': { type: 'toast', title_zh: '快捷命令: 健康检查', data: {} },
+      'click:quick_cmd:回滚操作': { type: 'modal', title_zh: '回滚操作', data: {} },
+      'click:quick_cmd:规范文档': { type: 'drawer', title_zh: '规范文档', data: { view: 'docs' } },
+      'click:architecture:view': { type: 'toast', title_zh: '架构视图', data: { view: 'architecture' } },
+    };
+
+    // Toolchain data from registry
+    const TOOLCHAIN = [
+      { id: 'requirement_platform', name: '需求管理平台', status: 'connected' },
+      { id: 'design_collaboration', name: '设计协作平台', status: 'connected' },
+      { id: 'code_repository', name: '代码仓库', status: 'connected' },
+      { id: 'code_quality', name: '代码质量平台', status: 'connected' },
+      { id: 'build_engine', name: '构建引擎', status: 'delayed' },
+      { id: 'test_platform', name: '测试平台', status: 'connected' },
+      { id: 'artifact_registry', name: '制品仓库', status: 'connected' },
+      { id: 'deployment_platform', name: '部署平台', status: 'connected' },
+      { id: 'observability_platform', name: '可观测性平台', status: 'connected' },
+      { id: 'alert_channel', name: '告警通道', status: 'connected' }
+    ];
+
+    function showToast(message) {
+      const existing = document.querySelector('.toast');
+      if (existing) existing.remove();
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      toast.textContent = message;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    }
 
     function App() {
       const [messages, setMessages] = useState([]);
@@ -436,49 +2267,58 @@
       const [executions, setExecutions] = useState({});
       const [isTyping, setIsTyping] = useState(false);
       const [connected, setConnected] = useState(false);
+      const [activeRole, setActiveRole] = useState('development');
+      const [drawerPanel, setDrawerPanel] = useState({ open: false, title: '', data: {} });
+      const [modalPanel, setModalPanel] = useState({ open: false, title: '', data: {} });
+      const [isStoryModeOpen, setIsStoryModeOpen] = useState(false);
+      const [currentStory, setCurrentStory] = useState(null);
+      const [currentStep, setCurrentStep] = useState(0);
+      const [storyEvents, setStoryEvents] = useState([]);
+      const [highlightedElement, setHighlightedElement] = useState(null);
+      const [isArchitectureOpen, setIsArchitectureOpen] = useState(false);
       const messagesEndRef = useRef(null);
-      
+
       useEffect(() => {
         socket.on('connect', () => {
           setConnected(true);
           socket.emit('get_stats');
         });
-        
+
         socket.on('disconnect', () => {
           setConnected(false);
         });
-        
+
         socket.on('stats_update', (data) => {
           setStats(data);
         });
-        
+
         socket.on('bot_response', (data) => {
           setIsTyping(false);
           if (data.type === 'confirmation') {
             const msgId = 'msg_' + Date.now();
-            setMessages(prev => [...prev, { 
+            setMessages(prev => [...prev, {
               id: msgId,
-              type: 'bot', 
-              content: data.message, 
+              type: 'bot',
+              content: data.message,
               confirmation: data.data,
               msgType: 'confirmation'
             }]);
           } else if (data.type === 'execution_start') {
             const execId = 'exec_' + Date.now();
             const msgId = 'msg_' + Date.now();
-            setExecutions(prev => ({ 
-              ...prev, 
-              [execId]: { 
+            setExecutions(prev => ({
+              ...prev,
+              [execId]: {
                 id: execId,
                 message: data.message,
                 steps: data.steps || Object.keys(STEP_LABELS).map(key => ({ name: key, status: 'pending' })),
-                status: 'running' 
-              } 
+                status: 'running'
+              }
             }));
-            setMessages(prev => [...prev, { 
+            setMessages(prev => [...prev, {
               id: msgId,
-              type: 'bot', 
-              content: data.message, 
+              type: 'bot',
+              content: data.message,
               executionId: execId,
               msgType: 'execution'
             }]);
@@ -487,15 +2327,15 @@
             setMessages(prev => [...prev, { id: msgId, type: 'bot', content: data.message, msgType: 'text' }]);
           }
         });
-        
+
         socket.on('step_update', (data) => {
           setExecutions(prev => {
             const execId = Object.keys(prev).find(id => prev[id].status === 'running');
             if (!execId) return prev;
-            
+
             const updated = { ...prev };
             const execution = { ...updated[execId] };
-            const steps = execution.steps.map(s => 
+            const steps = execution.steps.map(s =>
               s.name === data.step ? { ...s, status: data.status, message: data.message } : s
             );
             execution.steps = steps;
@@ -503,7 +2343,7 @@
             return updated;
           });
         });
-        
+
         socket.on('execution_complete', (data) => {
           setExecutions(prev => {
             const execId = Object.keys(prev).find(id => prev[id].status === 'running');
@@ -512,7 +2352,17 @@
           });
           socket.emit('get_stats');
         });
-        
+
+        // Demo interaction handler
+        socket.on('demo_interaction', (data) => {
+          showToast(data.message || '交互响应: ' + JSON.stringify(data));
+        });
+
+        // Story event handler
+        socket.on('story_event', (data) => {
+          setStoryEvents(prev => [...prev.slice(-4), data]);
+        });
+
         return () => {
           socket.off('connect');
           socket.off('disconnect');
@@ -520,100 +2370,820 @@
           socket.off('bot_response');
           socket.off('step_update');
           socket.off('execution_complete');
+          socket.off('demo_interaction');
+          socket.off('story_event');
         };
       }, []);
-      
+
       useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, [messages]);
-      
+
       const handleSend = useCallback(() => {
         if (!inputValue.trim()) return;
+
+        // Handle architecture view command locally
+        if (inputValue.includes('展示系统架构') || inputValue.includes('系统架构') || inputValue.includes('架构视图')) {
+          setMessages(prev => [...prev, { id: 'msg_' + Date.now(), type: 'user', content: inputValue, msgType: 'text' }]);
+          setIsArchitectureOpen(true);
+          setInputValue('');
+          return;
+        }
+
         setMessages(prev => [...prev, { id: 'msg_' + Date.now(), type: 'user', content: inputValue, msgType: 'text' }]);
         setIsTyping(true);
         socket.emit('user_message', { message: inputValue });
         setInputValue('');
       }, [inputValue]);
-      
+
       const handleKeyPress = (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
           handleSend();
         }
       };
-      
+
       const handleQuickCmd = (message) => {
         setMessages(prev => [...prev, { id: 'msg_' + Date.now(), type: 'user', content: message, msgType: 'text' }]);
         setIsTyping(true);
         socket.emit('user_message', { message });
       };
-      
+
       const handleConfirm = (data) => {
         socket.emit('confirm_deploy', { service: data.service, version: data.version, environment: data.environment });
       };
-      
+
+      const handleNavClick = (section) => {
+        showToast('导航: ' + section);
+        socket.emit('demo_interaction', { interactionId: `click:sidebar:nav:${section}` });
+      };
+
+      const handleRoleChange = (roleId) => {
+        setActiveRole(roleId);
+        const role = ROLES.find(r => r.id === roleId);
+        showToast('切换角色: ' + (role ? role.name_zh : roleId));
+        socket.emit('demo_interaction', { interactionId: `click:sidebar:role:${roleId}` });
+      };
+
+      const handleToolClick = (toolName) => {
+        showToast('工具: ' + toolName);
+        socket.emit('demo_interaction', { interactionId: `click:sidebar:tool:${toolName}` });
+      };
+
+      const handleAlertClick = (alertTitle) => {
+        showToast('告警: ' + alertTitle);
+        socket.emit('demo_interaction', { interactionId: `click:alerts:${alertTitle}` });
+      };
+
+      const handleMetricClick = (metricName) => {
+        showToast('指标: ' + metricName);
+        socket.emit('demo_interaction', { interactionId: `click:metric:${metricName}` });
+      };
+
+      const handleStageClick = (stageName) => {
+        showToast('流程阶段: ' + stageName);
+        socket.emit('demo_interaction', { interactionId: `click:pipeline:stage:${stageName}` });
+      };
+
+      const handleAgentNodeClick = (agentName) => {
+        showToast('智能体: ' + agentName);
+        socket.emit('demo_interaction', { interactionId: `click:agent:${agentName}` });
+      };
+
+      const handleSidebarAgentClick = (agentName) => {
+        showToast('智能体详情: ' + agentName);
+        socket.emit('demo_interaction', { interactionId: `click:sidebar:agent:${agentName}` });
+      };
+
+      const handleSearchSubmit = (query) => {
+        if (query.trim()) {
+          showToast('搜索: ' + query);
+          socket.emit('demo_interaction', { interactionId: 'click:search:submit' });
+        }
+      };
+
+      const handleMicClick = () => {
+        showToast('语音输入');
+        socket.emit('demo_interaction', { interactionId: 'click:input:mic' });
+      };
+
+      const handleFooterStatusClick = (statusType) => {
+        showToast('状态: ' + statusType);
+        socket.emit('demo_interaction', { interactionId: `click:footer:${statusType}` });
+      };
+
+      const handleNotificationClick = () => {
+        showToast('通知面板');
+        socket.emit('demo_interaction', { interactionId: 'click:notification:bell' });
+      };
+
+      const handleSettingsClick = () => {
+        showToast('设置');
+        socket.emit('demo_interaction', { interactionId: 'click:topnav:settings' });
+      };
+
+      const handleUserMenuClick = () => {
+        showToast('用户菜单');
+        socket.emit('demo_interaction', { interactionId: 'click:topnav:user' });
+      };
+
+      const handleRoleSwitcherClick = () => {
+        showToast('角色列表');
+        socket.emit('demo_interaction', { interactionId: 'click:sidebar:role_switcher' });
+      };
+
+      const handleSystemSettingsClick = () => {
+        showToast('系统设置');
+        socket.emit('demo_interaction', { interactionId: 'click:sidebar:system_settings' });
+      };
+
+      const handleGenericClick = (interactionId) => {
+        const event = INTERACTION_RESPONSES[interactionId] || { type: 'toast', title_zh: '演示交互', data: {} };
+        if (event.type === 'toast') {
+          showToast(event.title_zh + ' - 演示交互');
+        } else if (event.type === 'drawer') {
+          setDrawerPanel({ open: true, title: event.title_zh, data: event.data });
+        } else if (event.type === 'modal') {
+          setModalPanel({ open: true, title: event.title_zh, data: event.data });
+        }
+        if (socket && socket.connected) {
+          socket.emit('demo_interaction', { interactionId });
+        }
+      };
+
+      const handleCommandChip = (chipText) => {
+        const interactionId = 'click:quick_cmd:' + chipText;
+        handleGenericClick(interactionId);
+        handleQuickCmd(chipText);
+      };
+
+      const handleStoryModeOpen = () => {
+        setIsStoryModeOpen(true);
+        setCurrentStory(null);
+        setCurrentStep(0);
+        setStoryEvents([]);
+        setHighlightedElement(null);
+      };
+
+      const handleStoryModeClose = () => {
+        setIsStoryModeOpen(false);
+        setCurrentStory(null);
+        setCurrentStep(0);
+        setStoryEvents([]);
+        setHighlightedElement(null);
+      };
+
+      const handleStartStory = (storyId) => {
+        setCurrentStory(storyId);
+        setCurrentStep(0);
+        setStoryEvents([]);
+
+        const story = STORY_SEQUENCES[storyId];
+        if (story && story.steps[0]) {
+          const firstStep = story.steps[0];
+          // Switch role
+          setActiveRole(firstStep.role);
+          // Set highlight
+          setHighlightedElement({ type: firstStep.highlight, element: firstStep.highlightElement });
+          // Emit demo interaction
+          socket.emit('demo_interaction', { interactionId: `story:step:${storyId}:${firstStep.step}`, storyId, step: firstStep.step });
+          // Emit story event
+          socket.emit('story_advance', { storyId, step: firstStep.step, role: firstStep.role });
+        }
+      };
+
+      const handleStoryNext = () => {
+        const story = STORY_SEQUENCES[currentStory];
+        if (!story) return;
+
+        if (currentStep < story.steps.length - 1) {
+          const nextStep = currentStep + 1;
+          setCurrentStep(nextStep);
+          const stepData = story.steps[nextStep];
+
+          // Switch role
+          setActiveRole(stepData.role);
+          // Set highlight
+          setHighlightedElement({ type: stepData.highlight, element: stepData.highlightElement });
+          // Emit demo interaction
+          socket.emit('demo_interaction', { interactionId: `story:step:${currentStory}:${stepData.step}`, storyId: currentStory, step: stepData.step });
+          // Emit story event
+          socket.emit('story_advance', { storyId: currentStory, step: stepData.step, role: stepData.role });
+        } else {
+          // Story complete
+          handleStoryModeClose();
+        }
+      };
+
+      const handleStoryPrev = () => {
+        if (currentStep > 0) {
+          const prevStep = currentStep - 1;
+          setCurrentStep(prevStep);
+          const stepData = STORY_SEQUENCES[currentStory].steps[prevStep];
+
+          // Switch role
+          setActiveRole(stepData.role);
+          // Set highlight
+          setHighlightedElement({ type: stepData.highlight, element: stepData.highlightElement });
+          // Emit demo interaction
+          socket.emit('demo_interaction', { interactionId: `story:step:${currentStory}:${stepData.step}`, storyId: currentStory, step: stepData.step });
+        }
+      };
+
+      const handleStoryExit = () => {
+        handleStoryModeClose();
+      };
+
+      const handleArchitectureViewOpen = () => {
+        setIsArchitectureOpen(true);
+      };
+
+      const handleArchitectureViewClose = () => {
+        setIsArchitectureOpen(false);
+      };
+
       return (
         <div className="app-container">
-          <BubbleWall stats={stats} onQuickCmd={handleQuickCmd} />
-          
-          <div className="main-area">
-            <header className="header">
-              <span className="header-logo">🤖</span>
-              <span className="header-title">AgentCenter</span>
-              <div className="header-status">
-                <span className={`status-dot ${connected ? '' : 'disconnected'}`}></span>
-                <span>{connected ? '已连接' : '未连接'}</span>
-              </div>
-            </header>
-            
-            <div className="chat-container">
-              <div className="messages-area">
-                <div className="message message-bot">
-                  <div className="message-bubble">{WELCOME_MESSAGE}</div>
-                </div>
-                
-                {messages.map((msg) => (
-                  <Message 
-                    key={msg.id} 
-                    {...msg} 
-                    executions={executions} 
-                    onConfirm={handleConfirm}
-                    onQuickCmd={handleQuickCmd}
-                  />
-                ))}
-                
-                {isTyping && (
-                  <div className="message message-bot">
-                    <div className="message-bubble">
-                      <div className="typing-indicator">
-                        <span className="typing-dot"></span>
-                        <span className="typing-dot"></span>
-                        <span className="typing-dot"></span>
+          <StoryModeOverlay
+            isOpen={isStoryModeOpen}
+            onClose={handleStoryModeClose}
+            onStartStory={handleStartStory}
+            currentStory={currentStory}
+            currentStep={currentStep}
+            onNext={handleStoryNext}
+            onPrev={handleStoryPrev}
+            onExit={handleStoryExit}
+            storyEvents={storyEvents}
+          />
+
+          <ArchitectureView
+            isOpen={isArchitectureOpen}
+            onClose={handleArchitectureViewClose}
+          />
+
+          <button
+            className="story-start-btn"
+            onClick={handleStoryModeOpen}
+            data-testid="story-mode-start"
+            style={{ position: 'fixed', bottom: 80, right: 24, zIndex: 500 }}
+          >
+            <i data-lucide="book-open"></i>
+            故事模式
+          </button>
+
+          <Sidebar
+            activeRole={activeRole}
+            onRoleChange={handleRoleChange}
+            onNavClick={handleNavClick}
+            onToolClick={handleToolClick}
+            onAgentClick={handleSidebarAgentClick}
+            onRoleSwitcherClick={handleRoleSwitcherClick}
+            onSystemSettingsClick={handleSystemSettingsClick}
+            onArchitectureViewOpen={handleArchitectureViewOpen}
+          />
+
+          <div className="main-content">
+            <TopNav onNavClick={handleNavClick} connected={connected} activeRole={activeRole} onSearchSubmit={handleSearchSubmit} onMicClick={handleMicClick} onNotificationClick={handleNotificationClick} onSettingsClick={handleSettingsClick} onUserMenuClick={handleUserMenuClick} />
+
+            <div className="dashboard-content">
+              <MetricsStrip stats={stats} activeRole={activeRole} />
+
+              <div className="two-column">
+                <div className="card conversation-panel">
+                  <div className="card-header" data-testid="chat-header">
+                    <div className="card-title">
+                      <span className="card-title-main" data-testid="dashboard-headline">{ROLE_CONTENT[activeRole]?.headline || 'AI 智能中枢'}</span>
+                      <span className="card-title-sub" data-testid="dashboard-headline-sub">{ROLE_CONTENT[activeRole]?.headlineSub || '通过对话驱动全流程'}</span>
+                    </div>
+                    <div className="card-actions">
+                      <button className="card-action-btn" onClick={() => showToast('新建对话')}>新建对话</button>
+                      <button className="card-action-btn" onClick={() => showToast('历史记录')}>历史记录</button>
+                    </div>
+                  </div>
+                  <div className="conversation-messages">
+                    <div className="message message-bot">
+                      <div className="message-bubble">{WELCOME_MESSAGE}</div>
+                    </div>
+
+                    {messages.map((msg) => (
+                      <Message
+                        key={msg.id}
+                        {...msg}
+                        executions={executions}
+                        onConfirm={handleConfirm}
+                        onQuickCmd={handleQuickCmd}
+                      />
+                    ))}
+
+                    {isTyping && (
+                      <div className="message message-bot">
+                        <div className="message-bubble">
+                          <div className="typing-indicator">
+                            <span className="typing-dot"></span>
+                            <span className="typing-dot"></span>
+                            <span className="typing-dot"></span>
+                          </div>
+                        </div>
                       </div>
+                    )}
+
+                    <div ref={messagesEndRef} />
+                  </div>
+
+                  <div className="conversation-input" data-testid="chat-input-container">
+                    <div className="input-wrapper">
+                      <input
+                        type="text"
+                        placeholder="输入指令或问题..."
+                        value={inputValue}
+                        onChange={(e) => setInputValue(e.target.value)}
+                        onKeyPress={handleKeyPress}
+                        data-testid="chat-input"
+                      />
+                      <div className="input-btn" onClick={handleMicClick}>
+                        <i data-lucide="mic"></i>
+                      </div>
+                    </div>
+                    <button className="send-btn" onClick={handleSend} data-testid="chat-send-btn">
+                      <i data-lucide="send"></i>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="right-column">
+                  <AlertsPanel onAlertClick={handleAlertClick} />
+                  <CollaborationPanel onAgentNodeClick={handleAgentNodeClick} />
+                </div>
+              </div>
+
+              <PipelineFull onStageClick={handleStageClick} />
+              <CommandDeck onChipClick={handleCommandChip} activeRole={activeRole} />
+            </div>
+
+            <FooterStatus connected={connected} onStatusClick={handleFooterStatusClick} />
+          </div>
+        </div>
+      );
+    }
+
+    function Sidebar({ activeRole, onRoleChange, onNavClick, onToolClick, onAgentClick, onRoleSwitcherClick, onSystemSettingsClick, onArchitectureViewOpen }) {
+      const [activeNav, setActiveNav] = useState('overview');
+
+      const handleNav = (item) => {
+        setActiveNav(item);
+        if (item === 'architecture') {
+          onArchitectureViewOpen();
+        } else {
+          onNavClick(item);
+        }
+      };
+
+      return (
+        <aside className="sidebar" data-testid="sidebar">
+          <div className="sidebar-header">
+            <div className="logo">
+              <div className="logo-icon">
+                <i data-lucide="sparkles"></i>
+              </div>
+              <span className="logo-text">AgentCenter</span>
+              <span className="version-badge">v2.0</span>
+            </div>
+          </div>
+
+          <div className="sidebar-content">
+            <div className="sidebar-section">
+              <div className="sidebar-section-title">角色切换</div>
+              <div className="role-switcher" data-testid="role-switcher" onClick={onRoleSwitcherClick} data-interaction-id="click:sidebar:role_switcher">
+                <i data-lucide={ROLES.find(r => r.id === activeRole)?.icon || 'User'}></i>
+                <span className="role-switcher-text">
+                  {ROLES.find(r => r.id === activeRole)?.name_zh || '选择角色'}
+                </span>
+                <i data-lucide="chevron-down" style={{marginLeft: 'auto'}}></i>
+              </div>
+              <div style={{padding: '8px 20px 0'}}>
+                {ROLES.map(role => (
+                  <div
+                    key={role.id}
+                    className={`nav-item ${activeRole === role.id ? 'active' : ''}`}
+                    onClick={() => onRoleChange(role.id)}
+                    data-interaction-id={`click:sidebar:role:${role.id}`}
+                    style={{padding: '6px 12px', fontSize: '13px'}}
+                  >
+                    <i data-lucide={role.icon} style={{width: '14px', height: '14px'}}></i>
+                    <span>{role.name_zh}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="sidebar-section">
+              <div className="sidebar-section-title">工作台</div>
+              <div className={`nav-item ${activeNav === 'overview' ? 'active' : ''}`} onClick={() => handleNav('overview')} data-interaction-id="click:sidebar:nav:overview">
+                <i data-lucide="layout-dashboard"></i>
+                <span>总览</span>
+              </div>
+              <div className={`nav-item ${activeNav === 'conversation' ? 'active' : ''}`} onClick={() => handleNav('conversation')} data-interaction-id="click:sidebar:nav:conversation">
+                <i data-lucide="message-square"></i>
+                <span>对话</span>
+              </div>
+              <div className={`nav-item ${activeNav === 'workflow' ? 'active' : ''}`} onClick={() => handleNav('workflow')} data-interaction-id="click:sidebar:nav:workflow">
+                <i data-lucide="git-branch"></i>
+                <span>工作流</span>
+              </div>
+              <div className={`nav-item ${activeNav === 'agents' ? 'active' : ''}`} onClick={() => handleNav('agents')} data-interaction-id="click:sidebar:nav:agents">
+                <i data-lucide="bot"></i>
+                <span>Agent 管理</span>
+              </div>
+              <div className={`nav-item ${activeNav === 'architecture' ? 'active' : ''}`} onClick={() => handleNav('architecture')} data-interaction-id="click:sidebar:nav:architecture" data-testid="nav-architecture">
+                <i data-lucide="network"></i>
+                <span>架构视图</span>
+              </div>
+            </div>
+
+            <div className="sidebar-section">
+              <div className="sidebar-section-title">DevOps 工具链</div>
+              {TOOLCHAIN.map(tool => (
+                <div key={tool.id} className="tool-item" onClick={() => onToolClick(tool.name)} data-interaction-id={`click:sidebar:tool:${tool.name}`}>
+                  <div className="tool-info">
+                    <span className={`tool-status-dot ${tool.status}`}></span>
+                    <span className="tool-name">{tool.name}</span>
+                  </div>
+                  <span className="tool-status-text">
+                    {tool.status === 'connected' ? '已连接' : tool.status === 'delayed' ? '延迟' : '离线'}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="sidebar-section">
+              <div className="sidebar-section-title">智能体状态</div>
+              <div className="agent-item" onClick={() => onAgentClick('需求分析 Agent')} data-interaction-id="click:sidebar:agent:需求分析 Agent">
+                <div className="agent-header">
+                  <span className="agent-name">需求分析 Agent</span>
+                  <span className="agent-status idle"><span className="dot"></span>空闲</span>
+                </div>
+                <div className="agent-task">等待下一个任务</div>
+              </div>
+              <div className="agent-item" onClick={() => onAgentClick('代码审查 Agent')} data-interaction-id="click:sidebar:agent:代码审查 Agent">
+                <div className="agent-header">
+                  <span className="agent-name">代码审查 Agent</span>
+                  <span className="agent-status working"><span className="dot"></span>工作中</span>
+                </div>
+                <div className="agent-task">审查设计中</div>
+              </div>
+              <div className="agent-item" onClick={() => onAgentClick('部署编排 Agent')} data-interaction-id="click:sidebar:agent:部署编排 Agent">
+                <div className="agent-header">
+                  <span className="agent-name">部署编排 Agent</span>
+                  <span className="agent-status idle"><span className="dot"></span>空闲</span>
+                </div>
+                <div className="agent-task">等待下一个任务</div>
+              </div>
+              <div className="agent-item" onClick={() => onAgentClick('监控预警 Agent')} data-interaction-id="click:sidebar:agent:监控预警 Agent">
+                <div className="agent-header">
+                  <span className="agent-name">监控预警 Agent</span>
+                  <span className="agent-status alert"><span className="dot"></span>告警中</span>
+                </div>
+                <div className="agent-task">服务延迟预警</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="sidebar-footer">
+            <div className="system-settings" onClick={onSystemSettingsClick} data-interaction-id="click:sidebar:system_settings">
+              <i data-lucide="settings"></i>
+              <span>系统设置</span>
+            </div>
+          </div>
+        </aside>
+      );
+    }
+
+    function TopNav({ onNavClick, connected, activeRole, onSearchSubmit, onMicClick, onNotificationClick, onSettingsClick, onUserMenuClick }) {
+      const currentRole = ROLES.find(r => r.id === activeRole);
+      const handleSearchKeyPress = (e) => {
+        if (e.key === 'Enter') {
+          onSearchSubmit(e.target.value);
+        }
+      };
+      return (
+        <nav className="top-nav" data-testid="top-nav">
+          <div className="nav-left">
+            <div className="collapse-btn" onClick={() => { showToast('切换侧边栏'); onNavClick('sidebar_toggle'); }} data-interaction-id="click:topnav:collapse">
+              <i data-lucide="panel-left-close"></i>
+            </div>
+          </div>
+
+          <div className="nav-center">
+            <div className="search-bar" data-testid="search-input">
+              <i data-lucide="search"></i>
+              <input type="text" placeholder="搜索需求、服务、工单..." onKeyPress={handleSearchKeyPress} data-interaction-id="click:search:input" />
+            </div>
+          </div>
+
+          <div className="nav-right">
+            <div className="nav-icon-btn" onClick={onNotificationClick} data-testid="alert-bell" data-interaction-id="click:notification:bell">
+              <i data-lucide="bell"></i>
+              <span className="alert-badge">3</span>
+            </div>
+            <div className="nav-icon-btn" onClick={onSettingsClick} data-interaction-id="click:topnav:settings">
+              <i data-lucide="settings"></i>
+            </div>
+            <div className="user-info" onClick={onUserMenuClick} data-interaction-id="click:topnav:user">
+              <div className="user-avatar">{currentRole?.name_zh?.charAt(0) || '用'}</div>
+              <div className="user-details">
+                <span className="user-name">{currentRole?.name_zh || '用户'}</span>
+                <span className="user-role">{currentRole?.description?.split('，')[0] || '智能中枢'}</span>
+              </div>
+            </div>
+          </div>
+        </nav>
+      );
+    }
+
+    function MetricsStrip({ stats, activeRole }) {
+      const defaultStats = {
+        deployments: { today: 12, success_rate: 94.7 },
+        builds: { today: 8, success_rate: 87 },
+        alerts: { active: 3 },
+        sprint: { name: 'Sprint 14', progress: 68 }
+      };
+
+      const s = stats || defaultStats;
+      const roleMetrics = ROLE_CONTENT[activeRole]?.metrics;
+
+      // Get metric card data based on role
+      const metricKeys = ['deployments', 'builds', 'alerts', 'sprint'];
+      const metricIcons = { deployments: 'blue', builds: 'green', alerts: 'red', sprint: 'amber' };
+
+      return (
+        <div className="metrics-strip" data-testid="metrics-strip">
+          {metricKeys.map((key, idx) => {
+            const roleMetric = roleMetrics?.[key];
+            const defaultMetric = {
+              deployments: { label: '今日部署', value: s.deployments?.today || 0, trend: `成功率 ${s.deployments?.success_rate || 0}%`, trendDir: 'up', icon: 'rocket' },
+              builds: { label: '构建引擎', value: s.builds?.today || 0, trend: `成功率 ${s.builds?.success_rate || 0}%`, trendDir: 'up', icon: 'check-circle' },
+              alerts: { label: '活跃告警', value: `${s.alerts?.active || 0}条`, trend: '2 严重, 1 警告', trendDir: 'down', icon: 'alert-triangle' },
+              sprint: { label: 'Sprint 进度', value: s.sprint?.name || 'Sprint 14', progress: s.sprint?.progress || 0, trendDir: 'up', icon: 'target' }
+            };
+            const metric = roleMetric || defaultMetric[key];
+            const iconColor = metricIcons[key];
+
+            return (
+              <div className="metric-card" key={key} data-testid={`metric-card-${key}`}>
+                <div className="metric-header">
+                  <span className="metric-label">{metric.label}</span>
+                  <div className={`metric-icon ${iconColor}`}>
+                    <i data-lucide={metric.icon}></i>
+                  </div>
+                </div>
+                <div className="metric-value">{metric.value}</div>
+                <div className="metric-trend">
+                  <span className={`trend-badge ${metric.trendDir}`}>{metric.trend}</span>
+                </div>
+                {metric.progress !== undefined && (
+                  <div className="progress-container">
+                    <div className="progress-header">
+                      <span className="progress-label">完成率</span>
+                      <span className="progress-value">{metric.progress}%</span>
+                    </div>
+                    <div className="progress-bar">
+                      <div className="progress-fill" style={{width: `${metric.progress}%`}}></div>
                     </div>
                   </div>
                 )}
-                
-                <div ref={messagesEndRef} />
               </div>
-              
-              <div className="input-area">
-                <input
-                  type="text"
-                  className="input-field"
-                  placeholder="输入命令或问题..."
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                />
-                <button className="send-btn" onClick={handleSend}>➤</button>
+            );
+          })}
+        </div>
+      );
+    }
+
+    function AlertsPanel({ onAlertClick }) {
+      const alerts = [
+        { id: 1, type: 'critical', title: '构建失败 — 某服务', time: '14:32', branch: 'main' },
+        { id: 2, type: 'warning', title: '部署审批超时', time: '10:30', approver: '待审批' },
+        { id: 3, type: 'info', title: 'Sprint 14 即将结束', time: '剩余 2 天', items: '12 个待办' }
+      ];
+
+      return (
+        <div className="card alerts-panel" data-testid="alerts-panel">
+          <div className="card-header">
+            <div className="card-title">
+              <span className="card-title-main">主动预警</span>
+            </div>
+            <span className="card-badge">{alerts.length}条未读</span>
+          </div>
+          <div className="card-body">
+            <div className="alerts-list">
+              {alerts.map(alert => (
+                <div
+                  key={alert.id}
+                  className={`alert-card ${alert.type}`}
+                  onClick={() => onAlertClick(alert.title)}
+                  data-interaction-id={`click:alerts:${alert.title}`}
+                >
+                  <div className="alert-header">
+                    <span className="alert-title">{alert.title}</span>
+                    <span className={`alert-type ${alert.type}`}>{alert.type.toUpperCase()}</span>
+                  </div>
+                  <div className="alert-meta">
+                    {alert.branch ? `分支 ${alert.branch}` : ''} | 时间: {alert.time}
+                  </div>
+                  <div className="alert-actions">
+                    <button className="alert-btn view" onClick={(e) => { e.stopPropagation(); showToast('查看 ' + alert.title); }} data-interaction-id={`click:alerts:${alert.title}:view`}>查看</button>
+                    <button className="alert-btn handle" onClick={(e) => { e.stopPropagation(); showToast('处理 ' + alert.title); }} data-interaction-id={`click:alerts:${alert.title}:handle`}>处理</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function CollaborationPanel({ onAgentNodeClick }) {
+      return (
+        <div className="card collaboration-panel" data-testid="agent-collaboration">
+          <div className="card-header">
+            <div className="card-title">
+              <span className="card-title-main">智能体协作</span>
+            </div>
+            <span className="card-badge">1 个任务进行中</span>
+          </div>
+          <div className="card-body">
+            <div className="task-header">
+              <div className="task-icon">
+                <i data-lucide="users"></i>
+              </div>
+              <div className="task-info">
+                <div className="task-title">多阶段任务执行中</div>
+                <div className="task-subtitle">智能体协作任务</div>
+              </div>
+            </div>
+
+            <div className="agent-pipeline">
+              <div className="agent-node">
+                <div className="agent-node-circle completed" onClick={() => onAgentNodeClick('需求')} style={{cursor: 'pointer'}} data-interaction-id="click:agent:需求">1</div>
+                <span className="agent-node-label">需求</span>
+              </div>
+              <span className="agent-arrow">→</span>
+              <div className="agent-node">
+                <div className="agent-node-circle current" onClick={() => onAgentNodeClick('设计')} style={{cursor: 'pointer'}} data-interaction-id="click:agent:设计">2</div>
+                <span className="agent-node-label">设计</span>
+              </div>
+              <span className="agent-arrow">→</span>
+              <div className="agent-node">
+                <div className="agent-node-circle pending" onClick={() => onAgentNodeClick('检查')} style={{cursor: 'pointer'}} data-interaction-id="click:agent:检查">3</div>
+                <span className="agent-node-label">检查</span>
+              </div>
+              <span className="agent-arrow">→</span>
+              <div className="agent-node">
+                <div className="agent-node-circle pending" onClick={() => onAgentNodeClick('部署')} style={{cursor: 'pointer'}} data-interaction-id="click:agent:部署">4</div>
+                <span className="agent-node-label">部署</span>
+              </div>
+            </div>
+
+            <div className="agent-current-status">
+              <span className="agent-current-text">设计 Agent 正在生成方案</span>
+            </div>
+
+            <div className="agent-progress">
+              <div className="agent-progress-bar">
+                <div className="agent-progress-fill" style={{width: '40%'}}></div>
+              </div>
+              <span className="agent-progress-text">2/5 步骤完成</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function PipelineFull({ onStageClick }) {
+      const stages = [
+        { name: '需求管理', count: 23, status: 'healthy' },
+        { name: '设计建模', count: 18, status: 'healthy' },
+        { name: '代码开发', count: 45, status: 'warning' },
+        { name: '代码检查', count: 12, status: 'healthy' },
+        { name: '构建集成', count: 31, status: 'healthy' },
+        { name: '测试验证', count: 28, status: 'error' },
+        { name: '部署上线', count: 15, status: 'healthy' },
+        { name: '运维监控', count: 8, status: 'healthy' }
+      ];
+
+      const events = [
+        { type: 'success', text: '某需求已完成设计评审', time: '10:32' },
+        { type: 'error', text: '构建失败', time: '10:28' },
+        { type: 'success', text: '部署成功', time: '09:45' },
+        { type: 'info', text: 'Sprint 进度更新 68%', time: '09:30' }
+      ];
+
+      return (
+        <div className="card pipeline-full" data-testid="pipeline-view">
+          <div className="card-header">
+            <span className="pipeline-title">全流程管线</span>
+            <div className="pipeline-filters">
+              <button className="filter-btn" onClick={() => showToast('今日数据')} data-interaction-id="click:pipeline:filter:today">今日</button>
+              <button className="filter-btn active" onClick={() => showToast('本周数据')} data-interaction-id="click:pipeline:filter:week">本周</button>
+              <button className="filter-btn" onClick={() => showToast('本月数据')} data-interaction-id="click:pipeline:filter:month">本月</button>
+            </div>
+          </div>
+          <div className="card-body">
+            <div className="pipeline-stages">
+              {stages.map((stage, idx) => (
+                <div key={idx} className="stage-item">
+                  <div className={`stage-circle ${stage.status}`} onClick={() => onStageClick(stage.name)} style={{cursor: 'pointer'}} data-interaction-id={`click:pipeline:stage:${stage.name}`}>
+                    <span className="stage-count">{stage.count}</span>
+                  </div>
+                  <span className="stage-label">{stage.name}</span>
+                  {idx < stages.length - 1 && (
+                    <div className="stage-connector">
+                      <div className={`stage-connector-line ${idx < 2 ? 'active' : ''}`}></div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="pipeline-timeline">
+              <div className="timeline-header">最近活动</div>
+              <div className="timeline-events">
+                {events.map((event, idx) => (
+                  <div key={idx} className="timeline-event">
+                    <span className={`event-dot ${event.type}`}></span>
+                    <span className="event-text">{event.text}</span>
+                    <span className="event-time">{event.time}</span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
         </div>
       );
     }
-    
+
+    function CommandDeck({ onChipClick, activeRole }) {
+      const defaultChips = [
+        { icon: 'layout-dashboard', text: '总览', desc: '查看全局状态' },
+        { icon: 'git-branch', text: 'Sprint 进度', desc: '当前迭代状态' },
+        { icon: 'rocket', text: '部署服务', desc: '快速部署到环境' },
+        { icon: 'play', text: '运行测试', desc: '触发测试执行' },
+        { icon: 'search', text: '检查服务', desc: '健康检查' },
+        { icon: 'file-text', text: '查看日志', desc: '追踪问题' }
+      ];
+
+      const chips = ROLE_CONTENT[activeRole]?.commands || defaultChips;
+
+      return (
+        <div className="command-deck" data-testid="command-deck">
+          <div className="command-deck-header">
+            <span className="command-deck-title">快捷命令</span>
+          </div>
+          <div className="command-chips">
+            {chips.map((chip, idx) => (
+              <div
+                key={idx}
+                className="command-chip"
+                onClick={() => onChipClick(chip.text)}
+                data-interaction-id={`click:quick_cmd:${chip.text}`}
+              >
+                <div className="command-chip-icon">
+                  <i data-lucide={chip.icon}></i>
+                </div>
+                <div>
+                  <div className="command-chip-text">{chip.text}</div>
+                  <div className="command-chip-desc">{chip.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    function FooterStatus({ connected, onStatusClick }) {
+      return (
+        <footer className="footer-status" data-testid="footer-status">
+          <div className="status-left">
+            <div className="status-item" onClick={() => onStatusClick('system')} style={{cursor: 'pointer'}} data-interaction-id="click:footer:system">
+              <span className={`status-dot ${connected ? 'green' : ''}`}></span>
+              <span>{connected ? '系统运行正常' : '未连接'}</span>
+            </div>
+            <div className="status-item" onClick={() => onStatusClick('tools')} style={{cursor: 'pointer'}} data-interaction-id="click:footer:tools">
+              <i data-lucide="check-circle" style={{width: '14px', height: '14px', color: 'var(--success)'}}></i>
+              <span>10/10 工具已连接</span>
+            </div>
+            <div className="status-item" onClick={() => onStatusClick('agents')} style={{cursor: 'pointer'}} data-interaction-id="click:footer:agents">
+              <i data-lucide="activity" style={{width: '14px', height: '14px', color: 'var(--success)'}}></i>
+              <span>4 个智能体在线</span>
+            </div>
+          </div>
+          <div className="status-right">
+            v2.0.1
+          </div>
+        </footer>
+      );
+    }
+
     function Message({ type, content, confirmation, executionId, msgType, executions, onConfirm }) {
       if (type === 'user') {
         return (
@@ -622,7 +3192,7 @@
           </div>
         );
       }
-      
+
       return (
         <div className="message message-bot">
           {msgType === 'confirmation' && confirmation && <ConfirmationCard data={confirmation} onConfirm={onConfirm} />}
@@ -635,7 +3205,7 @@
         </div>
       );
     }
-    
+
     function ConfirmationCard({ data, onConfirm }) {
       return (
         <div className="confirmation-card">
@@ -653,148 +3223,584 @@
           </div>
           <div className="confirmation-actions">
             <button className="btn btn-primary" onClick={() => onConfirm(data)}>确认执行</button>
-            <button className="btn btn-secondary">取消</button>
+            <button className="btn btn-secondary" onClick={() => showToast('取消')}>取消</button>
           </div>
         </div>
       );
     }
-    
+
     function ExecutionCard({ execution }) {
       const getStepIcon = (status) => {
         switch(status) {
-          case 'completed': return '✓';
-          case 'running': return '⏳';
-          case 'failed': return '✗';
-          default: return '○';
+          case 'completed': return 'check';
+          case 'running': return 'loader';
+          case 'failed': return 'x';
+          default: return 'circle';
         }
       };
-      
+
       return (
         <div className="execution-card">
           <div className="execution-header">
-            <span>🔧</span>
-            <span className="execution-title">执行流程</span>
-            <span className="execution-subtitle">{execution.status === 'completed' ? '✓ 完成' : execution.status === 'failed' ? '✗ 失败' : '进行中...'}</span>
+            {execution.status === 'running' && <div className="execution-spinner"></div>}
+            <span className="execution-title">{execution.message || '执行流程'}</span>
+            <span className="execution-subtitle">
+              {execution.status === 'completed' ? '✓ 完成' : execution.status === 'failed' ? '✗ 失败' : '进行中...'}
+            </span>
           </div>
           <div className="execution-steps">
             {execution.steps.map((step, idx) => (
-              <div key={idx} className={`step-item step-${step.status}`}>
-                <span className="step-icon">{getStepIcon(step.status)}</span>
-                <span className="step-label">{STEP_LABELS[step.name] || step.name}</span>
-                {step.message && step.status === 'running' && (
-                  <span className="step-message">{step.message}</span>
-                )}
+              <div key={idx} className={`execution-step step-${step.status}`}>
+                <span className="step-icon">
+                  <i data-lucide={getStepIcon(step.status)}></i>
+                </span>
+                <span className="step-text">
+                  {STEP_LABELS[step.name] || step.name}
+                  {step.message && step.status === 'running' && <span> {step.message}</span>}
+                </span>
               </div>
             ))}
           </div>
         </div>
       );
     }
-    
-    function BubbleWall({ stats, onQuickCmd }) {
-      const defaultStats = {
-        requirements: { total: 0, done: 0, completion_rate: 0 },
-        sprint: { name: '-', total: 0, done: 0, in_progress: 0, delayed: 0, progress: 0 },
-        development: { in_progress: 0, code_reviews_pending: 0, todo: 0 },
-        builds: { today: 0, success_rate: 0 },
-        tests: { total_suites: 0, pass_rate: 0, failed: 0 },
-        deployments: { today: 0, total: 0, success_rate: 0 },
-        monitoring: { active_alerts: 0, healthy_services: 0, total_services: 0, sla: 0 },
-        alerts: { active_alerts: 0 }
+
+    // Story mode sequences
+    const STORY_SEQUENCES = {
+      requirement: {
+        title: '需求到设计与研发启动',
+        desc: '从产品需求到技术方案再到研发启动的完整流程',
+        icon: 'lightbulb',
+        roles: ['product', 'architecture', 'development'],
+        steps: [
+          {
+            step: 1,
+            role: 'product',
+            action: '产品经理提交新需求',
+            result: '需求已进入需求池待评审',
+            highlight: 'sidebar',
+            highlightElement: '需求管理平台',
+            value: '通过对话式界面，产品经理可以自然语言提交需求，AI 自动解析并创建工单，减少手工操作，提升需求录入效率。'
+          },
+          {
+            step: 2,
+            role: 'architecture',
+            action: '架构师进行技术方案评审',
+            result: '技术方案已评审通过',
+            highlight: 'sidebar',
+            highlightElement: '设计协作平台',
+            value: '架构师可以快速查看需求细节，通过 AI 辅助生成技术方案，多方案对比选择最优，提升架构决策效率。'
+          },
+          {
+            step: 3,
+            role: 'development',
+            action: '研发工程师领取任务并开始开发',
+            result: '代码分支已创建，开始编码',
+            highlight: 'pipeline',
+            highlightElement: '代码开发',
+            value: '研发工程师通过统一的开发工作台领取任务，查看技术方案，自动创建代码分支，提升开发启动速度。'
+          },
+          {
+            step: 4,
+            role: 'development',
+            action: '提交代码并触发自动构建',
+            result: '构建成功，镜像已推送',
+            highlight: 'pipeline',
+            highlightElement: '构建集成',
+            value: '代码提交后自动触发构建流程，无需人工干预构建环节，缩短交付周期，提升构建效率。'
+          }
+        ]
+      },
+      incident: {
+        title: '故障冒泡与协同处置',
+        desc: '从故障发现到多团队协同处理的完整流程',
+        icon: 'alert-triangle',
+        roles: ['ops', 'development', 'quality'],
+        steps: [
+          {
+            step: 1,
+            role: 'ops',
+            action: '运维团队发现告警并初步定位',
+            result: '故障根因已定位，影响范围已确认',
+            highlight: 'alerts',
+            highlightElement: '告警面板',
+            value: '可观测平台自动检测异常并实时告警，运维团队可以快速定位故障，减少平均发现时间 (MTTD)。'
+          },
+          {
+            step: 2,
+            role: 'development',
+            action: '研发工程师接到故障通知开始排查',
+            result: '日志已分析，修复方案已确定',
+            highlight: 'conversation',
+            highlightElement: '对话面板',
+            value: '通过统一的告警通知机制，研发团队第一时间收到故障告警，无需切换多个工具即可查看日志和分析问题。'
+          },
+          {
+            step: 3,
+            role: 'quality',
+            action: '测试团队待命并准备验证修复',
+            result: '验证环境已准备，待研发提交修复',
+            highlight: 'pipeline',
+            highlightElement: '测试验证',
+            value: '测试团队提前准备验证环境，待研发修复后立即进行回归测试，大幅缩短故障修复周期。'
+          },
+          {
+            step: 4,
+            role: 'ops',
+            action: '运维团队确认服务恢复',
+            result: '服务已恢复正常运行',
+            highlight: 'pipeline',
+            highlightElement: '运维监控',
+            value: '修复验证通过后，运维团队确认服务状态，事件自动同步到管理驾驶舱，实现故障处置闭环。'
+          }
+        ]
+      },
+      release: {
+        title: '发布门禁与管理可视化',
+        desc: '从研发提交到发布上线的完整流程',
+        icon: 'rocket',
+        roles: ['development', 'ops', 'management'],
+        steps: [
+          {
+            step: 1,
+            role: 'development',
+            action: '研发工程师提交发布申请',
+            result: '发布申请已提交，等待门禁检查',
+            highlight: 'command-deck',
+            highlightElement: '部署服务',
+            value: '研发通过快捷命令一键提交发布申请，系统自动执行代码扫描、单元测试等门禁检查，减少人工审批等待。'
+          },
+          {
+            step: 2,
+            role: 'ops',
+            action: '运维团队审批发布请求',
+            result: '发布已审批，开始部署执行',
+            highlight: 'conversation',
+            highlightElement: '审批确认',
+            value: '运维团队在统一的运维工作台审批发布请求，可以查看完整的变更信息，快速做出审批决策。'
+          },
+          {
+            step: 3,
+            role: 'ops',
+            action: '部署平台执行发布任务',
+            result: '服务已部署到预生产环境',
+            highlight: 'pipeline',
+            highlightElement: '部署上线',
+            value: '发布审批通过后自动触发部署流程，平台自动执行部署、验证等步骤，实时同步进度给相关团队。'
+          },
+          {
+            step: 4,
+            role: 'management',
+            action: '管理层在驾驶舱查看发布结果',
+            result: '发布成功，关键指标正常',
+            highlight: 'metrics',
+            highlightElement: '战略驾驶舱',
+            value: '管理层通过统一的管理驾驶舱实时掌握发布状态和关键指标，感知全局风险，无需逐个系统查询。'
+          }
+        ]
+      }
+    };
+
+    function StoryModeOverlay({ isOpen, onClose, onStartStory, currentStory, currentStep, onNext, onPrev, onExit, storyEvents }) {
+      const [selectedStory, setSelectedStory] = useState(null);
+
+      if (!isOpen) return null;
+
+      const handleStorySelect = (storyId) => {
+        setSelectedStory(storyId);
+        onStartStory(storyId);
       };
-      
-      const s = stats || defaultStats;
-      const alerts = s.alerts?.active_alerts ?? s.monitoring?.active_alerts ?? 0;
-      
+
+      const handleStartFromSelection = () => {
+        if (selectedStory) {
+          onStartStory(selectedStory);
+        }
+      };
+
+      // If a story is playing
+      if (currentStory && STORY_SEQUENCES[currentStory]) {
+        const story = STORY_SEQUENCES[currentStory];
+        const stepData = story.steps[currentStep];
+        const totalSteps = story.steps.length;
+        const role = ROLES.find(r => r.id === stepData?.role);
+
+        return (
+          <div className="story-overlay">
+            <div className="story-modal">
+              <div className="story-modal-header">
+                <div className="story-modal-title">
+                  <i data-lucide="book-open"></i>
+                  {story.title}
+                </div>
+                <button className="story-close-btn" onClick={onExit} data-testid="story-mode-exit-btn">
+                  <i data-lucide="x"></i>
+                </button>
+              </div>
+              <div className="story-modal-body">
+                <div className="story-step-container">
+                  <div className="story-step-header">
+                    <div className="story-step-info">
+                      <div className="story-step-badge">{stepData.step}</div>
+                      <div>
+                        <div className="story-step-title">{stepData.action}</div>
+                        <div className="story-step-role">
+                          <i data-lucide={role?.icon || 'user'} style={{width: 12, height: 12, marginRight: 4}}></i>
+                          {role?.name_zh || stepData.role}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="story-step-count">步骤 {currentStep + 1} / {totalSteps}</div>
+                  </div>
+                  <div className="story-step-content">
+                    <div className="story-step-section">
+                      <div className="story-step-label">操作结果</div>
+                      <div className="story-step-highlight">{stepData.result}</div>
+                    </div>
+                    <div className="story-step-section">
+                      <div className="story-step-label">价值说明</div>
+                      <div className="story-step-explanation">
+                        <div className="story-step-value">{stepData.value}</div>
+                      </div>
+                    </div>
+                    {storyEvents.length > 0 && (
+                      <div className="story-step-section">
+                        <div className="story-step-label">模拟事件</div>
+                        <div className="story-event-feed">
+                          {storyEvents.map((evt, idx) => (
+                            <div key={idx} className="story-event-item">
+                              <span className={`story-event-dot ${evt.severity?.toLowerCase() || 'info'}`}></span>
+                              <span className="story-event-text">{evt.message}</span>
+                              <span className="story-event-time">{new Date(evt.timestamp).toLocaleTimeString()}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="story-controls">
+                <button
+                  className="story-btn story-btn-prev"
+                  onClick={onPrev}
+                  disabled={currentStep === 0}
+                  data-testid="story-mode-prev-btn"
+                >
+                  <i data-lucide="chevron-left"></i>
+                  上一步
+                </button>
+                <button
+                  className="story-btn story-btn-next"
+                  onClick={onNext}
+                  data-testid="story-mode-next-btn"
+                >
+                  {currentStep === totalSteps - 1 ? '完成' : '下一步'}
+                  <i data-lucide={currentStep === totalSteps - 1 ? 'check' : 'chevron-right'}></i>
+                </button>
+                <button
+                  className="story-btn story-btn-exit"
+                  onClick={onExit}
+                  data-testid="story-mode-exit-btn"
+                >
+                  <i data-lucide="x"></i>
+                  退出
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // Story selection view
       return (
-        <div className="bubble-wall">
-          <div className="bubble-card">
-            <div className="bubble-card-icon">📋</div>
-            <div className="bubble-card-label">需求</div>
-            <div className="bubble-card-value">{s.requirements.completion_rate}%</div>
-            <div className="bubble-card-sub">{s.requirements.done}/{s.requirements.total} 已完成</div>
-          </div>
-          
-          <div className="bubble-card">
-            <div className="bubble-card-icon">📅</div>
-            <div className="bubble-card-label">Sprint</div>
-            <div className="bubble-card-value">{s.sprint.progress}%</div>
-            <div className="bubble-card-sub">
-              {s.sprint.name}
-              {s.sprint.delayed > 0 && <span style={{color: '#f59e0b'}}> ⚠️ {s.sprint.delayed} 延期</span>}
+        <div className="story-overlay">
+          <div className="story-modal">
+            <div className="story-modal-header">
+              <div className="story-modal-title">
+                <i data-lucide="sparkles"></i>
+                选择故事开始演示
+              </div>
+              <button className="story-close-btn" onClick={onClose} data-testid="story-mode-close-btn">
+                <i data-lucide="x"></i>
+              </button>
             </div>
-          </div>
-          
-          <div className="bubble-card">
-            <div className="bubble-card-icon">🔨</div>
-            <div className="bubble-card-label">开发</div>
-            <div className="bubble-card-value">{s.development.in_progress} 进行中</div>
-            <div className="bubble-card-sub">{s.development.code_reviews_pending} 个 CR 待审</div>
-          </div>
-          
-          <div className="bubble-card">
-            <div className="bubble-card-icon">⚙️</div>
-            <div className="bubble-card-label">构建</div>
-            <div className="bubble-card-value">{s.builds.today} 次</div>
-            <div className="bubble-card-sub">成功率 {s.builds.success_rate}%</div>
-          </div>
-          
-          <div className={`bubble-card ${s.tests.failed > 0 ? 'test-failed' : ''}`}>
-            <div className="bubble-card-icon">🧪</div>
-            <div className="bubble-card-label">测试</div>
-            <div className="bubble-card-value">{s.tests.pass_rate}%</div>
-            <div className="bubble-card-sub">{s.tests.failed} 个失败</div>
-          </div>
-          
-          <div className="bubble-card">
-            <div className="bubble-card-icon">🚀</div>
-            <div className="bubble-card-label">部署</div>
-            <div className="bubble-card-value">{s.deployments.today} 次</div>
-            <div className="bubble-card-sub">总计 {s.deployments.total} | 成功率 {s.deployments.success_rate}%</div>
-          </div>
-          
-          <div className="bubble-card">
-            <div className="bubble-card-icon">📡</div>
-            <div className="bubble-card-label">监控</div>
-            <div className="bubble-card-value">{s.monitoring.healthy_services}/{s.monitoring.total_services}</div>
-            <div className="bubble-card-sub">SLA {s.monitoring.sla}%</div>
-          </div>
-          
-          <div className={`bubble-card ${alerts > 0 ? 'alert-active' : 'alert-ok'}`}>
-            <div className="bubble-card-icon">⚠️</div>
-            <div className="bubble-card-label">告警</div>
-            <div className="bubble-card-value">{alerts} 条</div>
-            <div className="bubble-card-sub">{alerts > 0 ? '需要关注' : '无活跃告警'}</div>
-          </div>
-          
-          <div className="quick-commands">
-            <div className="quick-commands-title">💡 快捷命令</div>
-            
-            <div className="quick-cmd-card" onClick={() => onQuickCmd('总览')}>
-              <span className="quick-cmd-icon">🔍</span>
-              <span className="quick-cmd-label">总览</span>
+            <div className="story-modal-body">
+              <div className="story-storylines">
+                {Object.entries(STORY_SEQUENCES).map(([id, story]) => (
+                  <div
+                    key={id}
+                    className={`storyline-card ${selectedStory === id ? 'selected' : ''}`}
+                    onClick={() => handleStorySelect(id)}
+                  >
+                    <div className="storyline-icon">
+                      <i data-lucide={story.icon}></i>
+                    </div>
+                    <div className="storyline-title">{story.title}</div>
+                    <div className="storyline-desc">{story.desc}</div>
+                    <div className="storyline-roles">
+                      {story.roles.map(r => {
+                        const role = ROLES.find(rl => rl.id === r);
+                        return (
+                          <span key={r} className="storyline-role-tag">
+                            {role?.name_zh || r}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-            
-            <div className="quick-cmd-card" onClick={() => onQuickCmd('需求进度')}>
-              <span className="quick-cmd-icon">📋</span>
-              <span className="quick-cmd-label">需求进度</span>
-            </div>
-            
-            <div className="quick-cmd-card" onClick={() => onQuickCmd('Sprint 进度')}>
-              <span className="quick-cmd-icon">📅</span>
-              <span className="quick-cmd-label">Sprint</span>
-            </div>
-            
-            <div className="quick-cmd-card" onClick={() => onQuickCmd('跑一下回归测试')}>
-              <span className="quick-cmd-icon">🧪</span>
-              <span className="quick-cmd-label">跑测试</span>
+            <div className="story-controls">
+              <button
+                className="story-btn story-btn-next"
+                onClick={handleStartFromSelection}
+                disabled={!selectedStory}
+                data-testid="story-mode-start-btn"
+              >
+                开始演示
+                <i data-lucide="play"></i>
+              </button>
+              <button
+                className="story-btn story-btn-exit"
+                onClick={onClose}
+                data-testid="story-mode-cancel-btn"
+              >
+                取消
+              </button>
             </div>
           </div>
         </div>
       );
     }
-    
+
+    // Architecture View Component
+    const ARCHITECTURE_LAYERS = [
+      {
+        number: 1,
+        name: '用户交互层',
+        nameEn: 'User Interaction Layer',
+        icon: 'message-circle',
+        iconColor: 'blue',
+        description: '用户与 AgentCenter 交互的入口，包括对话界面和主动推送的气泡通知',
+        details: {
+          components: ['对话界面', '气泡通知', '快捷命令面板'],
+          features: ['自然语言理解', '意图识别', '多轮对话', '上下文记忆']
+        }
+      },
+      {
+        number: 2,
+        name: '编排引擎层',
+        nameEn: 'Orchestration Engine',
+        icon: 'git-branch',
+        iconColor: 'purple',
+        description: '核心的智能编排引擎，负责意图理解、流程编排和多智能体协作调度',
+        details: {
+          components: ['意图理解', '流程编排', '多智能体调度', '会话管理'],
+          features: ['自然语言处理', '任务分解', 'Agent 协调', '状态管理']
+        }
+      },
+      {
+        number: 3,
+        name: 'Agent Squad',
+        nameEn: 'Specialized Agent Squad',
+        icon: 'users',
+        iconColor: 'green',
+        description: '专业化 Agent 团队，每个角色专注于特定领域，通过协作完成复杂任务',
+        details: {
+          components: ['产品 Agent', '研发 Agent', '运维 Agent', '质量 Agent', '架构 Agent', '管理 Agent'],
+          features: ['角色专业化', '能力互补', '协作决策', '知识共享']
+        }
+      },
+      {
+        number: 4,
+        name: '工具链适配层',
+        nameEn: 'Toolchain Adapter Layer',
+        icon: 'plug',
+        iconColor: 'amber',
+        description: '抽象的外部工具集成接口，支持需求、设计、代码、质量、构建、测试、部署、监控等多种工具',
+        details: {
+          components: ['需求适配器', '设计适配器', '代码适配器', '质量适配器', '构建适配器', '测试适配器', '部署适配器', '监控适配器', '通知适配器', '审计适配器'],
+          features: ['统一接口', '协议转换', '数据标准化', '错误处理']
+        }
+      },
+      {
+        number: 5,
+        name: 'Mock 事件总线',
+        nameEn: 'Mock Event Bus',
+        icon: 'activity',
+        iconColor: 'cyan',
+        description: '确定性的模拟事件时间线，用于演示环境的事件驱动架构',
+        details: {
+          components: ['事件发布', '订阅管理', '时间线控制', '事件回放'],
+          features: ['确定性模拟', '可控制时序', '事件追溯', '状态重现']
+        }
+      },
+      {
+        number: 6,
+        name: 'Memory/Context',
+        nameEn: 'Memory & Context',
+        icon: 'database',
+        iconColor: 'blue',
+        description: '系统级记忆和上下文管理，包括会话上下文和用户偏好设置',
+        details: {
+          components: ['会话上下文', '用户偏好', '历史记录', '知识图谱'],
+          features: ['上下文继承', '偏好学习', '会话持久化', '语义搜索']
+        }
+      },
+      {
+        number: 7,
+        name: '外部企业系统',
+        nameEn: 'External Enterprise Systems',
+        icon: 'cloud',
+        iconColor: 'red',
+        description: '企业内部的存量系统集成，代表实际生产环境中的各种工具和平台',
+        details: {
+          components: ['需求管理系统', '设计协作平台', '代码仓库', '代码质量平台', '构建引擎', '测试平台', '制品仓库', '部署平台', '可观测性平台', '告警通道'],
+          features: ['异构系统集成', '数据同步', '单点登录', '权限管理']
+        }
+      }
+    ];
+
+    function ArchitectureView({ isOpen, onClose }) {
+      const [expandedLayer, setExpandedLayer] = useState(null);
+
+      useEffect(() => {
+        if (isOpen) {
+          setTimeout(() => lucide.createIcons(), 100);
+        }
+      }, [isOpen]);
+
+      if (!isOpen) return null;
+
+      const toggleLayer = (layerNumber) => {
+        setExpandedLayer(expandedLayer === layerNumber ? null : layerNumber);
+      };
+
+      return (
+        <div className="architecture-overlay" data-testid="architecture-view">
+          <div className="architecture-modal">
+            <div className="architecture-modal-header">
+              <div className="architecture-modal-title">
+                <i data-lucide="network"></i>
+                AgentCenter 系统架构
+                <span className="architecture-badge">
+                  <i data-lucide="info"></i>
+                  Demo Mock Runtime
+                </span>
+              </div>
+              <button className="architecture-close-btn" onClick={onClose} data-testid="architecture-close-btn">
+                <i data-lucide="x"></i>
+              </button>
+            </div>
+            <div className="architecture-modal-body">
+              <div className="architecture-intro">
+                <div className="architecture-intro-title">
+                  <i data-lucide="lightbulb"></i>
+                  关于本演示
+                </div>
+                <div className="architecture-intro-text">
+                  本演示是对 AgentCenter 架构的<strong>模拟展示</strong>，用于说明系统在生产环境中的设计意图。所有外部系统调用均为模拟数据，实际集成需根据企业存量系统情况开发适配器。
+                </div>
+              </div>
+
+              <div className="architecture-layers">
+                {ARCHITECTURE_LAYERS.map((layer) => (
+                  <div
+                    key={layer.number}
+                    className={`architecture-layer-card ${expandedLayer === layer.number ? 'expanded' : ''}`}
+                    onClick={() => toggleLayer(layer.number)}
+                  >
+                    <div className="architecture-layer-header">
+                      <div className={`architecture-layer-icon ${layer.iconColor}`}>
+                        <i data-lucide={layer.icon}></i>
+                      </div>
+                      <div className="architecture-layer-info">
+                        <div className="architecture-layer-number">Layer {layer.number}</div>
+                        <div className="architecture-layer-name">{layer.name}</div>
+                        <div className="architecture-layer-name-en">{layer.nameEn}</div>
+                        <div className="architecture-layer-desc">{layer.description}</div>
+                      </div>
+                      <div className="architecture-layer-expand-icon">
+                        <i data-lucide="chevron-down"></i>
+                      </div>
+                    </div>
+                    <div className="architecture-layer-details">
+                      <div className="architecture-layer-details-inner">
+                        <div className="architecture-detail-section">
+                          <div className="architecture-detail-label">核心组件</div>
+                          <div className="architecture-detail-items">
+                            {layer.details.components.map((comp, idx) => (
+                              <span key={idx} className="architecture-detail-item">
+                                <i data-lucide="box"></i>
+                                {comp}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="architecture-detail-section">
+                          <div className="architecture-detail-label">关键能力</div>
+                          <div className="architecture-detail-items">
+                            {layer.details.features.map((feat, idx) => (
+                              <span key={idx} className="architecture-detail-item">
+                                <i data-lucide="zap"></i>
+                                {feat}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="architecture-runtime-section">
+                <div className="architecture-runtime-header">
+                  <div className="architecture-runtime-icon">
+                    <i data-lucide="layers"></i>
+                  </div>
+                  <div>
+                    <div className="architecture-runtime-title">运行时模式对比</div>
+                    <div className="architecture-runtime-subtitle">当前演示模式 vs 未来真实适配器运行时</div>
+                  </div>
+                </div>
+                <div className="architecture-runtime-grid">
+                  <div className="architecture-runtime-card current">
+                    <div className="architecture-runtime-badge current">当前演示模式</div>
+                    <div className="architecture-runtime-label">Mock 运行时</div>
+                    <div className="architecture-runtime-desc">
+                      所有外部调用均为模拟数据，使用预设的确定性事件时间线。用于演示和培训目的。
+                    </div>
+                  </div>
+                  <div className="architecture-runtime-card future">
+                    <div className="architecture-runtime-badge future">未来目标</div>
+                    <div className="architecture-runtime-label">真实适配器运行时</div>
+                    <div className="architecture-runtime-desc">
+                      通过工具链适配层与真实企业系统集成，实时处理实际工作流程，支持真实数据和事件。
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="architecture-modal-footer">
+              <div className="architecture-mock-notice">
+                <i data-lucide="alert-triangle"></i>
+                当前为 Mock 演示模式，所有外部调用均为模拟
+              </div>
+              <button className="architecture-close-action" onClick={onClose}>
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+
+    // Initialize Lucide icons after render
+    setTimeout(() => lucide.createIcons(), 100);
   </script>
 </body>
 </html>

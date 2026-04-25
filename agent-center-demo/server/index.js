@@ -11,6 +11,7 @@ const {
   createRequirement, createTask,
 } = require('./db');
 const { runDeployment, runHealthCheck, runRollback, runCreateRequirement, runBuild, runTests } = require('./mock-agents');
+const { getInteractionResponse, getStorySequence } = require('./mock-events');
 
 const app = express();
 const server = http.createServer(app);
@@ -21,6 +22,18 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '../client')));
 
 const executions = new Map();
+
+// Demo state for reset functionality
+let activeRole = 'management';
+let messages = [];
+
+function resetDemoState() {
+  activeRole = 'management';
+  messages = [];
+  if (typeof resetStoryState === 'function') {
+    resetStoryState();
+  }
+}
 
 io.on('connection', (socket) => {
   console.log('客户端连接:', socket.id);
@@ -50,7 +63,7 @@ io.on('connection', (socket) => {
       case 'overview': return handleOverview(socket);
       default:
         socket.emit('bot_response', {
-          message: '抱歉，我没有理解你的意思。\n\n试试说：\n- "创建需求：用户登录支持二维码"\n- "Sprint 进度"\n- "代码审查"\n- "构建 user-service"\n- "跑一下回归测试"\n- "部署 user-service v2.4.0 到 test"\n- "总览"',
+          message: '抱歉，我没有理解你的意思。\n\n试试说：\n- "创建需求：用户登录支持二维码"\n- "Sprint 进度"\n- "代码审查"\n- "构建 identity-domain"\n- "跑一下回归测试"\n- "部署 identity-domain v2.4.0 到 test"\n- "总览"',
           type: 'text'
         });
     }
@@ -64,6 +77,32 @@ io.on('connection', (socket) => {
   });
 
   socket.on('get_stats', () => { socket.emit('stats_update', getBubbleStats()); });
+
+  socket.on('demo_interaction', (data) => {
+    const { interactionId } = data;
+    const response = getInteractionResponse(interactionId);
+
+    if (interactionId && interactionId.startsWith('story:start:')) {
+      const storyId = interactionId.replace('story:start:', '');
+      const events = getStorySequence(storyId);
+      socket.emit('demo_interaction_response', { interactionId, response, events });
+    } else {
+      socket.emit('demo_interaction_response', { interactionId, response });
+    }
+  });
+
+  socket.on('story_advance', (data) => {
+    const { storyId, step, role } = data;
+    const events = getStorySequence(storyId);
+    if (events && events.length > 0) {
+      socket.emit('story_event', events[0]);
+    }
+  });
+
+  socket.on('reset', () => {
+    resetDemoState();
+    socket.emit('demo_reset', { status: 'ok', activeRole });
+  });
 });
 
 function handleCreateRequirement(socket, executionId, entities) {
@@ -160,7 +199,7 @@ function handleQueryTests(socket) {
 
 function handleDeploy(socket, executionId, entities) {
   if (!entities.service) {
-    socket.emit('bot_response', { message: '请告诉我你要部署哪个服务？比如："部署 user-service 到 test"', type: 'text' });
+    socket.emit('bot_response', { message: '请告诉我你要部署哪个服务？比如："部署 identity-domain 到 test"', type: 'text' });
     return;
   }
   socket.emit('bot_response', { type: 'confirmation', data: { service: entities.service, version: entities.version, environment: entities.environment, message: '确认部署以下内容：', executionId } });
@@ -188,7 +227,7 @@ function handleQueryDeployments(socket) {
 
 async function handleHealthCheck(socket, executionId, entities) {
   if (!entities.service) {
-    socket.emit('bot_response', { message: '请告诉我你要检查哪个服务？比如："检查 user-service"', type: 'text' });
+    socket.emit('bot_response', { message: '请告诉我你要检查哪个服务？比如："检查 identity-domain"', type: 'text' });
     return;
   }
   const service = getServiceByName(entities.service);
@@ -238,23 +277,23 @@ function handleHelp(socket) {
   "Sprint 进度" / "有没有延期"
 
 🔨 **开发**
-  "代码审查" / "分配任务给张三"
+  "代码审查" / "分配任务给研发工程师 B"
 
 ⚙️ **构建**
-  "构建 user-service" / "构建状态"
+  "构建 identity-domain" / "构建状态"
 
 🧪 **测试**
   "跑一下回归测试" / "测试报告"
 
 🚀 **部署**
-  "部署 user-service v2.4.0 到 test"
+  "部署 identity-domain v2.4.0 到 test"
   "查看最近部署记录"
 
 📡 **监控**
-  "检查 user-service" / "告警列表"
+  "检查 identity-domain" / "告警列表"
 
 🔙 **回滚**
-  "回滚 user-service"
+  "回滚 identity-domain"
 
 📊 **总览**
   "总览" / "全局"
@@ -263,11 +302,27 @@ function handleHelp(socket) {
   socket.emit('bot_response', { message: helpText, type: 'help' });
 }
 
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', mode: 'mock', timestamp: new Date().toISOString() });
+});
+
 app.get('/api/stats', (req, res) => res.json(getBubbleStats()));
 app.get('/api/services', (req, res) => res.json(getAllServices()));
 app.get('/api/deployments', (req, res) => res.json(getDeployments(10)));
 
+app.post('/reset', (req, res) => {
+  resetDemoState();
+  res.json({ status: 'ok', message: 'Demo state reset to initial' });
+});
+
 const PORT = process.env.PORT || 4000;
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`❌ Port ${PORT} is already in use. Please stop the other process or set PORT env var.`);
+    process.exit(1);
+  }
+  throw err;
+});
 server.listen(PORT, () => {
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
@@ -280,9 +335,9 @@ server.listen(PORT, () => {
 ║   • "创建需求：用户登录支持二维码"                          ║
 ║   • "Sprint 进度"                                         ║
 ║   • "代码审查"                                            ║
-║   • "构建 user-service"                                   ║
+║   • "构建 identity-domain"                                ║
 ║   • "跑一下回归测试"                                       ║
-║   • "部署 user-service v2.4.0 到 test"                   ║
+║   • "部署 identity-domain v2.4.0 到 test"                ║
 ║   • "总览"                                                ║
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝

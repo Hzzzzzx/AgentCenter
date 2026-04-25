@@ -1,3 +1,5 @@
+const { getServiceNames } = require('./registry');
+
 function parseIntent(message) {
   const msg = message.toLowerCase().trim();
 
@@ -71,18 +73,22 @@ function parseIntent(message) {
     return { intent: 'overview', entities: {} };
   }
 
+  if (msg.includes('展示系统架构') || msg.includes('系统架构') || msg.includes('架构视图')) {
+    return { intent: 'show_architecture', entities: {} };
+  }
+
   return { intent: 'unknown', entities: {} };
 }
 
 function extractDeployEntities(message) {
   const entities = {};
   const msg = message.toLowerCase();
-  const services = ['user-service', 'api-gateway', 'payment-svc', 'order-svc', 'auth-service', 'notification', 'frontend-web', 'backend-api'];
+  const services = getServiceNames();
   for (const svc of services) {
     if (msg.includes(svc) || msg.includes(svc.replace(/-/g, ''))) { entities.service = svc; break; }
   }
   if (!entities.service) {
-    const m = message.match(/(\S+)-(service|svc|api|web)/i);
+    const m = message.match(/(\S+)-(domain|gateway|portal)/i);
     if (m) entities.service = m[1] + '-' + m[2].toLowerCase();
   }
   const vm = message.match(/v?([\d.]+)/);
@@ -98,12 +104,12 @@ function extractDeployEntities(message) {
 function extractServiceEntities(message) {
   const entities = {};
   const msg = message.toLowerCase();
-  const services = ['user-service', 'api-gateway', 'payment-svc', 'order-svc', 'auth-service', 'notification', 'frontend-web', 'backend-api'];
+  const services = getServiceNames();
   for (const svc of services) {
     if (msg.includes(svc) || msg.includes(svc.replace(/-/g, ''))) { entities.service = svc; break; }
   }
   if (!entities.service) {
-    const m = message.match(/(\S+)-(service|svc|api|web)/i);
+    const m = message.match(/(\S+)-(domain|gateway|portal)/i);
     if (m) entities.service = m[1] + '-' + m[2].toLowerCase();
   }
   return entities;
