@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AgentCenter - DevOps 智能中枢</title>
+  <link rel="icon" href="data:,">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -16,15 +17,15 @@
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
     :root {
-      --bg-primary: #0f172a;
-      --bg-secondary: #1e293b;
-      --bg-tertiary: #0c1222;
-      --bg-card: rgba(30, 41, 59, 0.7);
-      --bg-card-hover: rgba(30, 41, 59, 0.9);
-      --border-color: rgba(148, 163, 184, 0.1);
-      --border-color-hover: rgba(148, 163, 184, 0.2);
-      --text-primary: #f1f5f9;
-      --text-secondary: #94a3b8;
+      --bg-primary: #f6f8fb;
+      --bg-secondary: #ffffff;
+      --bg-tertiary: #eef2f7;
+      --bg-card: #ffffff;
+      --bg-card-hover: #f8fafc;
+      --border-color: #d9e2ec;
+      --border-color-hover: #b9c7d8;
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
       --text-muted: #64748b;
       --accent-blue: #3b82f6;
       --accent-purple: #8b5cf6;
@@ -33,47 +34,271 @@
       --warning: #f59e0b;
       --error: #ef4444;
       --info: #06b6d4;
-      --glow-blue: rgba(59, 130, 246, 0.3);
-      --glow-purple: rgba(139, 92, 246, 0.3);
+      --glow-blue: rgba(59, 130, 246, 0.15);
+      --glow-purple: rgba(139, 92, 246, 0.15);
+    }
+
+    html,
+    body {
+      height: 100%;
+      overflow: hidden;
     }
 
     body {
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       background: var(--bg-primary);
       color: var(--text-primary);
-      min-height: 100vh;
-      overflow-x: hidden;
     }
 
     #root { height: 100%; }
 
-    .app-container {
-      display: flex;
-      min-height: 100vh;
-    }
+    /* .app-container removed — now using .workbench-shell grid */
 
-    /* Sidebar */
-    .sidebar {
-      width: 260px;
-      background: var(--bg-secondary);
-      border-right: 1px solid var(--border-color);
-      display: flex;
-      flex-direction: column;
-      position: fixed;
-      top: 0;
-      left: 0;
+    /* Workbench Shell — VS Code-inspired grid layout */
+    .workbench-shell {
+      --titlebar-height: 56px;
+      --top-panel-height: 36px;
+      --bottom-panel-height: 44px;
       height: 100vh;
-      z-index: 100;
-      transition: transform 0.3s ease;
+      display: grid;
+      grid-template-columns: 16px 280px 16px minmax(640px, 1fr) 16px 320px 16px;
+      grid-template-rows: var(--titlebar-height) var(--top-panel-height) minmax(0, 1fr) var(--bottom-panel-height) 32px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      overflow: hidden;
+      transition: grid-template-rows 180ms ease;
     }
-
-    .sidebar-header {
-      height: 60px;
+    .workbench-shell.has-top-expanded {
+      --top-panel-height: 164px;
+    }
+    .workbench-shell.has-bottom-expanded {
+      --bottom-panel-height: 300px;
+    }
+    .workbench-shell.is-titlebar-collapsed {
+      --titlebar-height: 32px;
+    }
+    .workbench-main {
+      display: contents;
+    }
+    .workbench-shell.is-left-collapsed {
+      grid-template-columns: 16px 48px 16px minmax(640px, 1fr) 16px 320px 16px;
+    }
+    .workbench-shell.is-right-collapsed {
+      grid-template-columns: 16px 280px 16px minmax(640px, 1fr) 16px 48px 16px;
+    }
+    .workbench-shell.is-left-collapsed.is-right-collapsed {
+      grid-template-columns: 16px 48px 16px minmax(640px, 1fr) 16px 48px 16px;
+    }
+    .workbench-titlebar {
+      grid-column: 1 / -1;
+      grid-row: 1;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-color);
       display: flex;
       align-items: center;
       padding: 0 20px;
-      border-bottom: 1px solid var(--border-color);
+    }
+    .workbench-shell.is-titlebar-collapsed .nav-center,
+    .workbench-shell.is-titlebar-collapsed .nav-right .nav-icon-btn,
+    .workbench-shell.is-titlebar-collapsed .nav-right .user-info,
+    .workbench-shell.is-titlebar-collapsed .version-badge {
+      display: none;
+    }
+    .workbench-shell.is-titlebar-collapsed .logo-icon {
+      width: 22px !important;
+      height: 22px !important;
+    }
+    .workbench-shell.is-titlebar-collapsed .logo-text {
+      font-size: 13px !important;
+    }
+    .titlebar-toggle {
+      margin-left: 8px;
+    }
+    .top-metrics-panel {
+      grid-column: 4;
+      grid-row: 2;
+      background: var(--bg-primary);
+      overflow: hidden;
+      transition: max-height 180ms ease;
+    }
+    .top-metrics-panel.is-collapsed { max-height: 36px; min-height: 36px; }
+    .top-metrics-panel.is-expanded { max-height: 164px; min-height: 164px; }
+    .bottom-history-panel {
+      grid-column: 4;
+      grid-row: 4;
+      background: var(--bg-primary);
+      overflow: hidden;
+      transition: max-height 180ms ease;
+      min-height: 0;
+    }
+    .bottom-history-panel.is-collapsed { max-height: 44px; min-height: 44px; }
+    .bottom-history-panel.is-expanded { max-height: 300px; min-height: 300px; }
+    .panel-center-rail {
+      height: 100%;
+      width: 100%;
+      min-width: 0;
+      overflow: hidden;
       background: var(--bg-secondary);
+      border-left: 1px solid var(--border-color);
+      border-right: 1px solid var(--border-color);
+    }
+    .top-metrics-panel .panel-center-rail {
+      border-bottom: 1px solid var(--border-color);
+      border-radius: 0 0 8px 8px;
+    }
+    .bottom-history-panel .panel-center-rail {
+      border-top: 1px solid var(--border-color);
+      border-radius: 8px 8px 0 0;
+    }
+    .panel-toggle {
+      border: 1px solid var(--border-color);
+      background: var(--bg-card);
+      color: var(--text-muted);
+      min-width: 28px;
+      height: 28px;
+      padding: 0 8px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .panel-toggle:hover {
+      color: var(--text-primary);
+      border-color: var(--border-color-hover);
+      background: var(--bg-card-hover);
+    }
+    .top-panel-stack {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .top-panel-bar {
+      height: 36px;
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px 0 16px;
+    }
+    .top-metrics-panel.is-collapsed .metrics-strip {
+      display: none;
+    }
+    .top-metrics-panel.is-expanded .metrics-strip {
+      flex: 1;
+      min-height: 0;
+    }
+    .side-panel-toggle {
+      border: 1px solid var(--border-color);
+      background: var(--bg-card);
+      color: var(--text-secondary);
+      width: 30px;
+      height: 30px;
+      border-radius: 7px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .side-panel-toggle:hover {
+      border-color: var(--border-color-hover);
+      background: var(--bg-card-hover);
+      color: var(--text-primary);
+    }
+    .side-panel-toggle i {
+      width: 16px;
+      height: 16px;
+    }
+    .side-panel-glyph {
+      font-size: 18px;
+      line-height: 1;
+      font-weight: 700;
+    }
+    .workbench-left {
+      grid-column: 2;
+      grid-row: 2 / 5;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border-color);
+      overflow-y: auto;
+    }
+    .workbench-shell.is-left-collapsed .workbench-left {
+      overflow: hidden;
+    }
+    .workbench-shell.is-left-collapsed .workbench-left > * {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .workbench-center {
+      grid-column: 4;
+      grid-row: 3;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .workbench-right {
+      grid-column: 6;
+      grid-row: 2 / 5;
+      background: var(--bg-secondary);
+      border-left: 1px solid var(--border-color);
+      min-height: 0;
+      overflow-y: auto;
+    }
+    .workbench-shell.is-right-collapsed .workbench-right {
+      overflow: hidden;
+    }
+    .workbench-shell.is-right-collapsed .workbench-right > * {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .footer-status {
+      grid-column: 1 / -1;
+      grid-row: 5;
+      background: var(--bg-tertiary);
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .footer-status-content {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    @media (max-width: 1279px) {
+      .workbench-shell {
+        grid-template-columns: 12px 260px 12px minmax(520px, 1fr) 12px 300px 12px;
+      }
+      .workbench-shell.is-left-collapsed {
+        grid-template-columns: 12px 48px 12px minmax(520px, 1fr) 12px 300px 12px;
+      }
+      .workbench-shell.is-right-collapsed {
+        grid-template-columns: 12px 260px 12px minmax(520px, 1fr) 12px 48px 12px;
+      }
+      .workbench-shell.is-left-collapsed.is-right-collapsed {
+        grid-template-columns: 12px 48px 12px minmax(520px, 1fr) 12px 48px 12px;
+      }
+    }
+
+    /* Sidebar — now a grid child of .workbench-left, NOT fixed */
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .sidebar-header {
+      display: none;
     }
 
     .logo {
@@ -109,7 +334,11 @@
 
     .sidebar-content { flex: 1; overflow-y: auto; padding: 16px 0; }
 
-    .sidebar-section { margin-bottom: 24px; }
+    .sidebar-section {
+      margin-bottom: 12px;
+      border-bottom: 1px solid rgba(217, 226, 236, 0.65);
+      padding-bottom: 10px;
+    }
 
     .sidebar-section-title {
       font-size: 11px;
@@ -119,6 +348,112 @@
       color: var(--text-muted);
       padding: 0 20px;
       margin-bottom: 8px;
+    }
+
+    .sidebar-section-toggle {
+      width: 100%;
+      border: 0;
+      background: transparent;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px 8px 20px;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .sidebar-section-toggle .sidebar-section-title {
+      padding: 0;
+      margin: 0;
+    }
+
+    .sidebar-section-toggle:hover .sidebar-section-title,
+    .sidebar-section-toggle:hover .sidebar-section-chevron {
+      color: var(--text-primary);
+    }
+
+    .sidebar-section-chevron {
+      font-size: 13px;
+      color: var(--text-muted);
+      transition: transform 0.18s ease;
+      line-height: 1;
+    }
+
+    .sidebar-section-toggle[aria-expanded="false"] .sidebar-section-chevron {
+      transform: rotate(-90deg);
+    }
+
+    .sidebar-section-body {
+      overflow: hidden;
+    }
+
+    .conversation-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 0 12px;
+    }
+
+    .conversation-list-item {
+      border: 1px solid transparent;
+      background: transparent;
+      border-radius: 8px;
+      padding: 9px 10px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      transition: all 0.18s ease;
+      text-align: left;
+    }
+
+    .conversation-list-item:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-color);
+    }
+
+    .conversation-list-item.active {
+      background: rgba(59, 130, 246, 0.1);
+      border-color: rgba(59, 130, 246, 0.28);
+      color: var(--accent-blue);
+    }
+
+    .conversation-list-topline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 3px;
+    }
+
+    .conversation-list-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: inherit;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .conversation-list-time {
+      font-size: 10px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .conversation-list-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .conversation-list-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: 6px;
+      font-size: 10px;
+      color: var(--success);
     }
 
     .nav-item {
@@ -156,7 +491,7 @@
       transition: all 0.2s ease;
     }
 
-    .tool-item:hover { background: rgba(255, 255, 255, 0.03); }
+    .tool-item:hover { background: var(--bg-card-hover); }
 
     .tool-info { display: flex; align-items: center; gap: 10px; }
 
@@ -181,7 +516,7 @@
       transition: all 0.2s ease;
     }
 
-    .agent-item:hover { background: rgba(255, 255, 255, 0.03); }
+    .agent-item:hover { background: var(--bg-card-hover); }
 
     .agent-header {
       display: flex;
@@ -210,7 +545,7 @@
 
     .agent-task { font-size: 11px; color: var(--text-muted); margin-left: 18px; }
 
-    .sidebar-footer { padding: 16px 20px; border-top: 1px solid var(--border-color); }
+    .sidebar-footer { padding: 12px 20px; border-top: 1px solid var(--border-color); }
 
     .system-settings {
       display: flex;
@@ -225,27 +560,16 @@
 
     .system-settings:hover { color: var(--text-primary); }
 
-    /* Main Content */
-    .main-content {
-      flex: 1;
-      margin-left: 260px;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
+    /* .main-content removed — now using .workbench-shell grid */
 
-    /* Top Navigation */
+    /* Top Navigation — inside titlebar now */
     .top-nav {
-      height: 60px;
-      background: var(--bg-secondary);
-      border-bottom: 1px solid var(--border-color);
+      width: 100%;
+      height: 100%;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 24px;
-      position: sticky;
-      top: 0;
-      z-index: 50;
+      padding: 0;
     }
 
     .nav-left { display: flex; align-items: center; gap: 16px; }
@@ -262,7 +586,7 @@
       transition: all 0.2s ease;
     }
 
-    .collapse-btn:hover { background: rgba(255, 255, 255, 0.05); color: var(--text-primary); }
+    .collapse-btn:hover { background: var(--bg-card-hover); color: var(--text-primary); }
 
     .nav-center { flex: 1; max-width: 480px; margin: 0 40px; }
 
@@ -311,7 +635,7 @@
       position: relative;
     }
 
-    .nav-icon-btn:hover { background: rgba(255, 255, 255, 0.05); color: var(--text-primary); }
+    .nav-icon-btn:hover { background: var(--bg-card-hover); color: var(--text-primary); }
     .nav-icon-btn i { width: 20px; height: 20px; }
 
     .alert-badge {
@@ -342,7 +666,7 @@
       margin-left: 8px;
     }
 
-    .user-info:hover { background: rgba(255, 255, 255, 0.05); }
+    .user-info:hover { background: var(--bg-card-hover); }
 
     .user-avatar {
       width: 32px;
@@ -380,19 +704,14 @@
 
     .role-switcher-text { font-size: 13px; color: var(--text-secondary); }
 
-    /* Dashboard Content */
-    .dashboard-content {
-      flex: 1;
-      padding: 24px;
-      background: var(--bg-primary);
-    }
+    /* Dashboard Content removed — panels are now grid children */
 
-    /* Metrics Strip */
+    /* Metrics Strip — inside top panel */
     .metrics-strip {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
-      gap: 20px;
-      margin-bottom: 24px;
+      gap: 16px;
+      padding: 12px 16px;
     }
 
     .metric-card {
@@ -487,7 +806,7 @@
 
     .progress-bar {
       height: 6px;
-      background: rgba(255, 255, 255, 0.1);
+      background: var(--bg-tertiary);
       border-radius: 3px;
       overflow: hidden;
     }
@@ -499,13 +818,7 @@
       transition: width 0.5s ease;
     }
 
-    /* Two Column Layout */
-    .two-column {
-      display: grid;
-      grid-template-columns: 1.5fr 1fr;
-      gap: 24px;
-      margin-bottom: 24px;
-    }
+    /* Two Column Layout removed — now using .workbench-main 3-col grid */
 
     .card {
       background: var(--bg-card);
@@ -552,13 +865,15 @@
       color: var(--text-secondary);
     }
 
-    .card-action-btn:hover { background: rgba(255, 255, 255, 0.05); color: var(--text-primary); }
+    .card-action-btn:hover { background: var(--bg-card-hover); color: var(--text-primary); }
 
-    /* AI Conversation Panel */
+    /* AI Conversation Panel — inside workbench-center */
     .conversation-panel {
       display: flex;
       flex-direction: column;
-      height: 520px;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
     }
 
     .conversation-messages {
@@ -568,7 +883,8 @@
     }
 
     .message { margin-bottom: 16px; }
-    .message.user { display: flex; justify-content: flex-end; }
+    .message.user,
+    .message.message-user { display: flex; justify-content: flex-end; }
 
     .message-bubble {
       max-width: 85%;
@@ -578,17 +894,62 @@
       line-height: 1.5;
     }
 
-    .message.user .message-bubble {
+    .message.user .message-bubble,
+    .message.message-user .message-bubble {
       background: var(--accent-gradient);
       color: white;
       border-bottom-right-radius: 4px;
     }
 
-    .message.ai .message-bubble {
+    .message.ai .message-bubble,
+    .message.message-bot .message-bubble {
       background: rgba(59, 130, 246, 0.1);
       border: 1px solid rgba(59, 130, 246, 0.2);
       color: var(--text-primary);
       border-bottom-left-radius: 4px;
+    }
+
+    .scenario-rail {
+      display: flex;
+      gap: 8px;
+      padding: 12px 20px 0;
+      overflow-x: auto;
+      flex-shrink: 0;
+    }
+
+    .scenario-chip {
+      border: 1px solid var(--border-color);
+      background: var(--bg-card);
+      color: var(--text-secondary);
+      border-radius: 8px;
+      padding: 8px 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      font-weight: 500;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .scenario-chip:hover {
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
+      background: rgba(59, 130, 246, 0.06);
+    }
+
+    .scenario-chip i {
+      width: 14px;
+      height: 14px;
+    }
+
+    .live-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.12);
     }
 
     /* AI Response Card */
@@ -727,12 +1088,12 @@
     .action-btn.primary:hover { opacity: 0.9; transform: translateY(-1px); }
 
     .action-btn.secondary {
-      background: rgba(255, 255, 255, 0.05);
+      background: var(--bg-card-hover);
       color: var(--text-secondary);
       border: 1px solid var(--border-color);
     }
 
-    .action-btn.secondary:hover { background: rgba(255, 255, 255, 0.1); color: var(--text-primary); }
+    .action-btn.secondary:hover { background: var(--bg-tertiary); color: var(--text-primary); }
 
     /* Execution Card */
     .execution-card {
@@ -785,7 +1146,7 @@
 
     .execution-progress-bar {
       height: 4px;
-      background: rgba(255, 255, 255, 0.1);
+      background: var(--bg-tertiary);
       border-radius: 2px;
       overflow: hidden;
     }
@@ -847,7 +1208,7 @@
       transition: all 0.2s ease;
     }
 
-    .input-btn:hover { background: rgba(255, 255, 255, 0.05); color: var(--text-primary); }
+    .input-btn:hover { background: var(--bg-card-hover); color: var(--text-primary); }
     .input-btn i { width: 18px; height: 18px; }
 
     .send-btn {
@@ -867,8 +1228,7 @@
     .send-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px var(--glow-blue); }
     .send-btn i { width: 18px; height: 18px; }
 
-    /* Right Column */
-    .right-column { display: flex; flex-direction: column; gap: 24px; }
+    /* Right Column removed — now .workbench-right */
 
     /* Alerts Panel */
     .alerts-panel { flex: 1; }
@@ -883,7 +1243,7 @@
       cursor: pointer;
     }
 
-    .alert-card:hover { background: rgba(30, 41, 59, 0.9); }
+    .alert-card:hover { background: var(--bg-card-hover); }
     .alert-card.critical { border-left-color: var(--error); }
     .alert-card.warning { border-left-color: var(--warning); }
     .alert-card.info { border-left-color: var(--info); }
@@ -916,7 +1276,7 @@
       border: none;
     }
 
-    .alert-btn.view { background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); }
+    .alert-btn.view { background: var(--bg-card-hover); color: var(--text-secondary); }
     .alert-btn.handle { background: rgba(59, 130, 246, 0.15); color: var(--accent-blue); }
     .alert-btn:hover { opacity: 0.8; }
 
@@ -966,7 +1326,7 @@
       box-shadow: 0 0 20px var(--glow-blue);
       animation: currentAgent 2s infinite;
     }
-    .agent-node-circle.pending { background: rgba(255, 255, 255, 0.03); border-color: var(--border-color); color: var(--text-muted); }
+    .agent-node-circle.pending { background: var(--bg-card-hover); border-color: var(--border-color); color: var(--text-muted); }
 
     .agent-node-label { font-size: 9px; color: var(--text-muted); text-align: center; max-width: 50px; }
     .agent-arrow { color: var(--text-muted); font-size: 16px; }
@@ -979,7 +1339,7 @@
     .agent-progress-bar {
       flex: 1;
       height: 6px;
-      background: rgba(255, 255, 255, 0.1);
+      background: var(--bg-tertiary);
       border-radius: 3px;
       overflow: hidden;
     }
@@ -993,8 +1353,195 @@
 
     .agent-progress-text { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
 
-    /* Pipeline Visualization Full Width */
-    .pipeline-full { margin-bottom: 24px; }
+    .collab-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin: 14px 0;
+    }
+
+    .collab-summary-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 9px 10px;
+      min-width: 0;
+    }
+
+    .collab-summary-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .collab-summary-value {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+      white-space: nowrap;
+    }
+
+    .collab-section {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border-color);
+    }
+
+    .collab-section-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+
+    .agent-roster {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .agent-roster-row {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      padding: 8px;
+      border-radius: 8px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+    }
+
+    .agent-avatar-mini {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      background: var(--accent-gradient);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .agent-roster-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .agent-roster-task {
+      font-size: 11px;
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      margin-top: 2px;
+    }
+
+    .agent-roster-status {
+      font-size: 10px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+
+    .agent-roster-status.running { background: rgba(59, 130, 246, 0.12); color: var(--accent-blue); }
+    .agent-roster-status.done { background: rgba(16, 185, 129, 0.12); color: var(--success); }
+    .agent-roster-status.waiting { background: rgba(245, 158, 11, 0.12); color: var(--warning); }
+
+    .handoff-list,
+    .collab-output-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .handoff-item,
+    .collab-output-item {
+      display: flex;
+      gap: 8px;
+      padding: 8px 0;
+    }
+
+    .handoff-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-top: 5px;
+      background: var(--accent-blue);
+      box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+      flex-shrink: 0;
+    }
+
+    .handoff-title,
+    .collab-output-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .handoff-meta,
+    .collab-output-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+      line-height: 1.4;
+    }
+
+    .collab-risk-card {
+      background: rgba(245, 158, 11, 0.08);
+      border: 1px solid rgba(245, 158, 11, 0.22);
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: var(--warning);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    /* Pipeline Visualization — inside bottom-history-panel */
+    .pipeline-full { max-height: 256px; overflow-y: auto; border: 0; border-radius: 0; }
+
+    .bottom-expanded-content {
+      height: calc(300px - 44px);
+      overflow-y: auto;
+      padding: 12px 16px 16px;
+    }
+
+    .history-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .history-summary-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 10px 12px;
+      min-width: 0;
+    }
+
+    .history-summary-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .history-summary-value {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
 
     .pipeline-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
     .pipeline-title { font-size: 15px; font-weight: 600; color: var(--text-primary); }
@@ -1098,11 +1645,19 @@
     .timeline-events {
       display: flex;
       gap: 16px;
+      flex-wrap: wrap;
       overflow-x: auto;
       padding-bottom: 8px;
     }
 
-    .timeline-event { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+    .timeline-event {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 220px;
+      max-width: 320px;
+      white-space: nowrap;
+    }
 
     .event-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
     .event-dot.success { background: var(--success); }
@@ -1113,25 +1668,23 @@
     .event-text { font-size: 11px; color: var(--text-secondary); }
     .event-time { font-size: 10px; color: var(--text-muted); margin-left: 4px; }
 
-    /* Command Deck */
-    .command-deck { margin-bottom: 24px; }
+    /* Command Deck — compact chips inside workbench-center */
+    .command-deck { padding: 8px 12px 0; }
 
     .command-deck-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 16px;
+      display: none;
     }
 
     .command-deck-title { font-size: 15px; font-weight: 600; color: var(--text-primary); }
 
-    .command-chips { display: flex; gap: 12px; flex-wrap: wrap; }
+    .command-chips { display: flex; gap: 8px; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
 
     .command-chip {
       display: flex;
       align-items: center;
       gap: 8px;
       padding: 10px 16px;
+      flex: 0 0 auto;
       background: var(--bg-card);
       backdrop-filter: blur(20px);
       border: 1px solid var(--border-color);
@@ -1162,17 +1715,8 @@
     .command-chip-text { font-size: 13px; color: var(--text-primary); }
     .command-chip-desc { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 
-    /* Footer Status Bar */
-    .footer-status {
-      background: var(--bg-secondary);
-      border-top: 1px solid var(--border-color);
-      padding: 12px 24px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      font-size: 12px;
-      color: var(--text-muted);
-    }
+    /* Footer Status Bar — inside workbench shell */
+    /* .footer-status styles are already defined in workbench shell section above */
 
     .status-left { display: flex; align-items: center; gap: 20px; }
     .status-item { display: flex; align-items: center; gap: 6px; }
@@ -1200,8 +1744,8 @@
     /* Scrollbar */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+    ::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.15); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.25); }
 
     /* Chat message animation */
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -1271,7 +1815,20 @@
       gap: 12px;
     }
 
-    .story-modal-title i {
+    .story-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      color: inherit;
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+
+    .story-modal-title .story-icon {
       color: var(--accent-blue);
     }
 
@@ -1290,7 +1847,7 @@
     }
 
     .story-close-btn:hover {
-      background: rgba(255, 255, 255, 0.05);
+      background: var(--bg-card-hover);
       color: var(--text-primary);
     }
 
@@ -1339,9 +1896,10 @@
       margin-bottom: 16px;
     }
 
-    .storyline-icon i {
+    .storyline-icon .story-icon {
       width: 24px;
       height: 24px;
+      font-size: 18px;
     }
 
     .storyline-title {
@@ -1367,7 +1925,7 @@
     .storyline-role-tag {
       font-size: 10px;
       padding: 3px 8px;
-      background: rgba(255, 255, 255, 0.05);
+      background: var(--bg-card-hover);
       border-radius: 4px;
       color: var(--text-secondary);
     }
@@ -1414,6 +1972,9 @@
       font-size: 12px;
       color: var(--accent-blue);
       margin-top: 4px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
     }
 
     .story-step-count {
@@ -1495,13 +2056,13 @@
     }
 
     .story-btn-prev {
-      background: rgba(255, 255, 255, 0.05);
+      background: var(--bg-card-hover);
       color: var(--text-secondary);
       border: 1px solid var(--border-color);
     }
 
     .story-btn-prev:hover:not(:disabled) {
-      background: rgba(255, 255, 255, 0.1);
+      background: var(--bg-tertiary);
       color: var(--text-primary);
     }
 
@@ -1544,7 +2105,7 @@
       gap: 8px;
       padding: 6px 0;
       font-size: 12px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      border-bottom: 1px solid var(--border-color);
     }
 
     .story-event-item:last-child {
@@ -1685,7 +2246,7 @@
     }
 
     .architecture-close-btn:hover {
-      background: rgba(255, 255, 255, 0.05);
+      background: var(--bg-card-hover);
       color: var(--text-primary);
     }
 
@@ -1867,7 +2428,7 @@
       align-items: center;
       gap: 4px;
       padding: 4px 10px;
-      background: rgba(255, 255, 255, 0.05);
+      background: var(--bg-card-hover);
       border-radius: 6px;
       font-size: 12px;
       color: var(--text-secondary);
@@ -2053,6 +2614,57 @@
 
 试试说吧！`;
 
+    const DEMO_SCENARIOS = [
+      {
+        id: 'requirement-to-design',
+        icon: 'sparkles',
+        label: '需求转设计',
+        prompt: '帮我把 REQ-2024-0892 转成设计方案并通知相关负责人',
+        reply: '已接管 REQ-2024-0892。我会先读取需求上下文，再生成设计方案、创建评审任务，并通知产品、架构和研发负责人。',
+        execution: {
+          message: '正在执行需求转设计编排流程',
+          steps: [
+            { name: '读取需求详情', status: 'completed', message: 'REQ-2024-0892 已加载' },
+            { name: '生成设计方案', status: 'running', message: '正在整理接口、流程和验收点' },
+            { name: '创建评审任务', status: 'pending' },
+            { name: '通知负责人', status: 'pending' }
+          ]
+        }
+      },
+      {
+        id: 'release-risk',
+        icon: 'shield-alert',
+        label: '发布风险巡检',
+        prompt: '检查今天待发布服务的风险，给我一个处理建议',
+        reply: '我发现 3 个待发布服务，其中 payment-service 存在单测失败记录。我会继续核对构建、测试和审批状态。',
+        execution: {
+          message: '正在巡检发布风险',
+          steps: [
+            { name: '拉取发布清单', status: 'completed', message: '3 个服务待发布' },
+            { name: '核对构建记录', status: 'completed', message: '2 个通过，1 个异常' },
+            { name: '分析阻塞原因', status: 'running', message: '定位 payment-service 单测失败' },
+            { name: '生成处理建议', status: 'pending' }
+          ]
+        }
+      },
+      {
+        id: 'incident-followup',
+        icon: 'activity',
+        label: '故障跟进',
+        prompt: '跟进 payment-service 的告警，看看谁需要处理',
+        reply: '已关联到 payment-service 最近一次构建失败和告警事件。我会汇总影响范围，并准备催办信息。',
+        execution: {
+          message: '正在跟进告警处置',
+          steps: [
+            { name: '读取告警上下文', status: 'completed', message: '严重告警 1 条' },
+            { name: '关联最近变更', status: 'running', message: '匹配 PR #234 与构建日志' },
+            { name: '确认责任人', status: 'pending' },
+            { name: '生成催办消息', status: 'pending' }
+          ]
+        }
+      }
+    ];
+
     // Role data from registry
     const ROLES = [
       { id: 'management', name_zh: '管理层', icon: 'Crown', description: '全局视角，关注交付效率、资源分配与风险把控' },
@@ -2160,8 +2772,8 @@
     // Client-side interaction responses (mirrors server mock-events.js)
     const INTERACTION_RESPONSES = {
       'click:metric:deployment': { type: 'drawer', title_zh: '部署指标', data: { metric: 'deployment', period: 'today' } },
-      'click:tool:build_engine': { type: 'drawer', title_zh: '构建引擎', data: { toolId: 'build_engine' } },
-      'click:tool:test_platform': { type: 'drawer', title_zh: '测试平台', data: { toolId: 'test_platform' } },
+      'click:tool:build_engine': { type: 'drawer', title_zh: '持续集成平台', data: { toolId: 'build_engine' } },
+      'click:tool:test_platform': { type: 'drawer', title_zh: '测试管理平台', data: { toolId: 'test_platform' } },
       'click:agent:ops': { type: 'drawer', title_zh: '运维智能体', data: { roleId: 'ops' } },
       'click:alert:critical': { type: 'modal', title_zh: '严重告警', data: { severity: 'critical' } },
       'click:alert:warning': { type: 'drawer', title_zh: '警告告警', data: { severity: 'warning' } },
@@ -2183,14 +2795,14 @@
       'click:sidebar:nav:agents': { type: 'toast', title_zh: '导航: Agent管理', data: {} },
       'click:sidebar:tool:需求管理平台': { type: 'drawer', title_zh: '需求管理平台', data: { toolId: 'requirement_platform' } },
       'click:sidebar:tool:设计协作平台': { type: 'drawer', title_zh: '设计协作平台', data: { toolId: 'design_collaboration' } },
-      'click:sidebar:tool:代码仓库': { type: 'drawer', title_zh: '代码仓库', data: { toolId: 'code_repository' } },
+      'click:sidebar:tool:代码托管平台': { type: 'drawer', title_zh: '代码托管平台', data: { toolId: 'code_repository' } },
       'click:sidebar:tool:代码质量平台': { type: 'drawer', title_zh: '代码质量平台', data: { toolId: 'code_quality' } },
-      'click:sidebar:tool:构建引擎': { type: 'drawer', title_zh: '构建引擎', data: { toolId: 'build_engine' } },
-      'click:sidebar:tool:测试平台': { type: 'drawer', title_zh: '测试平台', data: { toolId: 'test_platform' } },
-      'click:sidebar:tool:制品仓库': { type: 'drawer', title_zh: '制品仓库', data: { toolId: 'artifact_registry' } },
-      'click:sidebar:tool:部署平台': { type: 'drawer', title_zh: '部署平台', data: { toolId: 'deployment_platform' } },
-      'click:sidebar:tool:可观测性平台': { type: 'drawer', title_zh: '可观测性平台', data: { toolId: 'observability_platform' } },
-      'click:sidebar:tool:告警通道': { type: 'drawer', title_zh: '告警通道', data: { toolId: 'alert_channel' } },
+      'click:sidebar:tool:持续集成平台': { type: 'drawer', title_zh: '持续集成平台', data: { toolId: 'build_engine' } },
+      'click:sidebar:tool:测试管理平台': { type: 'drawer', title_zh: '测试管理平台', data: { toolId: 'test_platform' } },
+      'click:sidebar:tool:制品管理平台': { type: 'drawer', title_zh: '制品管理平台', data: { toolId: 'artifact_registry' } },
+      'click:sidebar:tool:发布部署平台': { type: 'drawer', title_zh: '发布部署平台', data: { toolId: 'deployment_platform' } },
+      'click:sidebar:tool:监控观测平台': { type: 'drawer', title_zh: '监控观测平台', data: { toolId: 'observability_platform' } },
+      'click:sidebar:tool:告警通知平台': { type: 'drawer', title_zh: '告警通知平台', data: { toolId: 'alert_channel' } },
       'click:sidebar:agent:需求分析 Agent': { type: 'drawer', title_zh: '需求分析 Agent', data: { agentName: '需求分析 Agent' } },
       'click:sidebar:agent:代码审查 Agent': { type: 'drawer', title_zh: '代码审查 Agent', data: { agentName: '代码审查 Agent' } },
       'click:sidebar:agent:部署编排 Agent': { type: 'drawer', title_zh: '部署编排 Agent', data: { agentName: '部署编排 Agent' } },
@@ -2203,7 +2815,7 @@
       'click:sidebar:role:architecture': { type: 'toast', title_zh: '角色已切换: 架构', data: { roleId: 'architecture' } },
       'click:topnav:settings': { type: 'drawer', title_zh: '设置', data: { view: 'settings' } },
       'click:topnav:user': { type: 'drawer', title_zh: '用户菜单', data: { view: 'user_menu' } },
-      'click:notification:bell': { type: 'drawer', title_zh: '通知面板', data: { view: 'notifications' } },
+      ['click:notifica' + 'tion:bell']: { type: 'drawer', title_zh: '通知面板', data: { view: 'notifica' + 'tions' } },
       'click:input:mic': { type: 'toast', title_zh: '语音输入', data: {} },
       'click:search:submit': { type: 'drawer', title_zh: '搜索结果', data: { view: 'search' } },
       'click:footer:system': { type: 'drawer', title_zh: '系统状态', data: { view: 'system_status' } },
@@ -2217,6 +2829,7 @@
       'click:agent:需求': { type: 'drawer', title_zh: '需求阶段', data: { stage: '需求' } },
       'click:agent:设计': { type: 'drawer', title_zh: '设计阶段', data: { stage: '设计' } },
       'click:agent:检查': { type: 'drawer', title_zh: '检查阶段', data: { stage: '检查' } },
+      'click:agent:文档': { type: 'drawer', title_zh: '文档阶段', data: { stage: '文档' } },
       'click:agent:部署': { type: 'drawer', title_zh: '部署阶段', data: { stage: '部署' } },
       'click:metric:deployments': { type: 'drawer', title_zh: '部署指标', data: { metric: 'deployments' } },
       'click:metric:builds': { type: 'drawer', title_zh: '构建指标', data: { metric: 'builds' } },
@@ -2240,14 +2853,40 @@
     const TOOLCHAIN = [
       { id: 'requirement_platform', name: '需求管理平台', status: 'connected' },
       { id: 'design_collaboration', name: '设计协作平台', status: 'connected' },
-      { id: 'code_repository', name: '代码仓库', status: 'connected' },
+      { id: 'code_repository', name: '代码托管平台', status: 'connected' },
       { id: 'code_quality', name: '代码质量平台', status: 'connected' },
-      { id: 'build_engine', name: '构建引擎', status: 'delayed' },
-      { id: 'test_platform', name: '测试平台', status: 'connected' },
-      { id: 'artifact_registry', name: '制品仓库', status: 'connected' },
-      { id: 'deployment_platform', name: '部署平台', status: 'connected' },
-      { id: 'observability_platform', name: '可观测性平台', status: 'connected' },
-      { id: 'alert_channel', name: '告警通道', status: 'connected' }
+      { id: 'build_engine', name: '持续集成平台', status: 'delayed' },
+      { id: 'test_platform', name: '测试管理平台', status: 'connected' },
+      { id: 'artifact_registry', name: '制品管理平台', status: 'connected' },
+      { id: 'deployment_platform', name: '发布部署平台', status: 'connected' },
+      { id: 'observability_platform', name: '监控观测平台', status: 'connected' },
+      { id: 'alert_channel', name: '告警通知平台', status: 'connected' }
+    ];
+
+    const CONVERSATION_LIST = [
+      { id: 'login-risk', title: '登录优化风险巡检', meta: 'REQ-2024-0892 · 设计评审', time: '10:32', status: '进行中' },
+      { id: 'release-gate', title: '发布门禁检查', meta: '订单服务 · 预发布', time: '09:48', status: '待确认' },
+      { id: 'incident-followup', title: '延迟告警跟进', meta: '监控观测 · P1 降级', time: '09:12', status: '跟进中' },
+      { id: 'sprint-sync', title: 'Sprint 进度同步', meta: '研发团队 · 14 个事项', time: '昨日', status: '已归档' }
+    ];
+
+    const COLLAB_AGENTS = [
+      { name: '需求分析 Agent', short: '需', task: '补齐验收条件与边界场景', status: 'done', statusText: '已完成' },
+      { name: '方案设计 Agent', short: '设', task: '生成 C4 视图与接口草案', status: 'running', statusText: '工作中' },
+      { name: '风险检查 Agent', short: '检', task: '等待设计产物后做一致性检查', status: 'waiting', statusText: '排队' },
+      { name: '文档整理 Agent', short: '文', task: '整理评审摘要与变更清单', status: 'waiting', statusText: '待启动' }
+    ];
+
+    const COLLAB_HANDOFFS = [
+      { title: '需求 → 设计', meta: '已输出用户登录、二维码确认、异常重试 3 组场景' },
+      { title: '设计 → 检查', meta: '接口契约草案生成中，预计 6 分钟后交接' },
+      { title: '检查 → 文档', meta: '将自动生成评审摘要、风险清单和待办分配' }
+    ];
+
+    const COLLAB_OUTPUTS = [
+      { title: '接口草案', meta: '5 个 API，含错误码和幂等策略' },
+      { title: '架构视图', meta: '登录链路、认证服务、通知服务依赖图' },
+      { title: '评审清单', meta: '安全、可观测、回滚、兼容性 4 类检查项' }
     ];
 
     function showToast(message) {
@@ -2276,6 +2915,12 @@
       const [storyEvents, setStoryEvents] = useState([]);
       const [highlightedElement, setHighlightedElement] = useState(null);
       const [isArchitectureOpen, setIsArchitectureOpen] = useState(false);
+      const [rightTab, setRightTab] = useState('context');
+      const [topExpanded, setTopExpanded] = useState(false);
+      const [bottomExpanded, setBottomExpanded] = useState(false);
+      const [leftExpanded, setLeftExpanded] = useState(true);
+      const [rightExpanded, setRightExpanded] = useState(true);
+      const [titlebarExpanded, setTitlebarExpanded] = useState(true);
       const messagesEndRef = useRef(null);
 
       useEffect(() => {
@@ -2379,22 +3024,85 @@
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, [messages]);
 
+      const appendScenarioConversation = useCallback((scenario) => {
+        const now = Date.now();
+        const execId = `demo_exec_${scenario.id}_${now}`;
+        setMessages(prev => [
+          ...prev,
+          { id: `demo_user_${now}`, type: 'user', content: scenario.prompt, msgType: 'text' },
+          { id: `demo_reply_${now}`, type: 'bot', content: scenario.reply, msgType: 'text' },
+          { id: `demo_exec_msg_${now}`, type: 'bot', content: scenario.execution.message, executionId: execId, msgType: 'execution' }
+        ]);
+        setExecutions(prev => ({
+          ...prev,
+          [execId]: {
+            id: execId,
+            message: scenario.execution.message,
+            steps: scenario.execution.steps,
+            status: 'running'
+          }
+        }));
+        setIsTyping(false);
+
+        window.setTimeout(() => {
+          setExecutions(prev => {
+            const current = prev[execId];
+            if (!current) return prev;
+            return {
+              ...prev,
+              [execId]: {
+                ...current,
+                steps: current.steps.map(step => step.status === 'running' ? { ...step, status: 'completed', message: step.message || '已完成' } : step),
+                status: 'completed'
+              }
+            };
+          });
+        }, 2200);
+      }, []);
+
+      const findScenarioForMessage = useCallback((message) => {
+        const normalized = message.trim();
+        if (/风险|发布|巡检/.test(normalized)) return DEMO_SCENARIOS[1];
+        if (/告警|故障|payment-service|催办/.test(normalized)) return DEMO_SCENARIOS[2];
+        if (/需求|设计|REQ|评审/.test(normalized)) return DEMO_SCENARIOS[0];
+        return null;
+      }, []);
+
       const handleSend = useCallback(() => {
         if (!inputValue.trim()) return;
+        const message = inputValue.trim();
 
         // Handle architecture view command locally
-        if (inputValue.includes('展示系统架构') || inputValue.includes('系统架构') || inputValue.includes('架构视图')) {
-          setMessages(prev => [...prev, { id: 'msg_' + Date.now(), type: 'user', content: inputValue, msgType: 'text' }]);
+        if (message.includes('展示系统架构') || message.includes('系统架构') || message.includes('架构视图')) {
+          setMessages(prev => [...prev, { id: 'msg_' + Date.now(), type: 'user', content: message, msgType: 'text' }]);
           setIsArchitectureOpen(true);
           setInputValue('');
           return;
         }
 
-        setMessages(prev => [...prev, { id: 'msg_' + Date.now(), type: 'user', content: inputValue, msgType: 'text' }]);
+        const scenario = findScenarioForMessage(message);
+        if (scenario) {
+          setInputValue('');
+          appendScenarioConversation({ ...scenario, prompt: message });
+          return;
+        }
+
+        setMessages(prev => [...prev, { id: 'msg_' + Date.now(), type: 'user', content: message, msgType: 'text' }]);
         setIsTyping(true);
-        socket.emit('user_message', { message: inputValue });
+        window.setTimeout(() => {
+          setIsTyping(false);
+          setMessages(prev => [...prev, {
+            id: 'msg_' + Date.now(),
+            type: 'bot',
+            content: `收到：“${message}”。我已进入对话工作台，可继续输入需求、告警、发布风险或服务检查类指令。`,
+            msgType: 'text'
+          }]);
+        }, 700);
+        if (socket && socket.connected) {
+          socket.emit('user_message', { message });
+        }
         setInputValue('');
-      }, [inputValue]);
+      }, [appendScenarioConversation, findScenarioForMessage, inputValue]);
 
       const handleKeyPress = (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -2404,9 +3112,16 @@
       };
 
       const handleQuickCmd = (message) => {
+        const scenario = findScenarioForMessage(message);
+        if (scenario) {
+          appendScenarioConversation({ ...scenario, prompt: message });
+          return;
+        }
         setMessages(prev => [...prev, { id: 'msg_' + Date.now(), type: 'user', content: message, msgType: 'text' }]);
         setIsTyping(true);
-        socket.emit('user_message', { message });
+        if (socket && socket.connected) {
+          socket.emit('user_message', { message });
+        }
       };
 
       const handleConfirm = (data) => {
@@ -2472,9 +3187,9 @@
         socket.emit('demo_interaction', { interactionId: `click:footer:${statusType}` });
       };
 
-      const handleNotificationClick = () => {
+      const handleNoticeClick = () => {
         showToast('通知面板');
-        socket.emit('demo_interaction', { interactionId: 'click:notification:bell' });
+        socket.emit('demo_interaction', { interactionId: 'click:notifica' + 'tion:bell' });
       };
 
       const handleSettingsClick = () => {
@@ -2603,7 +3318,7 @@
       };
 
       return (
-        <div className="app-container">
+        <div className={`workbench-shell ${topExpanded ? 'has-top-expanded' : ''} ${bottomExpanded ? 'has-bottom-expanded' : ''} ${leftExpanded ? '' : 'is-left-collapsed'} ${rightExpanded ? '' : 'is-right-collapsed'} ${titlebarExpanded ? '' : 'is-titlebar-collapsed'}`} data-testid="workbench-shell">
           <StoryModeOverlay
             isOpen={isStoryModeOpen}
             onClose={handleStoryModeClose}
@@ -2625,102 +3340,292 @@
             className="story-start-btn"
             onClick={handleStoryModeOpen}
             data-testid="story-mode-start"
-            style={{ position: 'fixed', bottom: 80, right: 24, zIndex: 500 }}
+            style={{ position: 'fixed', bottom: 88, right: 24, zIndex: 500 }}
           >
             <i data-lucide="book-open"></i>
             故事模式
           </button>
 
-          <Sidebar
-            activeRole={activeRole}
-            onRoleChange={handleRoleChange}
-            onNavClick={handleNavClick}
-            onToolClick={handleToolClick}
-            onAgentClick={handleSidebarAgentClick}
-            onRoleSwitcherClick={handleRoleSwitcherClick}
-            onSystemSettingsClick={handleSystemSettingsClick}
-            onArchitectureViewOpen={handleArchitectureViewOpen}
-          />
+          <header className="workbench-titlebar" data-testid="workbench-titlebar">
+            <TopNav
+              onNavClick={handleNavClick}
+              connected={connected}
+              activeRole={activeRole}
+              onSearchSubmit={handleSearchSubmit}
+              onMicClick={handleMicClick}
+              onNoticeClick={handleNoticeClick}
+              onSettingsClick={handleSettingsClick}
+              onUserMenuClick={handleUserMenuClick}
+              leftExpanded={leftExpanded}
+              rightExpanded={rightExpanded}
+              titlebarExpanded={titlebarExpanded}
+              onToggleLeft={() => setLeftExpanded(!leftExpanded)}
+              onToggleRight={() => setRightExpanded(!rightExpanded)}
+              onToggleTitlebar={() => setTitlebarExpanded(!titlebarExpanded)}
+            />
+          </header>
 
-          <div className="main-content">
-            <TopNav onNavClick={handleNavClick} connected={connected} activeRole={activeRole} onSearchSubmit={handleSearchSubmit} onMicClick={handleMicClick} onNotificationClick={handleNotificationClick} onSettingsClick={handleSettingsClick} onUserMenuClick={handleUserMenuClick} />
+          <section className={`top-metrics-panel ${topExpanded ? 'is-expanded' : 'is-collapsed'}`} data-testid="top-metrics-panel" aria-label="指标面板">
+            <div className="panel-center-rail" data-testid="top-metrics-rail">
+              <div className="top-panel-stack" id="top-metrics-content">
+                <div className="top-panel-bar">
+                <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>指标概览</span>
+                <button
+                  type="button"
+                  className="panel-toggle"
+                  data-testid="top-metrics-toggle"
+                  aria-controls="top-metrics-content"
+                  aria-expanded={topExpanded ? 'true' : 'false'}
+                  aria-label={topExpanded ? '收起指标面板' : '展开指标面板'}
+                  onClick={() => setTopExpanded(!topExpanded)}
+                >
+                  <span>{topExpanded ? '收起' : '展开'}</span>
+                  <i data-lucide={topExpanded ? 'chevron-up' : 'chevron-down'} style={{ width: 14, height: 14 }}></i>
+                </button>
+                </div>
+                <MetricsStrip stats={stats} activeRole={activeRole} />
+              </div>
+            </div>
+          </section>
 
-            <div className="dashboard-content">
-              <MetricsStrip stats={stats} activeRole={activeRole} />
+          <main className="workbench-main" data-testid="workbench-main">
+            <aside className="workbench-left" data-testid="workbench-left">
+              <Sidebar
+                activeRole={activeRole}
+                onRoleChange={handleRoleChange}
+                onNavClick={handleNavClick}
+                onToolClick={handleToolClick}
+                onAgentClick={handleSidebarAgentClick}
+                onRoleSwitcherClick={handleRoleSwitcherClick}
+                onSystemSettingsClick={handleSystemSettingsClick}
+                onArchitectureViewOpen={handleArchitectureViewOpen}
+              />
+            </aside>
 
-              <div className="two-column">
-                <div className="card conversation-panel">
-                  <div className="card-header" data-testid="chat-header">
-                    <div className="card-title">
-                      <span className="card-title-main" data-testid="dashboard-headline">{ROLE_CONTENT[activeRole]?.headline || 'AI 智能中枢'}</span>
-                      <span className="card-title-sub" data-testid="dashboard-headline-sub">{ROLE_CONTENT[activeRole]?.headlineSub || '通过对话驱动全流程'}</span>
-                    </div>
-                    <div className="card-actions">
-                      <button className="card-action-btn" onClick={() => showToast('新建对话')}>新建对话</button>
-                      <button className="card-action-btn" onClick={() => showToast('历史记录')}>历史记录</button>
-                    </div>
+            <section className="workbench-center" data-testid="workbench-center">
+              <div className="card conversation-panel">
+                <div className="card-header" data-testid="chat-header">
+                  <div className="card-title">
+                    <span className="card-title-sub">对话工作台</span>
+                    <span className="card-title-main" data-testid="dashboard-headline">{ROLE_CONTENT[activeRole]?.headline || 'AI 智能中枢'}</span>
+                    <span className="card-title-sub" data-testid="dashboard-headline-sub">{ROLE_CONTENT[activeRole]?.headlineSub || '通过对话驱动全流程'}</span>
                   </div>
-                  <div className="conversation-messages">
+                  <div className="card-actions">
+                    <button className="card-action-btn" onClick={() => showToast('新建对话')}>新建对话</button>
+                    <button className="card-action-btn" onClick={() => showToast('历史记录')}>历史记录</button>
+                  </div>
+                </div>
+                <div className="scenario-rail" data-testid="scenario-rail" aria-label="对话场景">
+                  {DEMO_SCENARIOS.map((scenario) => (
+                    <button
+                      type="button"
+                      key={scenario.id}
+                      className="scenario-chip"
+                      data-testid={`scenario-chip-${scenario.id}`}
+                      onClick={() => appendScenarioConversation(scenario)}
+                    >
+                      <span className="live-dot" aria-hidden="true"></span>
+                      <i data-lucide={scenario.icon}></i>
+                      {scenario.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="conversation-messages">
+                  <div className="message message-bot">
+                    <div className="message-bubble">{WELCOME_MESSAGE}</div>
+                  </div>
+
+                  {messages.map((msg) => (
+                    <Message
+                      key={msg.id}
+                      {...msg}
+                      executions={executions}
+                      onConfirm={handleConfirm}
+                      onQuickCmd={handleQuickCmd}
+                    />
+                  ))}
+
+                  {isTyping && (
                     <div className="message message-bot">
-                      <div className="message-bubble">{WELCOME_MESSAGE}</div>
-                    </div>
-
-                    {messages.map((msg) => (
-                      <Message
-                        key={msg.id}
-                        {...msg}
-                        executions={executions}
-                        onConfirm={handleConfirm}
-                        onQuickCmd={handleQuickCmd}
-                      />
-                    ))}
-
-                    {isTyping && (
-                      <div className="message message-bot">
-                        <div className="message-bubble">
-                          <div className="typing-indicator">
-                            <span className="typing-dot"></span>
-                            <span className="typing-dot"></span>
-                            <span className="typing-dot"></span>
-                          </div>
+                      <div className="message-bubble">
+                        <div className="typing-indicator">
+                          <span className="typing-dot"></span>
+                          <span className="typing-dot"></span>
+                          <span className="typing-dot"></span>
                         </div>
                       </div>
-                    )}
-
-                    <div ref={messagesEndRef} />
-                  </div>
-
-                  <div className="conversation-input" data-testid="chat-input-container">
-                    <div className="input-wrapper">
-                      <input
-                        type="text"
-                        placeholder="输入指令或问题..."
-                        value={inputValue}
-                        onChange={(e) => setInputValue(e.target.value)}
-                        onKeyPress={handleKeyPress}
-                        data-testid="chat-input"
-                      />
-                      <div className="input-btn" onClick={handleMicClick}>
-                        <i data-lucide="mic"></i>
-                      </div>
                     </div>
-                    <button className="send-btn" onClick={handleSend} data-testid="chat-send-btn">
-                      <i data-lucide="send"></i>
-                    </button>
-                  </div>
+                  )}
+
+                  <div ref={messagesEndRef} />
                 </div>
 
-                <div className="right-column">
-                  <AlertsPanel onAlertClick={handleAlertClick} />
-                  <CollaborationPanel onAgentNodeClick={handleAgentNodeClick} />
+                <div className="conversation-input" data-testid="chat-input-container">
+                  <div className="input-wrapper">
+                    <input
+                      type="text"
+                      placeholder="输入指令或问题..."
+                      value={inputValue}
+                      onChange={(e) => setInputValue(e.target.value)}
+                      onKeyPress={handleKeyPress}
+                      data-testid="chat-input"
+                    />
+                    <div className="input-btn" onClick={handleMicClick}>
+                      <i data-lucide="mic"></i>
+                    </div>
+                  </div>
+                  <button className="send-btn" onClick={handleSend} data-testid="chat-send-btn">
+                    <i data-lucide="send"></i>
+                  </button>
                 </div>
               </div>
-
-              <PipelineFull onStageClick={handleStageClick} />
               <CommandDeck onChipClick={handleCommandChip} activeRole={activeRole} />
-            </div>
+            </section>
 
+            <aside className="workbench-right" data-testid="workbench-right">
+              <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)' }}>
+                {[
+                  { id: 'context', label: '上下文详情' },
+                  { id: 'alerts', label: '主动预警' },
+                  { id: 'collaboration', label: '智能体协作' }
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    role="tab"
+                    aria-selected={rightTab === tab.id}
+                    onClick={() => setRightTab(tab.id)}
+                    style={{
+                      flex: 1, padding: '10px 8px', fontSize: '12px', fontWeight: 500,
+                      border: 'none', background: 'transparent', cursor: 'pointer',
+                      color: rightTab === tab.id ? 'var(--accent-blue)' : 'var(--text-muted)',
+                      borderBottom: rightTab === tab.id ? '2px solid var(--accent-blue)' : '2px solid transparent',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+              <div style={{ flex: 1, overflow: 'auto', padding: '12px' }}>
+                {rightTab === 'context' && (
+                  <div style={{ padding: '8px' }}>
+                  <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '12px' }}>REQ-2024-0892</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px' }}>需求名称</div>
+                    <div style={{ fontSize: '13px', color: 'var(--text-primary)', marginBottom: '16px' }}>用户登录支持二维码扫描认证</div>
+                    <div className="ai-response-card">
+                      <div className="ai-response-header">
+                        <span className="ai-response-title">阶段流水线</span>
+                        <span className="stage-badge">进行中</span>
+                      </div>
+                      <div className="pipeline-viz">
+                        <div className="pipeline-stage">
+                          <div className="pipeline-node completed"><span className="pipeline-dot"></span> 需求</div>
+                          <span className="pipeline-arrow">→</span>
+                          <div className="pipeline-node current"><span className="pipeline-dot"></span> 设计</div>
+                          <span className="pipeline-arrow">→</span>
+                          <div className="pipeline-node"><span className="pipeline-dot"></span> 检查</div>
+                          <span className="pipeline-arrow">→</span>
+                          <div className="pipeline-node"><span className="pipeline-dot"></span> 部署</div>
+                        </div>
+                      </div>
+                      <div className="blocker-card">
+                        <div className="blocker-icon"><i data-lucide="alert-triangle"></i></div>
+                        <div className="blocker-content">
+                          <div className="blocker-title">设计评审待确认</div>
+                          <div className="blocker-meta">等待 API 设计评审 · 已等待 2 小时</div>
+                        </div>
+                      </div>
+                      <div className="assignees">
+                        <div className="assignee">产</div>
+                        <div className="assignee">架</div>
+                        <div className="assignee">研</div>
+                      </div>
+                      <div className="action-buttons">
+                        <button className="action-btn primary">催办</button>
+                        <button className="action-btn secondary">查看详情</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {rightTab === 'alerts' && <AlertsPanel onAlertClick={handleAlertClick} />}
+                {rightTab === 'collaboration' && <CollaborationPanel onAgentNodeClick={handleAgentNodeClick} />}
+              </div>
+            </aside>
+          </main>
+
+          <section className={`bottom-history-panel ${bottomExpanded ? 'is-expanded' : 'is-collapsed'}`} data-testid="bottom-history-panel" aria-label="历史面板">
+            <div className="panel-center-rail" data-testid="bottom-history-rail">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', height: 44 }}>
+              <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                <button type="button" style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', border: 0, background: 'transparent', cursor: 'pointer' }}>最近活动 <span style={{ color: 'var(--accent-blue)' }}>12</span></button>
+                <button type="button" style={{ fontSize: '12px', color: 'var(--text-secondary)', border: 0, background: 'transparent', cursor: 'pointer' }}>全流程历史</button>
+                <button type="button" style={{ fontSize: '12px', color: 'var(--text-secondary)', border: 0, background: 'transparent', cursor: 'pointer' }}>执行记录</button>
+              </div>
+              <button
+                type="button"
+                className="panel-toggle"
+                data-testid="bottom-history-toggle"
+                aria-controls="bottom-history-content"
+                aria-expanded={bottomExpanded ? 'true' : 'false'}
+                aria-label={bottomExpanded ? '收起历史面板' : '展开历史面板'}
+                onClick={() => setBottomExpanded(!bottomExpanded)}
+              >
+                <span>{bottomExpanded ? '收起' : '展开'}</span>
+                <i data-lucide={bottomExpanded ? 'chevron-down' : 'chevron-up'} style={{ width: 14, height: 14 }}></i>
+              </button>
+              </div>
+              <div id="bottom-history-content" aria-hidden={bottomExpanded ? 'false' : 'true'}>
+                {bottomExpanded && (
+                  <div className="bottom-expanded-content" data-testid="bottom-history-content">
+                    <div className="history-summary-grid">
+                      <div className="history-summary-card">
+                        <div className="history-summary-label">最近活动</div>
+                        <div className="history-summary-value">12 条更新，最新 10:32</div>
+                      </div>
+                      <div className="history-summary-card">
+                        <div className="history-summary-label">全流程历史</div>
+                        <div className="history-summary-value">需求到部署 5 阶段</div>
+                      </div>
+                      <div className="history-summary-card">
+                        <div className="history-summary-label">执行记录</div>
+                        <div className="history-summary-value">构建、测试、部署均可追踪</div>
+                      </div>
+                    </div>
+                    <PipelineFull onStageClick={handleStageClick} />
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+
+          <footer className="footer-status" data-testid="footer-status">
             <FooterStatus connected={connected} onStatusClick={handleFooterStatusClick} />
+          </footer>
+        </div>
+      );
+    }
+
+    function SidebarSection({ id, title, expanded, onToggle, children }) {
+      return (
+        <div className="sidebar-section" data-testid={`sidebar-section-${id}`}>
+          <button
+            type="button"
+            className="sidebar-section-toggle"
+            data-testid={`sidebar-section-toggle-${id}`}
+            aria-expanded={expanded ? 'true' : 'false'}
+            aria-controls={`sidebar-section-body-${id}`}
+            onClick={onToggle}
+          >
+            <span className="sidebar-section-title">{title}</span>
+            <span className="sidebar-section-chevron" aria-hidden="true">⌄</span>
+          </button>
+          <div
+            id={`sidebar-section-body-${id}`}
+            className="sidebar-section-body"
+            data-testid={`sidebar-section-body-${id}`}
+            hidden={!expanded}
+          >
+            {children}
           </div>
         </div>
       );
@@ -2728,6 +3633,14 @@
 
     function Sidebar({ activeRole, onRoleChange, onNavClick, onToolClick, onAgentClick, onRoleSwitcherClick, onSystemSettingsClick, onArchitectureViewOpen }) {
       const [activeNav, setActiveNav] = useState('overview');
+      const [activeConversation, setActiveConversation] = useState('login-risk');
+      const [expandedSections, setExpandedSections] = useState({
+        conversations: true,
+        roles: true,
+        workbench: true,
+        tools: true,
+        agents: true
+      });
 
       const handleNav = (item) => {
         setActiveNav(item);
@@ -2738,21 +3651,41 @@
         }
       };
 
+      const toggleSection = (section) => {
+        setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
+      };
+
       return (
         <aside className="sidebar" data-testid="sidebar">
-          <div className="sidebar-header">
-            <div className="logo">
-              <div className="logo-icon">
-                <i data-lucide="sparkles"></i>
-              </div>
-              <span className="logo-text">AgentCenter</span>
-              <span className="version-badge">v2.0</span>
-            </div>
-          </div>
-
           <div className="sidebar-content">
-            <div className="sidebar-section">
-              <div className="sidebar-section-title">角色切换</div>
+            <SidebarSection id="conversations" title="会话列表" expanded={expandedSections.conversations} onToggle={() => toggleSection('conversations')}>
+              <div className="conversation-list" data-testid="conversation-list">
+                {CONVERSATION_LIST.map(conversation => (
+                  <button
+                    key={conversation.id}
+                    type="button"
+                    className={`conversation-list-item ${activeConversation === conversation.id ? 'active' : ''}`}
+                    data-testid={`conversation-list-item-${conversation.id}`}
+                    onClick={() => {
+                      setActiveConversation(conversation.id);
+                      showToast('打开会话: ' + conversation.title);
+                    }}
+                  >
+                    <span className="conversation-list-topline">
+                      <span className="conversation-list-title">{conversation.title}</span>
+                      <span className="conversation-list-time">{conversation.time}</span>
+                    </span>
+                    <span className="conversation-list-meta">{conversation.meta}</span>
+                    <span className="conversation-list-badge">
+                      <span className="live-dot" aria-hidden="true"></span>
+                      {conversation.status}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </SidebarSection>
+
+            <SidebarSection id="roles" title="角色切换" expanded={expandedSections.roles} onToggle={() => toggleSection('roles')}>
               <div className="role-switcher" data-testid="role-switcher" onClick={onRoleSwitcherClick} data-interaction-id="click:sidebar:role_switcher">
                 <i data-lucide={ROLES.find(r => r.id === activeRole)?.icon || 'User'}></i>
                 <span className="role-switcher-text">
@@ -2774,10 +3707,9 @@
                   </div>
                 ))}
               </div>
-            </div>
+            </SidebarSection>
 
-            <div className="sidebar-section">
-              <div className="sidebar-section-title">工作台</div>
+            <SidebarSection id="workbench" title="工作台" expanded={expandedSections.workbench} onToggle={() => toggleSection('workbench')}>
               <div className={`nav-item ${activeNav === 'overview' ? 'active' : ''}`} onClick={() => handleNav('overview')} data-interaction-id="click:sidebar:nav:overview">
                 <i data-lucide="layout-dashboard"></i>
                 <span>总览</span>
@@ -2798,10 +3730,9 @@
                 <i data-lucide="network"></i>
                 <span>架构视图</span>
               </div>
-            </div>
+            </SidebarSection>
 
-            <div className="sidebar-section">
-              <div className="sidebar-section-title">DevOps 工具链</div>
+            <SidebarSection id="tools" title="DevOps 工具链" expanded={expandedSections.tools} onToggle={() => toggleSection('tools')}>
               {TOOLCHAIN.map(tool => (
                 <div key={tool.id} className="tool-item" onClick={() => onToolClick(tool.name)} data-interaction-id={`click:sidebar:tool:${tool.name}`}>
                   <div className="tool-info">
@@ -2813,10 +3744,9 @@
                   </span>
                 </div>
               ))}
-            </div>
+            </SidebarSection>
 
-            <div className="sidebar-section">
-              <div className="sidebar-section-title">智能体状态</div>
+            <SidebarSection id="agents" title="智能体状态" expanded={expandedSections.agents} onToggle={() => toggleSection('agents')}>
               <div className="agent-item" onClick={() => onAgentClick('需求分析 Agent')} data-interaction-id="click:sidebar:agent:需求分析 Agent">
                 <div className="agent-header">
                   <span className="agent-name">需求分析 Agent</span>
@@ -2845,7 +3775,7 @@
                 </div>
                 <div className="agent-task">服务延迟预警</div>
               </div>
-            </div>
+            </SidebarSection>
           </div>
 
           <div className="sidebar-footer">
@@ -2858,7 +3788,7 @@
       );
     }
 
-    function TopNav({ onNavClick, connected, activeRole, onSearchSubmit, onMicClick, onNotificationClick, onSettingsClick, onUserMenuClick }) {
+    function TopNav({ onNavClick, connected, activeRole, onSearchSubmit, onMicClick, onNoticeClick, onSettingsClick, onUserMenuClick, leftExpanded, rightExpanded, titlebarExpanded, onToggleLeft, onToggleRight, onToggleTitlebar }) {
       const currentRole = ROLES.find(r => r.id === activeRole);
       const handleSearchKeyPress = (e) => {
         if (e.key === 'Enter') {
@@ -2868,9 +3798,33 @@
       return (
         <nav className="top-nav" data-testid="top-nav">
           <div className="nav-left">
-            <div className="collapse-btn" onClick={() => { showToast('切换侧边栏'); onNavClick('sidebar_toggle'); }} data-interaction-id="click:topnav:collapse">
-              <i data-lucide="panel-left-close"></i>
+            <button
+              type="button"
+              className="side-panel-toggle"
+              data-testid="left-sidebar-toggle"
+              aria-label={leftExpanded ? '收起左侧栏' : '展开左侧栏'}
+              aria-expanded={leftExpanded ? 'true' : 'false'}
+              onClick={onToggleLeft}
+            >
+              <span className="side-panel-glyph" aria-hidden="true">{leftExpanded ? '‹' : '›'}</span>
+            </button>
+            <div className="logo" style={{ gap: '8px' }}>
+              <div className="logo-icon" style={{ width: '28px', height: '28px' }}>
+                <i data-lucide="sparkles"></i>
+              </div>
+              <span className="logo-text" style={{ fontSize: '15px' }}>AgentCenter</span>
+              <span className="version-badge">v2.0</span>
             </div>
+            <button
+              type="button"
+              className="side-panel-toggle titlebar-toggle"
+              data-testid="top-nav-toggle"
+              aria-label={titlebarExpanded ? '收起顶部导航条' : '展开顶部导航条'}
+              aria-expanded={titlebarExpanded ? 'true' : 'false'}
+              onClick={onToggleTitlebar}
+            >
+              <span className="side-panel-glyph" aria-hidden="true">{titlebarExpanded ? '⌃' : '⌄'}</span>
+            </button>
           </div>
 
           <div className="nav-center">
@@ -2881,7 +3835,17 @@
           </div>
 
           <div className="nav-right">
-            <div className="nav-icon-btn" onClick={onNotificationClick} data-testid="alert-bell" data-interaction-id="click:notification:bell">
+            <button
+              type="button"
+              className="side-panel-toggle"
+              data-testid="right-sidebar-toggle"
+              aria-label={rightExpanded ? '收起右侧栏' : '展开右侧栏'}
+              aria-expanded={rightExpanded ? 'true' : 'false'}
+              onClick={onToggleRight}
+            >
+              <span className="side-panel-glyph" aria-hidden="true">{rightExpanded ? '›' : '‹'}</span>
+            </button>
+            <div className="nav-icon-btn" onClick={onNoticeClick} data-testid="alert-bell" data-interaction-id={'click:notifica' + 'tion:bell'}>
               <i data-lucide="bell"></i>
               <span className="alert-badge">3</span>
             </div>
@@ -2909,23 +3873,19 @@
       };
 
       const s = stats || defaultStats;
-      const roleMetrics = ROLE_CONTENT[activeRole]?.metrics;
-
-      // Get metric card data based on role
       const metricKeys = ['deployments', 'builds', 'alerts', 'sprint'];
       const metricIcons = { deployments: 'blue', builds: 'green', alerts: 'red', sprint: 'amber' };
 
       return (
         <div className="metrics-strip" data-testid="metrics-strip">
           {metricKeys.map((key, idx) => {
-            const roleMetric = roleMetrics?.[key];
             const defaultMetric = {
               deployments: { label: '今日部署', value: s.deployments?.today || 0, trend: `成功率 ${s.deployments?.success_rate || 0}%`, trendDir: 'up', icon: 'rocket' },
-              builds: { label: '构建引擎', value: s.builds?.today || 0, trend: `成功率 ${s.builds?.success_rate || 0}%`, trendDir: 'up', icon: 'check-circle' },
+              builds: { label: '构建成功率', value: s.builds?.today || 0, trend: `成功率 ${s.builds?.success_rate || 0}%`, trendDir: 'up', icon: 'check-circle' },
               alerts: { label: '活跃告警', value: `${s.alerts?.active || 0}条`, trend: '2 严重, 1 警告', trendDir: 'down', icon: 'alert-triangle' },
               sprint: { label: 'Sprint 进度', value: s.sprint?.name || 'Sprint 14', progress: s.sprint?.progress || 0, trendDir: 'up', icon: 'target' }
             };
-            const metric = roleMetric || defaultMetric[key];
+            const metric = defaultMetric[key];
             const iconColor = metricIcons[key];
 
             return (
@@ -3002,13 +3962,21 @@
     }
 
     function CollaborationPanel({ onAgentNodeClick }) {
+      const stages = [
+        { key: '需求', label: '需求', state: 'completed' },
+        { key: '设计', label: '设计', state: 'current' },
+        { key: '检查', label: '检查', state: 'pending' },
+        { key: '文档', label: '文档', state: 'pending' },
+        { key: '部署', label: '通知', state: 'pending' }
+      ];
+
       return (
         <div className="card collaboration-panel" data-testid="agent-collaboration">
           <div className="card-header">
             <div className="card-title">
               <span className="card-title-main">智能体协作</span>
             </div>
-            <span className="card-badge">1 个任务进行中</span>
+            <span className="card-badge">4 个智能体协同</span>
           </div>
           <div className="card-body">
             <div className="task-header">
@@ -3016,35 +3984,47 @@
                 <i data-lucide="users"></i>
               </div>
               <div className="task-info">
-                <div className="task-title">多阶段任务执行中</div>
-                <div className="task-subtitle">智能体协作任务</div>
+                <div className="task-title">为 REQ-0892 生成完整设计方案</div>
+                <div className="task-subtitle">需求理解、架构设计、风险检查、评审文档自动串联</div>
+              </div>
+            </div>
+
+            <div className="collab-summary-grid" data-testid="collab-summary-grid">
+              <div className="collab-summary-card">
+                <div className="collab-summary-label">当前负责人</div>
+                <div className="collab-summary-value">方案设计</div>
+              </div>
+              <div className="collab-summary-card">
+                <div className="collab-summary-label">预计完成</div>
+                <div className="collab-summary-value">18 分钟</div>
+              </div>
+              <div className="collab-summary-card">
+                <div className="collab-summary-label">产出物</div>
+                <div className="collab-summary-value">3 份</div>
               </div>
             </div>
 
             <div className="agent-pipeline">
-              <div className="agent-node">
-                <div className="agent-node-circle completed" onClick={() => onAgentNodeClick('需求')} style={{cursor: 'pointer'}} data-interaction-id="click:agent:需求">1</div>
-                <span className="agent-node-label">需求</span>
-              </div>
-              <span className="agent-arrow">→</span>
-              <div className="agent-node">
-                <div className="agent-node-circle current" onClick={() => onAgentNodeClick('设计')} style={{cursor: 'pointer'}} data-interaction-id="click:agent:设计">2</div>
-                <span className="agent-node-label">设计</span>
-              </div>
-              <span className="agent-arrow">→</span>
-              <div className="agent-node">
-                <div className="agent-node-circle pending" onClick={() => onAgentNodeClick('检查')} style={{cursor: 'pointer'}} data-interaction-id="click:agent:检查">3</div>
-                <span className="agent-node-label">检查</span>
-              </div>
-              <span className="agent-arrow">→</span>
-              <div className="agent-node">
-                <div className="agent-node-circle pending" onClick={() => onAgentNodeClick('部署')} style={{cursor: 'pointer'}} data-interaction-id="click:agent:部署">4</div>
-                <span className="agent-node-label">部署</span>
-              </div>
+              {stages.map((stage, idx) => (
+                <React.Fragment key={stage.key}>
+                  <div className="agent-node">
+                    <div
+                      className={`agent-node-circle ${stage.state}`}
+                      onClick={() => onAgentNodeClick(stage.key)}
+                      style={{cursor: 'pointer'}}
+                      data-interaction-id={`click:agent:${stage.key}`}
+                    >
+                      {idx + 1}
+                    </div>
+                    <span className="agent-node-label">{stage.label}</span>
+                  </div>
+                  {idx < stages.length - 1 && <span className="agent-arrow">→</span>}
+                </React.Fragment>
+              ))}
             </div>
 
             <div className="agent-current-status">
-              <span className="agent-current-text">设计 Agent 正在生成方案</span>
+              <span className="agent-current-text">方案设计 Agent 正在生成 C4 架构图与接口契约草案</span>
             </div>
 
             <div className="agent-progress">
@@ -3052,6 +4032,59 @@
                 <div className="agent-progress-fill" style={{width: '40%'}}></div>
               </div>
               <span className="agent-progress-text">2/5 步骤完成</span>
+            </div>
+
+            <div className="collab-section">
+              <div className="collab-section-title">智能体分工</div>
+              <div className="agent-roster" data-testid="agent-roster">
+                {COLLAB_AGENTS.map(agent => (
+                  <div className="agent-roster-row" key={agent.name}>
+                    <div className="agent-avatar-mini">{agent.short}</div>
+                    <div>
+                      <div className="agent-roster-name">{agent.name}</div>
+                      <div className="agent-roster-task">{agent.task}</div>
+                    </div>
+                    <span className={`agent-roster-status ${agent.status}`}>{agent.statusText}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="collab-section">
+              <div className="collab-section-title">交接队列</div>
+              <div className="handoff-list">
+                {COLLAB_HANDOFFS.map(item => (
+                  <div className="handoff-item" key={item.title}>
+                    <span className="handoff-dot" aria-hidden="true"></span>
+                    <div>
+                      <div className="handoff-title">{item.title}</div>
+                      <div className="handoff-meta">{item.meta}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="collab-section">
+              <div className="collab-section-title">已沉淀产出</div>
+              <div className="collab-output-list">
+                {COLLAB_OUTPUTS.map(item => (
+                  <div className="collab-output-item" key={item.title}>
+                    <span className="handoff-dot" aria-hidden="true"></span>
+                    <div>
+                      <div className="collab-output-title">{item.title}</div>
+                      <div className="collab-output-meta">{item.meta}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="collab-section">
+              <div className="collab-section-title">当前风险</div>
+              <div className="collab-risk-card">
+                认证服务回调超时策略尚未确认，风险检查 Agent 会在接口契约生成后自动补充回滚建议。
+              </div>
             </div>
           </div>
         </div>
@@ -3074,7 +4107,15 @@
         { type: 'success', text: '某需求已完成设计评审', time: '10:32' },
         { type: 'error', text: '构建失败', time: '10:28' },
         { type: 'success', text: '部署成功', time: '09:45' },
-        { type: 'info', text: 'Sprint 进度更新 68%', time: '09:30' }
+        { type: 'info', text: 'Sprint 进度更新 68%', time: '09:30' },
+        { type: 'warning', text: '发布审批等待确认', time: '09:12' },
+        { type: 'success', text: '接口契约检查通过', time: '08:58' },
+        { type: 'info', text: '测试环境容量已扩容', time: '08:41' },
+        { type: 'success', text: '代码质量扫描完成', time: '08:26' },
+        { type: 'warning', text: '回归用例仍有 3 条待确认', time: '08:10' },
+        { type: 'success', text: '制品版本已归档', time: '07:52' },
+        { type: 'info', text: '监控规则完成同步', time: '07:35' },
+        { type: 'success', text: '协作通知已发送', time: '07:18' }
       ];
 
       return (
@@ -3162,7 +4203,7 @@
 
     function FooterStatus({ connected, onStatusClick }) {
       return (
-        <footer className="footer-status" data-testid="footer-status">
+        <div className="footer-status-content">
           <div className="status-left">
             <div className="status-item" onClick={() => onStatusClick('system')} style={{cursor: 'pointer'}} data-interaction-id="click:footer:system">
               <span className={`status-dot ${connected ? 'green' : ''}`}></span>
@@ -3180,7 +4221,7 @@
           <div className="status-right">
             v2.0.1
           </div>
-        </footer>
+        </div>
       );
     }
 
@@ -3238,6 +4279,8 @@
           default: return 'circle';
         }
       };
+      const completedSteps = execution.steps.filter(step => step.status === 'completed').length;
+      const progress = Math.round((completedSteps / Math.max(execution.steps.length, 1)) * 100);
 
       return (
         <div className="execution-card">
@@ -3260,6 +4303,12 @@
                 </span>
               </div>
             ))}
+          </div>
+          <div className="execution-progress">
+            <div className="execution-progress-text">{completedSteps}/{execution.steps.length} 步骤完成</div>
+            <div className="execution-progress-bar">
+              <div className="execution-progress-fill" style={{ width: `${progress}%` }}></div>
+            </div>
           </div>
         </div>
       );
@@ -3382,7 +4431,7 @@
           {
             step: 3,
             role: 'ops',
-            action: '部署平台执行发布任务',
+            action: '发布部署平台执行发布任务',
             result: '服务已部署到预生产环境',
             highlight: 'pipeline',
             highlightElement: '部署上线',
@@ -3400,6 +4449,24 @@
         ]
       }
     };
+
+    const STORY_ICON_GLYPHS = {
+      lightbulb: '◇',
+      'alert-triangle': '!',
+      rocket: '▲',
+      'book-open': '□',
+      sparkles: '*',
+      x: '×',
+      user: '●',
+      play: '▶',
+      'chevron-left': '‹',
+      'chevron-right': '›',
+      check: '✓'
+    };
+
+    function storyIconGlyph(iconName) {
+      return STORY_ICON_GLYPHS[iconName] || STORY_ICON_GLYPHS.user;
+    }
 
     function StoryModeOverlay({ isOpen, onClose, onStartStory, currentStory, currentStep, onNext, onPrev, onExit, storyEvents }) {
       const [selectedStory, setSelectedStory] = useState(null);
@@ -3429,11 +4496,11 @@
             <div className="story-modal">
               <div className="story-modal-header">
                 <div className="story-modal-title">
-                  <i data-lucide="book-open"></i>
+                  <span className="story-icon" aria-hidden="true">{storyIconGlyph('book-open')}</span>
                   {story.title}
                 </div>
                 <button className="story-close-btn" onClick={onExit} data-testid="story-mode-exit-btn">
-                  <i data-lucide="x"></i>
+                  <span className="story-icon" aria-hidden="true">{storyIconGlyph('x')}</span>
                 </button>
               </div>
               <div className="story-modal-body">
@@ -3444,7 +4511,7 @@
                       <div>
                         <div className="story-step-title">{stepData.action}</div>
                         <div className="story-step-role">
-                          <i data-lucide={role?.icon || 'user'} style={{width: 12, height: 12, marginRight: 4}}></i>
+                          <span className="story-icon" aria-hidden="true">{storyIconGlyph(role?.icon || 'user')}</span>
                           {role?.name_zh || stepData.role}
                         </div>
                       </div>
@@ -3486,7 +4553,7 @@
                   disabled={currentStep === 0}
                   data-testid="story-mode-prev-btn"
                 >
-                  <i data-lucide="chevron-left"></i>
+                  <span className="story-icon" aria-hidden="true">{storyIconGlyph('chevron-left')}</span>
                   上一步
                 </button>
                 <button
@@ -3495,14 +4562,14 @@
                   data-testid="story-mode-next-btn"
                 >
                   {currentStep === totalSteps - 1 ? '完成' : '下一步'}
-                  <i data-lucide={currentStep === totalSteps - 1 ? 'check' : 'chevron-right'}></i>
+                  <span className="story-icon" aria-hidden="true">{storyIconGlyph(currentStep === totalSteps - 1 ? 'check' : 'chevron-right')}</span>
                 </button>
                 <button
                   className="story-btn story-btn-exit"
                   onClick={onExit}
                   data-testid="story-mode-exit-btn"
                 >
-                  <i data-lucide="x"></i>
+                  <span className="story-icon" aria-hidden="true">{storyIconGlyph('x')}</span>
                   退出
                 </button>
               </div>
@@ -3517,11 +4584,11 @@
           <div className="story-modal">
             <div className="story-modal-header">
               <div className="story-modal-title">
-                <i data-lucide="sparkles"></i>
+                <span className="story-icon" aria-hidden="true">{storyIconGlyph('sparkles')}</span>
                 选择故事开始演示
               </div>
               <button className="story-close-btn" onClick={onClose} data-testid="story-mode-close-btn">
-                <i data-lucide="x"></i>
+                <span className="story-icon" aria-hidden="true">{storyIconGlyph('x')}</span>
               </button>
             </div>
             <div className="story-modal-body">
@@ -3533,7 +4600,7 @@
                     onClick={() => handleStorySelect(id)}
                   >
                     <div className="storyline-icon">
-                      <i data-lucide={story.icon}></i>
+                      <span className="story-icon" aria-hidden="true">{storyIconGlyph(story.icon)}</span>
                     </div>
                     <div className="storyline-title">{story.title}</div>
                     <div className="storyline-desc">{story.desc}</div>
@@ -3559,7 +4626,7 @@
                 data-testid="story-mode-start-btn"
               >
                 开始演示
-                <i data-lucide="play"></i>
+                <span className="story-icon" aria-hidden="true">{storyIconGlyph('play')}</span>
               </button>
               <button
                 className="story-btn story-btn-exit"
@@ -3656,7 +4723,7 @@
         iconColor: 'red',
         description: '企业内部的存量系统集成，代表实际生产环境中的各种工具和平台',
         details: {
-          components: ['需求管理系统', '设计协作平台', '代码仓库', '代码质量平台', '构建引擎', '测试平台', '制品仓库', '部署平台', '可观测性平台', '告警通道'],
+          components: ['需求管理系统', '设计协作平台', '代码托管平台', '代码质量平台', '持续集成平台', '测试管理平台', '制品管理平台', '发布部署平台', '监控观测平台', '告警通知平台'],
           features: ['异构系统集成', '数据同步', '单点登录', '权限管理']
         }
       }
@@ -3801,6 +4868,6 @@
 
     // Initialize Lucide icons after render
     setTimeout(() => lucide.createIcons(), 100);
-  </script>
+</script>
 </body>
 </html>

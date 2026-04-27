@@ -19,9 +19,23 @@ const BANNED_TERMS_SCAN = [
   'KUBERNETES', 'K8S', '飞书',
 ];
 
+async function waitForDemoHome(page) {
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await page.waitForSelector('[data-testid="dashboard-headline"]', { timeout: 15000 });
+      return;
+    } catch (error) {
+      lastError = error;
+      await page.waitForTimeout(500);
+    }
+  }
+  throw lastError;
+}
+
 test.beforeEach(async ({ page }) => {
-  await page.goto('/');
-  await page.waitForSelector('[data-testid="dashboard-headline"]', { timeout: 30000 });
+  await waitForDemoHome(page);
 });
 
 // ─── 1. Role Switches ───────────────────────────────────────────────────────
@@ -50,6 +64,10 @@ test.describe('Story mode', () => {
 
     const storyCard = overlay.locator('.storyline-card').filter({ hasText: '需求到设计与研发启动' });
     await storyCard.click();
+    const explicitStart = page.locator('[data-testid="story-mode-start-btn"]');
+    if (await explicitStart.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await explicitStart.click();
+    }
 
     // Wait for step view to render (parent state update triggers re-render)
     const stepBadge = overlay.locator('.story-step-badge');

@@ -12,14 +12,14 @@ const fs = require('fs');
 const TOOLCHAIN_REGISTRY = [
   { id: 'requirement_platform', name_zh: '需求管理平台', name_en: 'Requirement Management', icon: 'ClipboardList', description_zh: '需求收集、评审、排期与全生命周期追踪' },
   { id: 'design_collaboration', name_zh: '设计协作平台', name_en: 'Design Collaboration', icon: 'PenTool', description_zh: 'UI/UX 设计、原型评审与设计资产共享' },
-  { id: 'code_repository', name_zh: '代码仓库', name_en: 'Code Repository', icon: 'GitBranch', description_zh: '源码托管、分支管理与代码评审' },
+  { id: 'code_repository', name_zh: '代码托管平台', name_en: 'Code Repository', icon: 'GitBranch', description_zh: '源码托管、分支管理与代码评审' },
   { id: 'code_quality', name_zh: '代码质量平台', name_en: 'Code Quality', icon: 'ShieldCheck', description_zh: '静态分析、代码规范扫描与技术债务治理' },
-  { id: 'build_engine', name_zh: '构建引擎', name_en: 'Build Engine', icon: 'Hammer', description_zh: '编译构建、CI 流水线与制品产出' },
-  { id: 'test_platform', name_zh: '测试平台', name_en: 'Test Platform', icon: 'TestTube2', description_zh: '单元测试、集成测试、E2E 与回归测试管理' },
-  { id: 'artifact_registry', name_zh: '制品仓库', name_en: 'Artifact Registry', icon: 'Package', description_zh: '容器镜像、制品版本管理与安全扫描' },
-  { id: 'deployment_platform', name_zh: '部署平台', name_en: 'Deployment Platform', icon: 'Rocket', description_zh: '环境管理、应用部署、灰度发布与回滚' },
-  { id: 'observability_platform', name_zh: '可观测性平台', name_en: 'Observability Platform', icon: 'Activity', description_zh: '指标监控、链路追踪、日志聚合与告警' },
-  { id: 'alert_channel', name_zh: '告警通道', name_en: 'Alert Channel', icon: 'Bell', description_zh: 'IM 消息推送、邮件通知与事件广播' },
+  { id: 'build_engine', name_zh: '持续集成平台', name_en: 'Build Engine', icon: 'Hammer', description_zh: '编译构建、CI 流水线与制品产出' },
+  { id: 'test_platform', name_zh: '测试管理平台', name_en: 'Test Platform', icon: 'TestTube2', description_zh: '单元测试、集成测试、E2E 与回归测试管理' },
+  { id: 'artifact_registry', name_zh: '制品管理平台', name_en: 'Artifact Registry', icon: 'Package', description_zh: '容器镜像、制品版本管理与安全扫描' },
+  { id: 'deployment_platform', name_zh: '发布部署平台', name_en: 'Deployment Platform', icon: 'Rocket', description_zh: '环境管理、应用部署、灰度发布与回滚' },
+  { id: 'observability_platform', name_zh: '监控观测平台', name_en: 'Observability Platform', icon: 'Activity', description_zh: '指标监控、链路追踪、日志聚合与告警' },
+  { id: 'alert_channel', name_zh: '告警通知平台', name_en: 'Alert Channel', icon: 'Bell', description_zh: 'IM 消息推送、邮件通知与事件广播' },
   { id: 'audit_compliance', name_zh: '审计合规平台', name_en: 'Audit & Compliance', icon: 'FileCheck', description_zh: '操作审计、权限管控与合规报告' },
 ];
 

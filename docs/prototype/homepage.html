@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AgentCenter - 企业AI原生编排平台</title>
+  <link rel="icon" href="data:,">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -16,15 +17,15 @@
     }
 
     :root {
-      --bg-primary: #0f172a;
-      --bg-secondary: #1e293b;
-      --bg-tertiary: #0c1222;
-      --bg-card: rgba(30, 41, 59, 0.7);
-      --bg-card-hover: rgba(30, 41, 59, 0.9);
-      --border-color: rgba(148, 163, 184, 0.1);
-      --border-color-hover: rgba(148, 163, 184, 0.2);
-      --text-primary: #f1f5f9;
-      --text-secondary: #94a3b8;
+      --bg-primary: #f6f8fb;
+      --bg-secondary: #ffffff;
+      --bg-tertiary: #eef2f7;
+      --bg-card: #ffffff;
+      --bg-card-hover: #f8fafc;
+      --border-color: #d9e2ec;
+      --border-color-hover: #b9c7d8;
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
       --text-muted: #64748b;
       --accent-blue: #3b82f6;
       --accent-purple: #8b5cf6;
@@ -33,73 +34,121 @@
       --warning: #f59e0b;
       --error: #ef4444;
       --info: #06b6d4;
-      --glow-blue: rgba(59, 130, 246, 0.3);
-      --glow-purple: rgba(139, 92, 246, 0.3);
+      --glow-blue: rgba(59, 130, 246, 0.15);
+      --glow-purple: rgba(139, 92, 246, 0.15);
+    }
+
+    html,
+    body {
+      height: 100%;
+      overflow: hidden;
     }
 
     body {
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       background: var(--bg-primary);
       color: var(--text-primary);
-      min-height: 100vh;
-      overflow-x: hidden;
     }
 
-    /* Layout */
-    .app-container {
-      display: flex;
-      min-height: 100vh;
-    }
-
-    /* Sidebar */
-    .sidebar {
-      width: 260px;
-      background: var(--bg-secondary);
-      border-right: 1px solid var(--border-color);
-      display: flex;
-      flex-direction: column;
-      position: fixed;
-      top: 0;
-      left: 0;
+    /* ============================================
+       WORKBENCH SHELL — VS Code Grid Layout
+       ============================================ */
+    .workbench-shell {
+      --titlebar-height: 56px;
+      --top-panel-height: 36px;
+      --bottom-panel-height: 44px;
       height: 100vh;
-      z-index: 100;
-      transition: transform 0.3s ease;
+      display: grid;
+      grid-template-columns: 16px 280px 16px minmax(640px, 1fr) 16px 320px 16px;
+      grid-template-rows: var(--titlebar-height) var(--top-panel-height) minmax(0, 1fr) var(--bottom-panel-height) 32px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      overflow: hidden;
+      transition: grid-template-rows 180ms ease;
     }
 
-    .sidebar-header {
-      height: 60px;
+    .workbench-shell.has-top-expanded {
+      --top-panel-height: 164px;
+    }
+
+    .workbench-shell.has-bottom-expanded {
+      --bottom-panel-height: 300px;
+    }
+
+    .workbench-shell.is-titlebar-collapsed {
+      --titlebar-height: 32px;
+    }
+
+    /* Titlebar */
+    .workbench-shell.is-left-collapsed {
+      grid-template-columns: 16px 48px 16px minmax(640px, 1fr) 16px 320px 16px;
+    }
+
+    .workbench-shell.is-right-collapsed {
+      grid-template-columns: 16px 280px 16px minmax(640px, 1fr) 16px 48px 16px;
+    }
+
+    .workbench-shell.is-left-collapsed.is-right-collapsed {
+      grid-template-columns: 16px 48px 16px minmax(640px, 1fr) 16px 48px 16px;
+    }
+
+    .workbench-titlebar {
+      grid-column: 1 / -1;
+      grid-row: 1;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-color);
       display: flex;
       align-items: center;
       padding: 0 20px;
-      border-bottom: 1px solid var(--border-color);
-      background: var(--bg-secondary);
+      gap: 16px;
+    }
+
+    .workbench-shell.is-titlebar-collapsed .titlebar-center,
+    .workbench-shell.is-titlebar-collapsed .titlebar-right .nav-icon-btn,
+    .workbench-shell.is-titlebar-collapsed .titlebar-right .user-info,
+    .workbench-shell.is-titlebar-collapsed .version-badge {
+      display: none;
+    }
+
+    .workbench-shell.is-titlebar-collapsed .logo-icon {
+      width: 22px;
+      height: 22px;
+    }
+
+    .workbench-shell.is-titlebar-collapsed .logo-text {
+      font-size: 13px;
+    }
+
+    .titlebar-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
     }
 
     .logo {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
     }
 
     .logo-icon {
-      width: 32px;
-      height: 32px;
+      width: 28px;
+      height: 28px;
       background: var(--accent-gradient);
-      border-radius: 8px;
+      border-radius: 6px;
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 0 20px var(--glow-blue);
     }
 
     .logo-icon svg {
-      width: 20px;
-      height: 20px;
+      width: 16px;
+      height: 16px;
       color: white;
     }
 
     .logo-text {
-      font-size: 18px;
+      font-size: 14px;
       font-weight: 600;
       color: var(--text-primary);
     }
@@ -110,8 +159,413 @@
       font-size: 10px;
       padding: 2px 6px;
       border-radius: 4px;
-      margin-left: 8px;
       font-weight: 500;
+    }
+
+    .collapse-btn {
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      transition: all 0.2s ease;
+      border: 1px solid var(--border-color);
+      background: var(--bg-card);
+    }
+
+    .collapse-btn:hover {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+    }
+
+    .side-panel-glyph {
+      font-size: 18px;
+      line-height: 1;
+      font-weight: 700;
+    }
+
+    .titlebar-center {
+      flex: 1;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+
+    .search-bar {
+      display: flex;
+      align-items: center;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 0 14px;
+      height: 36px;
+      transition: all 0.2s ease;
+    }
+
+    .search-bar:focus-within {
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+    }
+
+    .search-bar i {
+      color: var(--text-muted);
+      width: 16px;
+      height: 16px;
+    }
+
+    .search-bar input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text-primary);
+      font-size: 13px;
+      margin-left: 8px;
+    }
+
+    .search-bar input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .titlebar-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .nav-icon-btn {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .nav-icon-btn:hover {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+    }
+
+    .nav-icon-btn i {
+      width: 18px;
+      height: 18px;
+    }
+
+    .notice-badge {
+      position: absolute;
+      top: 3px;
+      right: 3px;
+      width: 14px;
+      height: 14px;
+      background: var(--error);
+      border-radius: 50%;
+      font-size: 9px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      animation: alertPulse 2s infinite;
+    }
+
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-left: 4px;
+    }
+
+    .user-info:hover {
+      background: var(--bg-tertiary);
+    }
+
+    .user-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      background: var(--accent-gradient);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: white;
+    }
+
+    .user-details {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .user-name {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .user-role {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    /* Top Metrics Panel */
+    .top-metrics-panel {
+      grid-column: 4;
+      grid-row: 2;
+      background: var(--bg-primary);
+      overflow: hidden;
+      transition: max-height 180ms ease;
+    }
+
+    .top-metrics-panel.is-collapsed { max-height: 36px; min-height: 36px; }
+    .top-metrics-panel.is-expanded { max-height: 164px; min-height: 164px; }
+
+    .top-panel-stack {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .top-panel-bar {
+      height: 36px;
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px 0 16px;
+    }
+
+    .metrics-strip {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      flex: 1;
+      padding: 0 20px;
+      height: 100%;
+    }
+
+    .metric-pill {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 20px;
+      height: 100%;
+      border-right: 1px solid var(--border-color);
+      flex: 1;
+    }
+
+    .metric-pill:last-child {
+      border-right: none;
+    }
+
+    .metric-pill-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .metric-pill-icon.blue { background: rgba(59, 130, 246, 0.1); color: var(--accent-blue); }
+    .metric-pill-icon.green { background: rgba(16, 185, 129, 0.1); color: var(--success); }
+    .metric-pill-icon.red { background: rgba(239, 68, 68, 0.1); color: var(--error); }
+    .metric-pill-icon.amber { background: rgba(245, 158, 11, 0.1); color: var(--warning); }
+
+    .metric-pill-icon i {
+      width: 16px;
+      height: 16px;
+    }
+
+    .metric-pill-info {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .metric-pill-label {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .metric-pill-value {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .metric-pill-trend {
+      font-size: 10px;
+      font-weight: 500;
+      margin-left: auto;
+      white-space: nowrap;
+    }
+
+    .metric-pill-trend.up { color: var(--success); }
+    .metric-pill-trend.down { color: var(--error); }
+
+    .metrics-toggle {
+      min-width: 64px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      border-radius: 4px;
+      cursor: pointer;
+      color: var(--text-muted);
+      margin-right: 12px;
+      transition: all 0.2s ease;
+      border: none;
+      background: transparent;
+    }
+
+    .metrics-toggle:hover {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+    }
+
+    .metrics-toggle i {
+      width: 16px;
+      height: 16px;
+      transition: transform 0.2s ease;
+    }
+
+    .metrics-toggle.is-flipped i {
+      transform: rotate(180deg);
+    }
+
+    /* Expanded metrics detail (hidden when collapsed) */
+    .metrics-detail {
+      display: none;
+      padding: 12px 20px;
+    }
+
+    .top-metrics-panel.is-expanded .metrics-detail {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+
+    .top-metrics-panel.is-collapsed .metrics-strip {
+      display: none;
+    }
+
+    .top-metrics-panel.is-expanded .metrics-strip {
+      display: none;
+    }
+
+    .metric-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 16px;
+      transition: all 0.2s ease;
+    }
+
+    .metric-card:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-color-hover);
+    }
+
+    .metric-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .metric-label {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .metric-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .metric-icon.blue { background: rgba(59, 130, 246, 0.1); color: var(--accent-blue); }
+    .metric-icon.green { background: rgba(16, 185, 129, 0.1); color: var(--success); }
+    .metric-icon.red { background: rgba(239, 68, 68, 0.1); color: var(--error); }
+    .metric-icon.amber { background: rgba(245, 158, 11, 0.1); color: var(--warning); }
+
+    .metric-icon i { width: 16px; height: 16px; }
+
+    .metric-value {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 6px;
+    }
+
+    .metric-trend {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .trend-badge {
+      font-size: 11px;
+      font-weight: 500;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .trend-badge.up { background: rgba(16, 185, 129, 0.1); color: var(--success); }
+    .trend-badge.down { background: rgba(239, 68, 68, 0.1); color: var(--error); }
+
+    .trend-text {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .progress-container { margin-top: 6px; }
+    .progress-header { display: flex; justify-content: space-between; margin-bottom: 4px; }
+    .progress-label { font-size: 11px; color: var(--text-muted); }
+    .progress-value { font-size: 11px; color: var(--text-secondary); font-weight: 500; }
+    .progress-bar { height: 5px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden; }
+    .progress-fill { height: 100%; background: var(--accent-gradient); border-radius: 3px; transition: width 0.5s ease; }
+
+    /* Workbench Main — 3-column grid */
+    .workbench-main {
+      display: contents;
+    }
+
+    /* Left Column */
+    .workbench-left {
+      grid-column: 2;
+      grid-row: 2 / 5;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border-color);
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .workbench-shell.is-left-collapsed .workbench-left {
+      overflow: hidden;
+    }
+
+    .workbench-shell.is-left-collapsed .workbench-left > * {
+      opacity: 0;
+      pointer-events: none;
     }
 
     .sidebar-content {
@@ -121,7 +575,9 @@
     }
 
     .sidebar-section {
-      margin-bottom: 24px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid rgba(217, 226, 236, 0.65);
+      padding-bottom: 10px;
     }
 
     .sidebar-section-title {
@@ -134,11 +590,117 @@
       margin-bottom: 8px;
     }
 
+    .sidebar-section-toggle {
+      width: 100%;
+      border: 0;
+      background: transparent;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px 8px 20px;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .sidebar-section-toggle .sidebar-section-title {
+      padding: 0;
+      margin: 0;
+    }
+
+    .sidebar-section-toggle:hover .sidebar-section-title,
+    .sidebar-section-toggle:hover .sidebar-section-chevron {
+      color: var(--text-primary);
+    }
+
+    .sidebar-section-chevron {
+      font-size: 13px;
+      color: var(--text-muted);
+      transition: transform 0.18s ease;
+      line-height: 1;
+    }
+
+    .sidebar-section-toggle[aria-expanded="false"] .sidebar-section-chevron {
+      transform: rotate(-90deg);
+    }
+
+    .sidebar-section-body {
+      overflow: hidden;
+    }
+
+    .conversation-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 0 12px;
+    }
+
+    .conversation-list-item {
+      border: 1px solid transparent;
+      background: transparent;
+      border-radius: 8px;
+      padding: 9px 10px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      transition: all 0.18s ease;
+      text-align: left;
+    }
+
+    .conversation-list-item:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-color);
+    }
+
+    .conversation-list-item.active {
+      background: rgba(59, 130, 246, 0.1);
+      border-color: rgba(59, 130, 246, 0.28);
+      color: var(--accent-blue);
+    }
+
+    .conversation-list-topline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 3px;
+    }
+
+    .conversation-list-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: inherit;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .conversation-list-time {
+      font-size: 10px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .conversation-list-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .conversation-list-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: 6px;
+      font-size: 10px;
+      color: var(--success);
+    }
+
     .nav-item {
       display: flex;
       align-items: center;
       gap: 12px;
-      padding: 10px 20px;
+      padding: 8px 20px;
       color: var(--text-secondary);
       cursor: pointer;
       transition: all 0.2s ease;
@@ -146,12 +708,12 @@
     }
 
     .nav-item:hover {
-      background: rgba(59, 130, 246, 0.1);
+      background: rgba(59, 130, 246, 0.08);
       color: var(--text-primary);
     }
 
     .nav-item.active {
-      background: rgba(59, 130, 246, 0.15);
+      background: rgba(59, 130, 246, 0.12);
       color: var(--accent-blue);
       border-left-color: var(--accent-blue);
     }
@@ -163,21 +725,20 @@
     }
 
     .nav-item span {
-      font-size: 14px;
+      font-size: 13px;
     }
 
-    /* Tool Status */
     .tool-item {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 8px 20px;
+      padding: 6px 20px;
       cursor: pointer;
       transition: all 0.2s ease;
     }
 
     .tool-item:hover {
-      background: rgba(255, 255, 255, 0.03);
+      background: rgba(59, 130, 246, 0.04);
     }
 
     .tool-info {
@@ -193,53 +754,31 @@
       animation: pulse 2s infinite;
     }
 
-    .tool-status-dot.connected {
-      background: var(--success);
-      box-shadow: 0 0 8px var(--success);
-    }
+    .tool-status-dot.connected { background: var(--success); box-shadow: 0 0 6px var(--success); }
+    .tool-status-dot.delayed { background: var(--warning); box-shadow: 0 0 6px var(--warning); }
+    .tool-status-dot.error { background: var(--error); box-shadow: 0 0 6px var(--error); }
 
-    .tool-status-dot.delayed {
-      background: var(--warning);
-      box-shadow: 0 0 8px var(--warning);
-    }
+    .tool-name { font-size: 13px; color: var(--text-secondary); }
+    .tool-status-text { font-size: 11px; color: var(--text-muted); }
 
-    .tool-status-dot.error {
-      background: var(--error);
-      box-shadow: 0 0 8px var(--error);
-    }
-
-    .tool-name {
-      font-size: 13px;
-      color: var(--text-secondary);
-    }
-
-    .tool-status-text {
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-
-    /* Agent Status */
     .agent-item {
-      padding: 10px 20px;
+      padding: 8px 20px;
       cursor: pointer;
       transition: all 0.2s ease;
     }
 
     .agent-item:hover {
-      background: rgba(255, 255, 255, 0.03);
+      background: rgba(59, 130, 246, 0.04);
     }
 
     .agent-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 4px;
+      margin-bottom: 2px;
     }
 
-    .agent-name {
-      font-size: 13px;
-      color: var(--text-secondary);
-    }
+    .agent-name { font-size: 13px; color: var(--text-secondary); }
 
     .agent-status {
       font-size: 11px;
@@ -250,21 +789,9 @@
       gap: 4px;
     }
 
-    .agent-status.idle {
-      background: rgba(16, 185, 129, 0.15);
-      color: var(--success);
-    }
-
-    .agent-status.working {
-      background: rgba(59, 130, 246, 0.15);
-      color: var(--accent-blue);
-    }
-
-    .agent-status.alert {
-      background: rgba(245, 158, 11, 0.15);
-      color: var(--warning);
-      animation: alertPulse 1.5s infinite;
-    }
+    .agent-status.idle { background: rgba(16, 185, 129, 0.12); color: var(--success); }
+    .agent-status.working { background: rgba(59, 130, 246, 0.12); color: var(--accent-blue); }
+    .agent-status.alert { background: rgba(245, 158, 11, 0.12); color: var(--warning); animation: alertPulse 1.5s infinite; }
 
     .agent-status .dot {
       width: 6px;
@@ -273,18 +800,16 @@
       background: currentColor;
     }
 
-    .agent-status.working .dot {
-      animation: breathe 1.5s infinite;
-    }
+    .agent-status.working .dot { animation: breathe 1.5s infinite; }
 
     .agent-task {
       font-size: 11px;
       color: var(--text-muted);
-      margin-left: 18px;
+      margin-left: 0;
     }
 
     .sidebar-footer {
-      padding: 16px 20px;
+      padding: 12px 20px;
       border-top: 1px solid var(--border-color);
     }
 
@@ -295,375 +820,27 @@
       color: var(--text-muted);
       font-size: 13px;
       cursor: pointer;
-      padding: 8px 0;
+      padding: 6px 0;
       transition: color 0.2s ease;
     }
 
-    .system-settings:hover {
-      color: var(--text-primary);
-    }
+    .system-settings:hover { color: var(--text-primary); }
 
-    /* Main Content */
-    .main-content {
-      flex: 1;
-      margin-left: 260px;
-      min-height: 100vh;
+    /* Center Column */
+    .workbench-center {
+      grid-column: 4;
+      grid-row: 3;
       display: flex;
       flex-direction: column;
-    }
-
-    /* Top Navigation */
-    .top-nav {
-      height: 60px;
-      background: var(--bg-secondary);
-      border-bottom: 1px solid var(--border-color);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 24px;
-      position: sticky;
-      top: 0;
-      z-index: 50;
-    }
-
-    .nav-left {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-
-    .collapse-btn {
-      width: 36px;
-      height: 36px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 8px;
-      cursor: pointer;
-      color: var(--text-secondary);
-      transition: all 0.2s ease;
-    }
-
-    .collapse-btn:hover {
-      background: rgba(255, 255, 255, 0.05);
-      color: var(--text-primary);
-    }
-
-    .nav-center {
-      flex: 1;
-      max-width: 480px;
-      margin: 0 40px;
-    }
-
-    .search-bar {
-      display: flex;
-      align-items: center;
-      background: var(--bg-primary);
-      border: 1px solid var(--border-color);
-      border-radius: 10px;
-      padding: 0 16px;
-      height: 40px;
-      transition: all 0.2s ease;
-    }
-
-    .search-bar:focus-within {
-      border-color: var(--accent-blue);
-      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
-    }
-
-    .search-bar i {
-      color: var(--text-muted);
-      width: 18px;
-      height: 18px;
-    }
-
-    .search-bar input {
-      flex: 1;
-      background: transparent;
-      border: none;
-      outline: none;
-      color: var(--text-primary);
-      font-size: 14px;
-      margin-left: 10px;
-    }
-
-    .search-bar input::placeholder {
-      color: var(--text-muted);
-    }
-
-    .nav-right {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .nav-icon-btn {
-      width: 36px;
-      height: 36px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 8px;
-      cursor: pointer;
-      color: var(--text-secondary);
-      transition: all 0.2s ease;
-      position: relative;
-    }
-
-    .nav-icon-btn:hover {
-      background: rgba(255, 255, 255, 0.05);
-      color: var(--text-primary);
-    }
-
-    .nav-icon-btn i {
-      width: 20px;
-      height: 20px;
-    }
-
-    .notification-badge {
-      position: absolute;
-      top: 4px;
-      right: 4px;
-      width: 16px;
-      height: 16px;
-      background: var(--error);
-      border-radius: 50%;
-      font-size: 10px;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      animation: alertPulse 2s infinite;
-    }
-
-    .user-info {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 6px 12px;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      margin-left: 8px;
-    }
-
-    .user-info:hover {
-      background: rgba(255, 255, 255, 0.05);
-    }
-
-    .user-avatar {
-      width: 32px;
-      height: 32px;
-      border-radius: 8px;
-      background: var(--accent-gradient);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 13px;
-      font-weight: 600;
-      color: white;
-    }
-
-    .user-details {
-      display: flex;
-      flex-direction: column;
-    }
-
-    .user-name {
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--text-primary);
-    }
-
-    .user-role {
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-
-    /* Dashboard Content */
-    .dashboard-content {
-      flex: 1;
-      padding: 24px;
-      background: var(--bg-primary);
-    }
-
-    /* Metrics Strip */
-    .metrics-strip {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 20px;
-      margin-bottom: 24px;
-    }
-
-    .metric-card {
-      background: var(--bg-card);
-      backdrop-filter: blur(20px);
-      border: 1px solid var(--border-color);
-      border-radius: 16px;
-      padding: 20px;
-      transition: all 0.3s ease;
-    }
-
-    .metric-card:hover {
-      background: var(--bg-card-hover);
-      border-color: var(--border-color-hover);
-      transform: translateY(-2px);
-    }
-
-    .metric-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 12px;
-    }
-
-    .metric-label {
-      font-size: 13px;
-      color: var(--text-muted);
-    }
-
-    .metric-icon {
-      width: 36px;
-      height: 36px;
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .metric-icon.blue {
-      background: rgba(59, 130, 246, 0.15);
-      color: var(--accent-blue);
-    }
-
-    .metric-icon.green {
-      background: rgba(16, 185, 129, 0.15);
-      color: var(--success);
-    }
-
-    .metric-icon.red {
-      background: rgba(239, 68, 68, 0.15);
-      color: var(--error);
-    }
-
-    .metric-icon.amber {
-      background: rgba(245, 158, 11, 0.15);
-      color: var(--warning);
-    }
-
-    .metric-icon i {
-      width: 18px;
-      height: 18px;
-    }
-
-    .metric-value {
-      font-size: 28px;
-      font-weight: 700;
-      color: var(--text-primary);
-      margin-bottom: 8px;
-    }
-
-    .metric-trend {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .trend-badge {
-      font-size: 12px;
-      font-weight: 500;
-      padding: 2px 8px;
-      border-radius: 4px;
-    }
-
-    .trend-badge.up {
-      background: rgba(16, 185, 129, 0.15);
-      color: var(--success);
-    }
-
-    .trend-badge.down {
-      background: rgba(239, 68, 68, 0.15);
-      color: var(--error);
-    }
-
-    .trend-text {
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-
-    .sparkline {
-      display: flex;
-      align-items: flex-end;
-      gap: 2px;
-      height: 24px;
-      margin-top: 8px;
-    }
-
-    .sparkline-bar {
-      width: 4px;
-      background: var(--accent-blue);
-      border-radius: 2px;
-      opacity: 0.6;
-    }
-
-    .sparkline-bar:nth-child(1) { height: 40%; }
-    .sparkline-bar:nth-child(2) { height: 60%; }
-    .sparkline-bar:nth-child(3) { height: 35%; }
-    .sparkline-bar:nth-child(4) { height: 80%; }
-    .sparkline-bar:nth-child(5) { height: 55%; }
-    .sparkline-bar:nth-child(6) { height: 70%; }
-    .sparkline-bar:nth-child(7) { height: 100%; }
-
-    /* Progress Bar */
-    .progress-container {
-      margin-top: 8px;
-    }
-
-    .progress-header {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 6px;
-    }
-
-    .progress-label {
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-
-    .progress-value {
-      font-size: 12px;
-      color: var(--text-secondary);
-      font-weight: 500;
-    }
-
-    .progress-bar {
-      height: 6px;
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 3px;
+      min-height: 0;
       overflow: hidden;
-    }
-
-    .progress-fill {
-      height: 100%;
-      background: var(--accent-gradient);
-      border-radius: 3px;
-      transition: width 0.5s ease;
-    }
-
-    /* Two Column Layout */
-    .two-column {
-      display: grid;
-      grid-template-columns: 1.5fr 1fr;
-      gap: 24px;
-      margin-bottom: 24px;
+      background: var(--bg-primary);
     }
 
     .card {
       background: var(--bg-card);
-      backdrop-filter: blur(20px);
       border: 1px solid var(--border-color);
-      border-radius: 16px;
+      border-radius: 12px;
       overflow: hidden;
     }
 
@@ -671,7 +848,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 16px 20px;
+      padding: 12px 16px;
       border-bottom: 1px solid var(--border-color);
     }
 
@@ -681,45 +858,59 @@
     }
 
     .card-title-main {
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 600;
       color: var(--text-primary);
     }
 
     .card-title-sub {
-      font-size: 12px;
-      color: var(--text-muted);
-      margin-top: 2px;
-    }
-
-    .card-badge {
-      background: rgba(239, 68, 68, 0.15);
-      color: var(--error);
       font-size: 11px;
-      font-weight: 500;
+      color: var(--text-muted);
+      margin-top: 1px;
+    }
+
+    .card-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .card-action-btn {
       padding: 4px 10px;
-      border-radius: 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: 1px solid var(--border-color);
+      background: transparent;
+      color: var(--text-secondary);
     }
 
-    .card-body {
-      padding: 20px;
+    .card-action-btn:hover {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
     }
 
-    /* AI Conversation Panel */
+    /* Conversation Panel */
     .conversation-panel {
       display: flex;
       flex-direction: column;
-      height: 520px;
+      flex: 1;
+      margin: 12px;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+      background: var(--bg-card);
     }
 
     .conversation-messages {
       flex: 1;
       overflow-y: auto;
-      padding: 0 20px 20px;
+      padding: 16px;
     }
 
     .message {
-      margin-bottom: 16px;
+      margin-bottom: 12px;
     }
 
     .message.user {
@@ -729,8 +920,8 @@
 
     .message-bubble {
       max-width: 85%;
-      padding: 12px 16px;
-      border-radius: 12px;
+      padding: 10px 14px;
+      border-radius: 10px;
       font-size: 13px;
       line-height: 1.5;
     }
@@ -742,30 +933,67 @@
     }
 
     .message.ai .message-bubble {
-      background: rgba(59, 130, 246, 0.1);
-      border: 1px solid rgba(59, 130, 246, 0.2);
+      background: rgba(59, 130, 246, 0.06);
+      border: 1px solid rgba(59, 130, 246, 0.15);
       color: var(--text-primary);
       border-bottom-left-radius: 4px;
     }
 
-    /* AI Response Card */
+    .scenario-rail {
+      display: flex;
+      gap: 8px;
+      padding: 10px 16px 0;
+      overflow-x: auto;
+      flex-shrink: 0;
+    }
+
+    .scenario-chip {
+      border: 1px solid var(--border-color);
+      background: var(--bg-card);
+      color: var(--text-secondary);
+      border-radius: 8px;
+      padding: 7px 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      font-weight: 500;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .scenario-chip:hover {
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
+      background: rgba(59, 130, 246, 0.06);
+    }
+
+    .live-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.12);
+    }
+
     .ai-response-card {
-      background: rgba(59, 130, 246, 0.05);
-      border: 1px solid rgba(59, 130, 246, 0.15);
-      border-radius: 12px;
-      padding: 16px;
-      margin-top: 12px;
+      background: rgba(59, 130, 246, 0.04);
+      border: 1px solid rgba(59, 130, 246, 0.12);
+      border-radius: 10px;
+      padding: 14px;
+      margin-top: 10px;
     }
 
     .ai-response-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
     }
 
     .ai-response-title {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
       color: var(--text-primary);
     }
@@ -774,11 +1002,11 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 4px 10px;
-      background: rgba(245, 158, 11, 0.15);
+      padding: 3px 8px;
+      background: rgba(245, 158, 11, 0.12);
       color: var(--warning);
       border-radius: 6px;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 500;
     }
 
@@ -791,144 +1019,111 @@
       animation: pulse 1.5s infinite;
     }
 
-    /* Pipeline Visualization */
-    .pipeline-viz {
-      margin: 16px 0;
-    }
+    .pipeline-viz { margin: 12px 0; }
 
     .pipeline-stage {
       display: flex;
       align-items: center;
-      gap: 12px;
-      margin-bottom: 12px;
+      gap: 8px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
     }
 
     .pipeline-node {
       display: flex;
       align-items: center;
-      gap: 8px;
-      padding: 8px 12px;
+      gap: 6px;
+      padding: 6px 10px;
       background: var(--bg-secondary);
-      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
       font-size: 12px;
       color: var(--text-secondary);
     }
 
     .pipeline-node.completed {
-      background: rgba(16, 185, 129, 0.15);
+      background: rgba(16, 185, 129, 0.1);
+      border-color: rgba(16, 185, 129, 0.3);
       color: var(--success);
     }
 
     .pipeline-node.current {
-      background: rgba(59, 130, 246, 0.15);
+      background: rgba(59, 130, 246, 0.1);
+      border-color: rgba(59, 130, 246, 0.3);
       color: var(--accent-blue);
-      border: 1px solid rgba(59, 130, 246, 0.3);
     }
 
     .pipeline-dot {
-      width: 8px;
-      height: 8px;
+      width: 6px;
+      height: 6px;
       border-radius: 50%;
       background: currentColor;
     }
 
-    .pipeline-node.current .pipeline-dot {
-      animation: pulse 1s infinite;
-    }
+    .pipeline-node.current .pipeline-dot { animation: pulse 1s infinite; }
 
-    .pipeline-arrow {
-      color: var(--text-muted);
-      font-size: 16px;
-    }
+    .pipeline-arrow { color: var(--text-muted); font-size: 14px; }
 
-    .pipeline-connector {
-      width: 24px;
-      height: 2px;
-      background: var(--border-color);
-      position: relative;
-    }
-
-    .pipeline-connector.completed {
-      background: var(--success);
-    }
-
-    /* Blocker */
     .blocker-card {
-      background: rgba(245, 158, 11, 0.1);
+      background: rgba(245, 158, 11, 0.08);
       border: 1px solid rgba(245, 158, 11, 0.2);
       border-radius: 8px;
-      padding: 12px;
+      padding: 10px;
       display: flex;
       align-items: center;
-      gap: 10px;
-      margin: 12px 0;
+      gap: 8px;
+      margin: 10px 0;
     }
 
     .blocker-icon {
-      width: 32px;
-      height: 32px;
-      border-radius: 8px;
-      background: rgba(245, 158, 11, 0.15);
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      background: rgba(245, 158, 11, 0.12);
       color: var(--warning);
       display: flex;
       align-items: center;
       justify-content: center;
+      flex-shrink: 0;
     }
 
-    .blocker-icon i {
-      width: 16px;
-      height: 16px;
-    }
+    .blocker-icon i { width: 14px; height: 14px; }
 
-    .blocker-content {
-      flex: 1;
-    }
-
-    .blocker-title {
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--warning);
-    }
-
-    .blocker-meta {
-      font-size: 11px;
-      color: var(--text-muted);
-      margin-top: 2px;
-    }
+    .blocker-content { flex: 1; }
+    .blocker-title { font-size: 12px; font-weight: 500; color: var(--warning); }
+    .blocker-meta { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
 
     .assignees {
       display: flex;
-      gap: -8px;
-      margin-top: 12px;
+      gap: 0;
+      margin-top: 10px;
     }
 
     .assignee {
-      width: 28px;
-      height: 28px;
+      width: 26px;
+      height: 26px;
       border-radius: 50%;
       background: var(--accent-gradient);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 600;
       color: white;
-      border: 2px solid var(--bg-primary);
-      margin-left: -8px;
+      border: 2px solid var(--bg-card);
+      margin-left: -6px;
     }
 
-    .assignee:first-child {
-      margin-left: 0;
-    }
+    .assignee:first-child { margin-left: 0; }
 
     .action-buttons {
       display: flex;
-      gap: 8px;
-      margin-top: 12px;
+      gap: 6px;
+      margin-top: 10px;
     }
 
     .action-btn {
-      padding: 6px 12px;
+      padding: 5px 10px;
       border-radius: 6px;
       font-size: 12px;
       font-weight: 500;
@@ -942,134 +1137,110 @@
       color: white;
     }
 
-    .action-btn.primary:hover {
-      opacity: 0.9;
-      transform: translateY(-1px);
-    }
+    .action-btn.primary:hover { opacity: 0.9; transform: translateY(-1px); }
 
     .action-btn.secondary {
-      background: rgba(255, 255, 255, 0.05);
+      background: var(--bg-tertiary);
       color: var(--text-secondary);
       border: 1px solid var(--border-color);
     }
 
     .action-btn.secondary:hover {
-      background: rgba(255, 255, 255, 0.1);
+      background: var(--bg-primary);
       color: var(--text-primary);
     }
 
-    /* Execution Card */
     .execution-card {
       background: var(--bg-secondary);
-      border-radius: 12px;
-      padding: 16px;
-      margin-top: 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 14px;
+      margin-top: 10px;
     }
 
     .execution-header {
       display: flex;
       align-items: center;
-      gap: 10px;
-      margin-bottom: 16px;
+      gap: 8px;
+      margin-bottom: 12px;
     }
 
     .execution-spinner {
-      width: 20px;
-      height: 20px;
-      border: 2px solid rgba(59, 130, 246, 0.3);
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(59, 130, 246, 0.2);
       border-top-color: var(--accent-blue);
       border-radius: 50%;
       animation: spin 1s linear infinite;
     }
 
-    .execution-title {
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--text-primary);
-    }
+    .execution-title { font-size: 13px; font-weight: 500; color: var(--text-primary); }
 
     .execution-steps {
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
     }
 
     .execution-step {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
       font-size: 12px;
       color: var(--text-secondary);
     }
 
     .step-icon {
-      width: 18px;
-      height: 18px;
+      width: 16px;
+      height: 16px;
       display: flex;
       align-items: center;
       justify-content: center;
     }
 
-    .step-icon.check {
-      color: var(--success);
-    }
+    .step-icon.check { color: var(--success); }
+    .step-icon.progress { color: var(--accent-blue); }
+    .step-icon.pending { color: var(--text-muted); }
+    .step-icon i { width: 14px; height: 14px; }
 
-    .step-icon.progress {
-      color: var(--accent-blue);
-    }
-
-    .step-icon.pending {
-      color: var(--text-muted);
-    }
-
-    .step-icon i {
-      width: 14px;
-      height: 14px;
-    }
-
-    .step-text {
-      flex: 1;
-    }
-
-    .step-text span {
-      color: var(--text-muted);
-      margin-left: 6px;
-    }
+    .step-text { flex: 1; }
+    .step-text span { color: var(--text-muted); margin-left: 4px; }
 
     .execution-progress {
-      margin-top: 12px;
-      padding-top: 12px;
+      margin-top: 10px;
+      padding-top: 10px;
       border-top: 1px solid var(--border-color);
     }
 
-    .execution-progress-text {
-      font-size: 11px;
-      color: var(--text-muted);
-      margin-bottom: 6px;
+    .execution-progress-text { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+    .execution-progress-bar { height: 4px; background: var(--bg-tertiary); border-radius: 2px; overflow: hidden; }
+    .execution-progress-fill { height: 100%; background: var(--accent-gradient); border-radius: 2px; width: 40%; transition: width 0.5s ease; }
+
+    .typing-indicator {
+      display: flex;
+      gap: 4px;
+      padding: 6px 0;
     }
 
-    .execution-progress-bar {
-      height: 4px;
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 2px;
-      overflow: hidden;
+    .typing-dot {
+      width: 6px;
+      height: 6px;
+      background: var(--text-muted);
+      border-radius: 50%;
+      animation: typing 1.4s infinite;
     }
 
-    .execution-progress-fill {
-      height: 100%;
-      background: var(--accent-gradient);
-      border-radius: 2px;
-      width: 40%;
-      transition: width 0.5s ease;
-    }
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
 
-    /* Conversation Input */
+    /* Conversation Input — sticky inside center */
     .conversation-input {
-      padding: 16px 20px;
+      padding: 12px 16px;
       border-top: 1px solid var(--border-color);
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
+      background: var(--bg-card);
     }
 
     .input-wrapper {
@@ -1078,15 +1249,15 @@
       align-items: center;
       background: var(--bg-primary);
       border: 1px solid var(--border-color);
-      border-radius: 10px;
-      padding: 0 16px;
-      height: 42px;
+      border-radius: 8px;
+      padding: 0 12px;
+      height: 38px;
       transition: all 0.2s ease;
     }
 
     .input-wrapper:focus-within {
       border-color: var(--accent-blue);
-      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
     }
 
     .input-wrapper input {
@@ -1098,13 +1269,11 @@
       font-size: 13px;
     }
 
-    .input-wrapper input::placeholder {
-      color: var(--text-muted);
-    }
+    .input-wrapper input::placeholder { color: var(--text-muted); }
 
     .input-btn {
-      width: 32px;
-      height: 32px;
+      width: 28px;
+      height: 28px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -1114,22 +1283,15 @@
       transition: all 0.2s ease;
     }
 
-    .input-btn:hover {
-      background: rgba(255, 255, 255, 0.05);
-      color: var(--text-primary);
-    }
-
-    .input-btn i {
-      width: 18px;
-      height: 18px;
-    }
+    .input-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+    .input-btn i { width: 16px; height: 16px; }
 
     .send-btn {
-      width: 42px;
-      height: 42px;
+      width: 38px;
+      height: 38px;
       background: var(--accent-gradient);
       border: none;
-      border-radius: 10px;
+      border-radius: 8px;
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -1138,71 +1300,220 @@
       transition: all 0.2s ease;
     }
 
-    .send-btn:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px var(--glow-blue);
-    }
-
-    .send-btn i {
-      width: 18px;
-      height: 18px;
-    }
+    .send-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px var(--glow-blue); }
+    .send-btn i { width: 16px; height: 16px; }
 
     /* Right Column */
-    .right-column {
+    .workbench-right {
+      grid-column: 6;
+      grid-row: 2 / 5;
+      background: var(--bg-secondary);
+      border-left: 1px solid var(--border-color);
+      min-height: 0;
+      overflow: hidden;
       display: flex;
       flex-direction: column;
-      gap: 24px;
     }
 
-    /* Alerts Panel */
-    .alerts-panel {
+    .workbench-shell.is-right-collapsed .workbench-right {
+      overflow: hidden;
+    }
+
+    .workbench-shell.is-right-collapsed .workbench-right > * {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .right-tabs {
+      display: flex;
+      padding: 12px 16px 0;
+      gap: 4px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .right-tab {
+      padding: 6px 12px;
+      border-radius: 6px 6px 0 0;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: none;
+      background: transparent;
+      position: relative;
+    }
+
+    .right-tab:hover { color: var(--text-primary); }
+
+    .right-tab.active {
+      color: var(--accent-blue);
+      background: var(--bg-primary);
+    }
+
+    .right-tab.active::after {
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--accent-blue);
+    }
+
+    .right-tab-content {
+      display: none;
       flex: 1;
+      overflow-y: auto;
+      padding: 16px;
     }
 
+    .right-tab-content.active {
+      display: block;
+      min-height: 0;
+    }
+
+    /* Context Detail Card */
+    .context-detail-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .context-detail-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .context-req-id {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: monospace;
+    }
+
+    .context-req-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-top: 2px;
+    }
+
+    .context-detail-body {
+      padding: 14px 16px;
+    }
+
+    .context-field {
+      margin-bottom: 14px;
+    }
+
+    .context-field-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      letter-spacing: 0.3px;
+    }
+
+    .context-mini-pipeline {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+
+    .context-mini-node {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+
+    .context-mini-node.done {
+      background: rgba(16, 185, 129, 0.1);
+      color: var(--success);
+    }
+
+    .context-mini-node.current {
+      background: rgba(59, 130, 246, 0.1);
+      color: var(--accent-blue);
+      font-weight: 600;
+    }
+
+    .context-mini-node.pending {
+      background: var(--bg-tertiary);
+      color: var(--text-muted);
+    }
+
+    .context-mini-arrow {
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+    .context-assignees {
+      display: flex;
+      gap: 0;
+    }
+
+    .context-assignee {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--accent-gradient);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 600;
+      color: white;
+      border: 2px solid var(--bg-card);
+      margin-left: -6px;
+    }
+
+    .context-assignee:first-child { margin-left: 0; }
+
+    .context-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    /* Alerts in right tab */
     .alerts-list {
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 10px;
     }
 
     .alert-card {
-      background: var(--bg-secondary);
-      border-radius: 10px;
-      padding: 14px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px;
       border-left: 3px solid;
       transition: all 0.2s ease;
       cursor: pointer;
     }
 
-    .alert-card:hover {
-      background: rgba(30, 41, 59, 0.9);
-    }
-
-    .alert-card.critical {
-      border-left-color: var(--error);
-    }
-
-    .alert-card.warning {
-      border-left-color: var(--warning);
-    }
-
-    .alert-card.info {
-      border-left-color: var(--info);
-    }
+    .alert-card:hover { background: var(--bg-card-hover); }
+    .alert-card.critical { border-left-color: var(--error); }
+    .alert-card.warning { border-left-color: var(--warning); }
+    .alert-card.info { border-left-color: var(--info); }
 
     .alert-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
 
-    .alert-title {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text-primary);
-    }
+    .alert-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
 
     .alert-type {
       font-size: 10px;
@@ -1212,31 +1523,13 @@
       border-radius: 4px;
     }
 
-    .alert-type.critical {
-      background: rgba(239, 68, 68, 0.15);
-      color: var(--error);
-    }
+    .alert-type.critical { background: rgba(239, 68, 68, 0.1); color: var(--error); }
+    .alert-type.warning { background: rgba(245, 158, 11, 0.1); color: var(--warning); }
+    .alert-type.info { background: rgba(6, 182, 212, 0.1); color: var(--info); }
 
-    .alert-type.warning {
-      background: rgba(245, 158, 11, 0.15);
-      color: var(--warning);
-    }
+    .alert-meta { font-size: 11px; color: var(--text-muted); margin-bottom: 8px; }
 
-    .alert-type.info {
-      background: rgba(6, 182, 212, 0.15);
-      color: var(--info);
-    }
-
-    .alert-meta {
-      font-size: 12px;
-      color: var(--text-muted);
-      margin-bottom: 10px;
-    }
-
-    .alert-actions {
-      display: flex;
-      gap: 8px;
-    }
+    .alert-actions { display: flex; gap: 6px; }
 
     .alert-btn {
       padding: 4px 10px;
@@ -1249,69 +1542,47 @@
     }
 
     .alert-btn.view {
-      background: rgba(255, 255, 255, 0.05);
+      background: var(--bg-tertiary);
       color: var(--text-secondary);
     }
 
     .alert-btn.handle {
-      background: rgba(59, 130, 246, 0.15);
+      background: rgba(59, 130, 246, 0.1);
       color: var(--accent-blue);
     }
 
-    .alert-btn:hover {
-      opacity: 0.8;
-    }
+    .alert-btn:hover { opacity: 0.8; }
 
-    /* Agent Collaboration Panel */
-    .collaboration-panel {
-      flex: 1;
-    }
-
+    /* Agent Collaboration in right tab */
     .task-header {
       display: flex;
       align-items: center;
       gap: 10px;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
     }
 
     .task-icon {
-      width: 36px;
-      height: 36px;
-      border-radius: 10px;
-      background: rgba(139, 92, 246, 0.15);
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: rgba(139, 92, 246, 0.1);
       color: var(--accent-purple);
       display: flex;
       align-items: center;
       justify-content: center;
     }
 
-    .task-icon i {
-      width: 18px;
-      height: 18px;
-    }
-
-    .task-info {
-      flex: 1;
-    }
-
-    .task-title {
-      font-size: 14px;
-      font-weight: 500;
-      color: var(--text-primary);
-    }
-
-    .task-subtitle {
-      font-size: 11px;
-      color: var(--text-muted);
-      margin-top: 2px;
-    }
+    .task-icon i { width: 16px; height: 16px; }
+    .task-info { flex: 1; }
+    .task-title { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+    .task-subtitle { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
 
     .agent-pipeline {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       flex-wrap: wrap;
-      margin: 16px 0;
+      margin: 14px 0;
     }
 
     .agent-node {
@@ -1322,8 +1593,8 @@
     }
 
     .agent-node-circle {
-      width: 40px;
-      height: 40px;
+      width: 36px;
+      height: 36px;
       border-radius: 50%;
       display: flex;
       align-items: center;
@@ -1334,61 +1605,41 @@
       transition: all 0.3s ease;
     }
 
-    .agent-node-circle.completed {
-      background: rgba(16, 185, 129, 0.15);
-      border-color: var(--success);
-      color: var(--success);
-    }
+    .agent-node-circle.completed { background: rgba(16, 185, 129, 0.1); border-color: var(--success); color: var(--success); }
 
     .agent-node-circle.current {
-      background: rgba(59, 130, 246, 0.15);
+      background: rgba(59, 130, 246, 0.1);
       border-color: var(--accent-blue);
       color: var(--accent-blue);
-      box-shadow: 0 0 20px var(--glow-blue);
+      box-shadow: 0 0 16px var(--glow-blue);
       animation: currentAgent 2s infinite;
     }
 
-    .agent-node-circle.pending {
-      background: rgba(255, 255, 255, 0.03);
-      border-color: var(--border-color);
-      color: var(--text-muted);
-    }
+    .agent-node-circle.pending { background: var(--bg-tertiary); border-color: var(--border-color); color: var(--text-muted); }
 
-    .agent-node-label {
-      font-size: 9px;
-      color: var(--text-muted);
-      text-align: center;
-      max-width: 50px;
-    }
-
-    .agent-arrow {
-      color: var(--text-muted);
-      font-size: 16px;
-    }
+    .agent-node-label { font-size: 9px; color: var(--text-muted); text-align: center; max-width: 50px; }
+    .agent-arrow { color: var(--text-muted); font-size: 14px; }
 
     .agent-current-status {
-      background: var(--bg-secondary);
-      border-radius: 8px;
-      padding: 12px;
+      background: var(--bg-tertiary);
+      border-radius: 6px;
+      padding: 10px;
       text-align: center;
     }
 
-    .agent-current-text {
-      font-size: 12px;
-      color: var(--accent-blue);
-    }
+    .agent-current-text { font-size: 12px; color: var(--accent-blue); }
 
     .agent-progress {
-      margin-top: 12px;
+      margin-top: 10px;
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
     }
 
     .agent-progress-bar {
       flex: 1;
-      height: 6px;
-      background: rgba(255, 255, 255, 0.1);
+      height: 5px;
+      background: var(--bg-tertiary);
       border-radius: 3px;
       overflow: hidden;
     }
@@ -1400,41 +1651,204 @@
       width: 40%;
     }
 
-    .agent-progress-text {
-      font-size: 12px;
+    .agent-progress-text { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+
+    .collab-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin: 14px 0;
+    }
+
+    .collab-summary-card {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 9px 10px;
+      min-width: 0;
+    }
+
+    .collab-summary-label {
+      font-size: 10px;
       color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .collab-summary-value {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
       white-space: nowrap;
     }
 
-    /* Pipeline Visualization Full Width */
-    .pipeline-full {
-      margin-bottom: 24px;
+    .collab-section {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border-color);
     }
 
-    .pipeline-header {
+    .collab-section-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+
+    .agent-roster {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .agent-roster-row {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      padding: 8px;
+      border-radius: 8px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+    }
+
+    .agent-avatar-mini {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      margin-bottom: 20px;
+      justify-content: center;
+      color: white;
+      background: var(--accent-gradient);
+      font-size: 11px;
+      font-weight: 700;
     }
 
-    .pipeline-title {
-      font-size: 15px;
+    .agent-roster-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .agent-roster-task {
+      font-size: 11px;
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      margin-top: 2px;
+    }
+
+    .agent-roster-status {
+      font-size: 10px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+
+    .agent-roster-status.running { background: rgba(59, 130, 246, 0.12); color: var(--accent-blue); }
+    .agent-roster-status.done { background: rgba(16, 185, 129, 0.12); color: var(--success); }
+    .agent-roster-status.waiting { background: rgba(245, 158, 11, 0.12); color: var(--warning); }
+
+    .handoff-list,
+    .collab-output-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .handoff-item,
+    .collab-output-item {
+      display: flex;
+      gap: 8px;
+      padding: 8px 0;
+    }
+
+    .handoff-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-top: 5px;
+      background: var(--accent-blue);
+      box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+      flex-shrink: 0;
+    }
+
+    .handoff-title,
+    .collab-output-title {
+      font-size: 12px;
       font-weight: 600;
       color: var(--text-primary);
     }
 
-    .pipeline-filters {
-      display: flex;
-      gap: 4px;
-      background: var(--bg-secondary);
-      padding: 4px;
-      border-radius: 8px;
+    .handoff-meta,
+    .collab-output-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+      line-height: 1.4;
     }
 
-    .filter-btn {
-      padding: 6px 12px;
-      border-radius: 6px;
+    .collab-risk-card {
+      background: rgba(245, 158, 11, 0.08);
+      border: 1px solid rgba(245, 158, 11, 0.22);
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: var(--warning);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    /* Bottom History Panel */
+    .bottom-history-panel {
+      grid-column: 4;
+      grid-row: 4;
+      background: var(--bg-primary);
+      overflow: hidden;
+      transition: max-height 180ms ease;
+      min-height: 0;
+    }
+
+    .bottom-history-panel.is-collapsed { max-height: 44px; min-height: 44px; }
+    .bottom-history-panel.is-expanded { max-height: 300px; min-height: 300px; }
+    .panel-center-rail {
+      height: 100%;
+      width: 100%;
+      min-width: 0;
+      overflow: hidden;
+      background: var(--bg-secondary);
+      border-left: 1px solid var(--border-color);
+      border-right: 1px solid var(--border-color);
+    }
+
+    .top-metrics-panel .panel-center-rail {
+      border-bottom: 1px solid var(--border-color);
+      border-radius: 0 0 8px 8px;
+    }
+
+    .bottom-history-panel .panel-center-rail {
+      border-top: 1px solid var(--border-color);
+      border-radius: 8px 8px 0 0;
+    }
+
+    .bottom-tabs {
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      height: 44px;
+      gap: 0;
+    }
+
+    .bottom-tab {
+      padding: 0 16px;
+      height: 44px;
+      display: flex;
+      align-items: center;
       font-size: 12px;
       font-weight: 500;
       color: var(--text-muted);
@@ -1442,32 +1856,98 @@
       transition: all 0.2s ease;
       border: none;
       background: transparent;
+      border-bottom: 2px solid transparent;
     }
 
-    .filter-btn.active {
-      background: var(--accent-gradient);
-      color: white;
+    .bottom-tab:hover { color: var(--text-primary); }
+
+    .bottom-tab.active {
+      color: var(--accent-blue);
+      border-bottom-color: var(--accent-blue);
     }
 
-    .filter-btn:hover:not(.active) {
+    .bottom-tab .tab-count {
+      background: var(--bg-tertiary);
+      color: var(--text-muted);
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 8px;
+      margin-left: 4px;
+    }
+
+    .bottom-tab.active .tab-count {
+      background: rgba(59, 130, 246, 0.1);
+      color: var(--accent-blue);
+    }
+
+    .bottom-toggle {
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      cursor: pointer;
+      color: var(--text-muted);
+      margin-left: auto;
+      transition: all 0.2s ease;
+      border: none;
+      background: transparent;
+    }
+
+    .bottom-toggle:hover {
+      background: var(--bg-tertiary);
       color: var(--text-primary);
     }
 
+    .bottom-toggle i {
+      width: 16px;
+      height: 16px;
+      transition: transform 0.2s ease;
+    }
+
+    .bottom-toggle.is-flipped i {
+      transform: rotate(180deg);
+    }
+
+    .bottom-content {
+      display: none;
+      padding: 12px 20px;
+      overflow-y: auto;
+      max-height: 256px;
+    }
+
+    .bottom-content.active {
+      display: block;
+    }
+
+    @media (max-width: 1279px) {
+      .workbench-shell {
+        grid-template-columns: 12px 260px 12px minmax(520px, 1fr) 12px 300px 12px;
+      }
+      .workbench-shell.is-left-collapsed {
+        grid-template-columns: 12px 48px 12px minmax(520px, 1fr) 12px 300px 12px;
+      }
+      .workbench-shell.is-right-collapsed {
+        grid-template-columns: 12px 260px 12px minmax(520px, 1fr) 12px 48px 12px;
+      }
+      .workbench-shell.is-left-collapsed.is-right-collapsed {
+        grid-template-columns: 12px 48px 12px minmax(520px, 1fr) 12px 48px 12px;
+      }
+    }
+
+    /* Pipeline Stages (in bottom panel) */
     .pipeline-stages {
       display: flex;
       align-items: flex-start;
       gap: 0;
-      background: var(--bg-card);
-      backdrop-filter: blur(20px);
-      border: 1px solid var(--border-color);
-      border-radius: 16px;
-      padding: 24px;
       overflow-x: auto;
+      padding: 8px 0;
     }
 
     .stage-item {
       flex: 1;
-      min-width: 100px;
+      min-width: 80px;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -1475,54 +1955,31 @@
     }
 
     .stage-circle {
-      width: 56px;
-      height: 56px;
+      width: 44px;
+      height: 44px;
       border-radius: 50%;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      margin-bottom: 12px;
+      margin-bottom: 8px;
       position: relative;
       z-index: 1;
       transition: all 0.3s ease;
     }
 
-    .stage-circle.healthy {
-      background: rgba(16, 185, 129, 0.15);
-      border: 2px solid var(--success);
-      color: var(--success);
-    }
+    .stage-circle.healthy { background: rgba(16, 185, 129, 0.1); border: 2px solid var(--success); color: var(--success); }
+    .stage-circle.warning { background: rgba(245, 158, 11, 0.1); border: 2px solid var(--warning); color: var(--warning); }
+    .stage-circle.error { background: rgba(239, 68, 68, 0.1); border: 2px solid var(--error); color: var(--error); }
 
-    .stage-circle.warning {
-      background: rgba(245, 158, 11, 0.15);
-      border: 2px solid var(--warning);
-      color: var(--warning);
-    }
-
-    .stage-circle.error {
-      background: rgba(239, 68, 68, 0.15);
-      border: 2px solid var(--error);
-      color: var(--error);
-    }
-
-    .stage-count {
-      font-size: 18px;
-      font-weight: 700;
-    }
-
-    .stage-label {
-      font-size: 12px;
-      font-weight: 500;
-      color: var(--text-secondary);
-      text-align: center;
-    }
+    .stage-count { font-size: 14px; font-weight: 700; }
+    .stage-label { font-size: 11px; font-weight: 500; color: var(--text-secondary); text-align: center; }
 
     .stage-connector {
       position: absolute;
-      top: 28px;
-      left: calc(50% + 28px);
-      width: calc(100% - 56px);
+      top: 22px;
+      left: calc(50% + 22px);
+      width: calc(100% - 44px);
       height: 2px;
       z-index: 0;
     }
@@ -1536,107 +1993,111 @@
     .stage-connector-line::after {
       content: '';
       position: absolute;
-      right: -6px;
-      top: -4px;
+      right: -5px;
+      top: -3px;
       width: 0;
       height: 0;
-      border-left: 8px solid var(--border-color);
-      border-top: 5px solid transparent;
-      border-bottom: 5px solid transparent;
+      border-left: 6px solid var(--border-color);
+      border-top: 4px solid transparent;
+      border-bottom: 4px solid transparent;
     }
 
-    .stage-connector-line.active {
-      background: var(--success);
+    .stage-connector-line.active { background: var(--success); }
+    .stage-connector-line.active::after { border-left-color: var(--success); }
+
+    .pipeline-filters {
+      display: flex;
+      gap: 4px;
+      background: var(--bg-tertiary);
+      padding: 3px;
+      border-radius: 6px;
     }
 
-    .stage-connector-line.active::after {
-      border-left-color: var(--success);
-    }
-
-    /* Timeline */
-    .pipeline-timeline {
-      margin-top: 24px;
-      padding-top: 24px;
-      border-top: 1px solid var(--border-color);
-    }
-
-    .timeline-header {
-      font-size: 12px;
+    .filter-btn {
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 11px;
       font-weight: 500;
       color: var(--text-muted);
-      margin-bottom: 16px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: none;
+      background: transparent;
     }
+
+    .filter-btn.active {
+      background: var(--accent-gradient);
+      color: white;
+    }
+
+    .filter-btn:hover:not(.active) { color: var(--text-primary); }
+
+    /* Timeline */
+    .pipeline-timeline { margin-top: 0; }
 
     .timeline-events {
       display: flex;
       gap: 16px;
+      flex-wrap: wrap;
       overflow-x: auto;
-      padding-bottom: 8px;
+      padding: 4px 0;
     }
 
     .timeline-event {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
+      min-width: 210px;
+      max-width: 320px;
       white-space: nowrap;
     }
 
     .event-dot {
-      width: 8px;
-      height: 8px;
+      width: 6px;
+      height: 6px;
       border-radius: 50%;
       flex-shrink: 0;
     }
 
-    .event-dot.success {
-      background: var(--success);
-    }
+    .event-dot.success { background: var(--success); }
+    .event-dot.warning { background: var(--warning); }
+    .event-dot.error { background: var(--error); }
+    .event-dot.info { background: var(--info); }
 
-    .event-dot.warning {
-      background: var(--warning);
-    }
+    .event-text { font-size: 11px; color: var(--text-secondary); }
+    .event-time { font-size: 10px; color: var(--text-muted); margin-left: 2px; }
 
-    .event-dot.error {
-      background: var(--error);
-    }
-
-    .event-dot.info {
-      background: var(--info);
-    }
-
-    .event-text {
-      font-size: 11px;
-      color: var(--text-secondary);
-    }
-
-    .event-time {
-      font-size: 10px;
-      color: var(--text-muted);
-      margin-left: 4px;
+    .bottom-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
     }
 
     /* Footer Status Bar */
     .footer-status {
-      background: var(--bg-secondary);
+      grid-column: 1 / -1;
+      grid-row: 5;
+      background: var(--bg-tertiary);
       border-top: 1px solid var(--border-color);
-      padding: 12px 24px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      font-size: 12px;
+      padding: 0 20px;
+      font-size: 11px;
       color: var(--text-muted);
     }
 
     .status-left {
       display: flex;
       align-items: center;
-      gap: 20px;
+      gap: 16px;
     }
 
     .status-item {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
     }
 
     .status-dot {
@@ -1645,14 +2106,9 @@
       border-radius: 50%;
     }
 
-    .status-dot.green {
-      background: var(--success);
-      box-shadow: 0 0 6px var(--success);
-    }
+    .status-dot.green { background: var(--success); box-shadow: 0 0 4px var(--success); }
 
-    .status-right {
-      font-size: 11px;
-    }
+    .status-right { font-size: 10px; }
 
     /* Animations */
     @keyframes pulse {
@@ -1675,8 +2131,8 @@
     }
 
     @keyframes currentAgent {
-      0%, 100% { box-shadow: 0 0 20px var(--glow-blue); }
-      50% { box-shadow: 0 0 30px var(--glow-blue), 0 0 40px var(--glow-purple); }
+      0%, 100% { box-shadow: 0 0 16px var(--glow-blue); }
+      50% { box-shadow: 0 0 24px var(--glow-blue), 0 0 32px var(--glow-purple); }
     }
 
     @keyframes typing {
@@ -1684,180 +2140,330 @@
       30% { opacity: 1; }
     }
 
-    /* Typing indicator */
-    .typing-indicator {
-      display: flex;
-      gap: 4px;
-      padding: 8px 0;
-    }
-
-    .typing-dot {
-      width: 6px;
-      height: 6px;
-      background: var(--text-muted);
-      border-radius: 50%;
-      animation: typing 1.4s infinite;
-    }
-
-    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
-    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
-
     /* Scrollbar */
-    ::-webkit-scrollbar {
-      width: 6px;
-      height: 6px;
-    }
-
-    ::-webkit-scrollbar-track {
-      background: transparent;
-    }
-
-    ::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 3px;
-    }
-
-    ::-webkit-scrollbar-thumb:hover {
-      background: rgba(255, 255, 255, 0.2);
-    }
-
-    /* Card Actions */
-    .card-actions {
-      display: flex;
-      gap: 8px;
-    }
-
-    .card-action-btn {
-      padding: 6px 12px;
-      border-radius: 6px;
-      font-size: 12px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      border: 1px solid var(--border-color);
-      background: transparent;
-      color: var(--text-secondary);
-    }
-
-    .card-action-btn:hover {
-      background: rgba(255, 255, 255, 0.05);
-      color: var(--text-primary);
-    }
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.12); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.2); }
   </style>
 </head>
 <body>
-  <div class="app-container">
-    <!-- Sidebar -->
-    <aside class="sidebar">
-      <div class="sidebar-header">
-        <div class="logo">
-          <div class="logo-icon">
-            <i data-lucide="sparkles"></i>
-          </div>
-          <span class="logo-text">AgentCenter</span>
-          <span class="version-badge">v2.0</span>
+
+<div class="workbench-shell" data-testid="workbench-shell">
+
+  <!-- ═══ TITLEBAR ═══ -->
+  <header class="workbench-titlebar" data-testid="workbench-titlebar">
+    <div class="titlebar-left">
+      <button type="button" class="collapse-btn" data-testid="left-sidebar-toggle" aria-label="收起左侧栏" aria-expanded="true">
+        <span class="side-panel-glyph" aria-hidden="true">‹</span>
+      </button>
+      <div class="logo">
+        <div class="logo-icon">
+          <i data-lucide="sparkles"></i>
+        </div>
+        <span class="logo-text">AgentCenter</span>
+        <span class="version-badge">v2.0</span>
+      </div>
+      <button type="button" class="collapse-btn" data-testid="top-nav-toggle" aria-label="收起顶部导航条" aria-expanded="true">
+        <span class="side-panel-glyph" aria-hidden="true">⌃</span>
+      </button>
+    </div>
+
+    <div class="titlebar-center">
+      <div class="search-bar">
+        <i data-lucide="search"></i>
+        <input type="text" placeholder="搜索需求、服务、工单...">
+      </div>
+    </div>
+
+    <div class="titlebar-right">
+      <button type="button" class="collapse-btn" data-testid="right-sidebar-toggle" aria-label="收起右侧栏" aria-expanded="true">
+        <span class="side-panel-glyph" aria-hidden="true">›</span>
+      </button>
+      <div class="nav-icon-btn">
+        <i data-lucide="bell"></i>
+        <span class="notice-badge">3</span>
+      </div>
+      <div class="nav-icon-btn">
+        <i data-lucide="settings"></i>
+      </div>
+      <div class="user-info">
+        <div class="user-avatar">张</div>
+        <div class="user-details">
+          <span class="user-name">产品负责人 A</span>
+          <span class="user-role">技术负责人</span>
         </div>
       </div>
+    </div>
+  </header>
 
+  <!-- ═══ TOP METRICS PANEL ═══ -->
+  <section class="top-metrics-panel is-collapsed" data-testid="top-metrics-panel" aria-label="指标面板">
+    <div class="panel-center-rail" data-testid="top-metrics-rail">
+    <div class="top-panel-stack">
+    <div class="top-panel-bar">
+      <span style="font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">指标概览</span>
+      <button class="metrics-toggle" data-testid="top-metrics-toggle" aria-controls="top-metrics-content" aria-expanded="false" aria-label="展开指标面板">
+        <span style="font-size: 12px; font-weight: 500;">展开</span>
+        <i data-lucide="chevron-down"></i>
+      </button>
+    </div>
+    <!-- Collapsed: compact pill row -->
+    <div class="metrics-strip">
+      <div class="metric-pill">
+        <div class="metric-pill-icon blue"><i data-lucide="rocket"></i></div>
+        <div class="metric-pill-info">
+          <span class="metric-pill-label">今日部署</span>
+          <span class="metric-pill-value">12</span>
+        </div>
+        <span class="metric-pill-trend up">↑23%</span>
+      </div>
+      <div class="metric-pill">
+        <div class="metric-pill-icon green"><i data-lucide="check-circle"></i></div>
+        <div class="metric-pill-info">
+          <span class="metric-pill-label">构建成功率</span>
+          <span class="metric-pill-value">94.7%</span>
+        </div>
+        <span class="metric-pill-trend up">↑2.3%</span>
+      </div>
+      <div class="metric-pill">
+        <div class="metric-pill-icon red"><i data-lucide="alert-triangle"></i></div>
+        <div class="metric-pill-info">
+          <span class="metric-pill-label">活跃告警</span>
+          <span class="metric-pill-value">3条</span>
+        </div>
+        <span class="metric-pill-trend down">2 严重</span>
+      </div>
+      <div class="metric-pill">
+        <div class="metric-pill-icon amber"><i data-lucide="target"></i></div>
+        <div class="metric-pill-info">
+          <span class="metric-pill-label">Sprint 进度</span>
+          <span class="metric-pill-value">Sprint 14</span>
+        </div>
+        <span class="metric-pill-trend up">68%</span>
+      </div>
+    </div>
+
+    <!-- Expanded: full metric cards -->
+    <div class="metrics-detail" id="top-metrics-content" aria-hidden="true">
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-label">今日部署</span>
+          <div class="metric-icon blue"><i data-lucide="rocket"></i></div>
+        </div>
+        <div class="metric-value">12</div>
+        <div class="metric-trend">
+          <span class="trend-badge up">↑23%</span>
+          <span class="trend-text">较昨日</span>
+        </div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-label">构建成功率</span>
+          <div class="metric-icon green"><i data-lucide="check-circle"></i></div>
+        </div>
+        <div class="metric-value">94.7%</div>
+        <div class="metric-trend">
+          <span class="trend-badge up">↑2.3%</span>
+          <span class="trend-text">较上周</span>
+        </div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-label">活跃告警</span>
+          <div class="metric-icon red"><i data-lucide="alert-triangle"></i></div>
+        </div>
+        <div class="metric-value">3条</div>
+        <div class="metric-trend">
+          <span class="trend-badge down" style="background: rgba(239, 68, 68, 0.1); color: var(--error);">2 严重</span>
+          <span class="trend-badge down" style="background: rgba(245, 158, 11, 0.1); color: var(--warning);">1 警告</span>
+        </div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-label">Sprint 进度</span>
+          <div class="metric-icon amber"><i data-lucide="target"></i></div>
+        </div>
+        <div class="metric-value">Sprint 14</div>
+        <div class="progress-container">
+          <div class="progress-header">
+            <span class="progress-label">完成率</span>
+            <span class="progress-value">68%</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" style="width: 68%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    </div>
+    </div>
+  </section>
+
+  <!-- ═══ WORKBENCH MAIN (3-column) ═══ -->
+  <main class="workbench-main" data-testid="workbench-main">
+
+    <!-- ── LEFT COLUMN ── -->
+    <aside class="workbench-left" data-testid="workbench-left">
       <div class="sidebar-content">
+        <!-- Conversation List Section -->
+        <div class="sidebar-section" data-testid="sidebar-section-conversations">
+          <button type="button" class="sidebar-section-toggle" data-testid="sidebar-section-toggle-conversations" aria-expanded="true" aria-controls="sidebar-section-body-conversations">
+            <span class="sidebar-section-title">会话列表</span>
+            <span class="sidebar-section-chevron" aria-hidden="true">⌄</span>
+          </button>
+          <div class="sidebar-section-body" id="sidebar-section-body-conversations" data-testid="sidebar-section-body-conversations">
+            <div class="conversation-list" data-testid="conversation-list">
+              <button type="button" class="conversation-list-item active" data-testid="conversation-list-item-login-risk">
+                <span class="conversation-list-topline">
+                  <span class="conversation-list-title">登录优化风险巡检</span>
+                  <span class="conversation-list-time">10:32</span>
+                </span>
+                <span class="conversation-list-meta">REQ-2024-0892 · 设计评审</span>
+                <span class="conversation-list-badge"><span class="live-dot" aria-hidden="true"></span>进行中</span>
+              </button>
+              <button type="button" class="conversation-list-item">
+                <span class="conversation-list-topline">
+                  <span class="conversation-list-title">发布门禁检查</span>
+                  <span class="conversation-list-time">09:48</span>
+                </span>
+                <span class="conversation-list-meta">订单服务 · 预发布</span>
+                <span class="conversation-list-badge"><span class="live-dot" aria-hidden="true"></span>待确认</span>
+              </button>
+              <button type="button" class="conversation-list-item">
+                <span class="conversation-list-topline">
+                  <span class="conversation-list-title">延迟告警跟进</span>
+                  <span class="conversation-list-time">09:12</span>
+                </span>
+                <span class="conversation-list-meta">监控观测 · P1 降级</span>
+                <span class="conversation-list-badge"><span class="live-dot" aria-hidden="true"></span>跟进中</span>
+              </button>
+              <button type="button" class="conversation-list-item">
+                <span class="conversation-list-topline">
+                  <span class="conversation-list-title">Sprint 进度同步</span>
+                  <span class="conversation-list-time">昨日</span>
+                </span>
+                <span class="conversation-list-meta">研发团队 · 14 个事项</span>
+                <span class="conversation-list-badge"><span class="live-dot" aria-hidden="true"></span>已归档</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
         <!-- Workbench Section -->
-        <div class="sidebar-section">
-          <div class="sidebar-section-title">工作台</div>
-          <div class="nav-item active">
-            <i data-lucide="layout-dashboard"></i>
-            <span>总览</span>
-          </div>
-          <div class="nav-item">
-            <i data-lucide="message-square"></i>
-            <span>对话</span>
-          </div>
-          <div class="nav-item">
-            <i data-lucide="git-branch"></i>
-            <span>工作流</span>
-          </div>
-          <div class="nav-item">
-            <i data-lucide="bot"></i>
-            <span>Agent 管理</span>
+        <div class="sidebar-section" data-testid="sidebar-section-workbench">
+          <button type="button" class="sidebar-section-toggle" data-testid="sidebar-section-toggle-workbench" aria-expanded="true" aria-controls="sidebar-section-body-workbench">
+            <span class="sidebar-section-title">工作台</span>
+            <span class="sidebar-section-chevron" aria-hidden="true">⌄</span>
+          </button>
+          <div class="sidebar-section-body" id="sidebar-section-body-workbench" data-testid="sidebar-section-body-workbench">
+            <div class="nav-item active">
+              <i data-lucide="layout-dashboard"></i>
+              <span>总览</span>
+            </div>
+            <div class="nav-item">
+              <i data-lucide="message-square"></i>
+              <span>对话</span>
+            </div>
+            <div class="nav-item">
+              <i data-lucide="git-branch"></i>
+              <span>工作流</span>
+            </div>
+            <div class="nav-item">
+              <i data-lucide="bot"></i>
+              <span>Agent 管理</span>
+            </div>
           </div>
         </div>
 
         <!-- DevOps Toolchain Section -->
-        <div class="sidebar-section">
-          <div class="sidebar-section-title">DevOps 工具链</div>
-          <div class="tool-item">
-            <div class="tool-info">
-              <span class="tool-status-dot connected"></span>
-              <span class="tool-name">JIRA</span>
+        <div class="sidebar-section" data-testid="sidebar-section-tools">
+          <button type="button" class="sidebar-section-toggle" data-testid="sidebar-section-toggle-tools" aria-expanded="true" aria-controls="sidebar-section-body-tools">
+            <span class="sidebar-section-title">DevOps 工具链</span>
+            <span class="sidebar-section-chevron" aria-hidden="true">⌄</span>
+          </button>
+          <div class="sidebar-section-body" id="sidebar-section-body-tools" data-testid="sidebar-section-body-tools">
+            <div class="tool-item">
+              <div class="tool-info">
+                <span class="tool-status-dot connected"></span>
+                <span class="tool-name">需求管理平台</span>
+              </div>
+              <span class="tool-status-text">已连接</span>
             </div>
-            <span class="tool-status-text">已连接</span>
-          </div>
-          <div class="tool-item">
-            <div class="tool-info">
-              <span class="tool-status-dot connected"></span>
-              <span class="tool-name">GitLab</span>
+            <div class="tool-item">
+              <div class="tool-info">
+                <span class="tool-status-dot connected"></span>
+                <span class="tool-name">代码托管平台</span>
+              </div>
+              <span class="tool-status-text">已连接</span>
             </div>
-            <span class="tool-status-text">已连接</span>
-          </div>
-          <div class="tool-item">
-            <div class="tool-info">
-              <span class="tool-status-dot delayed"></span>
-              <span class="tool-name">Jenkins</span>
+            <div class="tool-item">
+              <div class="tool-info">
+                <span class="tool-status-dot delayed"></span>
+                <span class="tool-name">持续集成平台</span>
+              </div>
+              <span class="tool-status-text">延迟</span>
             </div>
-            <span class="tool-status-text">延迟</span>
-          </div>
-          <div class="tool-item">
-            <div class="tool-info">
-              <span class="tool-status-dot connected"></span>
-              <span class="tool-name">ArgoCD</span>
+            <div class="tool-item">
+              <div class="tool-info">
+                <span class="tool-status-dot connected"></span>
+                <span class="tool-name">发布部署平台</span>
+              </div>
+              <span class="tool-status-text">已连接</span>
             </div>
-            <span class="tool-status-text">已连接</span>
-          </div>
-          <div class="tool-item">
-            <div class="tool-info">
-              <span class="tool-status-dot connected"></span>
-              <span class="tool-name">Prometheus</span>
+            <div class="tool-item">
+              <div class="tool-info">
+                <span class="tool-status-dot connected"></span>
+                <span class="tool-name">监控观测平台</span>
+              </div>
+              <span class="tool-status-text">已连接</span>
             </div>
-            <span class="tool-status-text">已连接</span>
-          </div>
-          <div class="tool-item">
-            <div class="tool-info">
-              <span class="tool-status-dot connected"></span>
-              <span class="tool-name">飞书</span>
+            <div class="tool-item">
+              <div class="tool-info">
+                <span class="tool-status-dot connected"></span>
+                <span class="tool-name">协作通知平台</span>
+              </div>
+              <span class="tool-status-text">已连接</span>
             </div>
-            <span class="tool-status-text">已连接</span>
           </div>
         </div>
 
         <!-- Agent Status Section -->
-        <div class="sidebar-section">
-          <div class="sidebar-section-title">智能体状态</div>
-          <div class="agent-item">
-            <div class="agent-header">
-              <span class="agent-name">需求分析 Agent</span>
-              <span class="agent-status idle"><span class="dot"></span>空闲</span>
+        <div class="sidebar-section" data-testid="sidebar-section-agents">
+          <button type="button" class="sidebar-section-toggle" data-testid="sidebar-section-toggle-agents" aria-expanded="true" aria-controls="sidebar-section-body-agents">
+            <span class="sidebar-section-title">智能体状态</span>
+            <span class="sidebar-section-chevron" aria-hidden="true">⌄</span>
+          </button>
+          <div class="sidebar-section-body" id="sidebar-section-body-agents" data-testid="sidebar-section-body-agents">
+            <div class="agent-item">
+              <div class="agent-header">
+                <span class="agent-name">需求分析 Agent</span>
+                <span class="agent-status idle"><span class="dot"></span>空闲</span>
+              </div>
+              <div class="agent-task">等待下一个任务</div>
             </div>
-            <div class="agent-task">等待下一个任务</div>
-          </div>
-          <div class="agent-item">
-            <div class="agent-header">
-              <span class="agent-name">代码审查 Agent</span>
-              <span class="agent-status working"><span class="dot"></span>工作中</span>
+            <div class="agent-item">
+              <div class="agent-header">
+                <span class="agent-name">代码审查 Agent</span>
+                <span class="agent-status working"><span class="dot"></span>工作中</span>
+              </div>
+              <div class="agent-task">审查 PR #234</div>
             </div>
-            <div class="agent-task">审查 PR #234</div>
-          </div>
-          <div class="agent-item">
-            <div class="agent-header">
-              <span class="agent-name">部署编排 Agent</span>
-              <span class="agent-status idle"><span class="dot"></span>空闲</span>
+            <div class="agent-item">
+              <div class="agent-header">
+                <span class="agent-name">部署编排 Agent</span>
+                <span class="agent-status idle"><span class="dot"></span>空闲</span>
+              </div>
+              <div class="agent-task">等待下一个任务</div>
             </div>
-            <div class="agent-task">等待下一个任务</div>
-          </div>
-          <div class="agent-item">
-            <div class="agent-header">
-              <span class="agent-name">监控预警 Agent</span>
-              <span class="agent-status alert"><span class="dot"></span>告警中</span>
+            <div class="agent-item">
+              <div class="agent-header">
+                <span class="agent-name">监控预警 Agent</span>
+                <span class="agent-status alert"><span class="dot"></span>告警中</span>
+              </div>
+              <div class="agent-task">payment-service 构建失败</div>
             </div>
-            <div class="agent-task">payment-service 构建失败</div>
           </div>
         </div>
       </div>
@@ -1870,558 +2476,837 @@
       </div>
     </aside>
 
-    <!-- Main Content -->
-    <main class="main-content">
-      <!-- Top Navigation -->
-      <nav class="top-nav">
-        <div class="nav-left">
-          <div class="collapse-btn">
-            <i data-lucide="panel-left-close"></i>
+    <!-- ── CENTER COLUMN ── -->
+    <section class="workbench-center" data-testid="workbench-center">
+      <div class="card conversation-panel">
+        <div class="card-header">
+          <div class="card-title">
+            <span class="card-title-main">对话工作台 · AI 智能中枢</span>
+            <span class="card-title-sub">通过对话驱动全流程</span>
+          </div>
+          <div class="card-actions">
+            <button class="card-action-btn">新建对话</button>
+            <button class="card-action-btn">历史记录</button>
           </div>
         </div>
-
-        <div class="nav-center">
-          <div class="search-bar">
-            <i data-lucide="search"></i>
-            <input type="text" placeholder="搜索需求、服务、工单...">
-          </div>
+        <div class="scenario-rail" data-testid="scenario-rail" aria-label="对话场景">
+          <button type="button" class="scenario-chip" data-scenario="requirement">
+            <span class="live-dot" aria-hidden="true"></span>
+            需求转设计
+          </button>
+          <button type="button" class="scenario-chip" data-scenario="release">
+            <span class="live-dot" aria-hidden="true"></span>
+            发布风险巡检
+          </button>
+          <button type="button" class="scenario-chip" data-scenario="incident">
+            <span class="live-dot" aria-hidden="true"></span>
+            故障跟进
+          </button>
         </div>
-
-        <div class="nav-right">
-          <div class="nav-icon-btn">
-            <i data-lucide="bell"></i>
-            <span class="notification-badge">3</span>
-          </div>
-          <div class="nav-icon-btn">
-            <i data-lucide="settings"></i>
-          </div>
-          <div class="user-info">
-            <div class="user-avatar">张</div>
-            <div class="user-details">
-              <span class="user-name">张三</span>
-              <span class="user-role">技术负责人</span>
-            </div>
-          </div>
-        </div>
-      </nav>
-
-      <!-- Dashboard Content -->
-      <div class="dashboard-content">
-        <!-- Metrics Strip -->
-        <div class="metrics-strip">
-          <div class="metric-card">
-            <div class="metric-header">
-              <span class="metric-label">今日部署</span>
-              <div class="metric-icon blue">
-                <i data-lucide="rocket"></i>
-              </div>
-            </div>
-            <div class="metric-value">12</div>
-            <div class="metric-trend">
-              <span class="trend-badge up">↑23%</span>
-              <span class="trend-text">较昨日</span>
-            </div>
-            <div class="sparkline">
-              <div class="sparkline-bar"></div>
-              <div class="sparkline-bar"></div>
-              <div class="sparkline-bar"></div>
-              <div class="sparkline-bar"></div>
-              <div class="sparkline-bar"></div>
-              <div class="sparkline-bar"></div>
-              <div class="sparkline-bar"></div>
+        <div class="conversation-messages">
+          <!-- User Message -->
+          <div class="message user">
+            <div class="message-bubble">
+              帮我看看 REQ-2024-0892 当前在哪个阶段？
             </div>
           </div>
 
-          <div class="metric-card">
-            <div class="metric-header">
-              <span class="metric-label">构建成功率</span>
-              <div class="metric-icon green">
-                <i data-lucide="check-circle"></i>
+          <!-- AI Response -->
+          <div class="message ai">
+            <div class="message-bubble">
+              <div class="ai-response-card">
+                <div class="ai-response-header">
+                  <span class="ai-response-title">用户登录优化</span>
+                  <span class="stage-badge">设计中</span>
+                </div>
+
+                <div class="pipeline-viz">
+                  <div class="pipeline-stage">
+                    <div class="pipeline-node completed">
+                      <span class="pipeline-dot"></span>
+                      需求
+                    </div>
+                    <span class="pipeline-arrow">→</span>
+                    <div class="pipeline-node current">
+                      <span class="pipeline-dot"></span>
+                      设计中
+                    </div>
+                    <span class="pipeline-arrow">→</span>
+                    <div class="pipeline-node">
+                      开发
+                    </div>
+                    <span class="pipeline-arrow">→</span>
+                    <div class="pipeline-node">
+                      测试
+                    </div>
+                    <span class="pipeline-arrow">→</span>
+                    <div class="pipeline-node">
+                      部署
+                    </div>
+                  </div>
+                </div>
+
+                <div class="blocker-card">
+                  <div class="blocker-icon">
+                    <i data-lucide="clock"></i>
+                  </div>
+                  <div class="blocker-content">
+                    <div class="blocker-title">等待 API 设计评审 (已挂起 1 天)</div>
+                    <div class="blocker-meta">由 @研发工程师 B 负责</div>
+                  </div>
+                </div>
+
+                <div class="assignees">
+                  <div class="assignee">李</div>
+                  <div class="assignee">王</div>
+                </div>
+
+                <div class="action-buttons">
+                  <button class="action-btn primary">催一下评审</button>
+                  <button class="action-btn secondary">查看详情</button>
+                  <button class="action-btn secondary">查看依赖</button>
+                </div>
               </div>
-            </div>
-            <div class="metric-value">94.7%</div>
-            <div class="metric-trend">
-              <span class="trend-badge up">↑2.3%</span>
-              <span class="trend-text">较上周</span>
             </div>
           </div>
 
-          <div class="metric-card">
-            <div class="metric-header">
-              <span class="metric-label">活跃告警</span>
-              <div class="metric-icon red">
-                <i data-lucide="alert-triangle"></i>
-              </div>
-            </div>
-            <div class="metric-value">3条</div>
-            <div class="metric-trend">
-              <span class="trend-badge down" style="background: rgba(239, 68, 68, 0.15); color: var(--error);">2 严重</span>
-              <span class="trend-badge down" style="background: rgba(245, 158, 11, 0.15); color: var(--warning);">1 警告</span>
+          <!-- User Message -->
+          <div class="message user">
+            <div class="message-bubble">
+              帮我把这个需求转成设计稿并通知 PM
             </div>
           </div>
 
-          <div class="metric-card">
-            <div class="metric-header">
-              <span class="metric-label">Sprint 进度</span>
-              <div class="metric-icon amber">
-                <i data-lucide="target"></i>
-              </div>
-            </div>
-            <div class="metric-value">Sprint 14</div>
-            <div class="progress-container">
-              <div class="progress-header">
-                <span class="progress-label">完成率</span>
-                <span class="progress-value">68%</span>
-              </div>
-              <div class="progress-bar">
-                <div class="progress-fill" style="width: 68%"></div>
+          <!-- AI Response with Execution -->
+          <div class="message ai">
+            <div class="message-bubble">
+              <div class="execution-card">
+                <div class="execution-header">
+                  <div class="execution-spinner"></div>
+                  <span class="execution-title">正在执行需求→设计编排流程</span>
+                </div>
+                <div class="execution-steps">
+                  <div class="execution-step">
+                    <span class="step-icon check"><i data-lucide="check"></i></span>
+                    <span class="step-text">获取需求详情 — REQ-2024-0892 | 用户登录优化</span>
+                  </div>
+                  <div class="execution-step">
+                    <span class="step-icon check"><i data-lucide="check"></i></span>
+                    <span class="step-text">生成架构设计 — C4 Level-2 架构图</span>
+                  </div>
+                  <div class="execution-step">
+                    <span class="step-icon progress"><i data-lucide="loader"></i></span>
+                    <span class="step-text">生成接口设计 <span>正在生成 REST API...</span></span>
+                  </div>
+                  <div class="execution-step">
+                    <span class="step-icon pending"><i data-lucide="circle"></i></span>
+                    <span class="step-text">同步到设计平台</span>
+                  </div>
+                  <div class="execution-step">
+                    <span class="step-icon pending"><i data-lucide="circle"></i></span>
+                    <span class="step-text">通知 PM</span>
+                  </div>
+                </div>
+                <div class="execution-progress">
+                  <div class="execution-progress-text">2/5 步骤完成</div>
+                  <div class="execution-progress-bar">
+                    <div class="execution-progress-fill"></div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- Two Column Layout -->
-        <div class="two-column">
-          <!-- AI Conversation Panel -->
-          <div class="card conversation-panel">
-            <div class="card-header">
-              <div class="card-title">
-                <span class="card-title-main">AI 智能中枢</span>
-                <span class="card-title-sub">通过对话驱动全流程</span>
-              </div>
-              <div class="card-actions">
-                <button class="card-action-btn">新建对话</button>
-                <button class="card-action-btn">历史记录</button>
-              </div>
-            </div>
-            <div class="conversation-messages">
-              <!-- User Message -->
-              <div class="message user">
-                <div class="message-bubble">
-                  帮我看看 REQ-2024-0892 当前在哪个阶段？
-                </div>
-              </div>
-
-              <!-- AI Response -->
-              <div class="message ai">
-                <div class="message-bubble">
-                  <div class="ai-response-card">
-                    <div class="ai-response-header">
-                      <span class="ai-response-title">用户登录优化</span>
-                      <span class="stage-badge">设计中</span>
-                    </div>
-
-                    <div class="pipeline-viz">
-                      <div class="pipeline-stage">
-                        <div class="pipeline-node completed">
-                          <span class="pipeline-dot"></span>
-                          需求
-                        </div>
-                        <span class="pipeline-arrow">→</span>
-                        <div class="pipeline-node current">
-                          <span class="pipeline-dot"></span>
-                          设计中
-                        </div>
-                        <span class="pipeline-arrow">→</span>
-                        <div class="pipeline-node">
-                          开发
-                        </div>
-                        <span class="pipeline-arrow">→</span>
-                        <div class="pipeline-node">
-                          测试
-                        </div>
-                        <span class="pipeline-arrow">→</span>
-                        <div class="pipeline-node">
-                          部署
-                        </div>
-                      </div>
-                    </div>
-
-                    <div class="blocker-card">
-                      <div class="blocker-icon">
-                        <i data-lucide="clock"></i>
-                      </div>
-                      <div class="blocker-content">
-                        <div class="blocker-title">等待 API 设计评审 (已挂起 1 天)</div>
-                        <div class="blocker-meta">由 @李四 负责</div>
-                      </div>
-                    </div>
-
-                    <div class="assignees">
-                      <div class="assignee">李</div>
-                      <div class="assignee">王</div>
-                    </div>
-
-                    <div class="action-buttons">
-                      <button class="action-btn primary">催一下评审</button>
-                      <button class="action-btn secondary">查看详情</button>
-                      <button class="action-btn secondary">查看依赖</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- User Message -->
-              <div class="message user">
-                <div class="message-bubble">
-                  帮我把这个需求转成设计稿并通知 PM
-                </div>
-              </div>
-
-              <!-- AI Response with Execution -->
-              <div class="message ai">
-                <div class="message-bubble">
-                  <div class="execution-card">
-                    <div class="execution-header">
-                      <div class="execution-spinner"></div>
-                      <span class="execution-title">正在执行需求→设计编排流程</span>
-                    </div>
-                    <div class="execution-steps">
-                      <div class="execution-step">
-                        <span class="step-icon check"><i data-lucide="check"></i></span>
-                        <span class="step-text">获取需求详情 — REQ-2024-0892 | 用户登录优化</span>
-                      </div>
-                      <div class="execution-step">
-                        <span class="step-icon check"><i data-lucide="check"></i></span>
-                        <span class="step-text">生成架构设计 — C4 Level-2 架构图</span>
-                      </div>
-                      <div class="execution-step">
-                        <span class="step-icon progress"><i data-lucide="loader"></i></span>
-                        <span class="step-text">生成接口设计 <span>正在生成 REST API...</span></span>
-                      </div>
-                      <div class="execution-step">
-                        <span class="step-icon pending"><i data-lucide="circle"></i></span>
-                        <span class="step-text">同步到设计平台</span>
-                      </div>
-                      <div class="execution-step">
-                        <span class="step-icon pending"><i data-lucide="circle"></i></span>
-                        <span class="step-text">通知 PM</span>
-                      </div>
-                    </div>
-                    <div class="execution-progress">
-                      <div class="execution-progress-text">2/5 步骤完成</div>
-                      <div class="execution-progress-bar">
-                        <div class="execution-progress-fill"></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Typing Indicator -->
-              <div class="message ai">
-                <div class="message-bubble">
-                  <div class="typing-indicator">
-                    <div class="typing-dot"></div>
-                    <div class="typing-dot"></div>
-                    <div class="typing-dot"></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div class="conversation-input">
-              <div class="input-wrapper">
-                <input type="text" placeholder="输入指令或问题...">
-                <div class="input-btn">
-                  <i data-lucide="mic"></i>
-                </div>
-              </div>
-              <button class="send-btn">
-                <i data-lucide="send"></i>
-              </button>
-            </div>
-          </div>
-
-          <!-- Right Column -->
-          <div class="right-column">
-            <!-- Proactive Alerts -->
-            <div class="card alerts-panel">
-              <div class="card-header">
-                <div class="card-title">
-                  <span class="card-title-main">主动预警</span>
-                </div>
-                <span class="card-badge">3条未读</span>
-              </div>
-              <div class="card-body">
-                <div class="alerts-list">
-                  <div class="alert-card critical">
-                    <div class="alert-header">
-                      <span class="alert-title">构建失败 — payment-service</span>
-                      <span class="alert-type critical">CRITICAL</span>
-                    </div>
-                    <div class="alert-meta">
-                      分支 main | 原因: 单元测试未通过 | 时间: 14:32
-                    </div>
-                    <div class="alert-actions">
-                      <button class="alert-btn view">查看</button>
-                      <button class="alert-btn handle">处理</button>
-                    </div>
-                  </div>
-
-                  <div class="alert-card warning">
-                    <div class="alert-header">
-                      <span class="alert-title">审批超时 — PROJ-456 部署审批</span>
-                      <span class="alert-type warning">WARNING</span>
-                    </div>
-                    <div class="alert-meta">
-                      已等待 4 小时 | 审批人: @赵六
-                    </div>
-                    <div class="alert-actions">
-                      <button class="alert-btn view">查看</button>
-                      <button class="alert-btn handle">处理</button>
-                    </div>
-                  </div>
-
-                  <div class="alert-card info">
-                    <div class="alert-header">
-                      <span class="alert-title">Sprint 14 即将结束</span>
-                      <span class="alert-type info">INFO</span>
-                    </div>
-                    <div class="alert-meta">
-                      剩余 2 天 | 12 个待办项
-                    </div>
-                    <div class="alert-actions">
-                      <button class="alert-btn view">查看</button>
-                      <button class="alert-btn handle">处理</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Agent Collaboration -->
-            <div class="card collaboration-panel">
-              <div class="card-header">
-                <div class="card-title">
-                  <span class="card-title-main">智能体协作</span>
-                </div>
-                <span class="card-badge">1 个任务进行中</span>
-              </div>
-              <div class="card-body">
-                <div class="task-header">
-                  <div class="task-icon">
-                    <i data-lucide="users"></i>
-                  </div>
-                  <div class="task-info">
-                    <div class="task-title">为 REQ-0892 生成完整设计方案</div>
-                    <div class="task-subtitle">多智能体协作任务</div>
-                  </div>
-                </div>
-
-                <div class="agent-pipeline">
-                  <div class="agent-node">
-                    <div class="agent-node-circle completed">1</div>
-                    <span class="agent-node-label">需求</span>
-                  </div>
-                  <span class="agent-arrow">→</span>
-                  <div class="agent-node">
-                    <div class="agent-node-circle current">2</div>
-                    <span class="agent-node-label">设计</span>
-                  </div>
-                  <span class="agent-arrow">→</span>
-                  <div class="agent-node">
-                    <div class="agent-node-circle pending">3</div>
-                    <span class="agent-node-label">检查</span>
-                  </div>
-                  <span class="agent-arrow">→</span>
-                  <div class="agent-node">
-                    <div class="agent-node-circle pending">4</div>
-                    <span class="agent-node-label">文档</span>
-                  </div>
-                  <span class="agent-arrow">→</span>
-                  <div class="agent-node">
-                    <div class="agent-node-circle pending">5</div>
-                    <span class="agent-node-label">通知</span>
-                  </div>
-                </div>
-
-                <div class="agent-current-status">
-                  <span class="agent-current-text">设计 Agent 正在生成 C4 架构图</span>
-                </div>
-
-                <div class="agent-progress">
-                  <div class="agent-progress-bar">
-                    <div class="agent-progress-fill"></div>
-                  </div>
-                  <span class="agent-progress-text">2/5 步骤完成</span>
-                </div>
+          <!-- Typing Indicator -->
+          <div class="message ai">
+            <div class="message-bubble">
+              <div class="typing-indicator">
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
               </div>
             </div>
           </div>
         </div>
-
-        <!-- Full Pipeline Visualization -->
-        <div class="card pipeline-full">
-          <div class="card-header">
-            <span class="pipeline-title">全流程管线</span>
-            <div class="pipeline-filters">
-              <button class="filter-btn">今日</button>
-              <button class="filter-btn active">本周</button>
-              <button class="filter-btn">本月</button>
+        <div class="conversation-input">
+          <div class="input-wrapper">
+            <input type="text" data-testid="chat-input" placeholder="输入指令或问题...">
+            <div class="input-btn">
+              <i data-lucide="mic"></i>
             </div>
           </div>
-          <div class="card-body">
-            <div class="pipeline-stages">
-              <div class="stage-item">
-                <div class="stage-circle healthy">
-                  <span class="stage-count">23</span>
-                </div>
-                <span class="stage-label">需求管理</span>
-                <div class="stage-connector">
-                  <div class="stage-connector-line active"></div>
-                </div>
-              </div>
-              <div class="stage-item">
-                <div class="stage-circle healthy">
-                  <span class="stage-count">18</span>
-                </div>
-                <span class="stage-label">设计建模</span>
-                <div class="stage-connector">
-                  <div class="stage-connector-line active"></div>
-                </div>
-              </div>
-              <div class="stage-item">
-                <div class="stage-circle warning">
-                  <span class="stage-count">45</span>
-                </div>
-                <span class="stage-label">代码开发</span>
-                <div class="stage-connector">
-                  <div class="stage-connector-line"></div>
-                </div>
-              </div>
-              <div class="stage-item">
-                <div class="stage-circle healthy">
-                  <span class="stage-count">12</span>
-                </div>
-                <span class="stage-label">代码检查</span>
-                <div class="stage-connector">
-                  <div class="stage-connector-line"></div>
-                </div>
-              </div>
-              <div class="stage-item">
-                <div class="stage-circle healthy">
-                  <span class="stage-count">31</span>
-                </div>
-                <span class="stage-label">构建集成</span>
-                <div class="stage-connector">
-                  <div class="stage-connector-line"></div>
-                </div>
-              </div>
-              <div class="stage-item">
-                <div class="stage-circle error">
-                  <span class="stage-count">28</span>
-                </div>
-                <span class="stage-label">测试验证</span>
-                <div class="stage-connector">
-                  <div class="stage-connector-line"></div>
-                </div>
-              </div>
-              <div class="stage-item">
-                <div class="stage-circle healthy">
-                  <span class="stage-count">15</span>
-                </div>
-                <span class="stage-label">部署上线</span>
-                <div class="stage-connector">
-                  <div class="stage-connector-line"></div>
-                </div>
-              </div>
-              <div class="stage-item">
-                <div class="stage-circle healthy">
-                  <span class="stage-count">8</span>
-                </div>
-                <span class="stage-label">运维监控</span>
+          <button class="send-btn" data-testid="chat-send-btn">
+            <i data-lucide="send"></i>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── RIGHT COLUMN ── -->
+    <aside class="workbench-right" data-testid="workbench-right">
+      <div class="right-tabs">
+        <button class="right-tab active" role="tab" aria-selected="true" data-tab="context">上下文详情</button>
+        <button class="right-tab" role="tab" aria-selected="false" data-tab="alerts">主动预警</button>
+        <button class="right-tab" role="tab" aria-selected="false" data-tab="collab">智能体协作</button>
+      </div>
+
+      <!-- Tab: 上下文详情 (default) -->
+      <div class="right-tab-content active" data-tab-content="context">
+        <div class="context-detail-card">
+          <div class="context-detail-header">
+            <div>
+              <div class="context-req-id">REQ-2024-0892</div>
+              <div class="context-req-title">用户登录优化</div>
+            </div>
+            <span class="stage-badge">设计中</span>
+          </div>
+          <div class="context-detail-body">
+            <div class="context-field">
+              <div class="context-field-label">当前阶段</div>
+              <div class="context-mini-pipeline">
+                <span class="context-mini-node done">需求 ✓</span>
+                <span class="context-mini-arrow">→</span>
+                <span class="context-mini-node current">设计中</span>
+                <span class="context-mini-arrow">→</span>
+                <span class="context-mini-node pending">开发</span>
+                <span class="context-mini-arrow">→</span>
+                <span class="context-mini-node pending">测试</span>
+                <span class="context-mini-arrow">→</span>
+                <span class="context-mini-node pending">部署</span>
               </div>
             </div>
 
-            <div class="pipeline-timeline">
-              <div class="timeline-header">最近活动</div>
-              <div class="timeline-events">
-                <div class="timeline-event">
-                  <span class="event-dot success"></span>
-                  <span class="event-text">REQ-2024-0892 已完成设计评审</span>
-                  <span class="event-time">10:32</span>
+            <div class="context-field">
+              <div class="context-field-label">阻塞项</div>
+              <div class="blocker-card">
+                <div class="blocker-icon">
+                  <i data-lucide="clock"></i>
                 </div>
-                <div class="timeline-event">
-                  <span class="event-dot error"></span>
-                  <span class="event-text">payment-service 构建失败</span>
-                  <span class="event-time">10:28</span>
-                </div>
-                <div class="timeline-event">
-                  <span class="event-dot success"></span>
-                  <span class="event-text">PROJ-456 部署成功</span>
-                  <span class="event-time">09:45</span>
-                </div>
-                <div class="timeline-event">
-                  <span class="event-dot info"></span>
-                  <span class="event-text">Sprint 14 进度更新 68%</span>
-                  <span class="event-time">09:30</span>
-                </div>
-                <div class="timeline-event">
-                  <span class="event-dot warning"></span>
-                  <span class="event-text">PROJ-456 部署审批待处理</span>
-                  <span class="event-time">08:30</span>
-                </div>
-                <div class="timeline-event">
-                  <span class="event-dot success"></span>
-                  <span class="event-text">GitLab CI 流水线 #1234 完成</span>
-                  <span class="event-time">08:15</span>
+                <div class="blocker-content">
+                  <div class="blocker-title">等待 API 设计评审 (已挂起 1 天)</div>
+                  <div class="blocker-meta">由 @研发工程师 B 负责</div>
                 </div>
               </div>
+            </div>
+
+            <div class="context-field">
+              <div class="context-field-label">负责人</div>
+              <div class="context-assignees">
+                <div class="context-assignee">李</div>
+                <div class="context-assignee">王</div>
+              </div>
+            </div>
+
+            <div class="context-actions">
+              <button class="action-btn primary">催一下评审</button>
+              <button class="action-btn secondary">查看详情</button>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Footer Status Bar -->
-      <footer class="footer-status">
-        <div class="status-left">
-          <div class="status-item">
-            <span class="status-dot green"></span>
-            <span>系统运行正常</span>
+      <!-- Tab: 主动预警 -->
+      <div class="right-tab-content" data-tab-content="alerts">
+        <div class="alerts-list">
+          <div class="alert-card critical">
+            <div class="alert-header">
+              <span class="alert-title">构建失败 — payment-service</span>
+              <span class="alert-type critical">CRITICAL</span>
+            </div>
+            <div class="alert-meta">
+              分支 main | 原因: 单元测试未通过 | 时间: 14:32
+            </div>
+            <div class="alert-actions">
+              <button class="alert-btn view">查看</button>
+              <button class="alert-btn handle">处理</button>
+            </div>
           </div>
-          <div class="status-item">
-            <i data-lucide="check-circle" style="width: 14px; height: 14px; color: var(--success);"></i>
-            <span>6/6 工具已连接</span>
-          </div>
-          <div class="status-item">
-            <i data-lucide="activity" style="width: 14px; height: 14px; color: var(--success);"></i>
-            <span>4 个智能体在线</span>
-          </div>
-        </div>
-        <div class="status-right">
-          v2.0.1
-        </div>
-      </footer>
-    </main>
-  </div>
 
-  <script>
-    // Initialize Lucide icons
+          <div class="alert-card warning">
+            <div class="alert-header">
+              <span class="alert-title">审批超时 — PROJ-456 部署审批</span>
+              <span class="alert-type warning">WARNING</span>
+            </div>
+            <div class="alert-meta">
+              已等待 4 小时 | 审批人: @运维工程师 D
+            </div>
+            <div class="alert-actions">
+              <button class="alert-btn view">查看</button>
+              <button class="alert-btn handle">处理</button>
+            </div>
+          </div>
+
+          <div class="alert-card info">
+            <div class="alert-header">
+              <span class="alert-title">Sprint 14 即将结束</span>
+              <span class="alert-type info">INFO</span>
+            </div>
+            <div class="alert-meta">
+              剩余 2 天 | 12 个待办项
+            </div>
+            <div class="alert-actions">
+              <button class="alert-btn view">查看</button>
+              <button class="alert-btn handle">处理</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: 智能体协作 -->
+      <div class="right-tab-content" data-tab-content="collab">
+        <div class="task-header">
+          <div class="task-icon">
+            <i data-lucide="users"></i>
+          </div>
+          <div class="task-info">
+            <div class="task-title">为 REQ-0892 生成完整设计方案</div>
+            <div class="task-subtitle">需求理解、架构设计、风险检查、评审文档自动串联</div>
+          </div>
+        </div>
+
+        <div class="collab-summary-grid" data-testid="collab-summary-grid">
+          <div class="collab-summary-card">
+            <div class="collab-summary-label">当前负责人</div>
+            <div class="collab-summary-value">方案设计</div>
+          </div>
+          <div class="collab-summary-card">
+            <div class="collab-summary-label">预计完成</div>
+            <div class="collab-summary-value">18 分钟</div>
+          </div>
+          <div class="collab-summary-card">
+            <div class="collab-summary-label">产出物</div>
+            <div class="collab-summary-value">3 份</div>
+          </div>
+        </div>
+
+        <div class="agent-pipeline">
+          <div class="agent-node">
+            <div class="agent-node-circle completed">1</div>
+            <span class="agent-node-label">需求</span>
+          </div>
+          <span class="agent-arrow">→</span>
+          <div class="agent-node">
+            <div class="agent-node-circle current">2</div>
+            <span class="agent-node-label">设计</span>
+          </div>
+          <span class="agent-arrow">→</span>
+          <div class="agent-node">
+            <div class="agent-node-circle pending">3</div>
+            <span class="agent-node-label">检查</span>
+          </div>
+          <span class="agent-arrow">→</span>
+          <div class="agent-node">
+            <div class="agent-node-circle pending">4</div>
+            <span class="agent-node-label">文档</span>
+          </div>
+          <span class="agent-arrow">→</span>
+          <div class="agent-node">
+            <div class="agent-node-circle pending">5</div>
+            <span class="agent-node-label">通知</span>
+          </div>
+        </div>
+
+        <div class="agent-current-status">
+          <span class="agent-current-text">方案设计 Agent 正在生成 C4 架构图与接口契约草案</span>
+        </div>
+
+        <div class="agent-progress">
+          <div class="agent-progress-bar">
+            <div class="agent-progress-fill"></div>
+          </div>
+          <span class="agent-progress-text">2/5 步骤完成</span>
+        </div>
+
+        <div class="collab-section">
+          <div class="collab-section-title">智能体分工</div>
+          <div class="agent-roster" data-testid="agent-roster">
+            <div class="agent-roster-row">
+              <div class="agent-avatar-mini">需</div>
+              <div>
+                <div class="agent-roster-name">需求分析 Agent</div>
+                <div class="agent-roster-task">补齐验收条件与边界场景</div>
+              </div>
+              <span class="agent-roster-status done">已完成</span>
+            </div>
+            <div class="agent-roster-row">
+              <div class="agent-avatar-mini">设</div>
+              <div>
+                <div class="agent-roster-name">方案设计 Agent</div>
+                <div class="agent-roster-task">生成 C4 视图与接口草案</div>
+              </div>
+              <span class="agent-roster-status running">工作中</span>
+            </div>
+            <div class="agent-roster-row">
+              <div class="agent-avatar-mini">检</div>
+              <div>
+                <div class="agent-roster-name">风险检查 Agent</div>
+                <div class="agent-roster-task">等待设计产物后做一致性检查</div>
+              </div>
+              <span class="agent-roster-status waiting">排队</span>
+            </div>
+            <div class="agent-roster-row">
+              <div class="agent-avatar-mini">文</div>
+              <div>
+                <div class="agent-roster-name">文档整理 Agent</div>
+                <div class="agent-roster-task">整理评审摘要与变更清单</div>
+              </div>
+              <span class="agent-roster-status waiting">待启动</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="collab-section">
+          <div class="collab-section-title">交接队列</div>
+          <div class="handoff-list">
+            <div class="handoff-item">
+              <span class="handoff-dot" aria-hidden="true"></span>
+              <div>
+                <div class="handoff-title">需求 → 设计</div>
+                <div class="handoff-meta">已输出用户登录、二维码确认、异常重试 3 组场景</div>
+              </div>
+            </div>
+            <div class="handoff-item">
+              <span class="handoff-dot" aria-hidden="true"></span>
+              <div>
+                <div class="handoff-title">设计 → 检查</div>
+                <div class="handoff-meta">接口契约草案生成中，预计 6 分钟后交接</div>
+              </div>
+            </div>
+            <div class="handoff-item">
+              <span class="handoff-dot" aria-hidden="true"></span>
+              <div>
+                <div class="handoff-title">检查 → 文档</div>
+                <div class="handoff-meta">将自动生成评审摘要、风险清单和待办分配</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="collab-section">
+          <div class="collab-section-title">已沉淀产出</div>
+          <div class="collab-output-list">
+            <div class="collab-output-item">
+              <span class="handoff-dot" aria-hidden="true"></span>
+              <div>
+                <div class="collab-output-title">接口草案</div>
+                <div class="collab-output-meta">5 个 API，含错误码和幂等策略</div>
+              </div>
+            </div>
+            <div class="collab-output-item">
+              <span class="handoff-dot" aria-hidden="true"></span>
+              <div>
+                <div class="collab-output-title">架构视图</div>
+                <div class="collab-output-meta">登录链路、认证服务、通知服务依赖图</div>
+              </div>
+            </div>
+            <div class="collab-output-item">
+              <span class="handoff-dot" aria-hidden="true"></span>
+              <div>
+                <div class="collab-output-title">评审清单</div>
+                <div class="collab-output-meta">安全、可观测、回滚、兼容性 4 类检查项</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="collab-section">
+          <div class="collab-section-title">当前风险</div>
+          <div class="collab-risk-card">
+            认证服务回调超时策略尚未确认，风险检查 Agent 会在接口契约生成后自动补充回滚建议。
+          </div>
+        </div>
+      </div>
+    </aside>
+
+  </main>
+
+  <!-- ═══ BOTTOM HISTORY PANEL ═══ -->
+  <section class="bottom-history-panel is-collapsed" data-testid="bottom-history-panel" aria-label="历史面板">
+    <div class="panel-center-rail" data-testid="bottom-history-rail">
+    <div class="bottom-tabs">
+      <button class="bottom-tab active" data-bottom-tab="recent">最近活动 <span class="tab-count">12</span></button>
+      <button class="bottom-tab" data-bottom-tab="pipeline">全流程历史</button>
+      <button class="bottom-tab" data-bottom-tab="exec">执行记录</button>
+      <button class="bottom-toggle" data-testid="bottom-history-toggle" aria-controls="bottom-history-content" aria-expanded="false" aria-label="展开历史面板">
+        <i data-lucide="chevron-up"></i>
+      </button>
+    </div>
+
+    <div id="bottom-history-content" aria-hidden="true">
+    <!-- Bottom content: 最近活动 -->
+    <div class="bottom-content active" data-bottom-content="recent">
+      <div class="pipeline-timeline">
+        <div class="timeline-events">
+          <div class="timeline-event">
+            <span class="event-dot success"></span>
+            <span class="event-text">REQ-2024-0892 已完成设计评审</span>
+            <span class="event-time">10:32</span>
+          </div>
+          <div class="timeline-event">
+            <span class="event-dot error"></span>
+            <span class="event-text">账务域构建失败</span>
+            <span class="event-time">10:28</span>
+          </div>
+          <div class="timeline-event">
+            <span class="event-dot success"></span>
+            <span class="event-text">PROJ-456 部署成功</span>
+            <span class="event-time">09:45</span>
+          </div>
+          <div class="timeline-event">
+            <span class="event-dot info"></span>
+            <span class="event-text">Sprint 14 进度更新 68%</span>
+            <span class="event-time">09:30</span>
+          </div>
+          <div class="timeline-event">
+            <span class="event-dot warning"></span>
+            <span class="event-text">PROJ-456 部署审批待处理</span>
+            <span class="event-time">08:30</span>
+          </div>
+          <div class="timeline-event">
+            <span class="event-dot success"></span>
+            <span class="event-text">持续集成流水线 #1234 完成</span>
+            <span class="event-time">08:15</span>
+          </div>
+          <div class="timeline-event">
+            <span class="event-dot info"></span>
+            <span class="event-text">接口契约检查通过</span>
+            <span class="event-time">08:02</span>
+          </div>
+          <div class="timeline-event">
+            <span class="event-dot success"></span>
+            <span class="event-text">代码质量扫描完成</span>
+            <span class="event-time">07:48</span>
+          </div>
+          <div class="timeline-event">
+            <span class="event-dot warning"></span>
+            <span class="event-text">回归用例仍有 3 条待确认</span>
+            <span class="event-time">07:30</span>
+          </div>
+          <div class="timeline-event">
+            <span class="event-dot success"></span>
+            <span class="event-text">制品版本已归档</span>
+            <span class="event-time">07:16</span>
+          </div>
+          <div class="timeline-event">
+            <span class="event-dot info"></span>
+            <span class="event-text">监控规则完成同步</span>
+            <span class="event-time">06:58</span>
+          </div>
+          <div class="timeline-event">
+            <span class="event-dot success"></span>
+            <span class="event-text">协作通知已发送</span>
+            <span class="event-time">06:40</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom content: 全流程历史 -->
+    <div class="bottom-content" data-bottom-content="pipeline">
+      <div class="bottom-header">
+        <div class="pipeline-filters">
+          <button class="filter-btn">今日</button>
+          <button class="filter-btn active">本周</button>
+          <button class="filter-btn">本月</button>
+        </div>
+      </div>
+      <div class="pipeline-stages">
+        <div class="stage-item">
+          <div class="stage-circle healthy"><span class="stage-count">23</span></div>
+          <span class="stage-label">需求管理</span>
+          <div class="stage-connector"><div class="stage-connector-line active"></div></div>
+        </div>
+        <div class="stage-item">
+          <div class="stage-circle healthy"><span class="stage-count">18</span></div>
+          <span class="stage-label">设计建模</span>
+          <div class="stage-connector"><div class="stage-connector-line active"></div></div>
+        </div>
+        <div class="stage-item">
+          <div class="stage-circle warning"><span class="stage-count">45</span></div>
+          <span class="stage-label">代码开发</span>
+          <div class="stage-connector"><div class="stage-connector-line"></div></div>
+        </div>
+        <div class="stage-item">
+          <div class="stage-circle healthy"><span class="stage-count">12</span></div>
+          <span class="stage-label">代码检查</span>
+          <div class="stage-connector"><div class="stage-connector-line"></div></div>
+        </div>
+        <div class="stage-item">
+          <div class="stage-circle healthy"><span class="stage-count">31</span></div>
+          <span class="stage-label">构建集成</span>
+          <div class="stage-connector"><div class="stage-connector-line"></div></div>
+        </div>
+        <div class="stage-item">
+          <div class="stage-circle error"><span class="stage-count">28</span></div>
+          <span class="stage-label">测试验证</span>
+          <div class="stage-connector"><div class="stage-connector-line"></div></div>
+        </div>
+        <div class="stage-item">
+          <div class="stage-circle healthy"><span class="stage-count">15</span></div>
+          <span class="stage-label">部署上线</span>
+          <div class="stage-connector"><div class="stage-connector-line"></div></div>
+        </div>
+        <div class="stage-item">
+          <div class="stage-circle healthy"><span class="stage-count">8</span></div>
+          <span class="stage-label">运维监控</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom content: 执行记录 -->
+    <div class="bottom-content" data-bottom-content="exec">
+      <div style="padding: 16px; color: var(--text-muted); font-size: 12px; text-align: center;">
+        暂无执行记录
+      </div>
+    </div>
+    </div>
+    </div>
+  </section>
+
+  <!-- ═══ FOOTER STATUS ═══ -->
+  <footer class="footer-status" data-testid="footer-status">
+    <div class="status-left">
+      <div class="status-item">
+        <span class="status-dot green"></span>
+        <span>系统运行正常</span>
+      </div>
+      <div class="status-item">
+        <i data-lucide="check-circle" style="width: 12px; height: 12px; color: var(--success);"></i>
+        <span>6/6 工具已连接</span>
+      </div>
+      <div class="status-item">
+        <i data-lucide="activity" style="width: 12px; height: 12px; color: var(--success);"></i>
+        <span>4 个智能体在线</span>
+      </div>
+    </div>
+    <div class="status-right">
+      v2.0.1
+    </div>
+  </footer>
+
+</div>
+
+<script>
+  // Initialize Lucide icons
+  lucide.createIcons();
+
+  // ── Left sidebar nav items ──
+  document.querySelectorAll('.nav-item').forEach(item => {
+    item.addEventListener('click', function() {
+      document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+      this.classList.add('active');
+    });
+  });
+
+  // ── Left sidebar collapsible sections ──
+  document.querySelectorAll('.sidebar-section-toggle').forEach(toggle => {
+    toggle.addEventListener('click', function() {
+      const isExpanded = this.getAttribute('aria-expanded') === 'true';
+      const body = document.getElementById(this.getAttribute('aria-controls'));
+      this.setAttribute('aria-expanded', String(!isExpanded));
+      if (body) body.hidden = isExpanded;
+    });
+  });
+
+  document.querySelectorAll('.conversation-list-item').forEach(item => {
+    item.addEventListener('click', function() {
+      document.querySelectorAll('.conversation-list-item').forEach(i => i.classList.remove('active'));
+      this.classList.add('active');
+    });
+  });
+
+  // ── Right column tabs ──
+  document.querySelectorAll('.right-tab').forEach(tab => {
+    tab.addEventListener('click', function() {
+      const target = this.getAttribute('data-tab');
+      document.querySelectorAll('.right-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.right-tab').forEach(t => t.setAttribute('aria-selected', 'false'));
+      document.querySelectorAll('.right-tab-content').forEach(c => c.classList.remove('active'));
+      this.classList.add('active');
+      this.setAttribute('aria-selected', 'true');
+      const content = document.querySelector(`[data-tab-content="${target}"]`);
+      if (content) content.classList.add('active');
+    });
+  });
+
+  // ── Bottom history tabs ──
+  document.querySelectorAll('.bottom-tab').forEach(tab => {
+    tab.addEventListener('click', function() {
+      const target = this.getAttribute('data-bottom-tab');
+      document.querySelectorAll('.bottom-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.bottom-content').forEach(c => c.classList.remove('active'));
+      this.classList.add('active');
+      const content = document.querySelector(`[data-bottom-content="${target}"]`);
+      if (content) content.classList.add('active');
+    });
+  });
+
+  // ── Top metrics panel toggle ──
+  const metricsToggle = document.querySelector('[data-testid="top-metrics-toggle"]');
+  const metricsPanel = document.querySelector('.top-metrics-panel');
+  const metricsContent = document.getElementById('top-metrics-content');
+  const workbenchShell = document.querySelector('.workbench-shell');
+  if (metricsToggle && metricsPanel) {
+    metricsToggle.addEventListener('click', function() {
+      const isCollapsed = metricsPanel.classList.contains('is-collapsed');
+      metricsPanel.classList.toggle('is-collapsed', !isCollapsed);
+      metricsPanel.classList.toggle('is-expanded', isCollapsed);
+      this.classList.toggle('is-flipped', isCollapsed);
+      this.setAttribute('aria-expanded', String(isCollapsed));
+      this.setAttribute('aria-label', isCollapsed ? '收起指标面板' : '展开指标面板');
+      const label = this.querySelector('span');
+      if (label) label.textContent = isCollapsed ? '收起' : '展开';
+      if (metricsContent) metricsContent.setAttribute('aria-hidden', String(!isCollapsed));
+      if (workbenchShell) workbenchShell.classList.toggle('has-top-expanded', isCollapsed);
+    });
+  }
+
+  // ── Side panel toggles ──
+  const leftToggle = document.querySelector('[data-testid="left-sidebar-toggle"]');
+  const rightToggle = document.querySelector('[data-testid="right-sidebar-toggle"]');
+  if (leftToggle && workbenchShell) {
+    leftToggle.addEventListener('click', function() {
+      const isExpanded = this.getAttribute('aria-expanded') === 'true';
+      workbenchShell.classList.toggle('is-left-collapsed', isExpanded);
+      this.setAttribute('aria-expanded', String(!isExpanded));
+      this.setAttribute('aria-label', isExpanded ? '展开左侧栏' : '收起左侧栏');
+      const glyph = this.querySelector('.side-panel-glyph');
+      if (glyph) glyph.textContent = isExpanded ? '›' : '‹';
+    });
+  }
+  if (rightToggle && workbenchShell) {
+    rightToggle.addEventListener('click', function() {
+      const isExpanded = this.getAttribute('aria-expanded') === 'true';
+      workbenchShell.classList.toggle('is-right-collapsed', isExpanded);
+      this.setAttribute('aria-expanded', String(!isExpanded));
+      this.setAttribute('aria-label', isExpanded ? '展开右侧栏' : '收起右侧栏');
+      const glyph = this.querySelector('.side-panel-glyph');
+      if (glyph) glyph.textContent = isExpanded ? '‹' : '›';
+    });
+  }
+
+  const topNavToggle = document.querySelector('[data-testid="top-nav-toggle"]');
+  if (topNavToggle && workbenchShell) {
+    topNavToggle.addEventListener('click', function() {
+      const isExpanded = this.getAttribute('aria-expanded') === 'true';
+      workbenchShell.classList.toggle('is-titlebar-collapsed', isExpanded);
+      this.setAttribute('aria-expanded', String(!isExpanded));
+      this.setAttribute('aria-label', isExpanded ? '展开顶部导航条' : '收起顶部导航条');
+      const glyph = this.querySelector('.side-panel-glyph');
+      if (glyph) glyph.textContent = isExpanded ? '⌄' : '⌃';
+    });
+  }
+
+  // ── Bottom history panel toggle ──
+  const bottomToggle = document.querySelector('[data-testid="bottom-history-toggle"]');
+  const bottomPanel = document.querySelector('.bottom-history-panel');
+  const bottomContent = document.getElementById('bottom-history-content');
+  if (bottomToggle && bottomPanel) {
+    bottomToggle.addEventListener('click', function() {
+      const isCollapsed = bottomPanel.classList.contains('is-collapsed');
+      bottomPanel.classList.toggle('is-collapsed', !isCollapsed);
+      bottomPanel.classList.toggle('is-expanded', isCollapsed);
+      this.classList.toggle('is-flipped', isCollapsed);
+      this.setAttribute('aria-expanded', String(isCollapsed));
+      this.setAttribute('aria-label', isCollapsed ? '收起历史面板' : '展开历史面板');
+      if (bottomContent) bottomContent.setAttribute('aria-hidden', String(!isCollapsed));
+      if (workbenchShell) workbenchShell.classList.toggle('has-bottom-expanded', isCollapsed);
+    });
+  }
+
+  // ── Filter buttons (in bottom pipeline tab) ──
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+    });
+  });
+
+  // ── Conversation demo scenarios ──
+  const conversationMessages = document.querySelector('.conversation-messages');
+  const chatInput = document.querySelector('[data-testid="chat-input"]');
+  const chatSendBtn = document.querySelector('[data-testid="chat-send-btn"]');
+  const scenarioReplies = {
+    requirement: {
+      prompt: '帮我把 REQ-2024-0892 转成设计方案并通知相关负责人',
+      reply: '已接管 REQ-2024-0892。我会读取需求上下文、生成设计方案、创建评审任务，并通知产品、架构和研发负责人。',
+      title: '正在执行需求转设计编排流程',
+      steps: ['读取需求详情 — 已完成', '生成设计方案 — 进行中', '创建评审任务 — 待处理', '通知负责人 — 待处理']
+    },
+    release: {
+      prompt: '检查今天待发布服务的风险，给我一个处理建议',
+      reply: '发现 3 个待发布服务，其中 payment-service 有单测失败记录。我会继续核对构建、测试和审批状态。',
+      title: '正在巡检发布风险',
+      steps: ['拉取发布清单 — 已完成', '核对构建记录 — 已完成', '分析阻塞原因 — 进行中', '生成处理建议 — 待处理']
+    },
+    incident: {
+      prompt: '跟进 payment-service 的告警，看看谁需要处理',
+      reply: '已关联 payment-service 最近一次构建失败和告警事件。我会汇总影响范围，并准备催办信息。',
+      title: '正在跟进告警处置',
+      steps: ['读取告警上下文 — 已完成', '关联最近变更 — 进行中', '确认责任人 — 待处理', '生成催办消息 — 待处理']
+    }
+  };
+
+  function appendConversationMessage(type, html) {
+    if (!conversationMessages) return;
+    const message = document.createElement('div');
+    message.className = `message ${type}`;
+    message.innerHTML = `<div class="message-bubble">${html}</div>`;
+    conversationMessages.appendChild(message);
+    conversationMessages.scrollTop = conversationMessages.scrollHeight;
     lucide.createIcons();
+  }
 
-    // Add interactive hover effects for nav items
-    document.querySelectorAll('.nav-item').forEach(item => {
-      item.addEventListener('click', function() {
-        document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-        this.classList.add('active');
-      });
+  function runConversationScenario(scenario) {
+    appendConversationMessage('user', scenario.prompt);
+    appendConversationMessage('ai', scenario.reply);
+    const steps = scenario.steps.map((step, index) => {
+      const cls = index < 1 ? 'check' : index === 1 ? 'progress' : 'pending';
+      const icon = index < 1 ? 'check' : index === 1 ? 'loader' : 'circle';
+      return `<div class="execution-step"><span class="step-icon ${cls}"><i data-lucide="${icon}"></i></span><span class="step-text">${step}</span></div>`;
+    }).join('');
+    appendConversationMessage('ai', `<div class="execution-card"><div class="execution-header"><div class="execution-spinner"></div><span class="execution-title">${scenario.title}</span></div><div class="execution-steps">${steps}</div><div class="execution-progress"><div class="execution-progress-text">1/4 步骤完成</div><div class="execution-progress-bar"><div class="execution-progress-fill" style="width: 25%"></div></div></div></div>`);
+  }
+
+  document.querySelectorAll('.scenario-chip').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const scenario = scenarioReplies[this.getAttribute('data-scenario')];
+      if (scenario) runConversationScenario(scenario);
     });
+  });
 
-    // Add click handlers for filter buttons
-    document.querySelectorAll('.filter-btn').forEach(btn => {
-      btn.addEventListener('click', function() {
-        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-        this.classList.add('active');
-      });
-    });
-
-    // Simulate typing indicator animation
-    setInterval(() => {
-      const typingIndicator = document.querySelector('.typing-indicator');
-      if (typingIndicator) {
-        typingIndicator.style.opacity = typingIndicator.style.opacity === '0' ? '1' : '0';
+  if (chatSendBtn && chatInput) {
+    const sendMessage = () => {
+      const value = chatInput.value.trim();
+      if (!value) return;
+      chatInput.value = '';
+      const scenario = /风险|发布|巡检/.test(value)
+        ? scenarioReplies.release
+        : /告警|故障|payment-service|催办/.test(value)
+          ? scenarioReplies.incident
+          : /需求|设计|REQ|评审/.test(value)
+            ? scenarioReplies.requirement
+            : null;
+      if (scenario) {
+        runConversationScenario({ ...scenario, prompt: value });
+      } else {
+        appendConversationMessage('user', value);
+        appendConversationMessage('ai', `收到：“${value}”。你可以继续输入需求、告警、发布风险或服务检查类指令。`);
       }
-    }, 500);
-  </script>
+    };
+    chatSendBtn.addEventListener('click', sendMessage);
+    chatInput.addEventListener('keydown', event => {
+      if (event.key === 'Enter') sendMessage();
+    });
+  }
+
+  // ── Typing indicator animation ──
+  setInterval(() => {
+    const typingIndicator = document.querySelector('.typing-indicator');
+    if (typingIndicator) {
+      typingIndicator.style.opacity = typingIndicator.style.opacity === '0' ? '1' : '0';
+    }
+  }, 500);
+</script>
 </body>
 </html>

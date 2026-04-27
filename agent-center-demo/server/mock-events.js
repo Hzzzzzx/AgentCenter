@@ -26,8 +26,8 @@ function createMockEvent(overrides) {
 
 var INTERACTION_RESPONSES = {
   'click:metric:deployment': { type: 'drawer', title_zh: '部署指标', data: { metric: 'deployment', period: 'today' } },
-  'click:tool:build_engine': { type: 'drawer', title_zh: '构建引擎', data: { toolId: 'build_engine' } },
-  'click:tool:test_platform': { type: 'drawer', title_zh: '测试平台', data: { toolId: 'test_platform' } },
+  'click:tool:build_engine': { type: 'drawer', title_zh: '持续集成平台', data: { toolId: 'build_engine' } },
+  'click:tool:test_platform': { type: 'drawer', title_zh: '测试管理平台', data: { toolId: 'test_platform' } },
   'click:agent:ops': { type: 'drawer', title_zh: '运维智能体', data: { roleId: 'ops' } },
   'click:alert:critical': { type: 'modal', title_zh: '严重告警', data: { severity: 'critical' } },
   'click:alert:warning': { type: 'drawer', title_zh: '警告告警', data: { severity: 'warning' } },

@@ -13,6 +13,12 @@ module.exports = defineConfig({
     actionTimeout: 10000,
     navigationTimeout: 30000,
   },
+  webServer: {
+    command: 'node server/index.js',
+    url: 'http://localhost:4000/health',
+    reuseExistingServer: true,
+    timeout: 30000,
+  },
   projects: [
     {
       name: 'chromium',
