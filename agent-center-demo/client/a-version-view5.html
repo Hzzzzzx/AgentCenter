@@ -1,0 +1,1617 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgentCenter · 架构说明</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg-primary: #0f172a;
+      --bg-secondary: #1e293b;
+      --bg-tertiary: #0c1222;
+      --bg-insight: #1a2744;
+      --bg-card: rgba(30, 41, 59, 0.7);
+      --bg-card-hover: rgba(30, 41, 59, 0.9);
+      --border-color: #334155;
+      --border-color-light: rgba(148, 163, 184, 0.1);
+      --text-primary: #e2e8f0;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent-cyan: #06b6d4;
+      --accent-cyan-dim: rgba(6, 182, 212, 0.15);
+      --accent-cyan-glow: rgba(6, 182, 212, 0.3);
+      --accent-blue: #3b82f6;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --error: #ef4444;
+      --glow-cyan: rgba(6, 182, 212, 0.4);
+    }
+
+    body {
+      font-family: 'Noto Sans SC', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    #root { height: 100%; }
+
+    .app-container {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 240px;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      z-index: 100;
+    }
+
+    .sidebar-header {
+      height: 56px;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--border-color);
+      gap: 12px;
+    }
+
+    .logo-icon {
+      width: 28px;
+      height: 28px;
+      background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-blue) 100%);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .logo-icon svg { width: 16px; height: 16px; color: white; }
+
+    .logo-text {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .logo-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      line-height: 1.2;
+    }
+
+    .logo-subtitle {
+      font-size: 10px;
+      color: var(--text-muted);
+      line-height: 1.2;
+    }
+
+    .sidebar-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 0;
+    }
+
+    .sidebar-section {
+      padding: 0 12px;
+      margin-bottom: 16px;
+    }
+
+    .sidebar-section-title {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 0 8px;
+      margin-bottom: 8px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: 13px;
+      transition: all 0.15s ease;
+      border-left: 2px solid transparent;
+      margin-bottom: 2px;
+    }
+
+    .nav-item:hover {
+      background: rgba(148, 163, 184, 0.05);
+      color: var(--text-primary);
+    }
+
+    .nav-item.active {
+      background: rgba(6, 182, 212, 0.1);
+      color: var(--accent-cyan);
+      border-left-color: var(--accent-cyan);
+    }
+
+    .nav-item svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+    }
+
+    .nav-divider {
+      height: 1px;
+      background: var(--border-color);
+      margin: 12px 12px;
+    }
+
+    /* Agent Cards */
+    .agent-card {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      border-left: 2px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .agent-card:hover {
+      background: rgba(15, 23, 42, 0.8);
+    }
+
+    .agent-card.active {
+      border-left-color: var(--accent-cyan);
+      background: rgba(6, 182, 212, 0.08);
+    }
+
+    .agent-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+
+    .agent-name {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .agent-status {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .agent-status.idle {
+      background: rgba(34, 197, 94, 0.15);
+      color: var(--success);
+    }
+
+    .agent-status.working {
+      background: rgba(6, 182, 212, 0.15);
+      color: var(--accent-cyan);
+    }
+
+    .agent-status .dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .agent-card.active .agent-status.working .dot {
+      animation: blink 1s infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    .agent-action {
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Engine Status */
+    .engine-status {
+      padding: 12px;
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 8px;
+      margin: 0 12px;
+    }
+
+    .engine-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .engine-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(1.1); }
+    }
+
+    .engine-title {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .engine-subtitle {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* Main Content */
+    .main-content {
+      flex: 1;
+      margin-left: 240px;
+      width: calc(100vw - 240px);
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    /* Top Bar */
+    .top-bar {
+      height: 48px;
+      background: var(--bg-primary);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 16px;
+    }
+
+    .top-bar-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .ai-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 10px;
+      background: rgba(6, 182, 212, 0.1);
+      border-radius: 16px;
+      border: 1px solid rgba(6, 182, 212, 0.2);
+    }
+
+    .ai-status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent-cyan);
+      animation: pulse 2s infinite;
+    }
+
+    .ai-status-text {
+      font-size: 12px;
+      color: var(--accent-cyan);
+      font-weight: 500;
+    }
+
+    .top-bar-center {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+    }
+
+    .search-bar {
+      width: 100%;
+      max-width: 400px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .search-bar:focus-within {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 0 2px var(--accent-cyan-dim);
+    }
+
+    .search-bar svg {
+      width: 14px;
+      height: 14px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .search-bar input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      font-size: 13px;
+      color: var(--text-primary);
+    }
+
+    .search-bar input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .top-bar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .top-bar-icon {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      transition: all 0.15s ease;
+      position: relative;
+    }
+
+    .top-bar-icon:hover {
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+    }
+
+    .user-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 600;
+      color: white;
+      cursor: pointer;
+    }
+
+    /* View Content */
+    .view-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 16px 20px;
+      gap: 16px;
+      overflow-y: auto;
+    }
+
+    /* Architecture Explanation Styles */
+    .arch-title-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      background: var(--bg-secondary);
+      border-radius: 10px;
+      border: 1px solid var(--border-color);
+    }
+
+    .arch-title-left {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .arch-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .arch-subtitle {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .arch-title-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .arch-badge {
+      padding: 6px 12px;
+      background: rgba(6, 182, 212, 0.1);
+      border: 1px solid rgba(6, 182, 212, 0.2);
+      border-radius: 16px;
+      font-size: 12px;
+      color: var(--accent-cyan);
+    }
+
+    /* Layer Diagram */
+    .layer-diagram {
+      background: var(--bg-secondary);
+      border-radius: 10px;
+      border: 1px solid var(--border-color);
+      padding: 20px;
+      position: relative;
+    }
+
+    .layer-diagram-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .layer-diagram-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .layer-legend {
+      display: flex;
+      gap: 16px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    .legend-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .legend-dot.core { background: var(--accent-cyan); }
+    .legend-dot.side { background: var(--warning); }
+    .legend-dot.security { background: var(--error); }
+
+    .layers-container {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      position: relative;
+    }
+
+    .layer-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .layer-card {
+      flex: 1;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px 16px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .layer-card:hover {
+      border-color: var(--accent-cyan);
+      transform: translateY(-1px);
+    }
+
+    .layer-card.core {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 20px rgba(6, 182, 212, 0.15);
+    }
+
+    .layer-card.core::before {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      border-radius: 8px;
+      padding: 1px;
+      background: linear-gradient(135deg, var(--accent-cyan), transparent);
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+    }
+
+    .layer-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+
+    .layer-number {
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .layer-number.layer-1 { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+    .layer-number.layer-2 { background: rgba(168, 85, 247, 0.2); color: #c084fc; }
+    .layer-number.layer-3 { background: rgba(34, 197, 94, 0.2); color: #4ade80; }
+    .layer-number.layer-4 { background: rgba(249, 115, 22, 0.2); color: #fb923c; }
+    .layer-number.layer-5 { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+
+    .layer-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .layer-name-en {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-left: auto;
+    }
+
+    .layer-desc {
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
+    .layer-expand-icon {
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      transition: transform 0.2s ease;
+    }
+
+    .layer-card.expanded .layer-expand-icon {
+      transform: rotate(180deg);
+    }
+
+    .layer-details {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+
+    .layer-card.expanded .layer-details {
+      max-height: 200px;
+    }
+
+    .layer-details-inner {
+      padding-top: 12px;
+      margin-top: 12px;
+      border-top: 1px solid var(--border-color);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .detail-group h4 {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    .detail-group ul {
+      list-style: none;
+    }
+
+    .detail-group li {
+      font-size: 12px;
+      color: var(--text-secondary);
+      padding: 3px 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .detail-group li::before {
+      content: '';
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: var(--accent-cyan);
+    }
+
+    /* Side Layers */
+    .layers-with-sides {
+      display: grid;
+      grid-template-columns: 1fr 60px 1fr;
+      gap: 16px;
+    }
+
+    .side-layers {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .side-layer-card {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .side-layer-card:hover {
+      border-color: var(--warning);
+    }
+
+    .side-layer-card.memory {
+      border-color: rgba(249, 115, 22, 0.3);
+    }
+
+    .side-layer-card.security {
+      border-color: rgba(239, 68, 68, 0.3);
+    }
+
+    .side-layer-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .side-layer-desc {
+      font-size: 11px;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
+    .side-connector {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .connector-line {
+      width: 2px;
+      height: 30px;
+      background: linear-gradient(to bottom, var(--accent-cyan), var(--warning));
+      border-radius: 1px;
+    }
+
+    .connector-dots {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .connector-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent-cyan);
+      animation: flowDot 1.5s infinite;
+    }
+
+    .connector-dot:nth-child(2) { animation-delay: 0.3s; }
+    .connector-dot:nth-child(3) { animation-delay: 0.6s; }
+
+    @keyframes flowDot {
+      0%, 100% { opacity: 0.3; transform: translateY(0); }
+      50% { opacity: 1; transform: translateY(3px); }
+    }
+
+    /* Data Flow Arrows */
+    .flow-arrow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 0;
+      position: relative;
+    }
+
+    .flow-arrow-line {
+      height: 2px;
+      flex: 1;
+      background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .flow-arrow-line::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, white, transparent);
+      animation: flow 2s infinite;
+    }
+
+    @keyframes flow {
+      0% { left: -100%; }
+      100% { left: 100%; }
+    }
+
+    .flow-arrow.bidirectional .flow-arrow-line {
+      background: linear-gradient(90deg, var(--accent-cyan), var(--accent-cyan));
+    }
+
+    .flow-arrow.bidirectional::before,
+    .flow-arrow.bidirectional::after {
+      content: '';
+      position: absolute;
+      width: 0;
+      height: 0;
+      border-style: solid;
+    }
+
+    .flow-arrow.bidirectional::before {
+      left: 0;
+      border-width: 4px 6px 4px 0;
+      border-color: transparent var(--accent-cyan) transparent transparent;
+    }
+
+    .flow-arrow.bidirectional::after {
+      right: 0;
+      border-width: 4px 0 4px 6px;
+      border-color: transparent transparent transparent var(--accent-cyan);
+    }
+
+    .flow-label {
+      position: absolute;
+      font-size: 10px;
+      color: var(--text-muted);
+      background: var(--bg-secondary);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    /* Core Pulse Animation */
+    @keyframes corePulse {
+      0%, 100% { box-shadow: 0 0 20px rgba(6, 182, 212, 0.15); }
+      50% { box-shadow: 0 0 30px rgba(6, 182, 212, 0.3); }
+    }
+
+    .layer-card.core {
+      animation: corePulse 3s infinite;
+    }
+
+    /* Agent Toolchain Table */
+    .toolchain-section {
+      background: var(--bg-secondary);
+      border-radius: 10px;
+      border: 1px solid var(--border-color);
+      padding: 20px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .toolchain-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .toolchain-table th,
+    .toolchain-table td {
+      padding: 10px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .toolchain-table th {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      background: var(--bg-primary);
+    }
+
+    .toolchain-table td {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .toolchain-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .toolchain-table tr:hover td {
+      background: rgba(6, 182, 212, 0.05);
+    }
+
+    .agent-cell {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .agent-avatar-small {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 600;
+      color: white;
+    }
+
+    .agent-avatar-small.analyst { background: linear-gradient(135deg, #3b82f6, #8b5cf6); }
+    .agent-avatar-small.engineer { background: linear-gradient(135deg, #22c55e, #10b981); }
+    .agent-avatar-small.qa { background: linear-gradient(135deg, #f59e0b, #f97316); }
+    .agent-avatar-small.ops { background: linear-gradient(135deg, #ef4444, #dc2626); }
+    .agent-avatar-small.architect { background: linear-gradient(135deg, #8b5cf6, #a855f7); }
+    .agent-avatar-small.orchestrator { background: linear-gradient(135deg, #06b6d4, #0ea5e9); }
+
+    .tool-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    .tool-tag {
+      padding: 2px 8px;
+      background: var(--bg-primary);
+      border-radius: 4px;
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    /* Runtime Comparison */
+    .runtime-comparison {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .runtime-card {
+      background: var(--bg-secondary);
+      border-radius: 10px;
+      border: 1px solid var(--border-color);
+      padding: 20px;
+    }
+
+    .runtime-card.current {
+      border-color: rgba(249, 115, 22, 0.3);
+    }
+
+    .runtime-card.target {
+      border-color: rgba(34, 197, 94, 0.3);
+    }
+
+    .runtime-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .runtime-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .runtime-icon.current {
+      background: rgba(249, 115, 22, 0.15);
+      color: var(--warning);
+    }
+
+    .runtime-icon.target {
+      background: rgba(34, 197, 94, 0.15);
+      color: var(--success);
+    }
+
+    .runtime-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .runtime-subtitle {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .runtime-features {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .runtime-feature {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .runtime-feature svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+    }
+
+    .runtime-feature.current-feature svg { color: var(--warning); }
+    .runtime-feature.target-feature svg { color: var(--success); }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--bg-primary);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border-color);
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // Mock data
+    const agents = [
+      { id: 1, name: '编排引擎', status: 'working', action: '流程编排中' },
+      { id: 2, name: '需求分析师', status: 'idle', action: '等待指令' },
+      { id: 3, name: '代码工程师', status: 'idle', action: '等待指令' },
+      { id: 4, name: '质量守护者', status: 'idle', action: '等待指令' },
+      { id: 5, name: '运维专家', status: 'idle', action: '等待指令' },
+    ];
+
+    const LAYERS = [
+      { number: 1, name: '用户交互层', nameEn: 'User Interaction', icon: 'message-circle', iconColor: 'blue',
+        description: '用户与系统交互的入口，支持自然语言对话和主动推送通知',
+        components: ['对话界面', '气泡通知', '快捷命令面板'],
+        features: ['自然语言理解', '意图识别', '多轮对话', '上下文记忆'] },
+      { number: 2, name: 'AI 编排引擎层', nameEn: 'Orchestration Engine', icon: 'git-branch', iconColor: 'purple', isCore: true,
+        description: '核心智能编排引擎，负责意图理解、流程编排和多智能体协作调度',
+        components: ['意图理解', '流程编排', '多智能体调度', '会话管理'],
+        features: ['自然语言处理', '任务分解', 'Agent 协调', '状态管理'] },
+      { number: 3, name: 'Agent Squad', nameEn: 'Specialized Agent Squad', icon: 'users', iconColor: 'green',
+        description: '专业化 Agent 团队，每个角色专注于特定领域，通过协作完成复杂任务',
+        components: ['需求分析师', '代码工程师', '质量守护者', '运维专家', '架构师'],
+        features: ['角色专业化', '能力互补', '协作决策', '知识共享'] },
+      { number: 4, name: '工具链适配层', nameEn: 'Toolchain Adapter', icon: 'plug', iconColor: 'amber',
+        description: '抽象的外部工具集成接口，支持多种工具的统一接入',
+        components: ['需求适配器', '代码适配器', '质量适配器', '构建适配器', '测试适配器', '部署适配器'],
+        features: ['统一接口', '协议转换', '数据标准化', '错误处理'] },
+      { number: 5, name: '外部企业系统', nameEn: 'Enterprise Systems', icon: 'cloud', iconColor: 'red',
+        description: '企业内部的存量系统集成，代表实际生产环境中的各种工具和平台',
+        components: ['需求管理平台', '代码仓库', '测试平台', '部署平台', '可观测性平台'],
+        features: ['异构系统集成', '数据同步', '单点登录', '权限管理'] },
+    ];
+
+    const AGENT_TOOLCHAIN_MAPPING = [
+      { agent: '需求分析师', role: 'analyst', tools: ['需求管理平台', '设计协作平台'], scope: '需求解析, 方案评审' },
+      { agent: '代码工程师', role: 'engineer', tools: ['代码仓库', '代码质量平台', '构建引擎'], scope: '代码审查, 构建触发' },
+      { agent: '质量守护者', role: 'qa', tools: ['测试平台', '代码质量平台'], scope: '测试执行, 质量度量' },
+      { agent: '运维专家', role: 'ops', tools: ['部署平台', '制品仓库', '可观测性平台'], scope: '部署管理, 监控告警' },
+      { agent: '架构师', role: 'architect', tools: ['审计合规平台', '代码质量平台'], scope: '规范治理, 架构评审' },
+      { agent: '编排引擎', role: 'orchestrator', tools: ['全部工具链'], scope: '流程编排, Agent 调度' },
+    ];
+
+    function App() {
+      const [expandedLayer, setExpandedLayer] = useState(null);
+
+      const toggleLayer = (layerNum) => {
+        setExpandedLayer(expandedLayer === layerNum ? null : layerNum);
+      };
+
+      const renderLayerIcon = (icon) => {
+        const icons = {
+          'message-circle': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
+          'git-branch': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>,
+          'users': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+          'plug': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8z"/></svg>,
+          'cloud': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>,
+        };
+        return icons[icon] || icons['cloud'];
+      };
+
+      return (
+        <div className="app-container">
+          {/* Sidebar */}
+          <div className="sidebar">
+            <div className="sidebar-header">
+              <div className="logo-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                  <polyline points="2 17 12 22 22 17"/>
+                  <polyline points="2 12 12 17 22 12"/>
+                </svg>
+              </div>
+              <div className="logo-text">
+                <span className="logo-title">AgentCenter</span>
+                <span className="logo-subtitle">AI 编排工作台</span>
+              </div>
+            </div>
+
+            <div className="sidebar-content">
+              <div className="sidebar-section">
+                <div className="sidebar-section-title">视图</div>
+                <div className="nav-item" onClick={() => window.location.href='/a-version.html'}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="7" height="7"/>
+                    <rect x="14" y="3" width="7" height="7"/>
+                    <rect x="14" y="14" width="7" height="7"/>
+                    <rect x="3" y="14" width="7" height="7"/>
+                  </svg>
+                  智能总览
+                </div>
+                <div className="nav-item" onClick={() => window.location.href='/a-version-view2.html'}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                  </svg>
+                  对话编排
+                </div>
+                <div className="nav-item" onClick={() => window.location.href='/a-version-view3.html'}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                  </svg>
+                  编排监控
+                </div>
+                <div className="nav-item" onClick={() => window.location.href='/a-version-view4.html'}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <circle cx="19" cy="5" r="2"/>
+                    <circle cx="5" cy="5" r="2"/>
+                    <circle cx="5" cy="19" r="2"/>
+                    <circle cx="19" cy="19" r="2"/>
+                    <line x1="12" y1="9" x2="12" y2="3"/>
+                    <line x1="14.5" y1="10.5" x2="17.5" y2="7.5"/>
+                    <line x1="9.5" y1="10.5" x2="6.5" y2="7.5"/>
+                    <line x1="14.5" y1="13.5" x2="17.5" y2="16.5"/>
+                    <line x1="9.5" y1="13.5" x2="6.5" y2="16.5"/>
+                  </svg>
+                  服务拓扑
+                </div>
+                <div className="nav-item active">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                    <line x1="3" y1="9" x2="21" y2="9"/>
+                    <line x1="9" y1="21" x2="9" y2="9"/>
+                  </svg>
+                  架构说明
+                </div>
+              </div>
+
+              <div className="nav-divider" />
+
+              <div className="sidebar-section">
+                <div className="sidebar-section-title">智能体</div>
+                {agents.map(agent => (
+                  <div key={agent.id} className={`agent-card ${agent.status === 'working' ? 'active' : ''}`}>
+                    <div className="agent-header">
+                      <span className="agent-name">{agent.name}</span>
+                      <span className={`agent-status ${agent.status}`}>
+                        <span className="dot" />
+                        {agent.status === 'working' ? '工作中' : '空闲'}
+                      </span>
+                    </div>
+                    <div className="agent-action">{agent.action}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="engine-status">
+              <div className="engine-header">
+                <div className="engine-dot" />
+                <span className="engine-title">编排引擎</span>
+              </div>
+              <span className="engine-subtitle">在线 · 当前任务 1</span>
+            </div>
+          </div>
+
+          {/* Main Content */}
+          <div className="main-content">
+            {/* Top Bar */}
+            <div className="top-bar">
+              <div className="top-bar-left">
+                <div className="ai-status">
+                  <div className="ai-status-dot" />
+                  <span className="ai-status-text">AI 在线</span>
+                </div>
+              </div>
+              <div className="top-bar-center">
+                <div className="search-bar">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="11" cy="11" r="8"/>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                  </svg>
+                  <input type="text" placeholder="输入命令或问题..." />
+                </div>
+              </div>
+              <div className="top-bar-right">
+                <div className="top-bar-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                  </svg>
+                </div>
+                <div className="user-avatar">张</div>
+              </div>
+            </div>
+
+            {/* View Content */}
+            <div className="view-content">
+              {/* Title Bar */}
+              <div className="arch-title-bar">
+                <div className="arch-title-left">
+                  <div className="arch-title">架构说明</div>
+                  <div className="arch-subtitle">AI 编排层与企业 DevOps 系统对接全景</div>
+                </div>
+                <div className="arch-title-right">
+                  <div className="arch-badge">7 层架构</div>
+                </div>
+              </div>
+
+              {/* Layered Architecture Diagram */}
+              <div className="layer-diagram">
+                <div className="layer-diagram-header">
+                  <div className="layer-diagram-title">分层架构视图</div>
+                  <div className="layer-legend">
+                    <div className="legend-item">
+                      <div className="legend-dot core" />
+                      <span>核心层</span>
+                    </div>
+                    <div className="legend-item">
+                      <div className="legend-dot side" />
+                      <span>上下文</span>
+                    </div>
+                    <div className="legend-item">
+                      <div className="legend-dot security" />
+                      <span>安全审计</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="layers-container">
+                  {/* Layer 1 */}
+                  <div className="layer-row">
+                    <div
+                      className={`layer-card ${LAYERS[0].isCore ? 'core' : ''} ${expandedLayer === 1 ? 'expanded' : ''}`}
+                      onClick={() => toggleLayer(1)}
+                    >
+                      <div className="layer-header">
+                        <div className="layer-number layer-1">{LAYERS[0].number}</div>
+                        <div className="layer-name">{LAYERS[0].name}</div>
+                        <div className="layer-name-en">{LAYERS[0].nameEn}</div>
+                        <div className="layer-expand-icon">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="6 9 12 15 18 9"/>
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="layer-desc">{LAYERS[0].description}</div>
+                      <div className="layer-details">
+                        <div className="layer-details-inner">
+                          <div className="detail-group">
+                            <h4>核心组件</h4>
+                            <ul>
+                              {LAYERS[0].components.map((c, i) => <li key={i}>{c}</li>)}
+                            </ul>
+                          </div>
+                          <div className="detail-group">
+                            <h4>关键能力</h4>
+                            <ul>
+                              {LAYERS[0].features.map((f, i) => <li key={i}>{f}</li>)}
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Flow Arrow 1-2 */}
+                  <div className="flow-arrow bidirectional">
+                    <div className="flow-arrow-line" />
+                    <span className="flow-label">双向数据流</span>
+                  </div>
+
+                  {/* Layer 2 - Core */}
+                  <div className="layer-row">
+                    <div
+                      className={`layer-card core ${expandedLayer === 2 ? 'expanded' : ''}`}
+                      onClick={() => toggleLayer(2)}
+                    >
+                      <div className="layer-header">
+                        <div className="layer-number layer-2">{LAYERS[1].number}</div>
+                        <div className="layer-name">{LAYERS[1].name}</div>
+                        <div className="layer-name-en">{LAYERS[1].nameEn}</div>
+                        <div className="layer-expand-icon">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="6 9 12 15 18 9"/>
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="layer-desc">{LAYERS[1].description}</div>
+                      <div className="layer-details">
+                        <div className="layer-details-inner">
+                          <div className="detail-group">
+                            <h4>核心组件</h4>
+                            <ul>
+                              {LAYERS[1].components.map((c, i) => <li key={i}>{c}</li>)}
+                            </ul>
+                          </div>
+                          <div className="detail-group">
+                            <h4>关键能力</h4>
+                            <ul>
+                              {LAYERS[1].features.map((f, i) => <li key={i}>{f}</li>)}
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Flow Arrow 2-3 */}
+                  <div className="flow-arrow">
+                    <div className="flow-arrow-line" />
+                    <span className="flow-label">Agent 调度</span>
+                  </div>
+
+                  {/* Layer 3 - Agent Squad */}
+                  <div className="layer-row">
+                    <div
+                      className={`layer-card ${expandedLayer === 3 ? 'expanded' : ''}`}
+                      onClick={() => toggleLayer(3)}
+                    >
+                      <div className="layer-header">
+                        <div className="layer-number layer-3">{LAYERS[2].number}</div>
+                        <div className="layer-name">{LAYERS[2].name}</div>
+                        <div className="layer-name-en">{LAYERS[2].nameEn}</div>
+                        <div className="layer-expand-icon">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="6 9 12 15 18 9"/>
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="layer-desc">{LAYERS[2].description}</div>
+                      <div className="layer-details">
+                        <div className="layer-details-inner">
+                          <div className="detail-group">
+                            <h4>核心组件</h4>
+                            <ul>
+                              {LAYERS[2].components.map((c, i) => <li key={i}>{c}</li>)}
+                            </ul>
+                          </div>
+                          <div className="detail-group">
+                            <h4>关键能力</h4>
+                            <ul>
+                              {LAYERS[2].features.map((f, i) => <li key={i}>{f}</li>)}
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Flow Arrow 3-4 */}
+                  <div className="flow-arrow">
+                    <div className="flow-arrow-line" />
+                    <span className="flow-label">工具调用</span>
+                  </div>
+
+                  {/* Layer 4 */}
+                  <div className="layer-row">
+                    <div
+                      className={`layer-card ${expandedLayer === 4 ? 'expanded' : ''}`}
+                      onClick={() => toggleLayer(4)}
+                    >
+                      <div className="layer-header">
+                        <div className="layer-number layer-4">{LAYERS[3].number}</div>
+                        <div className="layer-name">{LAYERS[3].name}</div>
+                        <div className="layer-name-en">{LAYERS[3].nameEn}</div>
+                        <div className="layer-expand-icon">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="6 9 12 15 18 9"/>
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="layer-desc">{LAYERS[3].description}</div>
+                      <div className="layer-details">
+                        <div className="layer-details-inner">
+                          <div className="detail-group">
+                            <h4>核心组件</h4>
+                            <ul>
+                              {LAYERS[3].components.map((c, i) => <li key={i}>{c}</li>)}
+                            </ul>
+                          </div>
+                          <div className="detail-group">
+                            <h4>关键能力</h4>
+                            <ul>
+                              {LAYERS[3].features.map((f, i) => <li key={i}>{f}</li>)}
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Flow Arrow 4-5 */}
+                  <div className="flow-arrow">
+                    <div className="flow-arrow-line" />
+                    <span className="flow-label">API 调用</span>
+                  </div>
+
+                  {/* Layer 5 */}
+                  <div className="layer-row">
+                    <div
+                      className={`layer-card ${expandedLayer === 5 ? 'expanded' : ''}`}
+                      onClick={() => toggleLayer(5)}
+                    >
+                      <div className="layer-header">
+                        <div className="layer-number layer-5">{LAYERS[4].number}</div>
+                        <div className="layer-name">{LAYERS[4].name}</div>
+                        <div className="layer-name-en">{LAYERS[4].nameEn}</div>
+                        <div className="layer-expand-icon">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="6 9 12 15 18 9"/>
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="layer-desc">{LAYERS[4].description}</div>
+                      <div className="layer-details">
+                        <div className="layer-details-inner">
+                          <div className="detail-group">
+                            <h4>核心组件</h4>
+                            <ul>
+                              {LAYERS[4].components.map((c, i) => <li key={i}>{c}</li>)}
+                            </ul>
+                          </div>
+                          <div className="detail-group">
+                            <h4>关键能力</h4>
+                            <ul>
+                              {LAYERS[4].features.map((f, i) => <li key={i}>{f}</li>)}
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Side Layers */}
+                <div className="layers-with-sides" style={{ marginTop: '20px' }}>
+                  <div className="side-layers">
+                    <div className="side-layer-card memory">
+                      <div className="side-layer-title">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2">
+                          <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                          <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+                          <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+                        </svg>
+                        Memory/Context
+                      </div>
+                      <div className="side-layer-desc">上下文管理与会话记忆，支持跨会话上下文继承</div>
+                    </div>
+                  </div>
+
+                  <div className="side-connector">
+                    <div className="connector-line" />
+                    <div className="connector-dots">
+                      <div className="connector-dot" />
+                      <div className="connector-dot" />
+                      <div className="connector-dot" />
+                    </div>
+                    <div className="connector-line" />
+                  </div>
+
+                  <div className="side-layers">
+                    <div className="side-layer-card security">
+                      <div className="side-layer-title">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2">
+                          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        </svg>
+                        安全审计
+                      </div>
+                      <div className="side-layer-desc">全链路安全审计与合规检查，保障系统安全性</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Agent-Toolchain Mapping Table */}
+              <div className="toolchain-section">
+                <div className="section-header">
+                  <div className="section-title">Agent 工具链映射表</div>
+                </div>
+                <table className="toolchain-table">
+                  <thead>
+                    <tr>
+                      <th>Agent</th>
+                      <th>对接工具链</th>
+                      <th>职责范围</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {AGENT_TOOLCHAIN_MAPPING.map((item, index) => (
+                      <tr key={index}>
+                        <td>
+                          <div className="agent-cell">
+                            <div className={`agent-avatar-small ${item.role}`}>
+                              {item.agent.charAt(0)}
+                            </div>
+                            {item.agent}
+                          </div>
+                        </td>
+                        <td>
+                          <div className="tool-tags">
+                            {item.tools.map((tool, i) => (
+                              <span key={i} className="tool-tag">{tool}</span>
+                            ))}
+                          </div>
+                        </td>
+                        <td>{item.scope}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Runtime Mode Comparison */}
+              <div className="runtime-comparison">
+                <div className="runtime-card current">
+                  <div className="runtime-header">
+                    <div className="runtime-icon current">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <polyline points="12 6 12 12 16 14"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <div className="runtime-title">当前演示模式</div>
+                      <div className="runtime-subtitle">Mock Runtime</div>
+                    </div>
+                  </div>
+                  <div className="runtime-features">
+                    <div className="runtime-feature current-feature">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                      模拟数据驱动
+                    </div>
+                    <div className="runtime-feature current-feature">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                      确定性的事件时间线
+                    </div>
+                    <div className="runtime-feature current-feature">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                      可控制的演示流程
+                    </div>
+                  </div>
+                </div>
+
+                <div className="runtime-card target">
+                  <div className="runtime-header">
+                    <div className="runtime-icon target">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <circle cx="12" cy="12" r="6"/>
+                        <circle cx="12" cy="12" r="2"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <div className="runtime-title">未来目标</div>
+                      <div className="runtime-subtitle">Real Adapter Runtime</div>
+                    </div>
+                  </div>
+                  <div className="runtime-features">
+                    <div className="runtime-feature target-feature">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                      真实外部系统集成
+                    </div>
+                    <div className="runtime-feature target-feature">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                      实时数据同步
+                    </div>
+                    <div className="runtime-feature target-feature">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                      企业级安全合规
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>

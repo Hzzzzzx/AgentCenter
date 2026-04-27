@@ -1,0 +1,242 @@
+- generic [ref=e3]:
+  - button "故事模式" [ref=e4] [cursor=pointer]: 故事模式
+  - complementary [ref=e5]:
+    - generic [ref=e7]:
+      - generic [ref=e9]: AgentCenter
+      - generic [ref=e10]: v2.0
+    - generic [ref=e11]:
+      - generic [ref=e12]:
+        - generic [ref=e13]: 角色切换
+        - generic [ref=e16] [cursor=pointer]: 研发团队
+        - generic [ref=e18]:
+          - generic [ref=e21] [cursor=pointer]: 管理层
+          - generic [ref=e24] [cursor=pointer]: 产品团队
+          - generic [ref=e27] [cursor=pointer]: 研发团队
+          - generic [ref=e30] [cursor=pointer]: 运维团队
+          - generic [ref=e33] [cursor=pointer]: 质量团队
+          - generic [ref=e36] [cursor=pointer]: 架构团队
+      - generic [ref=e37]:
+        - generic [ref=e38]: 工作台
+        - generic [ref=e41] [cursor=pointer]: 总览
+        - generic [ref=e44] [cursor=pointer]: 对话
+        - generic [ref=e47] [cursor=pointer]: 工作流
+        - generic [ref=e50] [cursor=pointer]: Agent 管理
+        - generic [ref=e53] [cursor=pointer]: 架构视图
+      - generic [ref=e54]:
+        - generic [ref=e55]: DevOps 工具链
+        - generic [ref=e56] [cursor=pointer]:
+          - generic [ref=e59]: 需求管理平台
+          - generic [ref=e60]: 已连接
+        - generic [ref=e61] [cursor=pointer]:
+          - generic [ref=e64]: 设计协作平台
+          - generic [ref=e65]: 已连接
+        - generic [ref=e66] [cursor=pointer]:
+          - generic [ref=e69]: 代码仓库
+          - generic [ref=e70]: 已连接
+        - generic [ref=e71] [cursor=pointer]:
+          - generic [ref=e74]: 代码质量平台
+          - generic [ref=e75]: 已连接
+        - generic [ref=e76] [cursor=pointer]:
+          - generic [ref=e79]: 构建引擎
+          - generic [ref=e80]: 延迟
+        - generic [ref=e81] [cursor=pointer]:
+          - generic [ref=e84]: 测试平台
+          - generic [ref=e85]: 已连接
+        - generic [ref=e86] [cursor=pointer]:
+          - generic [ref=e89]: 制品仓库
+          - generic [ref=e90]: 已连接
+        - generic [ref=e91] [cursor=pointer]:
+          - generic [ref=e94]: 部署平台
+          - generic [ref=e95]: 已连接
+        - generic [ref=e96] [cursor=pointer]:
+          - generic [ref=e99]: 可观测性平台
+          - generic [ref=e100]: 已连接
+        - generic [ref=e101] [cursor=pointer]:
+          - generic [ref=e104]: 告警通道
+          - generic [ref=e105]: 已连接
+      - generic [ref=e106]:
+        - generic [ref=e107]: 智能体状态
+        - generic [ref=e108] [cursor=pointer]:
+          - generic [ref=e109]:
+            - generic [ref=e110]: 需求分析 Agent
+            - generic [ref=e111]: 空闲
+          - generic [ref=e113]: 等待下一个任务
+        - generic [ref=e114] [cursor=pointer]:
+          - generic [ref=e115]:
+            - generic [ref=e116]: 代码审查 Agent
+            - generic [ref=e117]: 工作中
+          - generic [ref=e119]: 审查设计中
+        - generic [ref=e120] [cursor=pointer]:
+          - generic [ref=e121]:
+            - generic [ref=e122]: 部署编排 Agent
+            - generic [ref=e123]: 空闲
+          - generic [ref=e125]: 等待下一个任务
+        - generic [ref=e126] [cursor=pointer]:
+          - generic [ref=e127]:
+            - generic [ref=e128]: 监控预警 Agent
+            - generic [ref=e129]: 告警中
+          - generic [ref=e131]: 服务延迟预警
+    - generic [ref=e134] [cursor=pointer]: 系统设置
+  - generic [ref=e135]:
+    - navigation [ref=e136]:
+      - textbox "搜索需求、服务、工单..." [ref=e142]
+      - generic [ref=e143]:
+        - generic [ref=e146] [cursor=pointer]: "3"
+        - generic [ref=e149] [cursor=pointer]:
+          - generic [ref=e150]: 研
+          - generic [ref=e151]:
+            - generic [ref=e152]: 研发团队
+            - generic [ref=e153]: 代码编写、评审、构建与日常开发协作
+    - generic [ref=e154]:
+      - generic [ref=e155]:
+        - generic [ref=e156]:
+          - generic [ref=e158]: 代码提交
+          - generic [ref=e161]: 127次
+          - generic [ref=e163]: "+15"
+        - generic [ref=e164]:
+          - generic [ref=e166]: 构建成功率
+          - generic [ref=e169]: 89%
+          - generic [ref=e171]: +3%
+        - generic [ref=e172]:
+          - generic [ref=e174]: 代码覆盖
+          - generic [ref=e177]: 76%
+          - generic [ref=e179]: +8%
+        - generic [ref=e180]:
+          - generic [ref=e182]: PR数量
+          - generic [ref=e185]: 34个
+          - generic [ref=e187]: "+6"
+      - generic [ref=e188]:
+        - generic [ref=e189]:
+          - generic [ref=e190]:
+            - generic [ref=e191]:
+              - generic [ref=e192]: 开发工作台
+              - generic [ref=e193]: 代码编写 · 评审协作 · 构建部署
+            - generic [ref=e194]:
+              - button "新建对话" [ref=e195] [cursor=pointer]
+              - button "历史记录" [ref=e196] [cursor=pointer]
+          - generic [ref=e199]: 欢迎使用 AgentCenter！ 我可以帮你完成全流程 DevOps 操作： • 需求 → "创建需求：用户登录支持二维码" • 计划 → "Sprint 进度" • 开发 → "代码审查" • 构建 → "构建镜像" • 测试 → "跑一下回归测试" • 部署 → "部署到测试环境" • 监控 → "检查服务状态" • 总览 → "总览" 试试说吧！
+          - generic [ref=e200]:
+            - textbox "输入指令或问题..." [ref=e202]
+            - button [ref=e205] [cursor=pointer]
+        - generic [ref=e207]:
+          - generic [ref=e208]:
+            - generic [ref=e209]:
+              - generic [ref=e211]: 主动预警
+              - generic [ref=e212]: 3条未读
+            - generic [ref=e214]:
+              - generic [ref=e215] [cursor=pointer]:
+                - generic [ref=e216]:
+                  - generic [ref=e217]: 构建失败 — 某服务
+                  - generic [ref=e218]: CRITICAL
+                - generic [ref=e219]: "分支 main | 时间: 14:32"
+                - generic [ref=e220]:
+                  - button "查看" [ref=e221]
+                  - button "处理" [ref=e222]
+              - generic [ref=e223] [cursor=pointer]:
+                - generic [ref=e224]:
+                  - generic [ref=e225]: 部署审批超时
+                  - generic [ref=e226]: WARNING
+                - generic [ref=e227]: "| 时间: 10:30"
+                - generic [ref=e228]:
+                  - button "查看" [ref=e229]
+                  - button "处理" [ref=e230]
+              - generic [ref=e231] [cursor=pointer]:
+                - generic [ref=e232]:
+                  - generic [ref=e233]: Sprint 14 即将结束
+                  - generic [ref=e234]: INFO
+                - generic [ref=e235]: "| 时间: 剩余 2 天"
+                - generic [ref=e236]:
+                  - button "查看" [ref=e237]
+                  - button "处理" [ref=e238]
+          - generic [ref=e239]:
+            - generic [ref=e240]:
+              - generic [ref=e242]: 智能体协作
+              - generic [ref=e243]: 1 个任务进行中
+            - generic [ref=e244]:
+              - generic [ref=e248]:
+                - generic [ref=e249]: 多阶段任务执行中
+                - generic [ref=e250]: 智能体协作任务
+              - generic [ref=e251]:
+                - generic [ref=e252]:
+                  - generic [ref=e253] [cursor=pointer]: "1"
+                  - generic [ref=e254]: 需求
+                - generic [ref=e255]: →
+                - generic [ref=e256]:
+                  - generic [ref=e257] [cursor=pointer]: "2"
+                  - generic [ref=e258]: 设计
+                - generic [ref=e259]: →
+                - generic [ref=e260]:
+                  - generic [ref=e261] [cursor=pointer]: "3"
+                  - generic [ref=e262]: 检查
+                - generic [ref=e263]: →
+                - generic [ref=e264]:
+                  - generic [ref=e265] [cursor=pointer]: "4"
+                  - generic [ref=e266]: 部署
+              - generic [ref=e267]: 设计 Agent 正在生成方案
+              - generic [ref=e271]: 2/5 步骤完成
+      - generic [ref=e272]:
+        - generic [ref=e273]:
+          - generic [ref=e274]: 全流程管线
+          - generic [ref=e275]:
+            - button "今日" [ref=e276] [cursor=pointer]
+            - button "本周" [ref=e277] [cursor=pointer]
+            - button "本月" [ref=e278] [cursor=pointer]
+        - generic [ref=e279]:
+          - generic [ref=e280]:
+            - generic [ref=e281]:
+              - generic [ref=e283] [cursor=pointer]: "23"
+              - generic [ref=e284]: 需求管理
+            - generic [ref=e287]:
+              - generic [ref=e289] [cursor=pointer]: "18"
+              - generic [ref=e290]: 设计建模
+            - generic [ref=e293]:
+              - generic [ref=e295] [cursor=pointer]: "45"
+              - generic [ref=e296]: 代码开发
+            - generic [ref=e299]:
+              - generic [ref=e301] [cursor=pointer]: "12"
+              - generic [ref=e302]: 代码检查
+            - generic [ref=e305]:
+              - generic [ref=e307] [cursor=pointer]: "31"
+              - generic [ref=e308]: 构建集成
+            - generic [ref=e311]:
+              - generic [ref=e313] [cursor=pointer]: "28"
+              - generic [ref=e314]: 测试验证
+            - generic [ref=e317]:
+              - generic [ref=e319] [cursor=pointer]: "15"
+              - generic [ref=e320]: 部署上线
+            - generic [ref=e323]:
+              - generic [ref=e325] [cursor=pointer]: "8"
+              - generic [ref=e326]: 运维监控
+          - generic [ref=e327]:
+            - generic [ref=e328]: 最近活动
+            - generic [ref=e329]:
+              - generic [ref=e330]:
+                - generic [ref=e332]: 某需求已完成设计评审
+                - generic [ref=e333]: 10:32
+              - generic [ref=e334]:
+                - generic [ref=e336]: 构建失败
+                - generic [ref=e337]: 10:28
+              - generic [ref=e338]:
+                - generic [ref=e340]: 部署成功
+                - generic [ref=e341]: 09:45
+              - generic [ref=e342]:
+                - generic [ref=e344]: Sprint 进度更新 68%
+                - generic [ref=e345]: 09:30
+      - generic [ref=e346]:
+        - generic [ref=e348]: 快捷命令
+        - generic [ref=e349]:
+          - generic [ref=e353] [cursor=pointer]:
+            - generic [ref=e354]: 代码审查
+            - generic [ref=e355]: 发起Code Review
+          - generic [ref=e359] [cursor=pointer]:
+            - generic [ref=e360]: 分支管理
+            - generic [ref=e361]: 查看分支状态
+          - generic [ref=e365] [cursor=pointer]:
+            - generic [ref=e366]: 提交记录
+            - generic [ref=e367]: 查看最近提交
+    - contentinfo [ref=e368]:
+      - generic [ref=e369]:
+        - generic [ref=e372] [cursor=pointer]: 系统运行正常
+        - generic [ref=e375] [cursor=pointer]: 10/10 工具已连接
+        - generic [ref=e378] [cursor=pointer]: 4 个智能体在线
+      - generic [ref=e379]: v2.0.1

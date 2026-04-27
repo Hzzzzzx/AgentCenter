@@ -1,0 +1,1397 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgentCenter · 编排监控</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg-primary: #0f172a;
+      --bg-secondary: #1e293b;
+      --bg-tertiary: #0c1222;
+      --bg-insight: #1a2744;
+      --bg-card: rgba(30, 41, 59, 0.7);
+      --bg-card-hover: rgba(30, 41, 59, 0.9);
+      --border-color: #334155;
+      --border-color-light: rgba(148, 163, 184, 0.1);
+      --text-primary: #e2e8f0;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent-cyan: #06b6d4;
+      --accent-cyan-dim: rgba(6, 182, 212, 0.15);
+      --accent-cyan-glow: rgba(6, 182, 212, 0.3);
+      --accent-blue: #3b82f6;
+      --success: #22c55e;
+      --success-dim: rgba(34, 197, 94, 0.15);
+      --warning: #f59e0b;
+      --error: #ef4444;
+      --glow-cyan: rgba(6, 182, 212, 0.4);
+      --waiting: #475569;
+      --waiting-dim: rgba(71, 85, 105, 0.15);
+    }
+
+    body {
+      font-family: 'Noto Sans SC', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    #root { height: 100%; }
+
+    .app-container {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 240px;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      z-index: 100;
+    }
+
+    .sidebar-header {
+      height: 56px;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--border-color);
+      gap: 12px;
+    }
+
+    .logo-icon {
+      width: 28px;
+      height: 28px;
+      background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-blue) 100%);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .logo-icon svg { width: 16px; height: 16px; color: white; }
+
+    .logo-text {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .logo-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      line-height: 1.2;
+    }
+
+    .logo-subtitle {
+      font-size: 10px;
+      color: var(--text-muted);
+      line-height: 1.2;
+    }
+
+    .sidebar-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 0;
+    }
+
+    .sidebar-section {
+      padding: 0 12px;
+      margin-bottom: 16px;
+    }
+
+    .sidebar-section-title {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 0 8px;
+      margin-bottom: 8px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: 13px;
+      transition: all 0.15s ease;
+      border-left: 2px solid transparent;
+      margin-bottom: 2px;
+    }
+
+    .nav-item:hover {
+      background: rgba(148, 163, 184, 0.05);
+      color: var(--text-primary);
+    }
+
+    .nav-item.active {
+      background: rgba(6, 182, 212, 0.1);
+      color: var(--accent-cyan);
+      border-left-color: var(--accent-cyan);
+    }
+
+    .nav-item svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+    }
+
+    .nav-divider {
+      height: 1px;
+      background: var(--border-color);
+      margin: 12px 12px;
+    }
+
+    /* Agent Cards */
+    .agent-card {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      border-left: 2px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .agent-card:hover {
+      background: rgba(15, 23, 42, 0.8);
+    }
+
+    .agent-card.completed {
+      border-left-color: var(--success);
+    }
+
+    .agent-card.active {
+      border-left-color: var(--accent-cyan);
+      background: rgba(6, 182, 212, 0.08);
+    }
+
+    .agent-card.active .agent-status {
+      animation: pulse-glow 2s infinite;
+    }
+
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 0 4px var(--accent-cyan); }
+      50% { box-shadow: 0 0 12px var(--accent-cyan); }
+    }
+
+    .agent-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+
+    .agent-name {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .agent-status {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .agent-status.idle {
+      background: rgba(34, 197, 94, 0.15);
+      color: var(--success);
+    }
+
+    .agent-status.working {
+      background: rgba(6, 182, 212, 0.15);
+      color: var(--accent-cyan);
+    }
+
+    .agent-status.waiting {
+      background: var(--waiting-dim);
+      color: var(--waiting);
+    }
+
+    .agent-status .dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .agent-status.working .dot {
+      animation: blink 1s infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    .agent-action {
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .agent-card.active .agent-action {
+      color: var(--text-secondary);
+    }
+
+    /* Engine Status */
+    .engine-status {
+      padding: 12px;
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 8px;
+      margin: 0 12px;
+    }
+
+    .engine-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .engine-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(1.1); }
+    }
+
+    .engine-title {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .engine-subtitle {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* Main Content */
+    .main-content {
+      flex: 1;
+      margin-left: 240px;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    /* Top Bar */
+    .top-bar {
+      height: 48px;
+      background: var(--bg-primary);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 16px;
+    }
+
+    .top-bar-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .ai-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 10px;
+      background: rgba(6, 182, 212, 0.1);
+      border-radius: 16px;
+      border: 1px solid rgba(6, 182, 212, 0.2);
+    }
+
+    .ai-status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent-cyan);
+      animation: pulse 2s infinite;
+    }
+
+    .ai-status-text {
+      font-size: 12px;
+      color: var(--accent-cyan);
+      font-weight: 500;
+    }
+
+    .top-bar-center {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+    }
+
+    .search-bar {
+      width: 100%;
+      max-width: 400px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .search-bar:focus-within {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 0 2px var(--accent-cyan-dim);
+    }
+
+    .search-bar svg {
+      width: 14px;
+      height: 14px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .search-bar input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      font-size: 13px;
+      color: var(--text-primary);
+    }
+
+    .search-bar input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .top-bar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .top-bar-icon {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      transition: all 0.15s ease;
+      position: relative;
+    }
+
+    .top-bar-icon:hover {
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+    }
+
+    .top-bar-icon svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .notification-badge {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      width: 14px;
+      height: 14px;
+      background: var(--error);
+      border-radius: 50%;
+      font-size: 9px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+    }
+
+    .user-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 600;
+      color: white;
+      cursor: pointer;
+    }
+
+    /* Content Area */
+    .content-area {
+      flex: 1;
+      padding: 20px 24px;
+      overflow-y: auto;
+    }
+
+    /* Scene Header */
+    .scene-header {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 20px 24px;
+      margin-bottom: 20px;
+    }
+
+    .scene-title {
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .scene-title.completed {
+      color: var(--success);
+    }
+
+    .scene-subtitle {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+    }
+
+    .scene-progress {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .progress-bar {
+      flex: 1;
+      height: 8px;
+      background: var(--border-color);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent-cyan), var(--accent-blue));
+      border-radius: 4px;
+      transition: width 0.8s ease;
+    }
+
+    .progress-fill.completed {
+      background: linear-gradient(90deg, var(--success), #4ade80);
+    }
+
+    .progress-text {
+      font-size: 13px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+
+    .progress-time {
+      font-size: 12px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    /* Agent Flow Section */
+    .agent-flow-section {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+
+    .flow-container {
+      display: flex;
+      align-items: flex-start;
+      gap: 0;
+      position: relative;
+      padding-top: 10px;
+    }
+
+    .agent-node {
+      width: 160px;
+      background: rgba(15, 23, 42, 0.6);
+      border-radius: 10px;
+      padding: 14px;
+      position: relative;
+      border-left: 3px solid var(--waiting);
+      transition: all 0.4s ease;
+      flex-shrink: 0;
+    }
+
+    .agent-node.completed {
+      border-left-color: var(--success);
+      opacity: 1;
+    }
+
+    .agent-node.active {
+      border-left-color: var(--accent-cyan);
+      opacity: 1;
+      box-shadow: 0 0 20px var(--accent-cyan-glow);
+    }
+
+    .agent-node.waiting {
+      border-left-color: var(--waiting);
+      border-left-style: dashed;
+      opacity: 0.5;
+    }
+
+    .node-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .node-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+
+    .agent-node.completed .node-icon {
+      background: var(--success-dim);
+    }
+
+    .agent-node.active .node-icon {
+      background: var(--accent-cyan-dim);
+    }
+
+    .agent-node.waiting .node-icon {
+      background: var(--waiting-dim);
+    }
+
+    .node-status-badge {
+      position: absolute;
+      top: -8px;
+      right: -8px;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      border: 2px solid var(--bg-secondary);
+    }
+
+    .agent-node.completed .node-status-badge {
+      background: var(--success);
+    }
+
+    .agent-node.active .node-status-badge {
+      background: var(--accent-cyan);
+      animation: spin 2s linear infinite;
+    }
+
+    .agent-node.waiting .node-status-badge {
+      background: var(--waiting);
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .node-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+
+    .node-state {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .node-divider {
+      height: 1px;
+      background: var(--border-color);
+      margin: 8px 0;
+    }
+
+    .node-tool {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .node-tool-detail {
+      font-size: 10px;
+      color: var(--text-muted);
+      opacity: 0.7;
+    }
+
+    .node-timer {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 8px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* Connector Lines */
+    .connector {
+      flex: 1;
+      height: 60px;
+      position: relative;
+      display: flex;
+      align-items: center;
+      min-width: 40px;
+    }
+
+    .connector-line {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      right: 0;
+      height: 2px;
+      transform: translateY(-50%);
+    }
+
+    .connector-line.completed {
+      background: var(--success);
+    }
+
+    .connector-line.active {
+      background: repeating-linear-gradient(
+        90deg,
+        var(--accent-cyan) 0px,
+        var(--accent-cyan) 8px,
+        transparent 8px,
+        transparent 16px
+      );
+      animation: connector-flow 1s linear infinite;
+    }
+
+    @keyframes connector-flow {
+      0% { background-position: 0 0; }
+      100% { background-position: 16px 0; }
+    }
+
+    .connector-line.waiting {
+      background: repeating-linear-gradient(
+        90deg,
+        var(--waiting) 0px,
+        var(--waiting) 4px,
+        transparent 4px,
+        transparent 10px
+      );
+    }
+
+    .moving-dot {
+      position: absolute;
+      top: 50%;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-cyan);
+      transform: translateY(-50%);
+      box-shadow: 0 0 10px var(--accent-cyan);
+      animation: move-dot 1.5s linear infinite;
+    }
+
+    @keyframes move-dot {
+      0% { left: 0; opacity: 0; }
+      10% { opacity: 1; }
+      90% { opacity: 1; }
+      100% { left: calc(100% - 8px); opacity: 0; }
+    }
+
+    /* Tool Indicators */
+    .tool-indicators {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 16px;
+      padding: 0 10px;
+    }
+
+    .tool-indicator {
+      width: 160px;
+      text-align: center;
+    }
+
+    .tool-name {
+      font-size: 11px;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+
+    .tool-name .spinner {
+      animation: spin 1s linear infinite;
+    }
+
+    /* Handoff Animation Bar */
+    .handoff-bar {
+      background: linear-gradient(90deg, var(--accent-cyan-dim), var(--bg-insight), var(--accent-cyan-dim));
+      background-size: 200% 100%;
+      animation: gradient-shift 3s ease infinite;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin: 16px 0;
+      text-align: center;
+      font-size: 12px;
+      color: var(--accent-cyan);
+      border: 1px solid rgba(6, 182, 212, 0.2);
+    }
+
+    @keyframes gradient-shift {
+      0%, 100% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+    }
+
+    /* Execution Log Section */
+    .log-section {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 20px;
+      flex: 1;
+      min-height: 280px;
+      max-height: 350px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .log-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .log-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .log-container {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .log-container::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .log-container::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .log-container::-webkit-scrollbar-thumb {
+      background: var(--border-color);
+      border-radius: 3px;
+    }
+
+    .log-entry {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      line-height: 1.5;
+      transition: all 0.3s ease;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .log-entry:hover {
+      background: rgba(15, 23, 42, 0.4);
+    }
+
+    .log-timestamp {
+      color: var(--text-muted);
+      font-size: 11px;
+      white-space: nowrap;
+      min-width: 60px;
+    }
+
+    .log-icon {
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+
+    .log-content {
+      flex: 1;
+      color: var(--text-secondary);
+    }
+
+    .log-highlight {
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+
+    /* Handoff Log Entry */
+    .log-entry.handoff {
+      background: var(--bg-insight);
+      border: 1px solid rgba(6, 182, 212, 0.2);
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px 16px;
+      margin: 8px 0;
+    }
+
+    .handoff-divider {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--accent-cyan);
+      margin-bottom: 4px;
+    }
+
+    .handoff-divider::before,
+    .handoff-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(6, 182, 212, 0.3), transparent);
+    }
+
+    .handoff-main {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+    }
+
+    .handoff-from {
+      color: var(--success);
+    }
+
+    .handoff-arrow {
+      color: var(--accent-cyan);
+    }
+
+    .handoff-to {
+      color: var(--accent-cyan);
+    }
+
+    .handoff-reason {
+      font-size: 11px;
+      color: var(--text-muted);
+      padding-left: 24px;
+    }
+
+    /* Footer Bar */
+    .footer-bar {
+      height: 36px;
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 20px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .footer-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .footer-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+    }
+
+    .footer-dot.online {
+      background: var(--success);
+    }
+
+    .footer-dot.offline {
+      background: var(--error);
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // Agent data
+    const AGENTS = [
+      { id: 1, name: '需求分析', icon: '📋', tool: '需求管理平台', toolDetail: 'REQ-102 状态确认' },
+      { id: 2, name: '代码审查', icon: '🔍', tool: '代码质量平台', toolDetail: 'PR #287 扫描完成' },
+      { id: 3, name: '质量验证', icon: '🔧', tool: '构建引擎', toolDetail: '构建中...' },
+      { id: 4, name: '部署编排', icon: '🚀', tool: '部署平台', toolDetail: '等待执行' },
+      { id: 5, name: '监控预警', icon: '📊', tool: '可观测性平台', toolDetail: '等待执行' },
+    ];
+
+    // Initial log entries
+    const INITIAL_LOGS = [
+      { time: '14:20:00', icon: '🤖', type: 'system', content: 'AI 编排器 · 启动部署编排流程', highlight: '启动部署编排流程' },
+      { time: '14:25:47', icon: '✅', type: 'success', content: '需求分析Agent → 需求管理平台 · REQ-102 状态确认', highlight: 'REQ-102 状态确认' },
+      { time: '14:28:03', icon: '🔄', type: 'running', content: '质量验证Agent → 构建引擎 · 构建 #428 进行中 (步骤 3/5)', highlight: '步骤 3/5' },
+      { time: '14:32:15', icon: '✅', type: 'success', content: '代码审查Agent → 代码质量平台 · PR #287 扫描完成，发现 0 个问题', highlight: '0 个问题' },
+    ];
+
+    // Phase transitions for auto-play
+    const PHASES = [
+      { delay: 3000, log: { time: '14:35:22', icon: '🔄', type: 'running', content: '质量验证Agent → 构建引擎 · 构建 #428 步骤 4/5 完成', highlight: '步骤 4/5 完成' } },
+      { delay: 6000, log: { time: '14:38:45', icon: '✅', type: 'success', content: '质量验证Agent → 构建引擎 · 构建 #428 步骤 5/5 完成 · 构建成功', highlight: '构建成功' } },
+      { delay: 8000, nodeTransition: { nodeIndex: 2, from: 'active', to: 'completed' }, nextActive: 3, log: { time: '14:40:12', icon: '🤖', type: 'handoff', from: '质量验证 Agent', to: '部署编排 Agent', reason: '构建已成功完成，开始部署编排' } },
+      { delay: 11000, log: { time: '14:42:30', icon: '🔄', type: 'running', content: '部署编排Agent → 部署平台 · 部署 identity-domain v2.3.2 进行中', highlight: '部署中' } },
+      { delay: 14000, nodeTransition: { nodeIndex: 3, from: 'active', to: 'completed' }, nextActive: 4, log: { time: '14:45:55', icon: '🤖', type: 'handoff', from: '部署编排 Agent', to: '监控预警 Agent', reason: '部署完成，开始健康检查' } },
+      { delay: 17000, log: { time: '14:48:20', icon: '✅', type: 'success', content: '监控预警Agent → 可观测性平台 · 健康检查通过 P99 180ms', highlight: 'P99 180ms' } },
+      { delay: 19000, nodeTransition: { nodeIndex: 4, from: 'active', to: 'completed' }, allComplete: true },
+    ];
+
+    // Sidebar Component
+    function Sidebar() {
+      const navItems = [
+        { icon: '📊', label: '智能总览', active: false, url: '/a-version.html' },
+        { icon: '💬', label: '对话编排', active: false, url: '/a-version-view2.html' },
+        { icon: '🔄', label: '编排监控', active: true, url: '/a-version-view3.html' },
+        { icon: '🕸️', label: '服务拓扑', active: false, url: '/a-version-view4.html' },
+        { icon: '📐', label: '架构说明', active: false, url: '/a-version-view5.html' },
+      ];
+
+      return (
+        <div className="sidebar">
+          <div className="sidebar-header">
+            <div className="logo-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+              </svg>
+            </div>
+            <div className="logo-text">
+              <div className="logo-title">AgentCenter</div>
+              <div className="logo-subtitle">AI 编排工作台</div>
+            </div>
+          </div>
+
+          <div className="sidebar-content">
+            <div className="sidebar-section">
+              <div className="sidebar-section-title">视图切换</div>
+              {navItems.map((item, idx) => (
+                <div key={idx} className={`nav-item ${item.active ? 'active' : ''}`} onClick={() => { if (item.url) window.location.href = item.url; }}>
+                  <span>{item.icon}</span>
+                  <span>{item.label}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="nav-divider" />
+
+            <div className="sidebar-section">
+              <div className="sidebar-section-title">智能体</div>
+              <div className="agent-card completed">
+                <div className="agent-header">
+                  <div className="agent-name">需求分析 Agent</div>
+                  <div className="agent-status idle">✅ 空闲</div>
+                </div>
+                <div className="agent-action">REQ-102 已确认</div>
+              </div>
+              <div className="agent-card completed">
+                <div className="agent-header">
+                  <div className="agent-name">代码审查 Agent</div>
+                  <div className="agent-status idle">✅ 空闲</div>
+                </div>
+                <div className="agent-action">PR #287 已审查</div>
+              </div>
+              <div className="agent-card active">
+                <div className="agent-header">
+                  <div className="agent-name">质量验证 Agent</div>
+                  <div className="agent-status working">
+                    <span className="dot" />
+                    执行中
+                  </div>
+                </div>
+                <div className="agent-action">构建 #428 进行中</div>
+              </div>
+              <div className="agent-card">
+                <div className="agent-header">
+                  <div className="agent-name">部署编排 Agent</div>
+                  <div className="agent-status waiting">⏳ 等待</div>
+                </div>
+                <div className="agent-action">等待质量验证</div>
+              </div>
+              <div className="agent-card">
+                <div className="agent-header">
+                  <div className="agent-name">监控预警 Agent</div>
+                  <div className="agent-status waiting">⏳ 等待</div>
+                </div>
+                <div className="agent-action">等待部署编排</div>
+              </div>
+            </div>
+
+            <div className="nav-divider" />
+
+            <div className="sidebar-section">
+              <div className="engine-status">
+                <div className="engine-header">
+                  <div className="engine-dot" />
+                  <div className="engine-title">编排引擎</div>
+                </div>
+                <div className="engine-subtitle">在线 · 当前任务 1</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Top Bar Component
+    function TopBar() {
+      return (
+        <div className="top-bar">
+          <div className="top-bar-left">
+            <div className="ai-status">
+              <div className="ai-status-dot" />
+              <span className="ai-status-text">AI 在线</span>
+            </div>
+          </div>
+
+          <div className="top-bar-center">
+            <div className="search-bar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8"/>
+                <path d="M21 21l-4.35-4.35"/>
+              </svg>
+              <input type="text" placeholder="搜索服务、需求、部署..." />
+            </div>
+          </div>
+
+          <div className="top-bar-right">
+            <div className="top-bar-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+              </svg>
+              <div className="notification-badge">3</div>
+            </div>
+            <div className="user-avatar">HZ</div>
+          </div>
+        </div>
+      );
+    }
+
+    // Agent Node Component
+    function AgentNode({ agent, state, timer }) {
+      const getStatusIcon = () => {
+        if (state === 'completed') return '✅';
+        if (state === 'active') return '🏃';
+        return '⏳';
+      };
+
+      return (
+        <div className={`agent-node ${state}`}>
+          <div className="node-header">
+            <div className="node-icon">{agent.icon}</div>
+          </div>
+          <div className="node-status-badge">{getStatusIcon()}</div>
+          <div className="node-title">{agent.name} Agent</div>
+          <div className="node-state">
+            状态: {state === 'completed' ? '已完成' : state === 'active' ? '执行中' : '等待'}
+          </div>
+          <div className="node-divider" />
+          <div className="node-tool">{agent.tool}</div>
+          <div className="node-tool-detail">{agent.toolDetail}</div>
+          <div className="node-timer">
+            <span>⏱</span> {timer}
+          </div>
+        </div>
+      );
+    }
+
+    // Connector Component
+    function Connector({ fromState, toState }) {
+      let lineClass = 'connector-line waiting';
+      let showDot = false;
+
+      if (fromState === 'completed' && toState === 'completed') {
+        lineClass = 'connector-line completed';
+      } else if (fromState === 'completed' && toState === 'active') {
+        lineClass = 'connector-line active';
+        showDot = true;
+      } else if (fromState === 'active' && toState === 'waiting') {
+        lineClass = 'connector-line waiting';
+      }
+
+      return (
+        <div className="connector">
+          <div className={lineClass} />
+          {showDot && <div className="moving-dot" />}
+        </div>
+      );
+    }
+
+    // Log Entry Component
+    function LogEntry({ entry }) {
+      if (entry.type === 'handoff') {
+        return (
+          <div className="log-entry handoff">
+            <div className="handoff-divider">🤖 交接</div>
+            <div className="handoff-main">
+              <span className="handoff-from">{entry.from} ✅</span>
+              <span className="handoff-arrow">→</span>
+              <span className="handoff-to">{entry.to} 🏃</span>
+            </div>
+            <div className="handoff-reason">交接原因: {entry.reason}</div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="log-entry">
+          <span className="log-timestamp">{entry.time}</span>
+          <span className="log-icon">{entry.icon}</span>
+          <span className="log-content">
+            {entry.highlight ? entry.content.split(entry.highlight).map((part, idx, arr) => (
+              idx < arr.length - 1 ? <span key={idx}>{part}<span className="log-highlight">{entry.highlight}</span></span> : <span key={idx}>{part}</span>
+            )) : entry.content}
+          </span>
+        </div>
+      );
+    }
+
+    // Main View 3 Component
+    function View3() {
+      const [nodeStates, setNodeStates] = useState([
+        'completed', 'completed', 'active', 'waiting', 'waiting'
+      ]);
+      const [progress, setProgress] = useState(60);
+      const [isCompleted, setIsCompleted] = useState(false);
+      const [remainingTime, setRemainingTime] = useState('预计剩余 3 分钟');
+      const [logs, setLogs] = useState(INITIAL_LOGS);
+      const [activeNodeIndex, setActiveNodeIndex] = useState(2);
+      const logRef = useRef(null);
+
+      // Auto-scroll logs
+      useEffect(() => {
+        if (logRef.current) {
+          logRef.current.scrollTop = 0;
+        }
+      }, [logs]);
+
+      // Auto-play simulation
+      useEffect(() => {
+        const timers = [];
+
+        PHASES.forEach((phase, idx) => {
+          const timer = setTimeout(() => {
+            // Add log entry if exists
+            if (phase.log) {
+              if (phase.log.type === 'handoff') {
+                setLogs(prev => [phase.log, ...prev]);
+              } else {
+                setLogs(prev => [phase.log, ...prev]);
+              }
+            }
+
+            // Node transition
+            if (phase.nodeTransition) {
+              setNodeStates(prev => {
+                const newStates = [...prev];
+                newStates[phase.nodeTransition.nodeIndex] = phase.nodeTransition.to;
+                if (phase.nextActive !== undefined) {
+                  newStates[phase.nextActive] = 'active';
+                  setActiveNodeIndex(phase.nextActive);
+                }
+                return newStates;
+              });
+            }
+
+            // Update progress
+            if (phase.allComplete) {
+              setProgress(100);
+              setIsCompleted(true);
+              setRemainingTime('已完成');
+            } else if (phase.log && phase.log.type === 'success' && phase.log.highlight.includes('步骤')) {
+              setProgress(prev => Math.min(prev + 10, 90));
+            }
+
+          }, phase.delay);
+          timers.push(timer);
+        });
+
+        return () => timers.forEach(clearTimeout);
+      }, []);
+
+      const getTimer = (index) => {
+        if (nodeStates[index] === 'completed') {
+          return ['45秒', '32秒', '78秒', '0秒', '0秒'][index];
+        }
+        if (nodeStates[index] === 'active') {
+          return '进行中';
+        }
+        return '等待';
+      };
+
+      return (
+        <div className="app-container">
+          <Sidebar />
+          <div className="main-content">
+            <TopBar />
+
+            <div className="content-area">
+              {/* Scene Header */}
+              <div className="scene-header">
+                <div className={`scene-title ${isCompleted ? 'completed' : ''}`}>
+                  {isCompleted ? '✅ 编排完成' : '🚀 部署 identity-domain v2.3.2'}
+                </div>
+                <div className="scene-subtitle">
+                  AI 正在编排 5 个智能体协同完成 · 已执行 2 分 15 秒
+                </div>
+                <div className="scene-progress">
+                  <div className="progress-bar">
+                    <div className={`progress-fill ${isCompleted ? 'completed' : ''}`} style={{ width: `${progress}%` }} />
+                  </div>
+                  <span className="progress-text">{progress}%</span>
+                  <span className="progress-time">{remainingTime}</span>
+                </div>
+              </div>
+
+              {/* Agent Flow */}
+              <div className="agent-flow-section">
+                <div className="flow-container">
+                  {AGENTS.map((agent, idx) => (
+                    <React.Fragment key={agent.id}>
+                      <AgentNode
+                        agent={agent}
+                        state={nodeStates[idx]}
+                        timer={getTimer(idx)}
+                      />
+                      {idx < AGENTS.length - 1 && (
+                        <Connector
+                          fromState={nodeStates[idx]}
+                          toState={nodeStates[idx + 1]}
+                        />
+                      )}
+                    </React.Fragment>
+                  ))}
+                </div>
+
+                <div className="handoff-bar">
+                  ═══════════════ 交接动画 ═══════════════
+                </div>
+
+                <div className="tool-indicators">
+                  <div className="tool-indicator">
+                    <div className="tool-name">📋 需求管理平台</div>
+                  </div>
+                  <div className="tool-indicator">
+                    <div className="tool-name">🔍 代码质量平台</div>
+                  </div>
+                  <div className="tool-indicator">
+                    <div className="tool-name">
+                      {nodeStates[2] === 'active' ? <span className="spinner">🔄</span> : ''}
+                      {nodeStates[2] === 'active' ? '构建引擎 (构建中...)' : '🔨 构建引擎'}
+                    </div>
+                  </div>
+                  <div className="tool-indicator">
+                    <div className="tool-name">🚀 部署平台</div>
+                  </div>
+                  <div className="tool-indicator">
+                    <div className="tool-name">📊 可观测性平台</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Execution Log */}
+              <div className="log-section">
+                <div className="log-header">
+                  <div className="log-title">
+                    <span>📋</span> 执行日志（实时）
+                  </div>
+                </div>
+                <div className="log-container" ref={logRef}>
+                  {logs.map((log, idx) => (
+                    <LogEntry key={idx} entry={log} />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="footer-bar">
+              <div className="footer-item">
+                <div className="footer-dot online" />
+                <span>连接正常</span>
+              </div>
+              <div className="footer-item">
+                <span>编排引擎: 在线</span>
+              </div>
+              <div className="footer-item">
+                <span>当前上下文: identity-domain v2.3.2</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Render
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<View3 />);
+  </script>
+</body>
+</html>

@@ -1,0 +1,1573 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgentCenter · AI 编排工作台</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg-primary: #0f172a;
+      --bg-secondary: #1e293b;
+      --bg-tertiary: #0c1222;
+      --bg-insight: #1a2744;
+      --bg-card: rgba(30, 41, 59, 0.7);
+      --bg-card-hover: rgba(30, 41, 59, 0.9);
+      --border-color: #334155;
+      --border-color-light: rgba(148, 163, 184, 0.1);
+      --text-primary: #e2e8f0;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent-cyan: #06b6d4;
+      --accent-cyan-dim: rgba(6, 182, 212, 0.15);
+      --accent-cyan-glow: rgba(6, 182, 212, 0.3);
+      --accent-blue: #3b82f6;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --error: #ef4444;
+      --glow-cyan: rgba(6, 182, 212, 0.4);
+    }
+
+    body {
+      font-family: 'Noto Sans SC', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    #root { height: 100%; }
+
+    .app-container {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 240px;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      z-index: 100;
+    }
+
+    .sidebar-header {
+      height: 56px;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--border-color);
+      gap: 12px;
+    }
+
+    .logo-icon {
+      width: 28px;
+      height: 28px;
+      background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-blue) 100%);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .logo-icon svg { width: 16px; height: 16px; color: white; }
+
+    .logo-text {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .logo-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      line-height: 1.2;
+    }
+
+    .logo-subtitle {
+      font-size: 10px;
+      color: var(--text-muted);
+      line-height: 1.2;
+    }
+
+    .sidebar-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 0;
+    }
+
+    .sidebar-section {
+      padding: 0 12px;
+      margin-bottom: 16px;
+    }
+
+    .sidebar-section-title {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 0 8px;
+      margin-bottom: 8px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: 13px;
+      transition: all 0.15s ease;
+      border-left: 2px solid transparent;
+      margin-bottom: 2px;
+    }
+
+    .nav-item:hover {
+      background: rgba(148, 163, 184, 0.05);
+      color: var(--text-primary);
+    }
+
+    .nav-item.active {
+      background: rgba(6, 182, 212, 0.1);
+      color: var(--accent-cyan);
+      border-left-color: var(--accent-cyan);
+    }
+
+    .nav-item svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+    }
+
+    .nav-divider {
+      height: 1px;
+      background: var(--border-color);
+      margin: 12px 12px;
+    }
+
+    /* Agent Cards */
+    .agent-card {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      border-left: 2px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .agent-card:hover {
+      background: rgba(15, 23, 42, 0.8);
+    }
+
+    .agent-card.active {
+      border-left-color: var(--accent-cyan);
+      background: rgba(6, 182, 212, 0.08);
+    }
+
+    .agent-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+
+    .agent-name {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .agent-status {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .agent-status.idle {
+      background: rgba(34, 197, 94, 0.15);
+      color: var(--success);
+    }
+
+    .agent-status.working {
+      background: rgba(6, 182, 212, 0.15);
+      color: var(--accent-cyan);
+    }
+
+    .agent-status .dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .agent-card.active .agent-status.working .dot {
+      animation: blink 1s infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    .agent-action {
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Engine Status */
+    .engine-status {
+      padding: 12px;
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 8px;
+      margin: 0 12px;
+    }
+
+    .engine-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .engine-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(1.1); }
+    }
+
+    .engine-title {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .engine-subtitle {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* Main Content */
+    .main-content {
+      flex: 1;
+      margin-left: 240px;
+      width: calc(100vw - 240px);
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    /* Top Bar */
+    .top-bar {
+      height: 48px;
+      background: var(--bg-primary);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 16px;
+    }
+
+    .top-bar-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .ai-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 10px;
+      background: rgba(6, 182, 212, 0.1);
+      border-radius: 16px;
+      border: 1px solid rgba(6, 182, 212, 0.2);
+    }
+
+    .ai-status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent-cyan);
+      animation: pulse 2s infinite;
+    }
+
+    .ai-status-text {
+      font-size: 12px;
+      color: var(--accent-cyan);
+      font-weight: 500;
+    }
+
+    .top-bar-center {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+    }
+
+    .search-bar {
+      width: 100%;
+      max-width: 400px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .search-bar:focus-within {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 0 2px var(--accent-cyan-dim);
+    }
+
+    .search-bar svg {
+      width: 14px;
+      height: 14px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .search-bar input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      font-size: 13px;
+      color: var(--text-primary);
+    }
+
+    .search-bar input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .top-bar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .top-bar-icon {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      transition: all 0.15s ease;
+      position: relative;
+    }
+
+    .top-bar-icon:hover {
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+    }
+
+    .user-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 600;
+      color: white;
+      cursor: pointer;
+    }
+
+    /* View Content */
+    .view-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 16px 20px;
+      gap: 16px;
+    }
+
+    /* Topology Toolbar */
+    .topology-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: var(--bg-secondary);
+      border-radius: 10px;
+      border: 1px solid var(--border-color);
+    }
+
+    .topology-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .topology-tabs {
+      display: flex;
+      gap: 8px;
+    }
+
+    .topology-tab {
+      padding: 6px 14px;
+      border-radius: 16px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      background: transparent;
+      color: var(--text-secondary);
+      border: 1px solid transparent;
+    }
+
+    .topology-tab:hover {
+      background: rgba(148, 163, 184, 0.1);
+      color: var(--text-primary);
+    }
+
+    .topology-tab.active {
+      background: var(--accent-cyan);
+      color: white;
+    }
+
+    .topology-search {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      min-width: 200px;
+    }
+
+    .topology-search:focus-within {
+      border-color: var(--accent-cyan);
+    }
+
+    .topology-search svg {
+      width: 14px;
+      height: 14px;
+      color: var(--text-muted);
+    }
+
+    .topology-search input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      font-size: 13px;
+      color: var(--text-primary);
+    }
+
+    .topology-search input::placeholder {
+      color: var(--text-muted);
+    }
+
+    /* Topology Graph Container */
+    .topology-container {
+      flex: 1;
+      background: var(--bg-secondary);
+      border-radius: 10px;
+      border: 1px solid var(--border-color);
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+      min-height: 500px;
+    }
+
+    .topology-svg {
+      width: 100%;
+      height: 100%;
+      min-height: 460px;
+    }
+
+    /* SVG Node Styles */
+    .topology-node {
+      cursor: pointer;
+      transition: transform 0.2s ease;
+    }
+
+    .topology-node:hover {
+      transform: scale(1.02);
+    }
+
+    .topology-node rect {
+      transition: all 0.2s ease;
+    }
+
+    .topology-node.selected rect {
+      stroke: var(--accent-cyan);
+      stroke-width: 2;
+      filter: drop-shadow(0 0 8px var(--glow-cyan));
+    }
+
+    .topology-node.highlighted rect {
+      stroke: var(--accent-cyan);
+      stroke-width: 2;
+      filter: drop-shadow(0 0 12px var(--glow-cyan));
+    }
+
+    .topology-node.healthy rect {
+      stroke: var(--success);
+    }
+
+    .topology-node.warning rect {
+      stroke: var(--warning);
+    }
+
+    .topology-node.error rect {
+      stroke: var(--error);
+    }
+
+    .topology-edge {
+      transition: all 0.2s ease;
+    }
+
+    .topology-edge:hover {
+      stroke: #60a5fa;
+      stroke-width: 3;
+    }
+
+    .topology-edge.warning {
+      stroke: #59492f;
+    }
+
+    .topology-edge.highlighted {
+      stroke: var(--accent-cyan);
+      stroke-width: 3;
+    }
+
+    /* Node Detail Panel */
+    .detail-panel {
+      background: var(--bg-secondary);
+      border-radius: 10px;
+      border: 1px solid var(--border-color);
+      border-top: 3px solid var(--accent-cyan);
+      padding: 20px;
+      animation: slideUp 0.3s ease;
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .detail-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .detail-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .detail-subtitle {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-left: 8px;
+      font-weight: 400;
+    }
+
+    .detail-close {
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--text-muted);
+      transition: all 0.15s ease;
+    }
+
+    .detail-close:hover {
+      background: rgba(148, 163, 184, 0.1);
+      color: var(--text-primary);
+    }
+
+    .detail-meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .detail-meta-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .health-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 12px;
+    }
+
+    .health-badge.healthy {
+      background: rgba(34, 197, 94, 0.15);
+      color: var(--success);
+    }
+
+    .health-badge.warning {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--warning);
+    }
+
+    .health-badge.error {
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--error);
+    }
+
+    .detail-stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .detail-stat {
+      background: var(--bg-primary);
+      border-radius: 8px;
+      padding: 12px;
+      text-align: center;
+    }
+
+    .detail-stat-value {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+
+    .detail-stat-label {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .detail-section {
+      margin-bottom: 16px;
+    }
+
+    .detail-section-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .detail-requirements {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .detail-requirement {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      background: var(--bg-primary);
+      border-radius: 6px;
+      font-size: 13px;
+    }
+
+    .requirement-id {
+      color: var(--accent-cyan);
+      font-weight: 500;
+      font-family: monospace;
+    }
+
+    .requirement-title {
+      color: var(--text-primary);
+      flex: 1;
+    }
+
+    .requirement-status {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+
+    .requirement-status.developing {
+      background: rgba(6, 182, 212, 0.15);
+      color: var(--accent-cyan);
+    }
+
+    .requirement-status.completed {
+      background: rgba(34, 197, 94, 0.15);
+      color: var(--success);
+    }
+
+    .requirement-status.pending {
+      background: rgba(148, 163, 184, 0.15);
+      color: var(--text-muted);
+    }
+
+    .requirement-status.review {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--warning);
+    }
+
+    .detail-related {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .related-item {
+      font-size: 12px;
+      color: var(--text-secondary);
+      padding: 4px 10px;
+      background: var(--bg-primary);
+      border-radius: 12px;
+    }
+
+    .detail-insight {
+      background: var(--bg-insight);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 16px;
+      border-left: 3px solid var(--warning);
+    }
+
+    .insight-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--warning);
+      margin-bottom: 6px;
+    }
+
+    .insight-text {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    .detail-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .detail-action {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      border: none;
+    }
+
+    .detail-action.primary {
+      background: var(--accent-cyan);
+      color: white;
+    }
+
+    .detail-action.primary:hover {
+      background: #0891b2;
+    }
+
+    .detail-action.secondary {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+    }
+
+    .detail-action.secondary:hover {
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 10px 20px;
+      font-size: 13px;
+      color: var(--text-primary);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      z-index: 1000;
+      animation: toastIn 0.3s ease;
+    }
+
+    @keyframes toastIn {
+      from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useCallback, useMemo } = React;
+
+    // Service details data
+    const serviceDetails = {
+      'integration-gateway': {
+        label: 'API 网关',
+        version: 'v3.1.0',
+        env: '生产环境',
+        health: 'healthy',
+        activeReqs: 2,
+        lastDeploy: '1天前',
+        buildStatus: '通过',
+        p99: '85ms',
+        aiInsight: 'API 网关运行正常，所有路由健康',
+        requirements: [
+          { id: 'REQ-105', title: 'API 限流策略', status: 'developing' },
+          { id: 'REQ-101', title: '网关日志增强', status: 'completed' }
+        ],
+        related: ['identity-domain ↓', 'order-domain ↓', 'billing-domain ↓']
+      },
+      'identity-domain': {
+        label: '认证服务',
+        version: 'v2.3.1',
+        env: '生产环境',
+        health: 'healthy',
+        activeReqs: 3,
+        lastDeploy: '2小时前',
+        buildStatus: '通过',
+        p99: '230ms',
+        aiInsight: 'P99 延迟近期从 120ms 上升至 230ms，可能与 v2.3.0 配置变更相关',
+        requirements: [
+          { id: 'REQ-102', title: '支付接口优化', status: 'developing' },
+          { id: 'REQ-98', title: '用户注册流程优化', status: 'completed' },
+          { id: 'REQ-95', title: '密码策略升级', status: 'completed' }
+        ],
+        related: ['integration-gateway ↑', 'customer-portal ↓']
+      },
+      'order-domain': {
+        label: '订单服务',
+        version: 'v1.12.0',
+        env: '生产环境',
+        health: 'warning',
+        activeReqs: 2,
+        lastDeploy: '5小时前',
+        buildStatus: '通过',
+        p99: '450ms',
+        aiInsight: 'P99 延迟持续偏高，数据库连接池使用率已达 85%，建议扩容或优化慢查询',
+        requirements: [
+          { id: 'REQ-103', title: '订单查询性能优化', status: 'developing' },
+          { id: 'REQ-99', title: '退款流程自动化', status: 'review' }
+        ],
+        related: ['integration-gateway ↑', 'customer-portal ↓']
+      },
+      'billing-domain': {
+        label: '计费服务',
+        version: 'v1.8.0',
+        env: '生产环境',
+        health: 'healthy',
+        activeReqs: 1,
+        lastDeploy: '3天前',
+        buildStatus: '通过',
+        p99: '120ms',
+        aiInsight: '运行稳定，本周交易处理量较上周增长 8%',
+        requirements: [
+          { id: 'REQ-104', title: '多币种支持', status: 'pending' }
+        ],
+        related: ['integration-gateway ↑', 'customer-portal ↓']
+      },
+      'customer-portal': {
+        label: '用户门户',
+        version: 'v2.1.0',
+        env: '生产环境',
+        health: 'healthy',
+        activeReqs: 2,
+        lastDeploy: '1天前',
+        buildStatus: '通过',
+        p99: '150ms',
+        aiInsight: '用户访问量平稳，页面加载时间正常',
+        requirements: [
+          { id: 'REQ-100', title: '个人中心改版', status: 'developing' },
+          { id: 'REQ-97', title: '消息通知优化', status: 'completed' }
+        ],
+        related: ['identity-domain ↑', 'order-domain ↑', 'billing-domain ↑']
+      }
+    };
+
+    // Node positions (percentage-based)
+    const nodes = [
+      { id: 'integration-gateway', label: 'API 网关', x: 400, y: 60, health: 'healthy' },
+      { id: 'identity-domain', label: '认证服务', x: 140, y: 220, health: 'healthy' },
+      { id: 'order-domain', label: '订单服务', x: 400, y: 220, health: 'warning' },
+      { id: 'billing-domain', label: '计费服务', x: 660, y: 220, health: 'healthy' },
+      { id: 'customer-portal', label: '用户门户', x: 400, y: 400, health: 'healthy' }
+    ];
+
+    // Edges with source and target
+    const edges = [
+      { source: 'integration-gateway', target: 'identity-domain', type: 'depends' },
+      { source: 'integration-gateway', target: 'order-domain', type: 'depends' },
+      { source: 'integration-gateway', target: 'billing-domain', type: 'depends' },
+      { source: 'identity-domain', target: 'customer-portal', type: 'serves' },
+      { source: 'order-domain', target: 'customer-portal', type: 'serves' },
+      { source: 'billing-domain', target: 'customer-portal', type: 'serves' }
+    ];
+
+    // Agent data for sidebar
+    const agents = [
+      { id: 'requirement', name: '需求分析', status: 'working', action: '分析 REQ-102' },
+      { id: 'code', name: '代码审查', status: 'idle', action: '等待任务' },
+      { id: 'quality', name: '质量验证', status: 'idle', action: '等待任务' },
+      { id: 'deploy', name: '部署编排', status: 'monitoring', action: '监控 identity-domain' },
+      { id: 'monitor', name: '监控预警', status: 'idle', action: '等待任务' }
+    ];
+
+    // Status translation
+    const statusLabels = {
+      developing: '开发中',
+      completed: '已完成',
+      pending: '待启动',
+      review: '评审中'
+    };
+
+    // Status icon
+    const getStatusIcon = (health) => {
+      switch (health) {
+        case 'healthy': return '🟢';
+        case 'warning': return '🟡';
+        case 'error': return '🔴';
+        default: return '⚪';
+      }
+    };
+
+    // Sidebar component
+    const Sidebar = () => {
+      return (
+        <div className="sidebar">
+          <div className="sidebar-header">
+            <div className="logo-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                <path d="M2 17l10 5 10-5"/>
+                <path d="M2 12l10 5 10-5"/>
+              </svg>
+            </div>
+            <div className="logo-text">
+              <span className="logo-title">AgentCenter</span>
+              <span className="logo-subtitle">AI 编排工作台</span>
+            </div>
+          </div>
+
+          <div className="sidebar-content">
+            <div className="sidebar-section">
+              <div className="sidebar-section-title">视图</div>
+              <div className="nav-item" onClick={() => window.location.href='/a-version.html'}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="7" height="7"/>
+                  <rect x="14" y="3" width="7" height="7"/>
+                  <rect x="14" y="14" width="7" height="7"/>
+                  <rect x="3" y="14" width="7" height="7"/>
+                </svg>
+                智能总览
+              </div>
+              <div className="nav-item" onClick={() => window.location.href='/a-version-view2.html'}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+                对话编排
+              </div>
+              <div className="nav-item" onClick={() => window.location.href='/a-version-view3.html'}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                </svg>
+                编排监控
+              </div>
+              <div className="nav-item active">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="3"/>
+                  <circle cx="19" cy="5" r="2"/>
+                  <circle cx="5" cy="5" r="2"/>
+                  <circle cx="5" cy="19" r="2"/>
+                  <circle cx="19" cy="19" r="2"/>
+                  <line x1="12" y1="9" x2="12" y2="3"/>
+                  <line x1="14.5" y1="10.5" x2="17.5" y2="7.5"/>
+                  <line x1="9.5" y1="10.5" x2="6.5" y2="7.5"/>
+                  <line x1="14.5" y1="13.5" x2="17.5" y2="16.5"/>
+                  <line x1="9.5" y1="13.5" x2="6.5" y2="16.5"/>
+                </svg>
+                服务拓扑
+              </div>
+              <div className="nav-item" onClick={() => window.location.href='/a-version-view5.html'}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  <line x1="3" y1="9" x2="21" y2="9"/>
+                  <line x1="9" y1="21" x2="9" y2="9"/>
+                </svg>
+                架构说明
+              </div>
+            </div>
+
+            <div className="nav-divider" />
+
+            <div className="sidebar-section">
+              <div className="sidebar-section-title">智能体</div>
+              {agents.map(agent => (
+                <div key={agent.id} className={`agent-card ${agent.status === 'working' ? 'active' : ''}`}>
+                  <div className="agent-header">
+                    <span className="agent-name">{agent.name}</span>
+                    <span className={`agent-status ${agent.status}`}>
+                      <span className="dot" />
+                      {agent.status === 'working' ? '工作中' : agent.status === 'idle' ? '空闲' : '监控中'}
+                    </span>
+                  </div>
+                  <div className="agent-action">{agent.action}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="engine-status">
+            <div className="engine-header">
+              <div className="engine-dot" />
+              <span className="engine-title">编排引擎</span>
+            </div>
+            <span className="engine-subtitle">在线 · 当前任务 1</span>
+          </div>
+        </div>
+      );
+    };
+
+    // Top Bar component
+    const TopBar = () => {
+      return (
+        <div className="top-bar">
+          <div className="top-bar-left">
+            <div className="ai-status">
+              <div className="ai-status-dot" />
+              <span className="ai-status-text">AI 引擎运行中</span>
+            </div>
+          </div>
+          <div className="top-bar-center">
+            <div className="search-bar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8"/>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <input type="text" placeholder="搜索服务、需求、故障..." />
+            </div>
+          </div>
+          <div className="top-bar-right">
+            <div className="top-bar-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+              </svg>
+            </div>
+            <div className="user-avatar">W</div>
+          </div>
+        </div>
+      );
+    };
+
+    // Topology Node component
+    const TopologyNode = ({ node, isSelected, isHighlighted, onClick, onMouseEnter, onMouseLeave }) => {
+      const details = serviceDetails[node.id];
+      const healthColor = node.health === 'healthy' ? '#22c55e' : node.health === 'warning' ? '#f59e0b' : '#ef4444';
+
+      return (
+        <g
+          className={`topology-node ${node.health} ${isSelected ? 'selected' : ''} ${isHighlighted ? 'highlighted' : ''}`}
+          onClick={() => onClick(node.id)}
+          onMouseEnter={() => onMouseEnter(node.id)}
+          onMouseLeave={onMouseLeave}
+          transform={`translate(${node.x}, ${node.y})`}
+        >
+          {/* Node background */}
+          <rect
+            x="-80"
+            y="-40"
+            width="160"
+            height="90"
+            rx="8"
+            fill="#1e293b"
+            stroke={healthColor}
+            strokeWidth="2"
+          />
+          {/* Health indicator */}
+          <circle cx="60" cy="-25" r="6" fill={healthColor} />
+          {/* Service name */}
+          <text
+            x="0"
+            y="-8"
+            textAnchor="middle"
+            fill="#e2e8f0"
+            fontSize="13"
+            fontWeight="600"
+            fontFamily="'Noto Sans SC', sans-serif"
+          >
+            {node.id}
+          </text>
+          {/* Service label */}
+          <text
+            x="0"
+            y="12"
+            textAnchor="middle"
+            fill="#94a3b8"
+            fontSize="11"
+            fontFamily="'Noto Sans SC', sans-serif"
+          >
+            {details.label}
+          </text>
+          {/* Version */}
+          <text
+            x="0"
+            y="30"
+            textAnchor="middle"
+            fill="#64748b"
+            fontSize="10"
+            fontFamily="'Noto Sans SC', sans-serif"
+          >
+            {details.version}
+          </text>
+        </g>
+      );
+    };
+
+    // Topology Edge component
+    const TopologyEdge = ({ edge, isHighlighted, highlightedNodes }) => {
+      const sourceNode = nodes.find(n => n.id === edge.source);
+      const targetNode = nodes.find(n => n.id === edge.target);
+
+      if (!sourceNode || !targetNode) return null;
+
+      const isEdgeHighlighted = highlightedNodes.includes(edge.source) && highlightedNodes.includes(edge.target);
+      const hasWarningNode = sourceNode.health === 'warning' || targetNode.health === 'warning';
+
+      // Calculate positions
+      const x1 = sourceNode.x;
+      const y1 = sourceNode.y;
+      const x2 = targetNode.x;
+      const y2 = targetNode.y;
+
+      // Calculate edge points (from node edge to node edge)
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      const nx = dx / len;
+      const ny = dy / len;
+
+      // Adjust start and end to be at node borders (approximate)
+      const startX = x1 + nx * 10;
+      const startY = y1 + ny * 10;
+      const endX = x2 - nx * 10;
+      const endY = y2 - ny * 10;
+
+      return (
+        <line
+          className={`topology-edge ${hasWarningNode ? 'warning' : ''} ${isEdgeHighlighted ? 'highlighted' : ''}`}
+          x1={startX}
+          y1={startY}
+          x2={endX}
+          y2={endY}
+          stroke={isEdgeHighlighted ? '#06b6d4' : hasWarningNode ? '#59492f' : '#334155'}
+          strokeWidth="2"
+          markerEnd="url(#arrowhead)"
+        />
+      );
+    };
+
+    // Detail Panel component
+    const DetailPanel = ({ serviceId, onClose, onAction }) => {
+      const details = serviceDetails[serviceId];
+      if (!details) return null;
+
+      return (
+        <div className="detail-panel">
+          <div className="detail-header">
+            <div className="detail-title">
+              {serviceId}
+              <span className="detail-subtitle">{details.label}</span>
+            </div>
+            <div className="detail-close" onClick={onClose}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </div>
+          </div>
+
+          <div className="detail-meta">
+            <div className="detail-meta-item">
+              <span>版本:</span>
+              <span style={{ color: '#e2e8f0' }}>{details.version}</span>
+            </div>
+            <div className="detail-meta-item">
+              <span>@</span>
+              <span style={{ color: '#e2e8f0' }}>{details.env}</span>
+            </div>
+            <div className={`health-badge ${details.health}`}>
+              {getStatusIcon(details.health)}
+              {details.health === 'healthy' ? '健康' : details.health === 'warning' ? '告警' : '错误'}
+            </div>
+          </div>
+
+          <div className="detail-stats">
+            <div className="detail-stat">
+              <div className="detail-stat-value">{details.activeReqs}</div>
+              <div className="detail-stat-label">活跃需求</div>
+            </div>
+            <div className="detail-stat">
+              <div className="detail-stat-value">{details.lastDeploy}</div>
+              <div className="detail-stat-label">最近部署</div>
+            </div>
+            <div className="detail-stat">
+              <div className="detail-stat-value" style={{ color: details.buildStatus === '通过' ? '#22c55e' : '#ef4444' }}>
+                {details.buildStatus}
+              </div>
+              <div className="detail-stat-label">构建状态</div>
+            </div>
+            <div className="detail-stat">
+              <div className="detail-stat-value" style={{ color: details.health === 'warning' ? '#f59e0b' : '#e2e8f0' }}>
+                {details.p99}
+              </div>
+              <div className="detail-stat-label">P99 延迟</div>
+            </div>
+          </div>
+
+          <div className="detail-section">
+            <div className="detail-section-title">关联需求</div>
+            <div className="detail-requirements">
+              {details.requirements.map(req => (
+                <div key={req.id} className="detail-requirement">
+                  <span className="requirement-id">{req.id}</span>
+                  <span className="requirement-title">{req.title}</span>
+                  <span className={`requirement-status ${req.status === 'developing' ? 'developing' : req.status === 'completed' ? 'completed' : req.status === 'review' ? 'review' : 'pending'}`}>
+                    {statusLabels[req.status]}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="detail-section">
+            <div className="detail-section-title">关联服务</div>
+            <div className="detail-related">
+              {details.related.map((rel, idx) => (
+                <span key={idx} className="related-item">{rel}</span>
+              ))}
+            </div>
+          </div>
+
+          <div className="detail-insight">
+            <div className="insight-header">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="16" x2="12" y2="12"/>
+                <line x1="12" y1="8" x2="12.01" y2="8"/>
+              </svg>
+              AI 洞察
+            </div>
+            <div className="insight-text">{details.aiInsight}</div>
+          </div>
+
+          <div className="detail-actions">
+            <button className="detail-action primary" onClick={() => onAction('deploy', serviceId)}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                <path d="M2 17l10 5 10-5"/>
+                <path d="M2 12l10 5 10-5"/>
+              </svg>
+              发起部署编排
+            </button>
+            <button className="detail-action secondary" onClick={() => onAction('health', serviceId)}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                <circle cx="11" cy="11" r="8"/>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              发起健康检查
+            </button>
+            <button className="detail-action secondary" onClick={() => onAction('requirements', serviceId)}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+              查看需求详情
+            </button>
+          </div>
+        </div>
+      );
+    };
+
+    // Toast component
+    const Toast = ({ message, onClose }) => {
+      React.useEffect(() => {
+        const timer = setTimeout(onClose, 3000);
+        return () => clearTimeout(timer);
+      }, [onClose]);
+
+      return <div className="toast">{message}</div>;
+    };
+
+    // Main App component
+    const App = () => {
+      const [activeTab, setActiveTab] = useState('service');
+      const [selectedNode, setSelectedNode] = useState(null);
+      const [hoveredNode, setHoveredNode] = useState(null);
+      const [searchQuery, setSearchQuery] = useState('');
+      const [toast, setToast] = useState(null);
+
+      const highlightedNodes = useMemo(() => {
+        const highlighted = [];
+        if (hoveredNode) highlighted.push(hoveredNode);
+        if (selectedNode && selectedNode !== hoveredNode) highlighted.push(selectedNode);
+
+        // Also highlight connected nodes
+        if (hoveredNode || selectedNode) {
+          const activeNode = hoveredNode || selectedNode;
+          edges.forEach(edge => {
+            if (edge.source === activeNode) highlighted.push(edge.target);
+            if (edge.target === activeNode) highlighted.push(edge.source);
+          });
+        }
+
+        return [...new Set(highlighted)];
+      }, [hoveredNode, selectedNode]);
+
+      const filteredNodes = useMemo(() => {
+        if (!searchQuery) return nodes;
+        return nodes.filter(node =>
+          node.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          node.label.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+      }, [searchQuery]);
+
+      const handleTabClick = (tab) => {
+        if (tab !== 'service') {
+          setToast(`${tab === 'requirement' ? '需求' : tab === 'fault' ? '故障' : '部署'}拓扑视图（开发中）`);
+          return;
+        }
+        setActiveTab(tab);
+      };
+
+      const handleNodeClick = (nodeId) => {
+        setSelectedNode(selectedNode === nodeId ? null : nodeId);
+      };
+
+      const handleNodeHover = (nodeId) => {
+        setHoveredNode(nodeId);
+      };
+
+      const handleNodeLeave = () => {
+        setHoveredNode(null);
+      };
+
+      const handleAction = (action, serviceId) => {
+        const actionLabels = {
+          deploy: '部署编排',
+          health: '健康检查',
+          requirements: '需求详情'
+        };
+        setToast(`编排任务已启动: ${actionLabels[action]} - ${serviceId}`);
+      };
+
+      return (
+        <div className="app-container">
+          <Sidebar />
+
+          <div className="main-content">
+            <TopBar />
+            <div className="view-content">
+              {/* Topology Toolbar */}
+              <div className="topology-toolbar">
+                <div className="topology-title">服务拓扑</div>
+                <div className="topology-tabs">
+                  <button
+                    className={`topology-tab ${activeTab === 'service' ? 'active' : ''}`}
+                    onClick={() => handleTabClick('service')}
+                  >
+                    {activeTab === 'service' ? '◉' : '○'} 服务
+                  </button>
+                  <button
+                    className={`topology-tab ${activeTab === 'requirement' ? 'active' : ''}`}
+                    onClick={() => handleTabClick('requirement')}
+                  >
+                    {activeTab === 'requirement' ? '◉' : '○'} 需求
+                  </button>
+                  <button
+                    className={`topology-tab ${activeTab === 'fault' ? 'active' : ''}`}
+                    onClick={() => handleTabClick('fault')}
+                  >
+                    {activeTab === 'fault' ? '◉' : '○'} 故障
+                  </button>
+                  <button
+                    className={`topology-tab ${activeTab === 'deploy' ? 'active' : ''}`}
+                    onClick={() => handleTabClick('deploy')}
+                  >
+                    {activeTab === 'deploy' ? '◉' : '○'} 部署
+                  </button>
+                </div>
+                <div className="topology-search">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="11" cy="11" r="8"/>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                  </svg>
+                  <input
+                    type="text"
+                    placeholder="搜索服务、需求..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Topology Graph */}
+              <div className="topology-container">
+                <svg
+                  className="topology-svg"
+                  viewBox="0 0 800 500"
+                  preserveAspectRatio="xMidYMid meet"
+                >
+                  <defs>
+                    <marker
+                      id="arrowhead"
+                      markerWidth="4"
+                      markerHeight="4"
+                      refX="3"
+                      refY="2"
+                      orient="auto"
+                    >
+                      <polygon
+                        points="0 0, 4 2, 0 4"
+                        fill="#334155"
+                      />
+                    </marker>
+                    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+                      <feGaussianBlur stdDeviation="1" result="coloredBlur"/>
+                      <feMerge>
+                        <feMergeNode in="coloredBlur"/>
+                        <feMergeNode in="SourceGraphic"/>
+                      </feMerge>
+                    </filter>
+                  </defs>
+
+                  {/* Edges */}
+                  {edges.map((edge, idx) => (
+                    <TopologyEdge
+                      key={idx}
+                      edge={edge}
+                      highlightedNodes={highlightedNodes}
+                    />
+                  ))}
+
+                  {/* Nodes */}
+                  {nodes.map(node => (
+                    <TopologyNode
+                      key={node.id}
+                      node={node}
+                      isSelected={selectedNode === node.id}
+                      isHighlighted={highlightedNodes.includes(node.id)}
+                      onClick={handleNodeClick}
+                      onMouseEnter={handleNodeHover}
+                      onMouseLeave={handleNodeLeave}
+                    />
+                  ))}
+                </svg>
+              </div>
+
+              {/* Detail Panel */}
+              {selectedNode && (
+                <DetailPanel
+                  serviceId={selectedNode}
+                  onClose={() => setSelectedNode(null)}
+                  onAction={handleAction}
+                />
+              )}
+
+              {/* Toast */}
+              {toast && (
+                <Toast message={toast} onClose={() => setToast(null)} />
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // Render
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
