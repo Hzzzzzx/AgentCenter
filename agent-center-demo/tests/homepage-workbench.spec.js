@@ -119,6 +119,31 @@ async function expectViewportFit(page) {
   expect(fit.scrollY).toBe(0);
 }
 
+async function expectTopWorkflowHasNoOverlap(page) {
+  const overlaps = await page.evaluate(() => {
+    const rectFor = (el) => {
+      const rect = el.getBoundingClientRect();
+      return {
+        text: el.textContent.trim(),
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+      };
+    };
+    const nodes = Array.from(document.querySelectorAll('.workflow-node-card')).map(rectFor);
+    const details = Array.from(document.querySelectorAll('.workflow-detail-card')).map(rectFor);
+    return nodes.flatMap((node) => details
+      .map((detail) => {
+        const overlapX = Math.max(0, Math.min(node.right, detail.right) - Math.max(node.left, detail.left));
+        const overlapY = Math.max(0, Math.min(node.bottom, detail.bottom) - Math.max(node.top, detail.top));
+        return overlapX && overlapY ? `${node.text} overlaps ${detail.text}` : null;
+      })
+      .filter(Boolean));
+  });
+  expect(overlaps).toEqual([]);
+}
+
 async function expectNoFocusableAriaHiddenDescendants(page) {
   const offenders = await page.evaluate(() => {
     const focusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
@@ -186,13 +211,15 @@ test.describe('static prototype layout', () => {
     await expectSidebarsSpanPanelRows(page);
     expect(await panelHeight(page, 'top-metrics-panel')).toBeLessThanOrEqual(44);
     expect(await panelHeight(page, 'bottom-history-panel')).toBeLessThanOrEqual(56);
-    await expect(page.getByText('今日部署').first()).toBeHidden();
+    await expect(page.getByTestId('top-workflow-summary')).toBeVisible();
+    await expect(page.getByText('指标概览')).toHaveCount(0);
+    await expect(page.getByText('需求管理').first()).toBeVisible();
     await expectViewportFit(page);
   });
 
   test('static prototype keeps required workbench text visible', async ({ page }) => {
     await expect(page.getByText('对话工作台 · AI 智能中枢')).toBeVisible();
-    await expect(page.getByText('指标概览').first()).toBeVisible();
+    await expect(page.getByText('全流程阶段').first()).toBeVisible();
     await expect(page.getByText('最近活动').first()).toBeVisible();
     await expect(page.getByText('执行记录').first()).toBeVisible();
   });
@@ -218,18 +245,20 @@ test.describe('react workbench layout', () => {
     await expect(page.getByRole('tab', { name: '上下文详情' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByRole('tab', { name: '主动预警' })).toBeVisible();
     await expect(page.getByRole('tab', { name: '智能体协作' })).toBeVisible();
-    await expect(page.getByText('指标概览').first()).toBeVisible();
-    await expect(page.getByText('构建成功率').first()).toBeHidden();
+    await expect(page.getByTestId('top-workflow-summary')).toContainText('全流程阶段');
+    await expect(page.getByText('指标概览')).toHaveCount(0);
     await expectViewportFit(page);
   });
 
-  test('collapsed metric labels stay generic across roles', async ({ page }) => {
+  test('top workflow panel expands from stage row to node detail', async ({ page }) => {
+    await expect(page.getByTestId('top-workflow-summary')).toContainText('测试验证');
+    await expect(page.getByTestId('top-workflow-detail')).toBeHidden();
     await page.getByTestId('top-metrics-toggle').click();
     await page.locator('[data-interaction-id="click:sidebar:role:development"]').click();
-    await expect(page.getByText('今日部署').first()).toBeVisible();
-    await expect(page.getByText('构建成功率').first()).toBeVisible();
-    await expect(page.getByText('活跃告警').first()).toBeVisible();
-    await expect(page.getByText('Sprint 进度').first()).toBeVisible();
+    await expect(page.getByTestId('top-workflow-detail')).toBeVisible();
+    await expect(page.getByText('测试验证存在 3 条失败')).toBeVisible();
+    await expect(page.locator('.workflow-node-card').filter({ hasText: '代码开发' })).toBeVisible();
+    await expectTopWorkflowHasNoOverlap(page);
   });
 
   test('center column grows on wide desktop', async ({ page }) => {
@@ -304,15 +333,18 @@ test.describe('collapsed panels toggle', () => {
 
     await topToggle.click();
     await expect(topToggle).toHaveAttribute('aria-expanded', 'true');
-    await waitForPanelHeight(page, 'top-metrics-panel', 150, 180);
+    await waitForPanelHeight(page, 'top-metrics-panel', 210, 240);
+    await expect(page.getByTestId('top-workflow-detail')).toContainText('节点情况');
+    await expectTopWorkflowHasNoOverlap(page);
 
     await bottomToggle.click();
     await expect(bottomToggle).toHaveAttribute('aria-expanded', 'true');
     await waitForPanelHeight(page, 'bottom-history-panel', 280, 320);
     await expect(page.getByTestId('bottom-history-content')).toBeVisible();
-    await expect(page.getByText('全流程管线')).toBeVisible();
+    await expect(page.getByText('已移入顶部面板')).toBeVisible();
     await expect(page.getByText('12 条更新，最新 10:32')).toBeVisible();
     await expect(page.getByText('接口契约检查通过')).toBeVisible();
+    await expect(page.getByText('全流程管线')).toHaveCount(0);
     await expectSidebarsSpanPanelRows(page);
     const sidebarsExpanded = await Promise.all([
       page.getByTestId('workbench-left').boundingBox(),
@@ -330,13 +362,16 @@ test.describe('collapsed panels toggle', () => {
 
   test('static top and bottom panels expand and collapse', async ({ page }) => {
     await page.goto(staticUrl, { waitUntil: 'domcontentloaded' });
-    await expect(page.getByText('今日部署').first()).toBeHidden();
+    await expect(page.getByTestId('top-workflow-summary')).toContainText('全流程阶段');
+    await expect(page.getByText('指标概览')).toHaveCount(0);
     await page.getByTestId('top-metrics-toggle').click();
     await page.getByTestId('bottom-history-toggle').click();
-    await waitForPanelHeight(page, 'top-metrics-panel', 150, 180);
+    await waitForPanelHeight(page, 'top-metrics-panel', 210, 240);
     await waitForPanelHeight(page, 'bottom-history-panel', 280, 320);
-    await expect(page.locator('.metrics-detail').getByText('今日部署')).toBeVisible();
+    await expect(page.getByTestId('top-workflow-detail')).toContainText('测试验证存在 3 条失败');
+    await expectTopWorkflowHasNoOverlap(page);
     await expect(page.getByText('REQ-2024-0892 已完成设计评审')).toBeVisible();
+    await expect(page.locator('.bottom-history-panel').getByText('全流程历史')).toHaveCount(0);
     await page.getByTestId('top-metrics-toggle').click();
     await page.getByTestId('bottom-history-toggle').click();
     await waitForPanelHeight(page, 'top-metrics-panel', 30, 44);
@@ -431,7 +466,7 @@ test.describe('accessibility affordances', () => {
   });
 
   test('toggles and tabs expose ARIA state and keyboard focus', async ({ page }) => {
-    await expect(page.getByTestId('top-metrics-toggle')).toHaveAttribute('aria-controls', 'top-metrics-content');
+    await expect(page.getByTestId('top-metrics-toggle')).toHaveAttribute('aria-controls', 'top-workflow-content');
     await expect(page.getByTestId('bottom-history-toggle')).toHaveAttribute('aria-controls', 'bottom-history-content');
     await expect(page.getByTestId('top-nav-toggle')).toHaveAttribute('aria-expanded', 'true');
     await expect(page.getByRole('tab', { name: '上下文详情' })).toHaveAttribute('aria-selected', 'true');

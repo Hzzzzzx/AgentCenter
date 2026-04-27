@@ -69,7 +69,7 @@
       transition: grid-template-rows 180ms ease;
     }
     .workbench-shell.has-top-expanded {
-      --top-panel-height: 164px;
+      --top-panel-height: 224px;
     }
     .workbench-shell.has-bottom-expanded {
       --bottom-panel-height: 300px;
@@ -122,7 +122,7 @@
       transition: max-height 180ms ease;
     }
     .top-metrics-panel.is-collapsed { max-height: 36px; min-height: 36px; }
-    .top-metrics-panel.is-expanded { max-height: 164px; min-height: 164px; }
+    .top-metrics-panel.is-expanded { max-height: 224px; min-height: 224px; }
     .bottom-history-panel {
       grid-column: 4;
       grid-row: 4;
@@ -184,13 +184,141 @@
       align-items: center;
       justify-content: space-between;
       padding: 0 12px 0 16px;
+      gap: 12px;
     }
-    .top-metrics-panel.is-collapsed .metrics-strip {
+    .top-workflow-summary {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow: hidden;
+    }
+    .top-workflow-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+    .top-workflow-stage-row {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      overflow: hidden;
+    }
+    .top-stage-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+      color: var(--text-secondary);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    .top-stage-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--border-color-hover);
+      flex-shrink: 0;
+    }
+    .top-stage-chip.healthy .top-stage-dot { background: var(--success); }
+    .top-stage-chip.warning .top-stage-dot { background: var(--warning); }
+    .top-stage-chip.error .top-stage-dot { background: var(--error); }
+    .top-stage-connector {
+      width: 14px;
+      height: 1px;
+      background: var(--border-color);
+      flex-shrink: 0;
+    }
+    .top-metrics-panel.is-collapsed .workflow-detail-panel {
       display: none;
     }
-    .top-metrics-panel.is-expanded .metrics-strip {
-      flex: 1;
+    .top-metrics-panel.is-expanded .workflow-detail-panel {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: auto auto;
+      align-content: start;
+      gap: 8px;
+      padding: 8px 12px 12px;
       min-height: 0;
+      overflow: hidden;
+    }
+    .workflow-node-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      min-width: 0;
+    }
+    .workflow-node-card {
+      min-width: 0;
+      border: 1px solid var(--border-color);
+      background: var(--bg-card);
+      border-radius: 8px;
+      padding: 7px 8px;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      column-gap: 8px;
+      align-items: center;
+    }
+    .workflow-node-card.healthy { border-color: rgba(16, 185, 129, 0.28); }
+    .workflow-node-card.warning { border-color: rgba(245, 158, 11, 0.34); background: rgba(245, 158, 11, 0.06); }
+    .workflow-node-card.error { border-color: rgba(239, 68, 68, 0.32); background: rgba(239, 68, 68, 0.05); }
+    .workflow-node-count {
+      font-size: 18px;
+      line-height: 1;
+      font-weight: 800;
+      color: var(--text-primary);
+      grid-row: 1 / span 2;
+    }
+    .workflow-node-name {
+      font-size: 11px;
+      color: var(--text-secondary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .workflow-node-status {
+      font-size: 10px;
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .workflow-detail-side {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      min-width: 0;
+    }
+    .workflow-detail-card {
+      border: 1px solid var(--border-color);
+      background: var(--bg-card);
+      border-radius: 8px;
+      padding: 7px 9px;
+      min-width: 0;
+    }
+    .workflow-detail-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+    .workflow-detail-value {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-primary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .workflow-detail-note {
+      font-size: 11px;
+      color: var(--warning);
+      line-height: 1.45;
     }
     .side-panel-toggle {
       border: 1px solid var(--border-color);
@@ -2889,6 +3017,32 @@
       { title: '评审清单', meta: '安全、可观测、回滚、兼容性 4 类检查项' }
     ];
 
+    const WORKFLOW_STAGES = [
+      { name: '需求管理', count: 23, status: 'healthy', statusText: '正常流转' },
+      { name: '设计建模', count: 18, status: 'healthy', statusText: '评审中' },
+      { name: '代码开发', count: 45, status: 'warning', statusText: '2 项阻塞' },
+      { name: '代码检查', count: 12, status: 'healthy', statusText: '通过率 92%' },
+      { name: '构建集成', count: 31, status: 'healthy', statusText: '稳定' },
+      { name: '测试验证', count: 28, status: 'error', statusText: '3 条失败' },
+      { name: '部署上线', count: 15, status: 'healthy', statusText: '待审批 1' },
+      { name: '运维监控', count: 8, status: 'healthy', statusText: '无 P0' }
+    ];
+
+    const RECENT_ACTIVITY_EVENTS = [
+      { type: 'success', text: '某需求已完成设计评审', time: '10:32' },
+      { type: 'error', text: '构建失败', time: '10:28' },
+      { type: 'success', text: '部署成功', time: '09:45' },
+      { type: 'info', text: 'Sprint 进度更新 68%', time: '09:30' },
+      { type: 'warning', text: '发布审批等待确认', time: '09:12' },
+      { type: 'success', text: '接口契约检查通过', time: '08:58' },
+      { type: 'info', text: '测试环境容量已扩容', time: '08:41' },
+      { type: 'success', text: '代码质量扫描完成', time: '08:26' },
+      { type: 'warning', text: '回归用例仍有 3 条待确认', time: '08:10' },
+      { type: 'success', text: '制品版本已归档', time: '07:52' },
+      { type: 'info', text: '监控规则完成同步', time: '07:35' },
+      { type: 'success', text: '协作通知已发送', time: '07:18' }
+    ];
+
     function showToast(message) {
       const existing = document.querySelector('.toast');
       if (existing) existing.remove();
@@ -3365,25 +3519,25 @@
             />
           </header>
 
-          <section className={`top-metrics-panel ${topExpanded ? 'is-expanded' : 'is-collapsed'}`} data-testid="top-metrics-panel" aria-label="指标面板">
+          <section className={`top-metrics-panel ${topExpanded ? 'is-expanded' : 'is-collapsed'}`} data-testid="top-metrics-panel" aria-label="全流程阶段面板">
             <div className="panel-center-rail" data-testid="top-metrics-rail">
-              <div className="top-panel-stack" id="top-metrics-content">
+              <div className="top-panel-stack" id="top-workflow-content">
                 <div className="top-panel-bar">
-                <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>指标概览</span>
-                <button
-                  type="button"
-                  className="panel-toggle"
-                  data-testid="top-metrics-toggle"
-                  aria-controls="top-metrics-content"
-                  aria-expanded={topExpanded ? 'true' : 'false'}
-                  aria-label={topExpanded ? '收起指标面板' : '展开指标面板'}
-                  onClick={() => setTopExpanded(!topExpanded)}
-                >
-                  <span>{topExpanded ? '收起' : '展开'}</span>
-                  <i data-lucide={topExpanded ? 'chevron-up' : 'chevron-down'} style={{ width: 14, height: 14 }}></i>
-                </button>
+                  <TopWorkflowSummary stages={WORKFLOW_STAGES} />
+                  <button
+                    type="button"
+                    className="panel-toggle"
+                    data-testid="top-metrics-toggle"
+                    aria-controls="top-workflow-content"
+                    aria-expanded={topExpanded ? 'true' : 'false'}
+                    aria-label={topExpanded ? '收起全流程阶段面板' : '展开全流程阶段面板'}
+                    onClick={() => setTopExpanded(!topExpanded)}
+                  >
+                    <span>{topExpanded ? '收起' : '展开'}</span>
+                    <i data-lucide={topExpanded ? 'chevron-up' : 'chevron-down'} style={{ width: 14, height: 14 }}></i>
+                  </button>
                 </div>
-                <MetricsStrip stats={stats} activeRole={activeRole} />
+                <TopWorkflowDetail stages={WORKFLOW_STAGES} />
               </div>
             </div>
           </section>
@@ -3558,7 +3712,6 @@
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', height: 44 }}>
               <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
                 <button type="button" style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', border: 0, background: 'transparent', cursor: 'pointer' }}>最近活动 <span style={{ color: 'var(--accent-blue)' }}>12</span></button>
-                <button type="button" style={{ fontSize: '12px', color: 'var(--text-secondary)', border: 0, background: 'transparent', cursor: 'pointer' }}>全流程历史</button>
                 <button type="button" style={{ fontSize: '12px', color: 'var(--text-secondary)', border: 0, background: 'transparent', cursor: 'pointer' }}>执行记录</button>
               </div>
               <button
@@ -3583,15 +3736,15 @@
                         <div className="history-summary-value">12 条更新，最新 10:32</div>
                       </div>
                       <div className="history-summary-card">
-                        <div className="history-summary-label">全流程历史</div>
-                        <div className="history-summary-value">需求到部署 5 阶段</div>
+                        <div className="history-summary-label">阶段详情</div>
+                        <div className="history-summary-value">已移入顶部面板</div>
                       </div>
                       <div className="history-summary-card">
                         <div className="history-summary-label">执行记录</div>
                         <div className="history-summary-value">构建、测试、部署均可追踪</div>
                       </div>
                     </div>
-                    <PipelineFull onStageClick={handleStageClick} />
+                    <RecentActivityList events={RECENT_ACTIVITY_EVENTS} />
                   </div>
                 )}
               </div>
@@ -3864,56 +4017,51 @@
       );
     }
 
-    function MetricsStrip({ stats, activeRole }) {
-      const defaultStats = {
-        deployments: { today: 12, success_rate: 94.7 },
-        builds: { today: 8, success_rate: 87 },
-        alerts: { active: 3 },
-        sprint: { name: 'Sprint 14', progress: 68 }
-      };
-
-      const s = stats || defaultStats;
-      const metricKeys = ['deployments', 'builds', 'alerts', 'sprint'];
-      const metricIcons = { deployments: 'blue', builds: 'green', alerts: 'red', sprint: 'amber' };
-
+    function TopWorkflowSummary({ stages }) {
       return (
-        <div className="metrics-strip" data-testid="metrics-strip">
-          {metricKeys.map((key, idx) => {
-            const defaultMetric = {
-              deployments: { label: '今日部署', value: s.deployments?.today || 0, trend: `成功率 ${s.deployments?.success_rate || 0}%`, trendDir: 'up', icon: 'rocket' },
-              builds: { label: '构建成功率', value: s.builds?.today || 0, trend: `成功率 ${s.builds?.success_rate || 0}%`, trendDir: 'up', icon: 'check-circle' },
-              alerts: { label: '活跃告警', value: `${s.alerts?.active || 0}条`, trend: '2 严重, 1 警告', trendDir: 'down', icon: 'alert-triangle' },
-              sprint: { label: 'Sprint 进度', value: s.sprint?.name || 'Sprint 14', progress: s.sprint?.progress || 0, trendDir: 'up', icon: 'target' }
-            };
-            const metric = defaultMetric[key];
-            const iconColor = metricIcons[key];
+        <div className="top-workflow-summary" data-testid="top-workflow-summary">
+          <span className="top-workflow-label">全流程阶段</span>
+          <div className="top-workflow-stage-row" aria-label="收起态阶段概览">
+            {stages.map((stage, idx) => (
+              <React.Fragment key={stage.name}>
+                <span className={`top-stage-chip ${stage.status}`}>
+                  <span className="top-stage-dot" aria-hidden="true"></span>
+                  <span>{stage.name}</span>
+                </span>
+                {idx < stages.length - 1 && <span className="top-stage-connector" aria-hidden="true"></span>}
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+      );
+    }
 
-            return (
-              <div className="metric-card" key={key} data-testid={`metric-card-${key}`}>
-                <div className="metric-header">
-                  <span className="metric-label">{metric.label}</span>
-                  <div className={`metric-icon ${iconColor}`}>
-                    <i data-lucide={metric.icon}></i>
-                  </div>
-                </div>
-                <div className="metric-value">{metric.value}</div>
-                <div className="metric-trend">
-                  <span className={`trend-badge ${metric.trendDir}`}>{metric.trend}</span>
-                </div>
-                {metric.progress !== undefined && (
-                  <div className="progress-container">
-                    <div className="progress-header">
-                      <span className="progress-label">完成率</span>
-                      <span className="progress-value">{metric.progress}%</span>
-                    </div>
-                    <div className="progress-bar">
-                      <div className="progress-fill" style={{width: `${metric.progress}%`}}></div>
-                    </div>
-                  </div>
-                )}
+    function TopWorkflowDetail({ stages }) {
+      return (
+        <div className="workflow-detail-panel" data-testid="top-workflow-detail">
+          <div className="workflow-node-grid">
+            {stages.map((stage) => (
+              <div className={`workflow-node-card ${stage.status}`} key={stage.name}>
+                <div className="workflow-node-count">{stage.count}</div>
+                <div className="workflow-node-name">{stage.name}</div>
+                <div className="workflow-node-status">{stage.statusText}</div>
               </div>
-            );
-          })}
+            ))}
+          </div>
+          <div className="workflow-detail-side">
+            <div className="workflow-detail-card">
+              <div className="workflow-detail-label">当前重点</div>
+              <div className="workflow-detail-value">测试验证存在 3 条失败</div>
+            </div>
+            <div className="workflow-detail-card">
+              <div className="workflow-detail-label">节点情况</div>
+              <div className="workflow-detail-value">6 正常 · 1 预警 · 1 异常</div>
+            </div>
+            <div className="workflow-detail-card">
+              <div className="workflow-detail-label">处理建议</div>
+              <div className="workflow-detail-note">优先确认测试失败原因，并联动代码开发阶段处理阻塞项。</div>
+            </div>
+          </div>
         </div>
       );
     }
@@ -4092,32 +4240,6 @@
     }
 
     function PipelineFull({ onStageClick }) {
-      const stages = [
-        { name: '需求管理', count: 23, status: 'healthy' },
-        { name: '设计建模', count: 18, status: 'healthy' },
-        { name: '代码开发', count: 45, status: 'warning' },
-        { name: '代码检查', count: 12, status: 'healthy' },
-        { name: '构建集成', count: 31, status: 'healthy' },
-        { name: '测试验证', count: 28, status: 'error' },
-        { name: '部署上线', count: 15, status: 'healthy' },
-        { name: '运维监控', count: 8, status: 'healthy' }
-      ];
-
-      const events = [
-        { type: 'success', text: '某需求已完成设计评审', time: '10:32' },
-        { type: 'error', text: '构建失败', time: '10:28' },
-        { type: 'success', text: '部署成功', time: '09:45' },
-        { type: 'info', text: 'Sprint 进度更新 68%', time: '09:30' },
-        { type: 'warning', text: '发布审批等待确认', time: '09:12' },
-        { type: 'success', text: '接口契约检查通过', time: '08:58' },
-        { type: 'info', text: '测试环境容量已扩容', time: '08:41' },
-        { type: 'success', text: '代码质量扫描完成', time: '08:26' },
-        { type: 'warning', text: '回归用例仍有 3 条待确认', time: '08:10' },
-        { type: 'success', text: '制品版本已归档', time: '07:52' },
-        { type: 'info', text: '监控规则完成同步', time: '07:35' },
-        { type: 'success', text: '协作通知已发送', time: '07:18' }
-      ];
-
       return (
         <div className="card pipeline-full" data-testid="pipeline-view">
           <div className="card-header">
@@ -4130,7 +4252,7 @@
           </div>
           <div className="card-body">
             <div className="pipeline-stages">
-              {stages.map((stage, idx) => (
+              {WORKFLOW_STAGES.map((stage, idx) => (
                 <div key={idx} className="stage-item">
                   <div className={`stage-circle ${stage.status}`} onClick={() => onStageClick(stage.name)} style={{cursor: 'pointer'}} data-interaction-id={`click:pipeline:stage:${stage.name}`}>
                     <span className="stage-count">{stage.count}</span>
@@ -4148,7 +4270,7 @@
             <div className="pipeline-timeline">
               <div className="timeline-header">最近活动</div>
               <div className="timeline-events">
-                {events.map((event, idx) => (
+                {RECENT_ACTIVITY_EVENTS.map((event, idx) => (
                   <div key={idx} className="timeline-event">
                     <span className={`event-dot ${event.type}`}></span>
                     <span className="event-text">{event.text}</span>
@@ -4157,6 +4279,23 @@
                 ))}
               </div>
             </div>
+          </div>
+        </div>
+      );
+    }
+
+    function RecentActivityList({ events }) {
+      return (
+        <div className="pipeline-timeline" data-testid="recent-activity-list">
+          <div className="timeline-header">最近活动</div>
+          <div className="timeline-events">
+            {events.map((event, idx) => (
+              <div key={idx} className="timeline-event">
+                <span className={`event-dot ${event.type}`}></span>
+                <span className="event-text">{event.text}</span>
+                <span className="event-time">{event.time}</span>
+              </div>
+            ))}
           </div>
         </div>
       );

@@ -68,7 +68,7 @@
     }
 
     .workbench-shell.has-top-expanded {
-      --top-panel-height: 164px;
+      --top-panel-height: 224px;
     }
 
     .workbench-shell.has-bottom-expanded {
@@ -329,7 +329,7 @@
     }
 
     .top-metrics-panel.is-collapsed { max-height: 36px; min-height: 36px; }
-    .top-metrics-panel.is-expanded { max-height: 164px; min-height: 164px; }
+    .top-metrics-panel.is-expanded { max-height: 224px; min-height: 224px; }
 
     .top-panel-stack {
       height: 100%;
@@ -345,6 +345,161 @@
       align-items: center;
       justify-content: space-between;
       padding: 0 12px 0 16px;
+      gap: 12px;
+    }
+
+    .top-workflow-summary {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow: hidden;
+    }
+
+    .top-workflow-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+
+    .top-workflow-stage-row {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      overflow: hidden;
+    }
+
+    .top-stage-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+      color: var(--text-secondary);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .top-stage-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--border-color-hover);
+      flex-shrink: 0;
+    }
+
+    .top-stage-chip.healthy .top-stage-dot { background: var(--success); }
+    .top-stage-chip.warning .top-stage-dot { background: var(--warning); }
+    .top-stage-chip.error .top-stage-dot { background: var(--error); }
+
+    .top-stage-connector {
+      width: 14px;
+      height: 1px;
+      background: var(--border-color);
+      flex-shrink: 0;
+    }
+
+    .top-metrics-panel.is-collapsed .workflow-detail-panel {
+      display: none;
+    }
+
+    .top-metrics-panel.is-expanded .workflow-detail-panel {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: auto auto;
+      align-content: start;
+      gap: 8px;
+      padding: 8px 12px 12px;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .workflow-node-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .workflow-node-card {
+      min-width: 0;
+      border: 1px solid var(--border-color);
+      background: var(--bg-card);
+      border-radius: 8px;
+      padding: 7px 8px;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      column-gap: 8px;
+      align-items: center;
+    }
+
+    .workflow-node-card.healthy { border-color: rgba(16, 185, 129, 0.28); }
+    .workflow-node-card.warning { border-color: rgba(245, 158, 11, 0.34); background: rgba(245, 158, 11, 0.06); }
+    .workflow-node-card.error { border-color: rgba(239, 68, 68, 0.32); background: rgba(239, 68, 68, 0.05); }
+
+    .workflow-node-count {
+      font-size: 18px;
+      line-height: 1;
+      font-weight: 800;
+      color: var(--text-primary);
+      grid-row: 1 / span 2;
+    }
+
+    .workflow-node-name {
+      font-size: 11px;
+      color: var(--text-secondary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .workflow-node-status {
+      font-size: 10px;
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .workflow-detail-side {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .workflow-detail-card {
+      border: 1px solid var(--border-color);
+      background: var(--bg-card);
+      border-radius: 8px;
+      padding: 7px 9px;
+      min-width: 0;
+    }
+
+    .workflow-detail-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .workflow-detail-value {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-primary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .workflow-detail-note {
+      font-size: 11px;
+      color: var(--warning);
+      line-height: 1.45;
     }
 
     .metrics-strip {
@@ -2197,102 +2352,59 @@
     </div>
   </header>
 
-  <!-- ═══ TOP METRICS PANEL ═══ -->
-  <section class="top-metrics-panel is-collapsed" data-testid="top-metrics-panel" aria-label="指标面板">
+  <!-- ═══ TOP WORKFLOW PANEL ═══ -->
+  <section class="top-metrics-panel is-collapsed" data-testid="top-metrics-panel" aria-label="全流程阶段面板">
     <div class="panel-center-rail" data-testid="top-metrics-rail">
     <div class="top-panel-stack">
-    <div class="top-panel-bar">
-      <span style="font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">指标概览</span>
-      <button class="metrics-toggle" data-testid="top-metrics-toggle" aria-controls="top-metrics-content" aria-expanded="false" aria-label="展开指标面板">
+    <div class="top-panel-bar" id="top-workflow-content">
+      <div class="top-workflow-summary" data-testid="top-workflow-summary">
+        <span class="top-workflow-label">全流程阶段</span>
+        <div class="top-workflow-stage-row" aria-label="收起态阶段概览">
+          <span class="top-stage-chip healthy"><span class="top-stage-dot" aria-hidden="true"></span>需求管理</span>
+          <span class="top-stage-connector" aria-hidden="true"></span>
+          <span class="top-stage-chip healthy"><span class="top-stage-dot" aria-hidden="true"></span>设计建模</span>
+          <span class="top-stage-connector" aria-hidden="true"></span>
+          <span class="top-stage-chip warning"><span class="top-stage-dot" aria-hidden="true"></span>代码开发</span>
+          <span class="top-stage-connector" aria-hidden="true"></span>
+          <span class="top-stage-chip healthy"><span class="top-stage-dot" aria-hidden="true"></span>代码检查</span>
+          <span class="top-stage-connector" aria-hidden="true"></span>
+          <span class="top-stage-chip healthy"><span class="top-stage-dot" aria-hidden="true"></span>构建集成</span>
+          <span class="top-stage-connector" aria-hidden="true"></span>
+          <span class="top-stage-chip error"><span class="top-stage-dot" aria-hidden="true"></span>测试验证</span>
+          <span class="top-stage-connector" aria-hidden="true"></span>
+          <span class="top-stage-chip healthy"><span class="top-stage-dot" aria-hidden="true"></span>部署上线</span>
+          <span class="top-stage-connector" aria-hidden="true"></span>
+          <span class="top-stage-chip healthy"><span class="top-stage-dot" aria-hidden="true"></span>运维监控</span>
+        </div>
+      </div>
+      <button class="metrics-toggle" data-testid="top-metrics-toggle" aria-controls="top-workflow-content" aria-expanded="false" aria-label="展开全流程阶段面板">
         <span style="font-size: 12px; font-weight: 500;">展开</span>
         <i data-lucide="chevron-down"></i>
       </button>
     </div>
-    <!-- Collapsed: compact pill row -->
-    <div class="metrics-strip">
-      <div class="metric-pill">
-        <div class="metric-pill-icon blue"><i data-lucide="rocket"></i></div>
-        <div class="metric-pill-info">
-          <span class="metric-pill-label">今日部署</span>
-          <span class="metric-pill-value">12</span>
-        </div>
-        <span class="metric-pill-trend up">↑23%</span>
+    <div class="workflow-detail-panel" data-testid="top-workflow-detail" aria-hidden="true">
+      <div class="workflow-node-grid">
+        <div class="workflow-node-card healthy"><div class="workflow-node-count">23</div><div class="workflow-node-name">需求管理</div><div class="workflow-node-status">正常流转</div></div>
+        <div class="workflow-node-card healthy"><div class="workflow-node-count">18</div><div class="workflow-node-name">设计建模</div><div class="workflow-node-status">评审中</div></div>
+        <div class="workflow-node-card warning"><div class="workflow-node-count">45</div><div class="workflow-node-name">代码开发</div><div class="workflow-node-status">2 项阻塞</div></div>
+        <div class="workflow-node-card healthy"><div class="workflow-node-count">12</div><div class="workflow-node-name">代码检查</div><div class="workflow-node-status">通过率 92%</div></div>
+        <div class="workflow-node-card healthy"><div class="workflow-node-count">31</div><div class="workflow-node-name">构建集成</div><div class="workflow-node-status">稳定</div></div>
+        <div class="workflow-node-card error"><div class="workflow-node-count">28</div><div class="workflow-node-name">测试验证</div><div class="workflow-node-status">3 条失败</div></div>
+        <div class="workflow-node-card healthy"><div class="workflow-node-count">15</div><div class="workflow-node-name">部署上线</div><div class="workflow-node-status">待审批 1</div></div>
+        <div class="workflow-node-card healthy"><div class="workflow-node-count">8</div><div class="workflow-node-name">运维监控</div><div class="workflow-node-status">无 P0</div></div>
       </div>
-      <div class="metric-pill">
-        <div class="metric-pill-icon green"><i data-lucide="check-circle"></i></div>
-        <div class="metric-pill-info">
-          <span class="metric-pill-label">构建成功率</span>
-          <span class="metric-pill-value">94.7%</span>
+      <div class="workflow-detail-side">
+        <div class="workflow-detail-card">
+          <div class="workflow-detail-label">当前重点</div>
+          <div class="workflow-detail-value">测试验证存在 3 条失败</div>
         </div>
-        <span class="metric-pill-trend up">↑2.3%</span>
-      </div>
-      <div class="metric-pill">
-        <div class="metric-pill-icon red"><i data-lucide="alert-triangle"></i></div>
-        <div class="metric-pill-info">
-          <span class="metric-pill-label">活跃告警</span>
-          <span class="metric-pill-value">3条</span>
+        <div class="workflow-detail-card">
+          <div class="workflow-detail-label">节点情况</div>
+          <div class="workflow-detail-value">6 正常 · 1 预警 · 1 异常</div>
         </div>
-        <span class="metric-pill-trend down">2 严重</span>
-      </div>
-      <div class="metric-pill">
-        <div class="metric-pill-icon amber"><i data-lucide="target"></i></div>
-        <div class="metric-pill-info">
-          <span class="metric-pill-label">Sprint 进度</span>
-          <span class="metric-pill-value">Sprint 14</span>
-        </div>
-        <span class="metric-pill-trend up">68%</span>
-      </div>
-    </div>
-
-    <!-- Expanded: full metric cards -->
-    <div class="metrics-detail" id="top-metrics-content" aria-hidden="true">
-      <div class="metric-card">
-        <div class="metric-header">
-          <span class="metric-label">今日部署</span>
-          <div class="metric-icon blue"><i data-lucide="rocket"></i></div>
-        </div>
-        <div class="metric-value">12</div>
-        <div class="metric-trend">
-          <span class="trend-badge up">↑23%</span>
-          <span class="trend-text">较昨日</span>
-        </div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-header">
-          <span class="metric-label">构建成功率</span>
-          <div class="metric-icon green"><i data-lucide="check-circle"></i></div>
-        </div>
-        <div class="metric-value">94.7%</div>
-        <div class="metric-trend">
-          <span class="trend-badge up">↑2.3%</span>
-          <span class="trend-text">较上周</span>
-        </div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-header">
-          <span class="metric-label">活跃告警</span>
-          <div class="metric-icon red"><i data-lucide="alert-triangle"></i></div>
-        </div>
-        <div class="metric-value">3条</div>
-        <div class="metric-trend">
-          <span class="trend-badge down" style="background: rgba(239, 68, 68, 0.1); color: var(--error);">2 严重</span>
-          <span class="trend-badge down" style="background: rgba(245, 158, 11, 0.1); color: var(--warning);">1 警告</span>
-        </div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-header">
-          <span class="metric-label">Sprint 进度</span>
-          <div class="metric-icon amber"><i data-lucide="target"></i></div>
-        </div>
-        <div class="metric-value">Sprint 14</div>
-        <div class="progress-container">
-          <div class="progress-header">
-            <span class="progress-label">完成率</span>
-            <span class="progress-value">68%</span>
-          </div>
-          <div class="progress-bar">
-            <div class="progress-fill" style="width: 68%"></div>
-          </div>
+        <div class="workflow-detail-card">
+          <div class="workflow-detail-label">处理建议</div>
+          <div class="workflow-detail-note">优先确认测试失败原因，并联动代码开发阶段处理阻塞项。</div>
         </div>
       </div>
     </div>
@@ -2925,7 +3037,6 @@
     <div class="panel-center-rail" data-testid="bottom-history-rail">
     <div class="bottom-tabs">
       <button class="bottom-tab active" data-bottom-tab="recent">最近活动 <span class="tab-count">12</span></button>
-      <button class="bottom-tab" data-bottom-tab="pipeline">全流程历史</button>
       <button class="bottom-tab" data-bottom-tab="exec">执行记录</button>
       <button class="bottom-toggle" data-testid="bottom-history-toggle" aria-controls="bottom-history-content" aria-expanded="false" aria-label="展开历史面板">
         <i data-lucide="chevron-up"></i>
@@ -2997,58 +3108,6 @@
             <span class="event-text">协作通知已发送</span>
             <span class="event-time">06:40</span>
           </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Bottom content: 全流程历史 -->
-    <div class="bottom-content" data-bottom-content="pipeline">
-      <div class="bottom-header">
-        <div class="pipeline-filters">
-          <button class="filter-btn">今日</button>
-          <button class="filter-btn active">本周</button>
-          <button class="filter-btn">本月</button>
-        </div>
-      </div>
-      <div class="pipeline-stages">
-        <div class="stage-item">
-          <div class="stage-circle healthy"><span class="stage-count">23</span></div>
-          <span class="stage-label">需求管理</span>
-          <div class="stage-connector"><div class="stage-connector-line active"></div></div>
-        </div>
-        <div class="stage-item">
-          <div class="stage-circle healthy"><span class="stage-count">18</span></div>
-          <span class="stage-label">设计建模</span>
-          <div class="stage-connector"><div class="stage-connector-line active"></div></div>
-        </div>
-        <div class="stage-item">
-          <div class="stage-circle warning"><span class="stage-count">45</span></div>
-          <span class="stage-label">代码开发</span>
-          <div class="stage-connector"><div class="stage-connector-line"></div></div>
-        </div>
-        <div class="stage-item">
-          <div class="stage-circle healthy"><span class="stage-count">12</span></div>
-          <span class="stage-label">代码检查</span>
-          <div class="stage-connector"><div class="stage-connector-line"></div></div>
-        </div>
-        <div class="stage-item">
-          <div class="stage-circle healthy"><span class="stage-count">31</span></div>
-          <span class="stage-label">构建集成</span>
-          <div class="stage-connector"><div class="stage-connector-line"></div></div>
-        </div>
-        <div class="stage-item">
-          <div class="stage-circle error"><span class="stage-count">28</span></div>
-          <span class="stage-label">测试验证</span>
-          <div class="stage-connector"><div class="stage-connector-line"></div></div>
-        </div>
-        <div class="stage-item">
-          <div class="stage-circle healthy"><span class="stage-count">15</span></div>
-          <span class="stage-label">部署上线</span>
-          <div class="stage-connector"><div class="stage-connector-line"></div></div>
-        </div>
-        <div class="stage-item">
-          <div class="stage-circle healthy"><span class="stage-count">8</span></div>
-          <span class="stage-label">运维监控</span>
         </div>
       </div>
     </div>
@@ -3144,7 +3203,7 @@
   // ── Top metrics panel toggle ──
   const metricsToggle = document.querySelector('[data-testid="top-metrics-toggle"]');
   const metricsPanel = document.querySelector('.top-metrics-panel');
-  const metricsContent = document.getElementById('top-metrics-content');
+  const workflowContent = document.querySelector('[data-testid="top-workflow-detail"]');
   const workbenchShell = document.querySelector('.workbench-shell');
   if (metricsToggle && metricsPanel) {
     metricsToggle.addEventListener('click', function() {
@@ -3153,10 +3212,10 @@
       metricsPanel.classList.toggle('is-expanded', isCollapsed);
       this.classList.toggle('is-flipped', isCollapsed);
       this.setAttribute('aria-expanded', String(isCollapsed));
-      this.setAttribute('aria-label', isCollapsed ? '收起指标面板' : '展开指标面板');
+      this.setAttribute('aria-label', isCollapsed ? '收起全流程阶段面板' : '展开全流程阶段面板');
       const label = this.querySelector('span');
       if (label) label.textContent = isCollapsed ? '收起' : '展开';
-      if (metricsContent) metricsContent.setAttribute('aria-hidden', String(!isCollapsed));
+      if (workflowContent) workflowContent.setAttribute('aria-hidden', String(!isCollapsed));
       if (workbenchShell) workbenchShell.classList.toggle('has-top-expanded', isCollapsed);
     });
   }
