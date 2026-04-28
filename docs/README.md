@@ -17,12 +17,24 @@
 
 | 文档 | 说明 | 状态 |
 |------|------|------|
+| [README.md](./architecture/README.md) | 架构文档入口、4+1 视图边界和阅读顺序 | 活跃 |
+| [DISCUSSION-HANDOFF-2026-04-28.md](./architecture/DISCUSSION-HANDOFF-2026-04-28.md) | 当前讨论进展交接，供后续 Agent 会话继续讨论 | 活跃 |
+| [APPLICATION-ARCHITECTURE-BASELINE.md](./architecture/APPLICATION-ARCHITECTURE-BASELINE.md) | 企业级应用架构基线：统一上下文、多项目多用户、性能并发、安全治理 | 活跃 |
 | [ARCHITECTURE-OVERVIEW.md](./architecture/ARCHITECTURE-OVERVIEW.md) | 4+1 视图架构总览 | 活跃 |
 | [UNIFIED-DOMAIN-MODEL.md](./architecture/UNIFIED-DOMAIN-MODEL.md) | 统一对象模型 (8+3 对象) | 活跃 |
+| [REFERENCE-PROJECTS-AND-RESEARCH.md](./architecture/REFERENCE-PROJECTS-AND-RESEARCH.md) | 开源框架、竞品调研和可引入经验登记 | 活跃 |
 | [ENVIRONMENT-AND-PROMOTION.md](./architecture/ENVIRONMENT-AND-PROMOTION.md) | 多环境隔离与晋升机制 | 活跃 |
 | [INTEGRATION-ROADMAP.md](./architecture/INTEGRATION-ROADMAP.md) | 存量系统逐步整合路线 | 活跃 |
 | [AI-NATIVE-DEVELOPMENT.md](./architecture/AI-NATIVE-DEVELOPMENT.md) | AI 原生开发流程 | 活跃 |
 | [VERIFICATION-FRAMEWORK.md](./architecture/VERIFICATION-FRAMEWORK.md) | 验证体系与可视化 | 活跃 |
+
+### 原型与高保真 (`prototype/`)
+
+| 文档 | 说明 | 状态 |
+|------|------|------|
+| [prototype/README.md](./prototype/README.md) | 当前首页高保真基线和归档入口 | 活跃 |
+| [prototype/homepage.html](./prototype/homepage.html) | 当前静态首页高保真原型 | 活跃 |
+| [prototype/archive/homepage-workbench-2026-04-27/README.md](./prototype/archive/homepage-workbench-2026-04-27/README.md) | 当前首页工作台布局基线归档 | 归档 |
 
 ### 行业调研 (`research/`)
 
@@ -32,6 +44,7 @@
 |------|------|------|
 | [enterprise-ai-summary/README.md](./research/enterprise-ai-summary/README.md) | 企业级 AI Agent 平台综合调研 | 活跃 |
 | [devops-ai-platforms/devops-ai-agent-research-2026-03-26.md](./research/devops-ai-platforms/devops-ai-agent-research-2026-03-26.md) | DevOps AI Agent 综合调研 | 活跃 |
+| [agentic-workbench-reference-patterns/README.md](./research/agentic-workbench-reference-patterns/README.md) | Agentic Workbench 开源参考项目与可迁移经验 | 活跃 |
 
 #### 平台专项调研 (`research/`)
 
@@ -58,11 +71,12 @@
 
 | 类别 | 数量 |
 |------|------|
-| 架构文档 | 6 |
-| 综合调研 | 2 |
+| 架构文档 | 10 |
+| 原型与高保真 | 1 |
+| 综合调研 | 3 |
 | 平台专项调研 | 13 |
-| **总计** | **21** |
+| **总计** | **27** |
 
 ---
 
-*最后更新：2026-04-06*
+*最后更新：2026-04-28*

@@ -2,9 +2,21 @@
 
 > 生成时间：2026-04-02
 > 状态：设计讨论中
-> 关联文档：[统一对象模型](./UNIFIED-DOMAIN-MODEL.md) | [环境与晋升](./ENVIRONMENT-AND-PROMOTION.md) | [AI 原生流程](./AI-NATIVE-DEVELOPMENT.md)
+> 关联文档：[应用架构基线](./APPLICATION-ARCHITECTURE-BASELINE.md) | [统一对象模型](./UNIFIED-DOMAIN-MODEL.md) | [环境与晋升](./ENVIRONMENT-AND-PROMOTION.md) | [AI 原生流程](./AI-NATIVE-DEVELOPMENT.md)
 
 ---
+
+## 当前讨论基线
+
+2026-04-27 之后的 4+1 架构讨论以 [APPLICATION-ARCHITECTURE-BASELINE.md](./APPLICATION-ARCHITECTURE-BASELINE.md) 为前置基线。本文中的具体技术栈、消息队列、存储、中间件和部署形态如未被后续 ADR 明确确认，都只视为早期草案或示例，不构成当前选型结论。
+
+当前先固定：
+
+- 统一上下文平台：证据、关系、索引、记忆、上下文构建和权限过滤。
+- 多项目多用户模型：Tenant、Workspace、Project、User、Team、Role、Agent、Run。
+- 运行事实层：Run、Plan、Step、ToolCall、Approval、Artifact、Event。
+- 企业治理：IAM、ACL、Policy、Approval、Audit、Sandbox、Secret Vault。
+- 性能并发：前台对话、后台任务、索引同步、投影查询分链路设计。
 
 ## 一、架构全景
 

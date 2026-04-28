@@ -122,10 +122,13 @@ docs/
 ├── research/
 │   ├── SDD-ECOSYSTEM.md                         # SDD 生态研究报告
 │   ├── INDUSTRY-RESEARCH.md                     # 业界 AI Agent 产品调研
-│   └── ENTERPRISE-AI-PLATFORMS.md               # 企业 AI 平台研究
+│   ├── ENTERPRISE-AI-PLATFORMS.md               # 企业 AI 平台研究
+│   └── agentic-workbench-reference-patterns/     # Agentic Workbench 开源参考项目与可迁移经验
 └── architecture/
+    ├── README.md                                # 架构文档入口、4+1 视图边界和阅读顺序
     ├── ARCHITECTURE-OVERVIEW.md                 # 4+1 视图架构总览
     ├── UNIFIED-DOMAIN-MODEL.md                   # 统一对象模型 (8+3 对象)
+    ├── REFERENCE-PROJECTS-AND-RESEARCH.md       # 开源框架、竞品调研和可引入经验登记
     ├── ENVIRONMENT-AND-PROMOTION.md              # 多环境隔离与晋升机制
     ├── INTEGRATION-ROADMAP.md                    # 存量系统逐步整合路线
     ├── AI-NATIVE-DEVELOPMENT.md                  # AI 原生开发流程
