@@ -162,9 +162,46 @@
       font-weight: 500;
     }
 
-    .collapse-btn {
-      width: 30px;
+    .project-switcher {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
       height: 30px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-card);
+      border-radius: 6px;
+      padding: 0 8px;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .project-switcher-label {
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .project-select {
+      height: 30px;
+      border: 0;
+      background: transparent;
+      color: var(--text-secondary);
+      padding: 0 20px 0 0;
+      font-size: 12px;
+      font-weight: 600;
+      outline: none;
+      cursor: pointer;
+      max-width: 130px;
+    }
+
+    .project-switcher:focus-within {
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+    }
+
+    .collapse-btn {
+      width: 32px;
+      height: 32px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -181,10 +218,10 @@
       color: var(--text-primary);
     }
 
+    .collapse-btn i,
     .side-panel-glyph {
-      font-size: 18px;
-      line-height: 1;
-      font-weight: 700;
+      width: 17px;
+      height: 17px;
     }
 
     .titlebar-center {
@@ -751,15 +788,25 @@
     }
 
     .sidebar-section-toggle {
-      width: 100%;
       border: 0;
       background: transparent;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 16px 8px 20px;
+      gap: 6px;
+      padding: 0;
       color: var(--text-muted);
       cursor: pointer;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .sidebar-section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 0 14px 8px 20px;
     }
 
     .sidebar-section-toggle .sidebar-section-title {
@@ -785,6 +832,30 @@
 
     .sidebar-section-body {
       overflow: hidden;
+    }
+
+    .sidebar-new-chat-btn {
+      width: 24px;
+      height: 24px;
+      border: 0;
+      border-radius: 5px;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+    }
+
+    .sidebar-new-chat-btn:hover {
+      color: var(--accent-blue);
+      background: rgba(59, 130, 246, 0.08);
+    }
+
+    .sidebar-new-chat-btn i {
+      width: 15px;
+      height: 15px;
     }
 
     .conversation-list {
@@ -1342,6 +1413,13 @@
       font-size: 24px;
       font-weight: 700;
       color: var(--text-primary);
+    }
+
+    .metric-status {
+      margin-top: 5px;
+      font-size: 11px;
+      line-height: 1.35;
+      color: var(--text-muted);
     }
 
     .task-list {
@@ -2143,6 +2221,59 @@
       margin-top: 4px;
     }
 
+    .detail-empty {
+      border: 1px dashed var(--border-color);
+      border-radius: 10px;
+      background: var(--bg-card);
+      color: var(--text-muted);
+      font-size: 12px;
+      line-height: 1.5;
+      padding: 14px;
+    }
+
+    .detail-section {
+      padding: 14px 16px;
+      border-top: 1px solid var(--border-color);
+    }
+
+    .detail-section:first-child {
+      border-top: 0;
+    }
+
+    .detail-section-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      margin-bottom: 8px;
+    }
+
+    .detail-meta-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .detail-meta-item {
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      background: var(--bg-primary);
+      padding: 8px;
+    }
+
+    .detail-meta-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-bottom: 3px;
+    }
+
+    .detail-meta-value {
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-weight: 650;
+    }
+
     /* Alerts in right tab */
     .alerts-list {
       display: flex;
@@ -2814,7 +2945,7 @@
   <header class="workbench-titlebar" data-testid="workbench-titlebar">
     <div class="titlebar-left">
       <button type="button" class="collapse-btn" data-testid="left-sidebar-toggle" aria-label="收起左侧栏" aria-expanded="true">
-        <span class="side-panel-glyph" aria-hidden="true">‹</span>
+        <i data-lucide="panel-left-close" class="side-panel-glyph" aria-hidden="true"></i>
       </button>
       <div class="logo">
         <div class="logo-icon">
@@ -2823,9 +2954,14 @@
         <span class="logo-text">AI DevOps</span>
         <span class="version-badge">v2.0</span>
       </div>
-      <button type="button" class="collapse-btn" data-testid="top-nav-toggle" aria-label="收起顶部导航条" aria-expanded="true">
-        <span class="side-panel-glyph" aria-hidden="true">⌃</span>
-      </button>
+      <label class="project-switcher" aria-label="项目选项">
+        <span class="project-switcher-label">项目</span>
+        <select class="project-select" data-testid="project-select" aria-label="选择项目">
+          <option>AgentCenter</option>
+          <option>TianYuan</option>
+          <option>平台接入</option>
+        </select>
+      </label>
     </div>
 
     <div class="titlebar-center">
@@ -2836,8 +2972,11 @@
     </div>
 
     <div class="titlebar-right">
+      <button type="button" class="collapse-btn" data-testid="top-nav-toggle" aria-label="收起顶部导航条" aria-expanded="true">
+        <i data-lucide="panel-top-close" class="side-panel-glyph" aria-hidden="true"></i>
+      </button>
       <button type="button" class="collapse-btn" data-testid="right-sidebar-toggle" aria-label="收起右侧栏" aria-expanded="true">
-        <span class="side-panel-glyph" aria-hidden="true">›</span>
+        <i data-lucide="panel-right-close" class="side-panel-glyph" aria-hidden="true"></i>
       </button>
       <div class="nav-icon-btn">
         <i data-lucide="bell"></i>
@@ -2939,10 +3078,15 @@
         </nav>
 
         <div class="sidebar-section" data-testid="sidebar-section-conversations">
-          <button type="button" class="sidebar-section-toggle" data-testid="sidebar-section-toggle-conversations" aria-expanded="true" aria-controls="sidebar-section-body-conversations">
-            <span class="sidebar-section-title">会话分组</span>
-            <span class="sidebar-section-chevron" aria-hidden="true">⌄</span>
-          </button>
+          <div class="sidebar-section-header">
+            <button type="button" class="sidebar-section-toggle" data-testid="sidebar-section-toggle-conversations" aria-expanded="true" aria-controls="sidebar-section-body-conversations">
+              <span class="sidebar-section-title">会话列表</span>
+              <span class="sidebar-section-chevron" aria-hidden="true">⌄</span>
+            </button>
+            <button type="button" class="sidebar-new-chat-btn" data-testid="sidebar-new-chat" aria-label="新建会话">
+              <i data-lucide="plus"></i>
+            </button>
+          </div>
           <div class="sidebar-section-body" id="sidebar-section-body-conversations" data-testid="sidebar-section-body-conversations">
             <div class="conversation-group-heading">
               <span>置顶</span>
@@ -2965,15 +3109,11 @@
               </button>
             </div>
 
-            <div class="conversation-group-heading">
-              <span>项目</span>
-              <i data-lucide="folder"></i>
-            </div>
             <div class="conversation-project">
-              <span class="conversation-project-main"><i data-lucide="folder-open"></i>AgentCenter</span>
-              <button type="button" class="conversation-project-action" aria-label="新建 AgentCenter 会话"><i data-lucide="edit-3"></i></button>
+              <span class="conversation-project-main"><i data-lucide="folder-open"></i>FE</span>
+              <button type="button" class="conversation-project-action" aria-label="新建 FE 会话"><i data-lucide="edit-3"></i></button>
             </div>
-            <div class="conversation-list">
+            <div class="conversation-list" data-conversation-bucket="FE">
               <button type="button" class="conversation-list-item conversation-child">
                 <span class="conversation-list-topline">
                   <span class="conversation-list-title">首页工作台布局</span>
@@ -2991,23 +3131,79 @@
             </div>
 
             <div class="conversation-project">
-              <span class="conversation-project-main"><i data-lucide="folder"></i>平台接入</span>
-              <button type="button" class="conversation-project-action" aria-label="新建平台接入会话"><i data-lucide="edit-3"></i></button>
+              <span class="conversation-project-main"><i data-lucide="folder"></i>US</span>
+              <button type="button" class="conversation-project-action" aria-label="新建 US 会话"><i data-lucide="edit-3"></i></button>
             </div>
-            <div class="conversation-list">
+            <div class="conversation-list" data-conversation-bucket="US">
               <button type="button" class="conversation-list-item conversation-child">
                 <span class="conversation-list-topline">
-                  <span class="conversation-list-title">发布门禁检查</span>
+                  <span class="conversation-list-title">用户从看板进入任务对话</span>
                   <span class="conversation-list-time">09:48</span>
                 </span>
-                <span class="conversation-list-meta">发布平台 · 预发布</span>
+                <span class="conversation-list-meta">US-3 · Todo · 设计</span>
               </button>
               <button type="button" class="conversation-list-item conversation-child">
                 <span class="conversation-list-topline">
-                  <span class="conversation-list-title">延迟告警跟进</span>
+                  <span class="conversation-list-title">按统计指标过滤首页条目</span>
                   <span class="conversation-list-time">09:12</span>
                 </span>
-                <span class="conversation-list-meta">监控观测 · P1 降级</span>
+                <span class="conversation-list-meta">US-7 · Done · 运营</span>
+              </button>
+            </div>
+
+            <div class="conversation-project">
+              <span class="conversation-project-main"><i data-lucide="folder"></i>Task</span>
+              <button type="button" class="conversation-project-action" aria-label="新建 Task 会话"><i data-lucide="edit-3"></i></button>
+            </div>
+            <div class="conversation-list" data-conversation-bucket="Task">
+              <button type="button" class="conversation-list-item conversation-child">
+                <span class="conversation-list-topline">
+                  <span class="conversation-list-title">梳理 4+1 架构视图文档</span>
+                  <span class="conversation-list-time">19 小时</span>
+                </span>
+                <span class="conversation-list-meta">TASK-8 · In Review · 发布</span>
+              </button>
+            </div>
+
+            <div class="conversation-project">
+              <span class="conversation-project-main"><i data-lucide="folder"></i>Work</span>
+              <button type="button" class="conversation-project-action" aria-label="新建 Work 会话"><i data-lucide="edit-3"></i></button>
+            </div>
+            <div class="conversation-list" data-conversation-bucket="Work">
+              <button type="button" class="conversation-list-item conversation-child">
+                <span class="conversation-list-topline">
+                  <span class="conversation-list-title">企业内部平台权限对接</span>
+                  <span class="conversation-list-time">2 天</span>
+                </span>
+                <span class="conversation-list-meta">WORK-5 · Backlog · 分析</span>
+              </button>
+            </div>
+
+            <div class="conversation-project">
+              <span class="conversation-project-main"><i data-lucide="folder"></i>缺陷</span>
+              <button type="button" class="conversation-project-action" aria-label="新建缺陷会话"><i data-lucide="edit-3"></i></button>
+            </div>
+            <div class="conversation-list" data-conversation-bucket="缺陷">
+              <button type="button" class="conversation-list-item conversation-child">
+                <span class="conversation-list-topline">
+                  <span class="conversation-list-title">顶部面板展开时节点重叠</span>
+                  <span class="conversation-list-time">昨日</span>
+                </span>
+                <span class="conversation-list-meta">BUG-2 · Done · 运营</span>
+              </button>
+            </div>
+
+            <div class="conversation-project">
+              <span class="conversation-project-main"><i data-lucide="folder"></i>漏洞</span>
+              <button type="button" class="conversation-project-action" aria-label="新建漏洞会话"><i data-lucide="edit-3"></i></button>
+            </div>
+            <div class="conversation-list" data-conversation-bucket="漏洞">
+              <button type="button" class="conversation-list-item conversation-child">
+                <span class="conversation-list-topline">
+                  <span class="conversation-list-title">上下文知识库访问边界校验</span>
+                  <span class="conversation-list-time">刚刚</span>
+                </span>
+                <span class="conversation-list-meta">VULN-1 · In Progress · 开发</span>
               </button>
             </div>
 
@@ -3279,6 +3475,7 @@
     <aside class="workbench-right" data-testid="workbench-right">
       <div class="right-tabs">
         <button class="right-tab active" role="tab" aria-selected="true" data-tab="alerts">主动预警</button>
+        <button class="right-tab" role="tab" aria-selected="false" data-tab="detail">详情</button>
       </div>
 
       <!-- Tab: 主动预警 -->
@@ -3326,6 +3523,14 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- Tab: 详情 -->
+      <div class="right-tab-content" data-tab-content="detail">
+        <div class="detail-empty" data-testid="task-detail-empty">
+          从首页条目或看板卡片选择一个事项后，这里会展示详情，并可基于该事项新建会话。
+        </div>
+        <div data-testid="task-detail-panel"></div>
       </div>
     </aside>
 
@@ -3449,12 +3654,12 @@
   lucide.createIcons();
 
   const taskTypes = [
-    { key: 'FE', label: 'FE', name: '功能特性', count: 8, cls: 'type-fe' },
-    { key: 'US', label: 'US', name: '用户故事', count: 12, cls: 'type-us' },
-    { key: 'Task', label: 'Task', name: '任务', count: 18, cls: 'type-task' },
-    { key: 'Work', label: 'Work', name: '工作项', count: 9, cls: 'type-work' },
-    { key: '缺陷', label: '缺陷', name: '缺陷', count: 6, cls: 'type-bug' },
-    { key: '漏洞', label: '漏洞', name: '漏洞', count: 3, cls: 'type-vuln' }
+    { key: 'FE', label: 'FE', name: '功能特性', count: 8, statusText: '3 个开发中 · 2 个待评审', cls: 'type-fe' },
+    { key: 'US', label: 'US', name: '用户故事', count: 12, statusText: '4 个处理中 · 2 个待拆解', cls: 'type-us' },
+    { key: 'Task', label: 'Task', name: '任务', count: 18, statusText: '6 个处理中 · 5 个待办', cls: 'type-task' },
+    { key: 'Work', label: 'Work', name: '工作项', count: 9, statusText: '2 个开发中 · 3 个阻塞', cls: 'type-work' },
+    { key: '缺陷', label: '缺陷', name: '缺陷', count: 6, statusText: '2 个修复中 · 1 个待验证', cls: 'type-bug' },
+    { key: '漏洞', label: '漏洞', name: '漏洞', count: 3, statusText: '1 个处理中 · 1 个待复核', cls: 'type-vuln' }
   ];
 
   const boardStatuses = ['Backlog', 'Todo', 'In Progress', 'In Review', 'Done'];
@@ -3530,6 +3735,83 @@
     `).join('');
   }
 
+  function activateRightTab(target) {
+    document.querySelectorAll('.right-tab').forEach(tab => {
+      const isActive = tab.getAttribute('data-tab') === target;
+      tab.classList.toggle('active', isActive);
+      tab.setAttribute('aria-selected', String(isActive));
+    });
+    document.querySelectorAll('.right-tab-content').forEach(content => {
+      content.classList.toggle('active', content.getAttribute('data-tab-content') === target);
+    });
+  }
+
+  function renderTaskDetail(task) {
+    const empty = document.querySelector('[data-testid="task-detail-empty"]');
+    const panel = document.querySelector('[data-testid="task-detail-panel"]');
+    if (!panel) return;
+    if (empty) empty.style.display = 'none';
+    const type = getTypeMeta(task.type);
+    panel.innerHTML = `
+      <div class="context-detail-card">
+        <div class="context-detail-header">
+          <div>
+            <div class="context-req-id">${task.id}</div>
+            <div class="context-req-title">${task.title}</div>
+          </div>
+          <span class="type-badge ${type.cls}">${task.type}</span>
+        </div>
+        <div class="detail-section">
+          <div class="detail-section-title">事项摘要</div>
+          <div class="task-meta">${task.desc}</div>
+        </div>
+        <div class="detail-section">
+          <div class="detail-section-title">当前进展</div>
+          ${renderFlow(task)}
+        </div>
+        <div class="detail-section">
+          <div class="detail-meta-grid">
+            <div class="detail-meta-item">
+              <div class="detail-meta-label">状态</div>
+              <div class="detail-meta-value">${task.status}</div>
+            </div>
+            <div class="detail-meta-item">
+              <div class="detail-meta-label">优先级</div>
+              <div class="detail-meta-value">${task.priority}</div>
+            </div>
+            <div class="detail-meta-item">
+              <div class="detail-meta-label">工作流节点</div>
+              <div class="detail-meta-value">${workflowStages[task.stage]}</div>
+            </div>
+            <div class="detail-meta-item">
+              <div class="detail-meta-label">分类</div>
+              <div class="detail-meta-value">${type.name}</div>
+            </div>
+          </div>
+        </div>
+        <div class="detail-section">
+          <div class="blocker-card">
+            <div class="blocker-icon"><i data-lucide="sparkles"></i></div>
+            <div class="blocker-content">
+              <div class="blocker-title">可基于该事项创建会话</div>
+              <div class="blocker-meta">会自动带入类型、标题、状态、流程节点和当前上下文。</div>
+            </div>
+          </div>
+          <div class="context-actions">
+            <button type="button" class="action-btn primary" data-detail-new-chat="${task.id}">新建会话</button>
+            <button type="button" class="action-btn secondary">查看依赖</button>
+          </div>
+        </div>
+      </div>`;
+    lucide.createIcons();
+  }
+
+  function showTaskDetail(task) {
+    renderTaskDetail(task);
+    renderAlerts('chat', task);
+    activateRightTab('detail');
+  }
+
   function renderOverview() {
     const metrics = document.querySelector('[data-testid="overview-metrics"]');
     const list = document.querySelector('[data-testid="overview-task-list"]');
@@ -3538,6 +3820,7 @@
       <button type="button" class="metric-card ${activeTypeFilter === type.key ? 'active' : ''}" data-type-filter="${type.key}">
         <div class="metric-label">${type.label}</div>
         <div class="metric-value">${type.count}</div>
+        <div class="metric-status">${type.statusText}</div>
       </button>
     `).join('');
     const visibleTasks = activeTypeFilter === '全部' ? tasks : tasks.filter(task => task.type === activeTypeFilter);
@@ -3673,8 +3956,8 @@
 
   function openTaskConversation(task) {
     setWorkbenchView('chat', task);
-    const list = document.getElementById('conversation-list');
-    if (list && !list.querySelector(`[data-task-conversation="${task.id}"]`)) {
+    const list = document.querySelector(`[data-conversation-bucket="${task.type}"]`) || document.getElementById('conversation-list');
+    if (list && !document.querySelector(`[data-task-conversation="${task.id}"]`)) {
       list.insertAdjacentHTML('afterbegin', `<button type="button" class="conversation-list-item active" data-task-conversation="${task.id}">
         <span class="conversation-list-topline">
           <span class="conversation-list-title">${task.id} · ${task.title}</span>
@@ -3693,11 +3976,37 @@
     }
   }
 
+  const sidebarNewChat = document.querySelector('[data-testid="sidebar-new-chat"]');
+  if (sidebarNewChat) {
+    sidebarNewChat.addEventListener('click', function(event) {
+      event.stopPropagation();
+      setWorkbenchView('chat');
+      const list = document.getElementById('conversation-list');
+      const id = `manual-chat-${Date.now()}`;
+      if (list) {
+        list.insertAdjacentHTML('afterbegin', `<button type="button" class="conversation-list-item active" data-task-conversation="${id}">
+          <span class="conversation-list-topline">
+            <span class="conversation-list-title">新建会话</span>
+            <span class="conversation-list-time">刚刚</span>
+          </span>
+          <span class="conversation-list-meta">未选择任务 · 可输入问题</span>
+        </button>`);
+      }
+      document.querySelectorAll('.conversation-list-item').forEach(i => i.classList.remove('active'));
+      const current = document.querySelector(`[data-task-conversation="${id}"]`);
+      if (current) current.classList.add('active');
+      if (conversationMessages) {
+        conversationMessages.innerHTML = '';
+        appendConversationMessage('ai', '已创建空白会话。你可以选择一个 FE、US、Task、Work、缺陷或漏洞事项，也可以直接输入问题。');
+      }
+    });
+  }
+
   function bindTaskOpeners() {
     document.querySelectorAll('[data-task-id]').forEach(btn => {
       btn.addEventListener('click', () => {
         const task = tasks.find(item => item.id === btn.dataset.taskId);
-        if (task) openTaskConversation(task);
+        if (task) showTaskDetail(task);
       });
     });
   }
@@ -3742,14 +4051,15 @@
   document.querySelectorAll('.right-tab').forEach(tab => {
     tab.addEventListener('click', function() {
       const target = this.getAttribute('data-tab');
-      document.querySelectorAll('.right-tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.right-tab').forEach(t => t.setAttribute('aria-selected', 'false'));
-      document.querySelectorAll('.right-tab-content').forEach(c => c.classList.remove('active'));
-      this.classList.add('active');
-      this.setAttribute('aria-selected', 'true');
-      const content = document.querySelector(`[data-tab-content="${target}"]`);
-      if (content) content.classList.add('active');
+      activateRightTab(target);
     });
+  });
+
+  document.addEventListener('click', function(event) {
+    const button = event.target.closest('[data-detail-new-chat]');
+    if (!button) return;
+    const task = tasks.find(item => item.id === button.getAttribute('data-detail-new-chat'));
+    if (task) openTaskConversation(task);
   });
 
   // ── Bottom history tabs ──
@@ -3794,7 +4104,8 @@
       this.setAttribute('aria-expanded', String(!isExpanded));
       this.setAttribute('aria-label', isExpanded ? '展开左侧栏' : '收起左侧栏');
       const glyph = this.querySelector('.side-panel-glyph');
-      if (glyph) glyph.textContent = isExpanded ? '›' : '‹';
+      if (glyph) glyph.setAttribute('data-lucide', isExpanded ? 'panel-left-open' : 'panel-left-close');
+      lucide.createIcons();
     });
   }
   if (rightToggle && workbenchShell) {
@@ -3804,7 +4115,8 @@
       this.setAttribute('aria-expanded', String(!isExpanded));
       this.setAttribute('aria-label', isExpanded ? '展开右侧栏' : '收起右侧栏');
       const glyph = this.querySelector('.side-panel-glyph');
-      if (glyph) glyph.textContent = isExpanded ? '‹' : '›';
+      if (glyph) glyph.setAttribute('data-lucide', isExpanded ? 'panel-right-open' : 'panel-right-close');
+      lucide.createIcons();
     });
   }
 
@@ -3816,7 +4128,8 @@
       this.setAttribute('aria-expanded', String(!isExpanded));
       this.setAttribute('aria-label', isExpanded ? '展开顶部导航条' : '收起顶部导航条');
       const glyph = this.querySelector('.side-panel-glyph');
-      if (glyph) glyph.textContent = isExpanded ? '⌄' : '⌃';
+      if (glyph) glyph.setAttribute('data-lucide', isExpanded ? 'panel-top-open' : 'panel-top-close');
+      lucide.createIcons();
     });
   }
 
