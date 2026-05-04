@@ -726,20 +726,25 @@
     .sidebar-content {
       flex: 1;
       overflow-y: auto;
-      padding: 16px 0;
+      padding: 10px 0 14px;
     }
 
     .sidebar-section {
-      margin-bottom: 12px;
-      border-bottom: 1px solid rgba(217, 226, 236, 0.65);
-      padding-bottom: 10px;
+      margin: 0 0 12px;
+      padding-bottom: 8px;
+    }
+
+    .workspace-nav {
+      padding: 6px 8px 10px;
+      border-bottom: 1px solid rgba(217, 226, 236, 0.75);
+      margin-bottom: 10px;
     }
 
     .sidebar-section-title {
       font-size: 11px;
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.3px;
       color: var(--text-muted);
       padding: 0 20px;
       margin-bottom: 8px;
@@ -785,15 +790,15 @@
     .conversation-list {
       display: flex;
       flex-direction: column;
-      gap: 6px;
-      padding: 0 12px;
+      gap: 4px;
+      padding: 0 10px;
     }
 
     .conversation-list-item {
       border: 1px solid transparent;
       background: transparent;
-      border-radius: 8px;
-      padding: 9px 10px;
+      border-radius: 7px;
+      padding: 8px 10px;
       cursor: pointer;
       color: var(--text-secondary);
       transition: all 0.18s ease;
@@ -851,15 +856,85 @@
       color: var(--success);
     }
 
+    .conversation-group-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px 6px;
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .conversation-group-heading i {
+      width: 14px;
+      height: 14px;
+    }
+
+    .conversation-project {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 7px 20px 7px 18px;
+      color: var(--text-secondary);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .conversation-project-main {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .conversation-project-main i {
+      width: 16px;
+      height: 16px;
+      color: var(--text-muted);
+      flex: 0 0 auto;
+    }
+
+    .conversation-project-action {
+      border: 0;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 2px;
+      border-radius: 4px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .conversation-project-action:hover {
+      color: var(--accent-blue);
+      background: rgba(59, 130, 246, 0.08);
+    }
+
+    .conversation-project-action i {
+      width: 14px;
+      height: 14px;
+    }
+
+    .conversation-child {
+      margin-left: 28px;
+    }
+
     .nav-item {
       display: flex;
       align-items: center;
       gap: 12px;
-      padding: 8px 20px;
+      padding: 10px 14px;
       color: var(--text-secondary);
       cursor: pointer;
       transition: all 0.2s ease;
       border-left: 3px solid transparent;
+      border-radius: 7px;
+      font-weight: 600;
     }
 
     .nav-item:hover {
@@ -874,13 +949,13 @@
     }
 
     .nav-item i {
-      width: 18px;
-      height: 18px;
+      width: 20px;
+      height: 20px;
       opacity: 0.8;
     }
 
     .nav-item span {
-      font-size: 13px;
+      font-size: 14px;
     }
 
     .tool-item {
@@ -964,22 +1039,97 @@
     }
 
     .sidebar-footer {
-      padding: 12px 20px;
+      position: relative;
+      padding: 10px 14px;
       border-top: 1px solid var(--border-color);
     }
 
     .system-settings {
       display: flex;
       align-items: center;
+      justify-content: space-between;
       gap: 10px;
       color: var(--text-muted);
       font-size: 13px;
       cursor: pointer;
-      padding: 6px 0;
+      padding: 8px 6px;
       transition: color 0.2s ease;
+      border: 0;
+      background: transparent;
+      width: 100%;
+      border-radius: 7px;
+      text-align: left;
     }
 
-    .system-settings:hover { color: var(--text-primary); }
+    .system-settings:hover {
+      color: var(--text-primary);
+      background: rgba(59, 130, 246, 0.06);
+    }
+
+    .system-settings-main {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .system-settings i,
+    .system-settings-main i {
+      width: 18px;
+      height: 18px;
+    }
+
+    .settings-drawer {
+      position: absolute;
+      left: 10px;
+      right: 10px;
+      bottom: calc(100% + 8px);
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      box-shadow: 0 16px 36px rgba(15, 23, 42, 0.14);
+      padding: 8px;
+      display: none;
+      z-index: 20;
+    }
+
+    .settings-drawer.is-open {
+      display: block;
+    }
+
+    .settings-drawer-title {
+      padding: 4px 8px 8px;
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .settings-menu-item {
+      width: 100%;
+      border: 0;
+      background: transparent;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 8px;
+      border-radius: 7px;
+      cursor: pointer;
+      font-size: 13px;
+      text-align: left;
+    }
+
+    .settings-menu-item:hover {
+      color: var(--text-primary);
+      background: var(--bg-card-hover);
+    }
+
+    .settings-menu-item i {
+      width: 16px;
+      height: 16px;
+      color: var(--text-muted);
+    }
 
     /* Center Column */
     .workbench-center {
@@ -1122,6 +1272,309 @@
       border-color: var(--accent-blue);
       color: var(--accent-blue);
       background: rgba(59, 130, 246, 0.06);
+    }
+
+    .workbench-view {
+      display: none;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .workbench-view.active {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .overview-panel,
+    .board-panel,
+    .workflow-panel {
+      flex: 1;
+      min-height: 0;
+      margin: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-card);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .view-scroll {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      padding: 16px;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(88px, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .metric-card {
+      border: 1px solid var(--border-color);
+      background: var(--bg-primary);
+      border-radius: 10px;
+      padding: 12px;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.18s ease;
+    }
+
+    .metric-card:hover,
+    .metric-card.active {
+      border-color: rgba(59, 130, 246, 0.45);
+      background: rgba(59, 130, 246, 0.06);
+    }
+
+    .metric-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+
+    .metric-value {
+      margin-top: 6px;
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .task-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .task-row {
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      background: var(--bg-primary);
+      padding: 12px;
+      cursor: pointer;
+      text-align: left;
+      width: 100%;
+      transition: all 0.18s ease;
+    }
+
+    .task-row:hover,
+    .kanban-card:hover {
+      border-color: rgba(59, 130, 246, 0.45);
+      box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
+      transform: translateY(-1px);
+    }
+
+    .task-row-main,
+    .kanban-card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .task-title,
+    .kanban-card-title {
+      font-size: 14px;
+      font-weight: 650;
+      color: var(--text-primary);
+      line-height: 1.35;
+    }
+
+    .task-meta,
+    .kanban-card-desc {
+      margin-top: 4px;
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .type-badge,
+    .priority-badge,
+    .status-filter {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .type-badge {
+      padding: 3px 7px;
+      background: rgba(59, 130, 246, 0.1);
+      color: var(--accent-blue);
+    }
+
+    .type-fe { background: rgba(99, 102, 241, 0.12); color: #4f46e5; }
+    .type-us { background: rgba(16, 185, 129, 0.12); color: #059669; }
+    .type-task { background: rgba(245, 158, 11, 0.13); color: #b45309; }
+    .type-work { background: rgba(14, 165, 233, 0.12); color: #0284c7; }
+    .type-bug { background: rgba(239, 68, 68, 0.12); color: #dc2626; }
+    .type-vuln { background: rgba(168, 85, 247, 0.12); color: #7c3aed; }
+
+    .task-flow {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+
+    .flow-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #d7dee8;
+      border: 2px solid #fff;
+      box-shadow: 0 0 0 1px var(--border-color);
+    }
+
+    .flow-dot.done { background: var(--success); }
+    .flow-dot.current { background: var(--accent-blue); box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12); }
+    .flow-line { width: 28px; height: 1px; background: var(--border-color); }
+    .flow-label { font-size: 11px; color: var(--text-muted); margin-left: 4px; }
+
+    .board-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .filter-group {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .status-filter {
+      border: 1px solid var(--border-color);
+      background: var(--bg-primary);
+      color: var(--text-secondary);
+      padding: 6px 9px;
+      cursor: pointer;
+    }
+
+    .status-filter.active {
+      color: var(--accent-blue);
+      border-color: rgba(59, 130, 246, 0.4);
+      background: rgba(59, 130, 246, 0.08);
+    }
+
+    .kanban-board {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(210px, 1fr));
+      gap: 12px;
+      min-width: 1080px;
+    }
+
+    .kanban-column {
+      border-radius: 12px;
+      background: var(--bg-secondary);
+      padding: 10px;
+      min-height: 520px;
+    }
+
+    .kanban-column-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      color: var(--text-secondary);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .kanban-column-count {
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    .kanban-card {
+      border: 1px solid var(--border-color);
+      background: var(--bg-card);
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      text-align: left;
+      width: 100%;
+      transition: all 0.18s ease;
+    }
+
+    .kanban-card-code {
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    .priority-badge {
+      margin-top: 10px;
+      padding: 4px 7px;
+      background: rgba(249, 115, 22, 0.12);
+      color: #ea580c;
+    }
+
+    .workflow-layout {
+      display: grid;
+      grid-template-columns: 180px minmax(0, 1fr) 260px;
+      gap: 14px;
+      min-height: 560px;
+    }
+
+    .workflow-type-list,
+    .workflow-editor,
+    .workflow-rules {
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      background: var(--bg-primary);
+      padding: 12px;
+    }
+
+    .workflow-type-btn {
+      width: 100%;
+      border: 0;
+      background: transparent;
+      color: var(--text-secondary);
+      border-radius: 7px;
+      padding: 9px;
+      margin-bottom: 4px;
+      text-align: left;
+      cursor: pointer;
+      font-weight: 650;
+    }
+
+    .workflow-type-btn.active {
+      color: var(--accent-blue);
+      background: rgba(59, 130, 246, 0.08);
+    }
+
+    .workflow-node-card {
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 10px;
+      background: var(--bg-card);
+    }
+
+    .workflow-node-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .workflow-node-meta,
+    .rule-item {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 5px;
+      line-height: 1.45;
     }
 
     .live-dot {
@@ -2419,177 +2872,194 @@
     <!-- ── LEFT COLUMN ── -->
     <aside class="workbench-left" data-testid="workbench-left">
       <div class="sidebar-content">
-        <!-- Conversation List Section -->
+        <nav class="workspace-nav" aria-label="固定工作台入口" data-testid="workspace-nav">
+          <div class="nav-item active" data-view="home" data-testid="workspace-nav-home">
+            <i data-lucide="layout-dashboard"></i>
+            <span>首页</span>
+          </div>
+          <div class="nav-item" data-view="board" data-testid="workspace-nav-board">
+            <i data-lucide="columns-3"></i>
+            <span>看板</span>
+          </div>
+          <div class="nav-item" data-view="workflow" data-testid="workspace-nav-workflow">
+            <i data-lucide="git-branch"></i>
+            <span>工作流</span>
+          </div>
+        </nav>
+
         <div class="sidebar-section" data-testid="sidebar-section-conversations">
           <button type="button" class="sidebar-section-toggle" data-testid="sidebar-section-toggle-conversations" aria-expanded="true" aria-controls="sidebar-section-body-conversations">
-            <span class="sidebar-section-title">会话列表</span>
+            <span class="sidebar-section-title">会话分组</span>
             <span class="sidebar-section-chevron" aria-hidden="true">⌄</span>
           </button>
           <div class="sidebar-section-body" id="sidebar-section-body-conversations" data-testid="sidebar-section-body-conversations">
-            <div class="conversation-list" data-testid="conversation-list">
+            <div class="conversation-group-heading">
+              <span>置顶</span>
+              <i data-lucide="pin"></i>
+            </div>
+            <div class="conversation-list" data-testid="conversation-list" id="conversation-list">
               <button type="button" class="conversation-list-item active" data-testid="conversation-list-item-login-risk">
                 <span class="conversation-list-topline">
                   <span class="conversation-list-title">登录优化风险巡检</span>
                   <span class="conversation-list-time">10:32</span>
                 </span>
                 <span class="conversation-list-meta">REQ-2024-0892 · 设计评审</span>
-                <span class="conversation-list-badge"><span class="live-dot" aria-hidden="true"></span>进行中</span>
               </button>
               <button type="button" class="conversation-list-item">
+                <span class="conversation-list-topline">
+                  <span class="conversation-list-title">总架构讨论</span>
+                  <span class="conversation-list-time">19 小时</span>
+                </span>
+                <span class="conversation-list-meta">4+1 视图 · 应用架构</span>
+              </button>
+            </div>
+
+            <div class="conversation-group-heading">
+              <span>项目</span>
+              <i data-lucide="folder"></i>
+            </div>
+            <div class="conversation-project">
+              <span class="conversation-project-main"><i data-lucide="folder-open"></i>AgentCenter</span>
+              <button type="button" class="conversation-project-action" aria-label="新建 AgentCenter 会话"><i data-lucide="edit-3"></i></button>
+            </div>
+            <div class="conversation-list">
+              <button type="button" class="conversation-list-item conversation-child">
+                <span class="conversation-list-topline">
+                  <span class="conversation-list-title">首页工作台布局</span>
+                  <span class="conversation-list-time">1 周</span>
+                </span>
+                <span class="conversation-list-meta">白色三栏 · 原型归档</span>
+              </button>
+              <button type="button" class="conversation-list-item conversation-child">
+                <span class="conversation-list-topline">
+                  <span class="conversation-list-title">企业上下文中心</span>
+                  <span class="conversation-list-time">2 天</span>
+                </span>
+                <span class="conversation-list-meta">知识库 · 多项目权限</span>
+              </button>
+            </div>
+
+            <div class="conversation-project">
+              <span class="conversation-project-main"><i data-lucide="folder"></i>平台接入</span>
+              <button type="button" class="conversation-project-action" aria-label="新建平台接入会话"><i data-lucide="edit-3"></i></button>
+            </div>
+            <div class="conversation-list">
+              <button type="button" class="conversation-list-item conversation-child">
                 <span class="conversation-list-topline">
                   <span class="conversation-list-title">发布门禁检查</span>
                   <span class="conversation-list-time">09:48</span>
                 </span>
-                <span class="conversation-list-meta">订单服务 · 预发布</span>
-                <span class="conversation-list-badge"><span class="live-dot" aria-hidden="true"></span>待确认</span>
+                <span class="conversation-list-meta">发布平台 · 预发布</span>
               </button>
-              <button type="button" class="conversation-list-item">
+              <button type="button" class="conversation-list-item conversation-child">
                 <span class="conversation-list-topline">
                   <span class="conversation-list-title">延迟告警跟进</span>
                   <span class="conversation-list-time">09:12</span>
                 </span>
                 <span class="conversation-list-meta">监控观测 · P1 降级</span>
-                <span class="conversation-list-badge"><span class="live-dot" aria-hidden="true"></span>跟进中</span>
               </button>
+            </div>
+
+            <div class="conversation-group-heading">
+              <span>对话</span>
+              <i data-lucide="list-filter"></i>
+            </div>
+            <div class="conversation-list">
               <button type="button" class="conversation-list-item">
                 <span class="conversation-list-topline">
                   <span class="conversation-list-title">Sprint 进度同步</span>
                   <span class="conversation-list-time">昨日</span>
                 </span>
                 <span class="conversation-list-meta">研发团队 · 14 个事项</span>
-                <span class="conversation-list-badge"><span class="live-dot" aria-hidden="true"></span>已归档</span>
               </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Workbench Section -->
-        <div class="sidebar-section" data-testid="sidebar-section-workbench">
-          <button type="button" class="sidebar-section-toggle" data-testid="sidebar-section-toggle-workbench" aria-expanded="true" aria-controls="sidebar-section-body-workbench">
-            <span class="sidebar-section-title">工作台</span>
-            <span class="sidebar-section-chevron" aria-hidden="true">⌄</span>
-          </button>
-          <div class="sidebar-section-body" id="sidebar-section-body-workbench" data-testid="sidebar-section-body-workbench">
-            <div class="nav-item active">
-              <i data-lucide="layout-dashboard"></i>
-              <span>总览</span>
-            </div>
-            <div class="nav-item">
-              <i data-lucide="message-square"></i>
-              <span>对话</span>
-            </div>
-            <div class="nav-item">
-              <i data-lucide="git-branch"></i>
-              <span>工作流</span>
-            </div>
-            <div class="nav-item">
-              <i data-lucide="bot"></i>
-              <span>Agent 管理</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- DevOps Toolchain Section -->
-        <div class="sidebar-section" data-testid="sidebar-section-tools">
-          <button type="button" class="sidebar-section-toggle" data-testid="sidebar-section-toggle-tools" aria-expanded="true" aria-controls="sidebar-section-body-tools">
-            <span class="sidebar-section-title">DevOps 工具链</span>
-            <span class="sidebar-section-chevron" aria-hidden="true">⌄</span>
-          </button>
-          <div class="sidebar-section-body" id="sidebar-section-body-tools" data-testid="sidebar-section-body-tools">
-            <div class="tool-item">
-              <div class="tool-info">
-                <span class="tool-status-dot connected"></span>
-                <span class="tool-name">需求管理平台</span>
-              </div>
-              <span class="tool-status-text">已连接</span>
-            </div>
-            <div class="tool-item">
-              <div class="tool-info">
-                <span class="tool-status-dot connected"></span>
-                <span class="tool-name">代码托管平台</span>
-              </div>
-              <span class="tool-status-text">已连接</span>
-            </div>
-            <div class="tool-item">
-              <div class="tool-info">
-                <span class="tool-status-dot delayed"></span>
-                <span class="tool-name">持续集成平台</span>
-              </div>
-              <span class="tool-status-text">延迟</span>
-            </div>
-            <div class="tool-item">
-              <div class="tool-info">
-                <span class="tool-status-dot connected"></span>
-                <span class="tool-name">发布部署平台</span>
-              </div>
-              <span class="tool-status-text">已连接</span>
-            </div>
-            <div class="tool-item">
-              <div class="tool-info">
-                <span class="tool-status-dot connected"></span>
-                <span class="tool-name">监控观测平台</span>
-              </div>
-              <span class="tool-status-text">已连接</span>
-            </div>
-            <div class="tool-item">
-              <div class="tool-info">
-                <span class="tool-status-dot connected"></span>
-                <span class="tool-name">协作通知平台</span>
-              </div>
-              <span class="tool-status-text">已连接</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Agent Status Section -->
-        <div class="sidebar-section" data-testid="sidebar-section-agents">
-          <button type="button" class="sidebar-section-toggle" data-testid="sidebar-section-toggle-agents" aria-expanded="true" aria-controls="sidebar-section-body-agents">
-            <span class="sidebar-section-title">智能体状态</span>
-            <span class="sidebar-section-chevron" aria-hidden="true">⌄</span>
-          </button>
-          <div class="sidebar-section-body" id="sidebar-section-body-agents" data-testid="sidebar-section-body-agents">
-            <div class="agent-item">
-              <div class="agent-header">
-                <span class="agent-name">需求分析 Agent</span>
-                <span class="agent-status idle"><span class="dot"></span>空闲</span>
-              </div>
-              <div class="agent-task">等待下一个任务</div>
-            </div>
-            <div class="agent-item">
-              <div class="agent-header">
-                <span class="agent-name">代码审查 Agent</span>
-                <span class="agent-status working"><span class="dot"></span>工作中</span>
-              </div>
-              <div class="agent-task">审查 PR #234</div>
-            </div>
-            <div class="agent-item">
-              <div class="agent-header">
-                <span class="agent-name">部署编排 Agent</span>
-                <span class="agent-status idle"><span class="dot"></span>空闲</span>
-              </div>
-              <div class="agent-task">等待下一个任务</div>
-            </div>
-            <div class="agent-item">
-              <div class="agent-header">
-                <span class="agent-name">监控预警 Agent</span>
-                <span class="agent-status alert"><span class="dot"></span>告警中</span>
-              </div>
-              <div class="agent-task">payment-service 构建失败</div>
             </div>
           </div>
         </div>
       </div>
 
       <div class="sidebar-footer">
-        <div class="system-settings">
-          <i data-lucide="settings"></i>
-          <span>系统设置</span>
+        <div class="settings-drawer" data-testid="sidebar-settings-drawer" aria-hidden="true">
+          <div class="settings-drawer-title">管理与配置</div>
+          <button type="button" class="settings-menu-item"><i data-lucide="bot"></i><span>Agent 管理</span></button>
+          <button type="button" class="settings-menu-item"><i data-lucide="puzzle"></i><span>Skill 管理</span></button>
+          <button type="button" class="settings-menu-item"><i data-lucide="plug"></i><span>MCP 管理</span></button>
+          <button type="button" class="settings-menu-item"><i data-lucide="shield-check"></i><span>权限配置</span></button>
+          <button type="button" class="settings-menu-item"><i data-lucide="activity"></i><span>监控中心</span></button>
+          <button type="button" class="settings-menu-item"><i data-lucide="database-zap"></i><span>平台连接</span></button>
         </div>
+        <button type="button" class="system-settings" data-testid="sidebar-settings-toggle" aria-expanded="false">
+          <span class="system-settings-main"><i data-lucide="settings"></i><span>设置</span></span>
+          <i data-lucide="chevron-up"></i>
+        </button>
       </div>
     </aside>
 
     <!-- ── CENTER COLUMN ── -->
     <section class="workbench-center" data-testid="workbench-center">
+      <div class="workbench-view active" data-workbench-view="home">
+        <div class="overview-panel">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="card-title-main">首页概览 · 任务全景</span>
+              <span class="card-title-sub">按 FE、US、Task、Work、缺陷、漏洞聚合当前企业研发事项</span>
+            </div>
+            <div class="card-actions">
+              <button class="card-action-btn">同步数据</button>
+              <button class="card-action-btn">导出视图</button>
+            </div>
+          </div>
+          <div class="view-scroll">
+            <div class="metric-grid" data-testid="overview-metrics"></div>
+            <div class="task-list" data-testid="overview-task-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="workbench-view" data-workbench-view="board">
+        <div class="board-panel">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="card-title-main">任务看板 · 状态流转</span>
+              <span class="card-title-sub">按状态列组织事项，点击卡片创建带上下文的会话</span>
+            </div>
+            <div class="card-actions">
+              <button class="card-action-btn">Display</button>
+              <button class="card-action-btn">New Item</button>
+            </div>
+          </div>
+          <div class="view-scroll">
+            <div class="board-toolbar">
+              <div class="filter-group" data-testid="board-type-filters"></div>
+              <div class="filter-group" data-testid="board-status-filters"></div>
+            </div>
+            <div class="kanban-board" data-testid="kanban-board"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="workbench-view" data-workbench-view="workflow">
+        <div class="workflow-panel">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="card-title-main">工作流配置 · 类型状态模型</span>
+              <span class="card-title-sub">为 6 类事项定义状态、准入准出、自动化与预警规则</span>
+            </div>
+            <div class="card-actions">
+              <button class="card-action-btn">保存草稿</button>
+              <button class="card-action-btn">发布配置</button>
+            </div>
+          </div>
+          <div class="view-scroll">
+            <div class="workflow-layout">
+              <div class="workflow-type-list" data-testid="workflow-type-list"></div>
+              <div class="workflow-editor" data-testid="workflow-editor"></div>
+              <div class="workflow-rules" data-testid="workflow-rules"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="workbench-view" data-workbench-view="chat">
       <div class="card conversation-panel">
         <div class="card-header">
           <div class="card-title">
@@ -2752,74 +3222,18 @@
           </button>
         </div>
       </div>
+      </div>
     </section>
 
     <!-- ── RIGHT COLUMN ── -->
     <aside class="workbench-right" data-testid="workbench-right">
       <div class="right-tabs">
-        <button class="right-tab active" role="tab" aria-selected="true" data-tab="context">上下文详情</button>
-        <button class="right-tab" role="tab" aria-selected="false" data-tab="alerts">主动预警</button>
-        <button class="right-tab" role="tab" aria-selected="false" data-tab="collab">智能体协作</button>
-      </div>
-
-      <!-- Tab: 上下文详情 (default) -->
-      <div class="right-tab-content active" data-tab-content="context">
-        <div class="context-detail-card">
-          <div class="context-detail-header">
-            <div>
-              <div class="context-req-id">REQ-2024-0892</div>
-              <div class="context-req-title">用户登录优化</div>
-            </div>
-            <span class="stage-badge">设计中</span>
-          </div>
-          <div class="context-detail-body">
-            <div class="context-field">
-              <div class="context-field-label">当前阶段</div>
-              <div class="context-mini-pipeline">
-                <span class="context-mini-node done">需求 ✓</span>
-                <span class="context-mini-arrow">→</span>
-                <span class="context-mini-node current">设计中</span>
-                <span class="context-mini-arrow">→</span>
-                <span class="context-mini-node pending">开发</span>
-                <span class="context-mini-arrow">→</span>
-                <span class="context-mini-node pending">测试</span>
-                <span class="context-mini-arrow">→</span>
-                <span class="context-mini-node pending">部署</span>
-              </div>
-            </div>
-
-            <div class="context-field">
-              <div class="context-field-label">阻塞项</div>
-              <div class="blocker-card">
-                <div class="blocker-icon">
-                  <i data-lucide="clock"></i>
-                </div>
-                <div class="blocker-content">
-                  <div class="blocker-title">等待 API 设计评审 (已挂起 1 天)</div>
-                  <div class="blocker-meta">由 @研发工程师 B 负责</div>
-                </div>
-              </div>
-            </div>
-
-            <div class="context-field">
-              <div class="context-field-label">负责人</div>
-              <div class="context-assignees">
-                <div class="context-assignee">李</div>
-                <div class="context-assignee">王</div>
-              </div>
-            </div>
-
-            <div class="context-actions">
-              <button class="action-btn primary">催一下评审</button>
-              <button class="action-btn secondary">查看详情</button>
-            </div>
-          </div>
-        </div>
+        <button class="right-tab active" role="tab" aria-selected="true" data-tab="alerts">主动预警</button>
       </div>
 
       <!-- Tab: 主动预警 -->
-      <div class="right-tab-content" data-tab-content="alerts">
-        <div class="alerts-list">
+      <div class="right-tab-content active" data-tab-content="alerts">
+        <div class="alerts-list" data-testid="alerts-list">
           <div class="alert-card critical">
             <div class="alert-header">
               <span class="alert-title">构建失败 — payment-service</span>
@@ -2860,171 +3274,6 @@
               <button class="alert-btn view">查看</button>
               <button class="alert-btn handle">处理</button>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Tab: 智能体协作 -->
-      <div class="right-tab-content" data-tab-content="collab">
-        <div class="task-header">
-          <div class="task-icon">
-            <i data-lucide="users"></i>
-          </div>
-          <div class="task-info">
-            <div class="task-title">为 REQ-0892 生成完整设计方案</div>
-            <div class="task-subtitle">需求理解、架构设计、风险检查、评审文档自动串联</div>
-          </div>
-        </div>
-
-        <div class="collab-summary-grid" data-testid="collab-summary-grid">
-          <div class="collab-summary-card">
-            <div class="collab-summary-label">当前负责人</div>
-            <div class="collab-summary-value">方案设计</div>
-          </div>
-          <div class="collab-summary-card">
-            <div class="collab-summary-label">预计完成</div>
-            <div class="collab-summary-value">18 分钟</div>
-          </div>
-          <div class="collab-summary-card">
-            <div class="collab-summary-label">产出物</div>
-            <div class="collab-summary-value">3 份</div>
-          </div>
-        </div>
-
-        <div class="agent-pipeline">
-          <div class="agent-node">
-            <div class="agent-node-circle completed">1</div>
-            <span class="agent-node-label">需求</span>
-          </div>
-          <span class="agent-arrow">→</span>
-          <div class="agent-node">
-            <div class="agent-node-circle current">2</div>
-            <span class="agent-node-label">设计</span>
-          </div>
-          <span class="agent-arrow">→</span>
-          <div class="agent-node">
-            <div class="agent-node-circle pending">3</div>
-            <span class="agent-node-label">检查</span>
-          </div>
-          <span class="agent-arrow">→</span>
-          <div class="agent-node">
-            <div class="agent-node-circle pending">4</div>
-            <span class="agent-node-label">文档</span>
-          </div>
-          <span class="agent-arrow">→</span>
-          <div class="agent-node">
-            <div class="agent-node-circle pending">5</div>
-            <span class="agent-node-label">通知</span>
-          </div>
-        </div>
-
-        <div class="agent-current-status">
-          <span class="agent-current-text">方案设计 Agent 正在生成 C4 架构图与接口契约草案</span>
-        </div>
-
-        <div class="agent-progress">
-          <div class="agent-progress-bar">
-            <div class="agent-progress-fill"></div>
-          </div>
-          <span class="agent-progress-text">2/5 步骤完成</span>
-        </div>
-
-        <div class="collab-section">
-          <div class="collab-section-title">智能体分工</div>
-          <div class="agent-roster" data-testid="agent-roster">
-            <div class="agent-roster-row">
-              <div class="agent-avatar-mini">需</div>
-              <div>
-                <div class="agent-roster-name">需求分析 Agent</div>
-                <div class="agent-roster-task">补齐验收条件与边界场景</div>
-              </div>
-              <span class="agent-roster-status done">已完成</span>
-            </div>
-            <div class="agent-roster-row">
-              <div class="agent-avatar-mini">设</div>
-              <div>
-                <div class="agent-roster-name">方案设计 Agent</div>
-                <div class="agent-roster-task">生成 C4 视图与接口草案</div>
-              </div>
-              <span class="agent-roster-status running">工作中</span>
-            </div>
-            <div class="agent-roster-row">
-              <div class="agent-avatar-mini">检</div>
-              <div>
-                <div class="agent-roster-name">风险检查 Agent</div>
-                <div class="agent-roster-task">等待设计产物后做一致性检查</div>
-              </div>
-              <span class="agent-roster-status waiting">排队</span>
-            </div>
-            <div class="agent-roster-row">
-              <div class="agent-avatar-mini">文</div>
-              <div>
-                <div class="agent-roster-name">文档整理 Agent</div>
-                <div class="agent-roster-task">整理评审摘要与变更清单</div>
-              </div>
-              <span class="agent-roster-status waiting">待启动</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="collab-section">
-          <div class="collab-section-title">交接队列</div>
-          <div class="handoff-list">
-            <div class="handoff-item">
-              <span class="handoff-dot" aria-hidden="true"></span>
-              <div>
-                <div class="handoff-title">需求 → 设计</div>
-                <div class="handoff-meta">已输出用户登录、二维码确认、异常重试 3 组场景</div>
-              </div>
-            </div>
-            <div class="handoff-item">
-              <span class="handoff-dot" aria-hidden="true"></span>
-              <div>
-                <div class="handoff-title">设计 → 检查</div>
-                <div class="handoff-meta">接口契约草案生成中，预计 6 分钟后交接</div>
-              </div>
-            </div>
-            <div class="handoff-item">
-              <span class="handoff-dot" aria-hidden="true"></span>
-              <div>
-                <div class="handoff-title">检查 → 文档</div>
-                <div class="handoff-meta">将自动生成评审摘要、风险清单和待办分配</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="collab-section">
-          <div class="collab-section-title">已沉淀产出</div>
-          <div class="collab-output-list">
-            <div class="collab-output-item">
-              <span class="handoff-dot" aria-hidden="true"></span>
-              <div>
-                <div class="collab-output-title">接口草案</div>
-                <div class="collab-output-meta">5 个 API，含错误码和幂等策略</div>
-              </div>
-            </div>
-            <div class="collab-output-item">
-              <span class="handoff-dot" aria-hidden="true"></span>
-              <div>
-                <div class="collab-output-title">架构视图</div>
-                <div class="collab-output-meta">登录链路、认证服务、通知服务依赖图</div>
-              </div>
-            </div>
-            <div class="collab-output-item">
-              <span class="handoff-dot" aria-hidden="true"></span>
-              <div>
-                <div class="collab-output-title">评审清单</div>
-                <div class="collab-output-meta">安全、可观测、回滚、兼容性 4 类检查项</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="collab-section">
-          <div class="collab-section-title">当前风险</div>
-          <div class="collab-risk-card">
-            认证服务回调超时策略尚未确认，风险检查 Agent 会在接口契约生成后自动补充回滚建议。
           </div>
         </div>
       </div>
@@ -3149,13 +3398,229 @@
   // Initialize Lucide icons
   lucide.createIcons();
 
+  const taskTypes = [
+    { key: 'FE', label: 'FE', name: '功能特性', count: 8, cls: 'type-fe' },
+    { key: 'US', label: 'US', name: '用户故事', count: 12, cls: 'type-us' },
+    { key: 'Task', label: 'Task', name: '任务', count: 18, cls: 'type-task' },
+    { key: 'Work', label: 'Work', name: '工作项', count: 9, cls: 'type-work' },
+    { key: '缺陷', label: '缺陷', name: '缺陷', count: 6, cls: 'type-bug' },
+    { key: '漏洞', label: '漏洞', name: '漏洞', count: 3, cls: 'type-vuln' }
+  ];
+
+  const boardStatuses = ['Backlog', 'Todo', 'In Progress', 'In Review', 'Done'];
+  const workflowStages = ['分析', '设计', '开发', '测试', '发布', '运营'];
+  const tasks = [
+    { id: 'FE-1', type: 'FE', title: '统一工作台首页框架', desc: '左中右三栏、顶部流程、底部历史与白色 Web 展示基线', status: 'In Progress', stage: 2, priority: 'High' },
+    { id: 'US-3', type: 'US', title: '用户从看板进入任务对话', desc: '点击卡片后创建会话并注入任务上下文', status: 'Todo', stage: 1, priority: 'High' },
+    { id: 'TASK-8', type: 'Task', title: '梳理 4+1 架构视图文档', desc: '沉淀应用架构、逻辑视图、开发视图与部署视图', status: 'In Review', stage: 4, priority: 'Medium' },
+    { id: 'WORK-5', type: 'Work', title: '企业内部平台权限对接', desc: '对接统一身份认证、项目权限和审计日志', status: 'Backlog', stage: 0, priority: 'Medium' },
+    { id: 'BUG-2', type: '缺陷', title: '顶部面板展开时节点重叠', desc: '修正流程节点在窄宽度下的换行和间距', status: 'Done', stage: 5, priority: 'Low' },
+    { id: 'VULN-1', type: '漏洞', title: '上下文知识库访问边界校验', desc: '补充多租户、多项目数据隔离和敏感信息脱敏策略', status: 'In Progress', stage: 2, priority: 'Urgent' },
+    { id: 'FE-4', type: 'FE', title: '主动预警右侧栏联动', desc: '根据首页、看板、工作流、会话上下文展示不同预警', status: 'Todo', stage: 1, priority: 'Medium' },
+    { id: 'US-7', type: 'US', title: '按统计指标过滤首页条目', desc: '点击 FE、US、Task 等指标后过滤下方任务列表', status: 'Done', stage: 5, priority: 'Low' }
+  ];
+
+  const alertsByView = {
+    home: [
+      ['warning', '设计评审积压', 'US 与 FE 共 4 项停留在设计阶段超过 1 天'],
+      ['critical', '漏洞事项待确认', 'VULN-1 缺少安全负责人和准出条件'],
+      ['info', '今日新增任务', '新增 6 个 Task，建议先按项目分组']
+    ],
+    board: [
+      ['critical', 'In Progress WIP 超限', '进行中列已有 3 项高优先级事项'],
+      ['warning', 'In Review 等待时间偏长', 'TASK-8 已等待架构评审 19 小时'],
+      ['info', 'Done 列可归档', '2 个事项可进入历史归档']
+    ],
+    workflow: [
+      ['warning', '漏洞工作流缺少复核节点', '建议增加安全复核与审计留痕'],
+      ['info', 'Task 工作流可自动化', '开发完成后可自动触发测试验证'],
+      ['warning', 'Work 类型准出条件不足', '缺少负责人确认和业务验收规则']
+    ],
+    chat: [
+      ['critical', '当前事项存在阻塞', '等待 API 设计评审，已挂起 1 天'],
+      ['warning', '依赖服务未确认', '认证服务回调超时策略尚未确认'],
+      ['info', '可生成评审摘要', '当前上下文已足够生成评审材料初稿']
+    ]
+  };
+
+  let activeTypeFilter = '全部';
+  let activeBoardTypeFilter = '全部';
+  let activeBoardStatusFilter = '全部';
+  let activeWorkflowType = 'FE';
+
+  function getTypeMeta(type) {
+    return taskTypes.find(item => item.key === type) || taskTypes[0];
+  }
+
+  function renderFlow(task) {
+    return `<div class="task-flow">${workflowStages.map((stage, index) => {
+      const cls = index < task.stage ? 'done' : index === task.stage ? 'current' : '';
+      return `${index ? '<span class="flow-line"></span>' : ''}<span class="flow-dot ${cls}" title="${stage}"></span>`;
+    }).join('')}<span class="flow-label">${workflowStages[task.stage] || '完成'}</span></div>`;
+  }
+
+  function renderAlerts(view, task) {
+    const alertsList = document.querySelector('[data-testid="alerts-list"]');
+    if (!alertsList) return;
+    const rows = task
+      ? [['warning', `${task.id} · ${task.title}`, `${task.type} 当前处于 ${task.status}，流程节点：${workflowStages[task.stage]}`], ...(alertsByView.chat || [])]
+      : alertsByView[view] || alertsByView.home;
+    alertsList.innerHTML = rows.map(([level, title, meta]) => `
+      <div class="alert-card ${level === 'critical' ? 'critical' : level === 'warning' ? 'warning' : 'info'}">
+        <div class="alert-header">
+          <span class="alert-title">${title}</span>
+          <span class="alert-type ${level === 'critical' ? 'critical' : level === 'warning' ? 'warning' : 'info'}">${level.toUpperCase()}</span>
+        </div>
+        <div class="alert-meta">${meta}</div>
+        <div class="alert-actions">
+          <button class="alert-btn view">查看</button>
+          <button class="alert-btn handle">处理</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function renderOverview() {
+    const metrics = document.querySelector('[data-testid="overview-metrics"]');
+    const list = document.querySelector('[data-testid="overview-task-list"]');
+    if (!metrics || !list) return;
+    metrics.innerHTML = taskTypes.map(type => `
+      <button type="button" class="metric-card ${activeTypeFilter === type.key ? 'active' : ''}" data-type-filter="${type.key}">
+        <div class="metric-label">${type.label}</div>
+        <div class="metric-value">${type.count}</div>
+      </button>
+    `).join('');
+    const visibleTasks = activeTypeFilter === '全部' ? tasks : tasks.filter(task => task.type === activeTypeFilter);
+    list.innerHTML = visibleTasks.map(task => {
+      const type = getTypeMeta(task.type);
+      return `<button type="button" class="task-row" data-task-id="${task.id}">
+        <span class="task-row-main">
+          <span>
+            <span class="type-badge ${type.cls}">${task.id}</span>
+            <div class="task-title">${task.title}</div>
+            <div class="task-meta">${task.desc}</div>
+          </span>
+          <span class="priority-badge">${task.priority}</span>
+        </span>
+        ${renderFlow(task)}
+      </button>`;
+    }).join('');
+    document.querySelectorAll('[data-type-filter]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        activeTypeFilter = activeTypeFilter === btn.dataset.typeFilter ? '全部' : btn.dataset.typeFilter;
+        renderOverview();
+      });
+    });
+    bindTaskOpeners();
+  }
+
+  function renderBoard() {
+    const typeFilters = document.querySelector('[data-testid="board-type-filters"]');
+    const statusFilters = document.querySelector('[data-testid="board-status-filters"]');
+    const board = document.querySelector('[data-testid="kanban-board"]');
+    if (!typeFilters || !statusFilters || !board) return;
+    const types = ['全部', ...taskTypes.map(type => type.key)];
+    typeFilters.innerHTML = types.map(type => `<button type="button" class="status-filter ${activeBoardTypeFilter === type ? 'active' : ''}" data-board-type="${type}">${type}</button>`).join('');
+    statusFilters.innerHTML = ['全部', ...boardStatuses].map(status => `<button type="button" class="status-filter ${activeBoardStatusFilter === status ? 'active' : ''}" data-board-status="${status}">${status}</button>`).join('');
+    const filtered = tasks.filter(task => (activeBoardTypeFilter === '全部' || task.type === activeBoardTypeFilter) && (activeBoardStatusFilter === '全部' || task.status === activeBoardStatusFilter));
+    board.innerHTML = boardStatuses.map(status => {
+      const columnTasks = filtered.filter(task => task.status === status);
+      return `<div class="kanban-column">
+        <div class="kanban-column-header"><span>${status}</span><span class="kanban-column-count">${columnTasks.length}</span></div>
+        ${columnTasks.map(task => {
+          const type = getTypeMeta(task.type);
+          return `<button type="button" class="kanban-card" data-task-id="${task.id}">
+            <div class="kanban-card-code">${task.id}</div>
+            <div class="kanban-card-title">${task.title}</div>
+            <div class="kanban-card-desc">${task.desc}</div>
+            <span class="type-badge ${type.cls}">${task.type}</span>
+            <span class="priority-badge">${task.priority}</span>
+          </button>`;
+        }).join('')}
+      </div>`;
+    }).join('');
+    document.querySelectorAll('[data-board-type]').forEach(btn => btn.addEventListener('click', () => {
+      activeBoardTypeFilter = btn.dataset.boardType;
+      renderBoard();
+    }));
+    document.querySelectorAll('[data-board-status]').forEach(btn => btn.addEventListener('click', () => {
+      activeBoardStatusFilter = btn.dataset.boardStatus;
+      renderBoard();
+    }));
+    bindTaskOpeners();
+  }
+
+  function renderWorkflow() {
+    const typeList = document.querySelector('[data-testid="workflow-type-list"]');
+    const editor = document.querySelector('[data-testid="workflow-editor"]');
+    const rules = document.querySelector('[data-testid="workflow-rules"]');
+    if (!typeList || !editor || !rules) return;
+    const type = getTypeMeta(activeWorkflowType);
+    typeList.innerHTML = taskTypes.map(item => `<button type="button" class="workflow-type-btn ${activeWorkflowType === item.key ? 'active' : ''}" data-workflow-type="${item.key}">${item.label} · ${item.name}</button>`).join('');
+    editor.innerHTML = `<div class="card-title-main">${type.name}工作流</div><div class="card-title-sub">用于首页进度点、看板状态和会话上下文初始化</div>${workflowStages.map((stage, index) => `
+      <div class="workflow-node-card">
+        <div class="workflow-node-title">${index + 1}. ${stage}</div>
+        <div class="workflow-node-meta">准入：上一节点完成并写入上下文；准出：产出物、负责人、风险状态齐备。</div>
+      </div>
+    `).join('')}`;
+    rules.innerHTML = `<div class="card-title-main">规则建议</div>
+      <div class="rule-item">自动化：状态进入“测试”后触发质量检查与漏洞扫描。</div>
+      <div class="rule-item">预警：任一节点停留超过 24 小时进入右侧主动预警。</div>
+      <div class="rule-item">安全：漏洞类型必须经过安全复核、审计留痕和负责人确认。</div>
+      <div class="rule-item">会话：从任务进入对话时注入类型、标题、当前节点、阻塞项和历史产出。</div>`;
+    document.querySelectorAll('[data-workflow-type]').forEach(btn => btn.addEventListener('click', () => {
+      activeWorkflowType = btn.dataset.workflowType;
+      renderWorkflow();
+    }));
+  }
+
+  function setWorkbenchView(view, task) {
+    document.querySelectorAll('[data-workbench-view]').forEach(panel => panel.classList.toggle('active', panel.dataset.workbenchView === view));
+    document.querySelectorAll('.workspace-nav .nav-item').forEach(item => item.classList.toggle('active', item.dataset.view === view));
+    renderAlerts(view, task);
+    if (view === 'home') renderOverview();
+    if (view === 'board') renderBoard();
+    if (view === 'workflow') renderWorkflow();
+  }
+
+  function openTaskConversation(task) {
+    setWorkbenchView('chat', task);
+    const list = document.getElementById('conversation-list');
+    if (list && !list.querySelector(`[data-task-conversation="${task.id}"]`)) {
+      list.insertAdjacentHTML('afterbegin', `<button type="button" class="conversation-list-item active" data-task-conversation="${task.id}">
+        <span class="conversation-list-topline">
+          <span class="conversation-list-title">${task.id} · ${task.title}</span>
+          <span class="conversation-list-time">刚刚</span>
+        </span>
+        <span class="conversation-list-meta">${task.type} · ${task.status} · ${workflowStages[task.stage]}</span>
+      </button>`);
+    }
+    document.querySelectorAll('.conversation-list-item').forEach(i => i.classList.remove('active'));
+    const current = document.querySelector(`[data-task-conversation="${task.id}"]`);
+    if (current) current.classList.add('active');
+    if (conversationMessages) {
+      conversationMessages.innerHTML = '';
+      appendConversationMessage('user', `打开 ${task.id}：${task.title}`);
+      appendConversationMessage('ai', `已加载 ${task.type} 上下文：当前状态 ${task.status}，工作流节点为「${workflowStages[task.stage]}」。你可以继续让我生成方案、推进节点、催办负责人或检查风险。`);
+    }
+  }
+
+  function bindTaskOpeners() {
+    document.querySelectorAll('[data-task-id]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const task = tasks.find(item => item.id === btn.dataset.taskId);
+        if (task) openTaskConversation(task);
+      });
+    });
+  }
+
   // ── Left sidebar nav items ──
-  document.querySelectorAll('.nav-item').forEach(item => {
+  document.querySelectorAll('.workspace-nav .nav-item').forEach(item => {
     item.addEventListener('click', function() {
-      document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-      this.classList.add('active');
+      setWorkbenchView(this.dataset.view || 'home');
     });
   });
+  setWorkbenchView('home');
 
   // ── Left sidebar collapsible sections ──
   document.querySelectorAll('.sidebar-section-toggle').forEach(toggle => {
@@ -3171,8 +3636,19 @@
     item.addEventListener('click', function() {
       document.querySelectorAll('.conversation-list-item').forEach(i => i.classList.remove('active'));
       this.classList.add('active');
+      setWorkbenchView('chat');
     });
   });
+
+  const settingsToggle = document.querySelector('[data-testid="sidebar-settings-toggle"]');
+  const settingsDrawer = document.querySelector('[data-testid="sidebar-settings-drawer"]');
+  if (settingsToggle && settingsDrawer) {
+    settingsToggle.addEventListener('click', function() {
+      const isOpen = settingsDrawer.classList.toggle('is-open');
+      settingsDrawer.setAttribute('aria-hidden', String(!isOpen));
+      this.setAttribute('aria-expanded', String(isOpen));
+    });
+  }
 
   // ── Right column tabs ──
   document.querySelectorAll('.right-tab').forEach(tab => {
