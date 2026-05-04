@@ -34,7 +34,14 @@
 |------|------|------|
 | [prototype/README.md](./prototype/README.md) | 当前首页高保真基线和归档入口 | 活跃 |
 | [prototype/homepage.html](./prototype/homepage.html) | 当前静态首页高保真原型 | 活跃 |
-| [prototype/archive/homepage-workbench-2026-04-27/README.md](./prototype/archive/homepage-workbench-2026-04-27/README.md) | 当前首页工作台布局基线归档 | 归档 |
+| [prototype/archive/homepage-workbench-2026-04-27/](./prototype/archive/homepage-workbench-2026-04-27/README.md) | 工作台基线归档（静态原型 + React Demo 快照） | 归档 |
+| [prototype/archive/client-demo-2026-04-29/](./prototype/archive/client-demo-2026-04-29/) | 早期首页视觉探索草稿（a-version 系列） | 归档 |
+
+### 归档 (`archive/`)
+
+| 文件 | 说明 |
+|------|------|
+| [archive/root-loose-files/](./archive/root-loose-files/) | 项目根目录散落文件（旧截图、参考图片、PPTX） |
 
 ### 行业调研 (`research/`)
 
@@ -79,4 +86,4 @@
 
 ---
 
-*最后更新：2026-04-28*
+*最后更新：2026-05-02*
