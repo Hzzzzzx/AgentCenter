@@ -167,23 +167,31 @@ public class AgentSessionService {
         boolean runtimeOk = true;
         String runtimeError = null;
 
-        if (effectiveRuntimeSessionId == null || effectiveRuntimeSessionId.isBlank()) {
-            try {
-                effectiveRuntimeSessionId = agentRuntimeAdapter.createSession(session.getWorkItemId(), sessionId);
+        try {
+            effectiveRuntimeSessionId = agentRuntimeAdapter.ensureSession(
+                    session.getWorkItemId(), sessionId, effectiveRuntimeSessionId);
+            if (!effectiveRuntimeSessionId.equals(session.getRuntimeSessionId())) {
                 session.setRuntimeSessionId(effectiveRuntimeSessionId);
                 sessionMapper.update(session);
-            } catch (Exception e) {
-                runtimeOk = false;
-                runtimeError = "Failed to create runtime session: " + e.getMessage();
             }
+        } catch (Exception e) {
+            runtimeOk = false;
+            runtimeError = "Failed to create runtime session: " + e.getMessage();
         }
 
         if (runtimeOk && effectiveRuntimeSessionId != null) {
             try {
                 agentRuntimeAdapter.sendMessage(effectiveRuntimeSessionId, content);
             } catch (Exception e) {
-                runtimeOk = false;
-                runtimeError = "Runtime sendMessage failed: " + e.getMessage();
+                try {
+                    effectiveRuntimeSessionId = agentRuntimeAdapter.createSession(session.getWorkItemId(), sessionId);
+                    session.setRuntimeSessionId(effectiveRuntimeSessionId);
+                    sessionMapper.update(session);
+                    agentRuntimeAdapter.sendMessage(effectiveRuntimeSessionId, content);
+                } catch (Exception retryError) {
+                    runtimeOk = false;
+                    runtimeError = "Runtime sendMessage failed: " + retryError.getMessage();
+                }
             }
         }
 

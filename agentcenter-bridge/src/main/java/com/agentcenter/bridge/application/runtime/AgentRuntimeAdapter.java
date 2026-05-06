@@ -2,6 +2,12 @@ package com.agentcenter.bridge.application.runtime;
 
 public interface AgentRuntimeAdapter {
     String createSession(String workItemId, String agentSessionId);
+    default String ensureSession(String workItemId, String agentSessionId, String runtimeSessionId) {
+        if (runtimeSessionId == null || runtimeSessionId.isBlank()) {
+            return createSession(workItemId, agentSessionId);
+        }
+        return runtimeSessionId;
+    }
     SkillRunResult runSkill(String sessionId, String skillName, String inputContext);
     void sendMessage(String sessionId, String userMessage);
     void cancel(String sessionId);

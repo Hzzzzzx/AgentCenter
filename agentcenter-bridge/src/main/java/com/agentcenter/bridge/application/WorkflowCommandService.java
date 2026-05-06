@@ -319,8 +319,9 @@ public class WorkflowCommandService {
             );
         }
 
-        if (runtimeSessionId == null || runtimeSessionId.isBlank()) {
-            runtimeSessionId = runtimeAdapter.createSession(workItem.getId(), session.id());
+        String ensuredRuntimeSessionId = runtimeAdapter.ensureSession(workItem.getId(), session.id(), runtimeSessionId);
+        if (!ensuredRuntimeSessionId.equals(runtimeSessionId)) {
+            runtimeSessionId = ensuredRuntimeSessionId;
             agentSessionService.bindRuntimeSession(session.id(), runtimeSessionId, workflowRuntimeType);
         }
 

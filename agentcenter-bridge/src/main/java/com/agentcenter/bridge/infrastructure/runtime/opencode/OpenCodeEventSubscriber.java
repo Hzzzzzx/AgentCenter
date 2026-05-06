@@ -6,6 +6,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -22,6 +24,12 @@ import com.agentcenter.bridge.api.dto.RuntimeEventDto;
 import com.agentcenter.bridge.application.RuntimeEventService;
 import com.agentcenter.bridge.domain.runtime.RuntimeEventSource;
 import com.agentcenter.bridge.domain.runtime.RuntimeEventType;
+import com.agentcenter.bridge.domain.session.ContentFormat;
+import com.agentcenter.bridge.domain.session.MessageRole;
+import com.agentcenter.bridge.domain.session.MessageStatus;
+import com.agentcenter.bridge.infrastructure.id.IdGenerator;
+import com.agentcenter.bridge.infrastructure.persistence.entity.AgentMessageEntity;
+import com.agentcenter.bridge.infrastructure.persistence.mapper.AgentMessageMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -38,8 +46,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public class OpenCodeEventSubscriber {
 
     private static final Logger log = LoggerFactory.getLogger(OpenCodeEventSubscriber.class);
+    private static final DateTimeFormatter SQLITE_DATETIME =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final RuntimeEventService eventService;
+    private final AgentMessageMapper agentMessageMapper;
+    private final IdGenerator idGenerator;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
 
@@ -48,6 +60,7 @@ public class OpenCodeEventSubscriber {
     private final Map<String, Set<String>> seenReasoningParts = new ConcurrentHashMap<>();
     private final Map<String, Set<String>> runningTools = new ConcurrentHashMap<>();
     private final Map<String, Set<String>> userMessageIds = new ConcurrentHashMap<>();
+    private final Map<String, StringBuilder> assistantBuffers = new ConcurrentHashMap<>();
 
     private final ExecutorService executor = Executors.newCachedThreadPool(r -> {
         Thread t = new Thread(r, "opencode-sse-reader");
@@ -56,8 +69,13 @@ public class OpenCodeEventSubscriber {
     });
     private final AtomicBoolean subscribed = new AtomicBoolean(false);
 
-    public OpenCodeEventSubscriber(RuntimeEventService eventService, ObjectMapper objectMapper) {
+    public OpenCodeEventSubscriber(RuntimeEventService eventService,
+                                   AgentMessageMapper agentMessageMapper,
+                                   IdGenerator idGenerator,
+                                   ObjectMapper objectMapper) {
         this.eventService = eventService;
+        this.agentMessageMapper = agentMessageMapper;
+        this.idGenerator = idGenerator;
         this.objectMapper = objectMapper;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
@@ -74,6 +92,7 @@ public class OpenCodeEventSubscriber {
         seenReasoningParts.computeIfAbsent(opencodeSessionId, k -> new HashSet<>());
         runningTools.computeIfAbsent(opencodeSessionId, k -> new HashSet<>());
         userMessageIds.computeIfAbsent(opencodeSessionId, k -> new HashSet<>());
+        assistantBuffers.computeIfAbsent(agentSessionId, k -> new StringBuilder());
 
         if (subscribed.compareAndSet(false, true)) {
             startSubscription(baseUrl, workingDirectory);
@@ -282,11 +301,15 @@ public class OpenCodeEventSubscriber {
 
         publishEvent(agentSessionId, RuntimeEventType.STATUS,
                     payload("status", status, Map.of()));
+        if ("idle".equals(status) || "waiting_user".equals(status)) {
+            flushAssistantBuffer(agentSessionId);
+        }
     }
 
     private void handleSessionIdle(String agentSessionId) {
         publishEvent(agentSessionId, RuntimeEventType.STATUS,
                 payload("status", "waiting_user", Map.of()));
+        flushAssistantBuffer(agentSessionId);
     }
 
     private void handlePermission(String agentSessionId, JsonNode properties) {
@@ -312,8 +335,60 @@ public class OpenCodeEventSubscriber {
     }
 
     private void publishDelta(String agentSessionId, String text) {
+        StringBuilder buffer = assistantBuffers.computeIfAbsent(agentSessionId, k -> new StringBuilder());
+        synchronized (buffer) {
+            buffer.append(text);
+        }
         publishEvent(agentSessionId, RuntimeEventType.ASSISTANT_DELTA,
                 payload("assistant_delta", text, Map.of()));
+    }
+
+    private void flushAssistantBuffer(String agentSessionId) {
+        StringBuilder buffer = assistantBuffers.computeIfAbsent(agentSessionId, k -> new StringBuilder());
+        String content;
+        synchronized (buffer) {
+            content = buffer.toString().trim();
+            buffer.setLength(0);
+        }
+        if (content.isBlank()) {
+            return;
+        }
+        try {
+            if (isDuplicateLatestAssistant(agentSessionId, content)) {
+                return;
+            }
+            AgentMessageEntity message = new AgentMessageEntity();
+            message.setId(idGenerator.nextId());
+            message.setSessionId(agentSessionId);
+            message.setRole(MessageRole.ASSISTANT.name());
+            message.setContent(content);
+            message.setContentFormat(ContentFormat.MARKDOWN.name());
+            message.setStatus(MessageStatus.COMPLETED.name());
+            message.setSeqNo(nextMessageSeqNo(agentSessionId));
+            message.setCreatedBy("opencode-sse");
+            message.setCreatedAt(LocalDateTime.now().format(SQLITE_DATETIME));
+            agentMessageMapper.insert(message);
+        } catch (Exception e) {
+            log.warn("Failed to persist streamed assistant message for session {}: {}", agentSessionId, e.getMessage());
+            synchronized (buffer) {
+                buffer.insert(0, content);
+            }
+        }
+    }
+
+    private boolean isDuplicateLatestAssistant(String agentSessionId, String content) {
+        return agentMessageMapper.findBySessionId(agentSessionId).stream()
+                .filter(message -> MessageRole.ASSISTANT.name().equals(message.getRole()))
+                .reduce((first, second) -> second)
+                .map(message -> content.equals(message.getContent()))
+                .orElse(false);
+    }
+
+    private int nextMessageSeqNo(String agentSessionId) {
+        return agentMessageMapper.findBySessionId(agentSessionId).stream()
+                .mapToInt(message -> message.getSeqNo() != null ? message.getSeqNo() : 0)
+                .max()
+                .orElse(0) + 1;
     }
 
     private void publishEvent(String agentSessionId, RuntimeEventType type, String payloadJson) {

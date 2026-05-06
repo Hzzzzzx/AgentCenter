@@ -6,8 +6,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -23,12 +21,6 @@ import org.springframework.stereotype.Component;
 
 import com.agentcenter.bridge.application.runtime.AgentRuntimeAdapter;
 import com.agentcenter.bridge.application.runtime.SkillRunResult;
-import com.agentcenter.bridge.domain.session.ContentFormat;
-import com.agentcenter.bridge.domain.session.MessageRole;
-import com.agentcenter.bridge.domain.session.MessageStatus;
-import com.agentcenter.bridge.infrastructure.id.IdGenerator;
-import com.agentcenter.bridge.infrastructure.persistence.entity.AgentMessageEntity;
-import com.agentcenter.bridge.infrastructure.persistence.mapper.AgentMessageMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -40,7 +32,8 @@ import jakarta.annotation.PreDestroy;
  * Connects to {@code opencode serve} via HTTP API to create sessions,
  * send messages via {@code prompt_async}, and consume SSE events.
  *
- * <p>Session ID mapping: agentSessionId → opencodeSessionId (in memory).</p>
+ * <p>Runtime session IDs persisted in AgentCenter are real OpenCode session IDs.
+ * An in-memory agentSessionId → opencodeSessionId map is restored lazily when needed.</p>
  *
  * <p>Event flow: opencode SSE → {@link OpenCodeEventSubscriber} →
  * {@link com.agentcenter.bridge.application.RuntimeEventService} →
@@ -52,13 +45,8 @@ import jakarta.annotation.PreDestroy;
 public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
     private static final Logger log = LoggerFactory.getLogger(OpenCodeRuntimeAdapter.class);
-    private static final DateTimeFormatter SQLITE_DATETIME =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-
     private final OpenCodeProcessManager processManager;
     private final OpenCodeEventSubscriber eventSubscriber;
-    private final AgentMessageMapper agentMessageMapper;
-    private final IdGenerator idGenerator;
     private final ObjectMapper objectMapper;
     private final String agent;
     private final int responseTimeoutSeconds;
@@ -72,15 +60,11 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
     public OpenCodeRuntimeAdapter(
             OpenCodeProcessManager processManager,
             OpenCodeEventSubscriber eventSubscriber,
-            AgentMessageMapper agentMessageMapper,
-            IdGenerator idGenerator,
             ObjectMapper objectMapper,
             @Value("${agentcenter.runtime.opencode.serve.agent:build}") String agent,
             @Value("${agentcenter.runtime.opencode.timeout-seconds:180}") int responseTimeoutSeconds) {
         this.processManager = processManager;
         this.eventSubscriber = eventSubscriber;
-        this.agentMessageMapper = agentMessageMapper;
-        this.idGenerator = idGenerator;
         this.objectMapper = objectMapper;
         this.agent = agent;
         this.responseTimeoutSeconds = responseTimeoutSeconds;
@@ -131,11 +115,32 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
                 ? agentSessionId
                 : (workItemId != null ? "acs_" + workItemId : "acs_" + System.currentTimeMillis());
         agentToOpencodeSession.put(agentSid, opencodeSessionId);
+        agentToOpencodeSession.put(opencodeSessionId, opencodeSessionId);
 
         eventSubscriber.registerSession(opencodeSessionId, agentSid, baseUrl, cwd.toString());
 
         log.info("Created opencode session {} → agent session {}", opencodeSessionId, agentSid);
-        return agentSid;
+        return opencodeSessionId;
+    }
+
+    @Override
+    public String ensureSession(String workItemId, String agentSessionId, String runtimeSessionId) {
+        if (runtimeSessionId == null || runtimeSessionId.isBlank() || !runtimeSessionId.startsWith("ses_")) {
+            return createSession(workItemId, agentSessionId);
+        }
+
+        String baseUrl = processManager.ensureRunning();
+        Path cwd = processManager.resolveWorkingDirectory();
+        if (fetchMessages(baseUrl, cwd, runtimeSessionId) == null) {
+            log.info("Persisted opencode session {} is not available; creating a replacement for agent session {}",
+                    runtimeSessionId, agentSessionId);
+            return createSession(workItemId, agentSessionId);
+        }
+
+        agentToOpencodeSession.put(agentSessionId, runtimeSessionId);
+        agentToOpencodeSession.put(runtimeSessionId, runtimeSessionId);
+        eventSubscriber.registerSession(runtimeSessionId, agentSessionId, baseUrl, cwd.toString());
+        return runtimeSessionId;
     }
 
     @Override
@@ -159,10 +164,7 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
     @Override
     public void sendMessage(String sessionId, String userMessage) {
-        String output = dispatchPromptAndWait(sessionId, userMessage, false);
-        if (output != null && !output.isBlank()) {
-            insertAssistantMessage(sessionId, output);
-        }
+        dispatchPrompt(sessionId, userMessage);
     }
 
     private String buildSkillPrompt(String skillName, String inputContext) {
@@ -184,7 +186,21 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
     }
 
     private String dispatchPromptAndWait(String sessionId, String userMessage, boolean allowToolOutputFallback) {
+        DispatchContext context = dispatchPrompt(sessionId, userMessage);
+        return waitForAssistantText(
+                context.baseUrl(),
+                context.cwd(),
+                context.opencodeSessionId(),
+                context.knownMessageIds(),
+                allowToolOutputFallback);
+    }
+
+    private DispatchContext dispatchPrompt(String sessionId, String userMessage) {
         String opencodeSessionId = agentToOpencodeSession.get(sessionId);
+        if (opencodeSessionId == null && sessionId != null && sessionId.startsWith("ses_")) {
+            opencodeSessionId = sessionId;
+            agentToOpencodeSession.put(sessionId, sessionId);
+        }
         if (opencodeSessionId == null) {
             throw new IllegalArgumentException("No opencode session mapped for agent session: " + sessionId);
         }
@@ -214,7 +230,7 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         }
 
         log.debug("Sent message to opencode session {} (agent session {})", opencodeSessionId, sessionId);
-        return waitForAssistantText(baseUrl, cwd, opencodeSessionId, knownMessageIds, allowToolOutputFallback);
+        return new DispatchContext(baseUrl, cwd, opencodeSessionId, knownMessageIds);
     }
 
     @Override
@@ -380,27 +396,6 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         }
     }
 
-    private void insertAssistantMessage(String sessionId, String output) {
-        AgentMessageEntity message = new AgentMessageEntity();
-        message.setId(idGenerator.nextId());
-        message.setSessionId(sessionId);
-        message.setRole(MessageRole.ASSISTANT.name());
-        message.setContent(output);
-        message.setContentFormat(ContentFormat.MARKDOWN.name());
-        message.setStatus(MessageStatus.COMPLETED.name());
-        message.setSeqNo(nextMessageSeqNo(sessionId));
-        message.setCreatedBy("opencode-runtime");
-        message.setCreatedAt(LocalDateTime.now().format(SQLITE_DATETIME));
-        agentMessageMapper.insert(message);
-    }
-
-    private int nextMessageSeqNo(String sessionId) {
-        return agentMessageMapper.findBySessionId(sessionId).stream()
-                .mapToInt(m -> m.getSeqNo() != null ? m.getSeqNo() : 0)
-                .max()
-                .orElse(0) + 1;
-    }
-
     private HttpResponse<String> sendRequest(HttpRequest request) {
         try {
             return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
@@ -424,4 +419,9 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
             throw new RuntimeException("JSON parse failed: " + e.getMessage(), e);
         }
     }
+
+    private record DispatchContext(String baseUrl,
+                                   Path cwd,
+                                   String opencodeSessionId,
+                                   Set<String> knownMessageIds) {}
 }
