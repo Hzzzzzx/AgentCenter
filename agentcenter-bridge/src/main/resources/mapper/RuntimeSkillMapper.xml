@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.agentcenter.bridge.infrastructure.persistence.mapper.RuntimeSkillMapper">
+
+    <select id="findByProjectId" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.RuntimeSkillEntity">
+        SELECT id, project_id, name, display_name, description, current_version_id,
+               status, source, relative_path, checksum, validation_status, validation_message,
+               created_by, created_at, updated_at
+        FROM runtime_skill
+        WHERE project_id = #{projectId}
+        ORDER BY created_at DESC
+    </select>
+
+    <select id="findById" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.RuntimeSkillEntity">
+        SELECT id, project_id, name, display_name, description, current_version_id,
+               status, source, relative_path, checksum, validation_status, validation_message,
+               created_by, created_at, updated_at
+        FROM runtime_skill WHERE id = #{id}
+    </select>
+
+    <select id="findByProjectIdAndName" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.RuntimeSkillEntity">
+        SELECT id, project_id, name, display_name, description, current_version_id,
+               status, source, relative_path, checksum, validation_status, validation_message,
+               created_by, created_at, updated_at
+        FROM runtime_skill WHERE project_id = #{projectId} AND name = #{name}
+    </select>
+
+    <insert id="insert">
+        INSERT INTO runtime_skill (id, project_id, name, display_name, description, current_version_id,
+                                   status, source, relative_path, checksum, validation_status, validation_message,
+                                   created_by, created_at, updated_at)
+        VALUES (#{id}, #{projectId}, #{name}, #{displayName}, #{description}, #{currentVersionId},
+                #{status}, #{source}, #{relativePath}, #{checksum}, #{validationStatus}, #{validationMessage},
+                #{createdBy}, #{createdAt}, #{updatedAt})
+    </insert>
+
+    <update id="update">
+        UPDATE runtime_skill
+        SET display_name = #{displayName}, description = #{description},
+            current_version_id = #{currentVersionId}, status = #{status},
+            relative_path = #{relativePath}, checksum = #{checksum},
+            validation_status = #{validationStatus}, validation_message = #{validationMessage},
+            updated_at = (datetime('now'))
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM runtime_skill WHERE id = #{id}
+    </delete>
+
+    <select id="countByProjectId" resultType="int">
+        SELECT COUNT(*) FROM runtime_skill WHERE project_id = #{projectId}
+    </select>
+
+</mapper>

@@ -5,10 +5,11 @@ import LeftSidebar from './LeftSidebar.vue'
 import CenterWorkbench from './CenterWorkbench.vue'
 import RightPanel from './RightPanel.vue'
 import StatusBar from './StatusBar.vue'
-import type { AgentSessionDto } from '../../api/types'
+import type { AgentSessionDto, WorkItemDto } from '../../api/types'
 
 interface Props {
   activeView?: string
+  selectedWorkItem?: WorkItemDto | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -20,6 +21,9 @@ const emit = defineEmits<{
   'handle-confirmation': [id: string]
   'select-session': [session: AgentSessionDto]
   'create-general-session': []
+  'navigate-settings': [tab: string]
+  'start-workflow': [workItemId: string]
+  'enter-work-item-conversation': [id: string]
 }>()
 
 const leftCollapsed = ref(false)
@@ -50,6 +54,7 @@ function handleNavigate(viewId: string) {
         @select-session="(session) => emit('select-session', session)"
         @create-general-session="emit('create-general-session')"
         @update:collapsed="leftCollapsed = $event"
+        @navigate-settings="(tab) => emit('navigate-settings', tab)"
       />
     </div>
 
@@ -62,8 +67,11 @@ function handleNavigate(viewId: string) {
     <div class="app-shell__right-panel">
       <RightPanel
         :collapsed="rightCollapsed"
+        :selected-work-item="selectedWorkItem"
         @update:collapsed="rightCollapsed = $event"
         @handle-confirmation="(id: string) => emit('handle-confirmation', id)"
+        @start-workflow="(workItemId: string) => emit('start-workflow', workItemId)"
+        @enter-conversation="(id: string) => emit('enter-work-item-conversation', id)"
       />
     </div>
 

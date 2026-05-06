@@ -24,11 +24,13 @@ const emit = defineEmits<{
   'select-session': [session: AgentSessionDto]
   'create-general-session': []
   'update:collapsed': [value: boolean]
+  'navigate-settings': [tab: string]
 }>()
 
 const sessionStore = useSessionStore()
 const conversationOpen = ref(true)
 const taskSessionsOpen = ref(false)
+const settingsOpen = ref(false)
 
 const navItems: NavItem[] = [
   { id: 'home', label: '首页', icon: 'home' },
@@ -196,13 +198,38 @@ function sessionMeta(session: AgentSessionDto) {
     </div>
 
     <div v-if="!collapsed" class="left-sidebar__footer">
-      <button class="left-sidebar__settings">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
-          <path d="M19 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 01-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3A1.7 1.7 0 0014 21h-4a1.7 1.7 0 00-.8-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 01-2.8-2.8l.1-.1A1.7 1.7 0 005 15a1.7 1.7 0 00-1.5-1H3a2 2 0 010-4h.5A1.7 1.7 0 005 9a1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 012.8-2.8l.1.1A1.7 1.7 0 009 5a1.7 1.7 0 001-1.5V3a2 2 0 014 0v.5A1.7 1.7 0 0015 5a1.7 1.7 0 001.8-.3l.1-.1a2 2 0 012.8 2.8l-.1.1A1.7 1.7 0 0019 9a1.7 1.7 0 001.5 1H21a2 2 0 010 4h-.5A1.7 1.7 0 0019 15z" stroke="currentColor" stroke-width="2"/>
-        </svg>
-        <span>设置</span>
-      </button>
+      <div class="left-sidebar__settings-wrapper">
+        <button
+          class="left-sidebar__settings"
+          :class="{ 'left-sidebar__settings--active': settingsOpen }"
+          @click="settingsOpen = !settingsOpen"
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+            <path d="M19 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 01-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3A1.7 1.7 0 0014 21h-4a1.7 1.7 0 00-.8-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 01-2.8-2.8l.1-.1A1.7 1.7 0 005 15a1.7 1.7 0 00-1.5-1H3a2 2 0 010-4h.5A1.7 1.7 0 005 9a1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 012.8-2.8l.1.1A1.7 1.7 0 009 5a1.7 1.7 0 001-1.5V3a2 2 0 014 0v.5A1.7 1.7 0 0015 5a1.7 1.7 0 001.8-.3l.1-.1a2 2 0 012.8 2.8l-.1.1A1.7 1.7 0 0019 9a1.7 1.7 0 001.5 1H21a2 2 0 010 4h-.5A1.7 1.7 0 0019 15z" stroke="currentColor" stroke-width="2"/>
+          </svg>
+          <span>设置</span>
+        </button>
+        <div v-if="settingsOpen" class="left-sidebar__settings-menu">
+          <button class="left-sidebar__settings-menu-item" @click="emit('navigate-settings', 'skills'); settingsOpen = false">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+              <path d="M2 17l10 5 10-5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+              <path d="M2 12l10 5 10-5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+            </svg>
+            Skill 管理
+          </button>
+          <button class="left-sidebar__settings-menu-item" @click="emit('navigate-settings', 'mcps'); settingsOpen = false">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <rect x="2" y="2" width="8" height="8" rx="2" stroke="currentColor" stroke-width="2"/>
+              <rect x="14" y="2" width="8" height="8" rx="2" stroke="currentColor" stroke-width="2"/>
+              <rect x="2" y="14" width="8" height="8" rx="2" stroke="currentColor" stroke-width="2"/>
+              <rect x="14" y="14" width="8" height="8" rx="2" stroke="currentColor" stroke-width="2"/>
+            </svg>
+            MCP 管理
+          </button>
+        </div>
+      </div>
     </div>
 
     <button
@@ -468,6 +495,49 @@ function sessionMeta(session: AgentSessionDto) {
 
 .left-sidebar__settings:hover {
   background: var(--bg-card-hover);
+}
+
+.left-sidebar__settings-wrapper {
+  position: relative;
+}
+
+.left-sidebar__settings--active {
+  background: var(--bg-card-hover);
+  color: var(--accent-blue);
+}
+
+.left-sidebar__settings-menu {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  margin-bottom: 4px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  z-index: 100;
+}
+
+.left-sidebar__settings-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+}
+
+.left-sidebar__settings-menu-item:hover {
+  background: var(--bg-card-hover);
+  color: var(--accent-blue);
 }
 
 .left-sidebar__collapse {

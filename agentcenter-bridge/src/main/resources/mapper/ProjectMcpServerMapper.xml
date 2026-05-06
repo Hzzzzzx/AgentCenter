@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.agentcenter.bridge.infrastructure.persistence.mapper.ProjectMcpServerMapper">
+
+    <select id="findByProjectId" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.ProjectMcpServerEntity">
+        SELECT id, project_id, name, server_type, status, config_json, config_checksum,
+               last_health_status, last_health_message, last_checked_at,
+               created_by, created_at, updated_at
+        FROM project_mcp_server
+        WHERE project_id = #{projectId}
+        ORDER BY created_at DESC
+    </select>
+
+    <select id="findById" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.ProjectMcpServerEntity">
+        SELECT id, project_id, name, server_type, status, config_json, config_checksum,
+               last_health_status, last_health_message, last_checked_at,
+               created_by, created_at, updated_at
+        FROM project_mcp_server WHERE id = #{id}
+    </select>
+
+    <select id="findByProjectIdAndName" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.ProjectMcpServerEntity">
+        SELECT id, project_id, name, server_type, status, config_json, config_checksum,
+               last_health_status, last_health_message, last_checked_at,
+               created_by, created_at, updated_at
+        FROM project_mcp_server WHERE project_id = #{projectId} AND name = #{name}
+    </select>
+
+    <insert id="insert">
+        INSERT INTO project_mcp_server (id, project_id, name, server_type, status, config_json, config_checksum,
+                                        last_health_status, last_health_message, last_checked_at,
+                                        created_by, created_at, updated_at)
+        VALUES (#{id}, #{projectId}, #{name}, #{serverType}, #{status}, #{configJson}, #{configChecksum},
+                #{lastHealthStatus}, #{lastHealthMessage}, #{lastCheckedAt},
+                #{createdBy}, #{createdAt}, #{updatedAt})
+    </insert>
+
+    <update id="update">
+        UPDATE project_mcp_server
+        SET server_type = #{serverType}, status = #{status}, config_json = #{configJson},
+            config_checksum = #{configChecksum}, last_health_status = #{lastHealthStatus},
+            last_health_message = #{lastHealthMessage}, last_checked_at = #{lastCheckedAt},
+            updated_at = (datetime('now'))
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM project_mcp_server WHERE id = #{id}
+    </delete>
+
+</mapper>

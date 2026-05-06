@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.agentcenter.bridge.infrastructure.persistence.mapper.RuntimeSkillVersionMapper">
+
+    <select id="findBySkillId" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.RuntimeSkillVersionEntity">
+        SELECT id, skill_id, version_no, package_checksum, package_size, file_count,
+               installed_relative_path, manifest_json, skill_md_summary, status, created_by, created_at
+        FROM runtime_skill_version
+        WHERE skill_id = #{skillId}
+        ORDER BY created_at DESC
+    </select>
+
+    <select id="findById" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.RuntimeSkillVersionEntity">
+        SELECT id, skill_id, version_no, package_checksum, package_size, file_count,
+               installed_relative_path, manifest_json, skill_md_summary, status, created_by, created_at
+        FROM runtime_skill_version WHERE id = #{id}
+    </select>
+
+    <select id="findActiveBySkillId" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.RuntimeSkillVersionEntity">
+        SELECT id, skill_id, version_no, package_checksum, package_size, file_count,
+               installed_relative_path, manifest_json, skill_md_summary, status, created_by, created_at
+        FROM runtime_skill_version
+        WHERE skill_id = #{skillId} AND status = 'ACTIVE'
+        ORDER BY created_at DESC
+        LIMIT 1
+    </select>
+
+    <insert id="insert">
+        INSERT INTO runtime_skill_version (id, skill_id, version_no, package_checksum, package_size, file_count,
+                                           installed_relative_path, manifest_json, skill_md_summary,
+                                           status, created_by, created_at)
+        VALUES (#{id}, #{skillId}, #{versionNo}, #{packageChecksum}, #{packageSize}, #{fileCount},
+                #{installedRelativePath}, #{manifestJson}, #{skillMdSummary},
+                #{status}, #{createdBy}, #{createdAt})
+    </insert>
+
+    <update id="updateStatus">
+        UPDATE runtime_skill_version SET status = #{status} WHERE id = #{id}
+    </update>
+
+</mapper>
