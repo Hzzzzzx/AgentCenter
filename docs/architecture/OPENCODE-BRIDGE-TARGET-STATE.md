@@ -5,6 +5,8 @@
 > ⚠️ M1 决策：采用 REST+SSE 方案（非 WebSocket），详见 ADR-001
 > 目标读者：接手实现 Java Bridge、Vue 工作台和 OpenCode Runtime 适配的 Agent
 
+> 重要更新：M1 实施请以 [OPENCODE-BRIDGE-EXECUTION-DESIGN.md](./OPENCODE-BRIDGE-EXECUTION-DESIGN.md) 为权威设计。本文件保留部分长期目标和早期 WebSocket 草稿表述，不能作为 M1 实现口径。
+
 ## 1. 结论先行
 
 AgentCenter 要做的不是一个 Mock 聊天页，也不是每次调用一次 `opencode run` 的脚本包装器。目标状态是：
@@ -406,4 +408,3 @@ FE1234
 - 右侧“待确认”点击“处理”，进入该确认项绑定的一对一会话。
 - `agent_session.runtime_type` 为 `OPENCODE`，非测试路径不出现 `MOCK`。
 - 后端日志和 DB 能查到 OpenCode session id、消息、事件和产物。
-

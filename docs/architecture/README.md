@@ -3,7 +3,7 @@
 > 状态：讨论基线
 > 最近更新：2026-05-06
 >
-> ⚠️ **M1 实施决策**：OpenCode Bridge M1 采用 REST+SSE 方案，详见 [ADR-001](./ADR-001-OPENCODE-BRIDGE-SSE-REST.md)
+> ⚠️ **M1 实施决策**：OpenCode Bridge M1 采用 HTTP+SSE 方案，详见 [ADR-001](./ADR-001-OPENCODE-BRIDGE-SSE-REST.md)。后续实现以 [OPENCODE-BRIDGE-EXECUTION-DESIGN.md](./OPENCODE-BRIDGE-EXECUTION-DESIGN.md) 为准。
 
 本文档用于固定 AgentCenter 后续架构讨论的入口。当前阶段先把文档结构和 4+1 视图边界定下来，后续实现、调研、开源框架参考和产品收敛都围绕这个骨架补充。
 
@@ -28,10 +28,13 @@ AgentCenter 当前首页已经收敛为白色网页端工作台：
 | 2 | [APPLICATION-ARCHITECTURE-BASELINE.md](./APPLICATION-ARCHITECTURE-BASELINE.md) | 固定企业级应用架构约束：统一上下文、多项目多用户、性能并发、安全治理 |
 | 3 | [ARCHITECTURE-OVERVIEW.md](./ARCHITECTURE-OVERVIEW.md) | 理解现有 4+1 架构总览 |
 | 4 | [UNIFIED-DOMAIN-MODEL.md](./UNIFIED-DOMAIN-MODEL.md) | 理解核心领域对象和对象关系 |
-| 5 | [AGENT-RUNTIME-BRIDGE-DEVELOPMENT-BLUEPRINT.md](./AGENT-RUNTIME-BRIDGE-DEVELOPMENT-BLUEPRINT.md) | OpenCode 开发 Java Bridge 和 Vue 工作台的实现蓝图 |
-| 6 | [OPENCODE-BRIDGE-TARGET-STATE.md](./OPENCODE-BRIDGE-TARGET-STATE.md) | 真实 OpenCode 常驻 Runtime + WebSocket 对话的目标状态 |
-| 6.5 | **[ADR-001-OPENCODE-BRIDGE-SSE-REST.md](./ADR-001-OPENCODE-BRIDGE-SSE-REST.md)** | **M1 实施决策：REST+SSE 方案，Java SSE 基础设施对接 opencode serve** |
-| 6.6 | **[AGENT-RUNTIME-BRIDGE-M1-RUNBOOK.md](./AGENT-RUNTIME-BRIDGE-M1-RUNBOOK.md)** | **M1 快速启动指南：环境准备、工作目录配置、启动步骤、Troubleshooting** |
+| 5 | **[OPENCODE-BRIDGE-EXECUTION-DESIGN.md](./OPENCODE-BRIDGE-EXECUTION-DESIGN.md)** | **OpenCode 实施交接设计：HTTP 命令、SSE 输出、数据模型、工作流、待确认和高保真联动** |
+| 6 | [AGENT-RUNTIME-BRIDGE-DEVELOPMENT-BLUEPRINT.md](./AGENT-RUNTIME-BRIDGE-DEVELOPMENT-BLUEPRINT.md) | Java Bridge 和 Vue 工作台的总体开发蓝图 |
+| 6.5 | [ADR-001-OPENCODE-BRIDGE-SSE-REST.md](./ADR-001-OPENCODE-BRIDGE-SSE-REST.md) | M1 实施决策：HTTP+SSE 方案，Java SSE 基础设施对接 opencode serve |
+| 6.6 | [AGENT-RUNTIME-BRIDGE-M1-RUNBOOK.md](./AGENT-RUNTIME-BRIDGE-M1-RUNBOOK.md) | M1 快速启动指南：环境准备、工作目录配置、启动步骤、Troubleshooting |
+| 6.7 | [WORKFLOW-CONVERSATION-CLOSURE-DESIGN.md](./WORKFLOW-CONVERSATION-CLOSURE-DESIGN.md) | 首页工作项、后台工作流、任务会话和右侧待确认的闭环实施设计 |
+| 6.8 | [RUNTIME-RESOURCE-MANAGEMENT-DESIGN.md](./RUNTIME-RESOURCE-MANAGEMENT-DESIGN.md) | Skill 管理、MCP 管理、运行资源刷新、OpenCode 生效和会话页状态展示 |
+| 6.9 | [OPENCODE-BRIDGE-TARGET-STATE.md](./OPENCODE-BRIDGE-TARGET-STATE.md) | 长期目标状态草稿；其中旧 WebSocket 表述已被 M1 HTTP+SSE 设计取代 |
 | 7 | [OPENCODE-BRIDGE-CURRENT-STATE.md](./OPENCODE-BRIDGE-CURRENT-STATE.md) | 当前实现做到哪里、Mock 残留在哪里、哪些临时代码不要沿用 |
 | 8 | [AGENT-RUNTIME-WEBSOCKET-BRIDGE.md](./AGENT-RUNTIME-WEBSOCKET-BRIDGE.md) | 理解 Vue 工作台、Java Bridge 和 OpenCode Runtime 的 WebSocket 实时对接方案 |
 | 9 | [REFERENCE-PROJECTS-AND-RESEARCH.md](./REFERENCE-PROJECTS-AND-RESEARCH.md) | 查看开源框架、竞品调研和可引入经验 |
