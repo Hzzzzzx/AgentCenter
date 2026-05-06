@@ -135,7 +135,7 @@ class AgentSessionControllerTest {
                                 }
                                 """))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.seqNo", is(3)));
+                .andExpect(jsonPath("$.seqNo", is(2)));
     }
 
     @Test

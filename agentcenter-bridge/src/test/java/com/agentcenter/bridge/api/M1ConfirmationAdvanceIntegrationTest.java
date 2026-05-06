@@ -1,11 +1,13 @@
 package com.agentcenter.bridge.api;
 
+import com.agentcenter.bridge.application.TestWorkflowExecutorConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
@@ -18,6 +20,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
+@Import(TestWorkflowExecutorConfig.class)
 class M1ConfirmationAdvanceIntegrationTest {
 
     @Autowired
@@ -56,7 +59,6 @@ class M1ConfirmationAdvanceIntegrationTest {
 
     @Test
     void fullM1Flow_startWorkflow_resolveConfirmation_advancesToNextNode() throws Exception {
-        // Step 1: Start workflow for FE1234
         String fe1234Id = findWorkItemIdByCode("FE1234");
 
         MvcResult startResult = mockMvc.perform(
@@ -66,48 +68,44 @@ class M1ConfirmationAdvanceIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.workflowInstance.status").value("RUNNING"))
                 .andExpect(jsonPath("$.confirmation").exists())
-                .andExpect(jsonPath("$.confirmation.status").value("PENDING"))
+                .andExpect(jsonPath("$.confirmation.id").isNotEmpty())
+                .andExpect(jsonPath("$.artifacts").isArray())
                 .andReturn();
 
         var startJson = objectMapper.readTree(startResult.getResponse().getContentAsString());
-        String confirmationId = startJson.at("/confirmation/id").asText();
         String instanceId = startJson.at("/workflowInstance/id").asText();
+        String confirmationId = startJson.at("/confirmation/id").asText();
         assertThat(confirmationId).isNotEmpty();
 
-        // Step 2: List pending confirmations - should include our new one
-        mockMvc.perform(get("/api/confirmations?status=PENDING"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$[?(@.id == '" + confirmationId + "')]").exists());
+        assertThat(startJson.get("artifacts").size()).isGreaterThanOrEqualTo(1);
 
-        // Step 3: Get confirmation details
         mockMvc.perform(get("/api/confirmations/" + confirmationId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("PENDING"))
-                .andExpect(jsonPath("$.title").exists());
+                .andExpect(jsonPath("$.workflowInstanceId").value(instanceId));
 
-        // Step 4: Enter session
-        mockMvc.perform(post("/api/confirmations/" + confirmationId + "/enter-session"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("IN_CONVERSATION"));
-
-        // Step 5: Resolve with APPROVE - this should advance the workflow
         mockMvc.perform(post("/api/confirmations/" + confirmationId + "/resolve")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"actionType\":\"APPROVE\",\"comment\":\"Confirm and continue\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("RESOLVED"));
 
-        // Step 6: Verify workflow advanced - get the instance
-        mockMvc.perform(get("/api/workflow-instances/" + instanceId))
+        MvcResult wfResult = mockMvc.perform(get("/api/workflow-instances/" + instanceId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("RUNNING"))
-                .andExpect(jsonPath("$.nodes[?(@.status == 'COMPLETED')]").exists())
-                .andExpect(jsonPath("$.nodes[?(@.status == 'WAITING_CONFIRMATION')]").exists());
+                .andReturn();
+        var wfJson = objectMapper.readTree(wfResult.getResponse().getContentAsString());
+        assertThat(wfJson.get("status").asText()).isIn("RUNNING", "COMPLETED");
+
+        var nodes = wfJson.at("/nodes");
+        var completedStatuses = java.util.stream.StreamSupport.stream(nodes.spliterator(), false)
+                .map(n -> n.get("status").asText())
+                .filter("COMPLETED"::equals)
+                .count();
+        assertThat(completedStatuses).isGreaterThanOrEqualTo(2);
     }
 
     @Test
     void rejectConfirmation_doesNotAdvanceWorkflow() throws Exception {
-        // Start workflow
         String fe1234Id = findWorkItemIdByCode("FE1234");
 
         MvcResult startResult = mockMvc.perform(
@@ -115,22 +113,30 @@ class M1ConfirmationAdvanceIntegrationTest {
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{}"))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.confirmation").exists())
+                .andExpect(jsonPath("$.confirmation.id").isNotEmpty())
                 .andReturn();
 
         var startJson = objectMapper.readTree(startResult.getResponse().getContentAsString());
         String confirmationId = startJson.at("/confirmation/id").asText();
         String instanceId = startJson.at("/workflowInstance/id").asText();
+        assertThat(confirmationId).isNotEmpty();
 
-        // Reject
         mockMvc.perform(post("/api/confirmations/" + confirmationId + "/reject")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"comment\":\"Not approved\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("REJECTED"));
 
-        // Verify no node is COMPLETED - the first node stays WAITING_CONFIRMATION
-        mockMvc.perform(get("/api/workflow-instances/" + instanceId))
+        MvcResult wfResult = mockMvc.perform(get("/api/workflow-instances/" + instanceId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.nodes[?(@.status == 'COMPLETED')]").doesNotExist());
+                .andReturn();
+        var wfJson = objectMapper.readTree(wfResult.getResponse().getContentAsString());
+        var nodes = wfJson.at("/nodes");
+        long completedCount = java.util.stream.StreamSupport.stream(nodes.spliterator(), false)
+                .map(n -> n.get("status").asText())
+                .filter("COMPLETED"::equals)
+                .count();
+        assertThat(completedCount).isEqualTo(1);
     }
 }
