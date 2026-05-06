@@ -249,16 +249,23 @@ public class OpenCodeEventSubscriber {
     }
 
     private String resolvePartText(String opencodeSessionId, Map<String, Set<String>> seenMap, JsonNode part, String delta) {
-        if (!delta.isEmpty()) return delta;
+        String partId = part.path("id").asText("");
+
+        if (!delta.isEmpty()) {
+            // Mark part as streaming so subsequent part.updated won't re-emit full text
+            if (!partId.isEmpty()) {
+                seenMap.computeIfAbsent(opencodeSessionId, k -> ConcurrentHashMap.newKeySet())
+                       .add(partId);
+            }
+            return delta;
+        }
 
         String partText = part.path("text").asText("");
         if (partText.isEmpty()) return "";
 
-        String partId = part.path("id").asText("");
         if (partId.isEmpty()) return partText;
 
-        Set<String> seen = seenMap.get(opencodeSessionId);
-        if (seen == null) return partText;
+        Set<String> seen = seenMap.computeIfAbsent(opencodeSessionId, k -> ConcurrentHashMap.newKeySet());
         if (seen.contains(partId)) return "";
         seen.add(partId);
         return partText;

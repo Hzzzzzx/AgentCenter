@@ -38,6 +38,45 @@
         ORDER BY order_no ASC
     </select>
 
+    <insert id="insertDefinition">
+        INSERT INTO workflow_definition (id, work_item_type, name, version_no, status, is_default)
+        VALUES (#{id}, #{workItemType}, #{name}, #{versionNo}, #{status}, #{isDefault})
+    </insert>
+
+    <update id="updateDefinition">
+        UPDATE workflow_definition
+        SET name = #{name},
+            version_no = #{versionNo},
+            status = #{status},
+            is_default = #{isDefault},
+            updated_at = datetime('now')
+        WHERE id = #{id}
+    </update>
+
+    <update id="clearDefaultDefinitionsByWorkItemType">
+        UPDATE workflow_definition
+        SET is_default = 0,
+            updated_at = datetime('now')
+        WHERE work_item_type = #{workItemType}
+    </update>
+
+    <insert id="insertNodeDefinition">
+        INSERT INTO workflow_node_definition (
+            id, workflow_definition_id, node_key, name, order_no, skill_name,
+            input_policy, output_artifact_type, output_name_template,
+            retry_limit, timeout_seconds, required_confirmation,
+            stage_key, stage_goal, recommended_skill_names_json,
+            allow_dynamic_actions, confirmation_policy
+        )
+        VALUES (
+            #{id}, #{workflowDefinitionId}, #{nodeKey}, #{name}, #{orderNo}, #{skillName},
+            #{inputPolicy}, #{outputArtifactType}, #{outputNameTemplate},
+            #{retryLimit}, #{timeoutSeconds}, #{requiredConfirmation},
+            #{stageKey}, #{stageGoal}, #{recommendedSkillNamesJson},
+            COALESCE(#{allowDynamicActions}, 1), #{confirmationPolicy}
+        )
+    </insert>
+
     <select id="findInstanceById" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowInstanceEntity">
         SELECT id, work_item_id, workflow_definition_id, status, current_node_instance_id,
                started_at, completed_at, created_at, updated_at

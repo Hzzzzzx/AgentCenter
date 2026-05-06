@@ -17,6 +17,10 @@ public interface WorkflowMapper {
     List<WorkflowDefinitionEntity> findDefinitionsByWorkItemType(@Param("workItemType") String type);
     WorkflowDefinitionEntity findDefaultEnabledDefinition();
     List<WorkflowNodeDefinitionEntity> findNodeDefinitionsByWorkflowDefinitionId(@Param("workflowDefinitionId") String id);
+    void insertDefinition(WorkflowDefinitionEntity entity);
+    void updateDefinition(WorkflowDefinitionEntity entity);
+    void clearDefaultDefinitionsByWorkItemType(@Param("workItemType") String workItemType);
+    void insertNodeDefinition(WorkflowNodeDefinitionEntity entity);
 
     // Instances
     WorkflowInstanceEntity findInstanceById(@Param("id") String id);

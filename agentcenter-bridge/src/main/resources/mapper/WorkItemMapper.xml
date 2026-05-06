@@ -8,7 +8,7 @@
                project_id, space_id, iteration_id, owner_user_id, assignee_user_id,
                current_workflow_instance_id, version, created_at, updated_at
         FROM work_item
-        ORDER BY created_at DESC
+        ORDER BY updated_at DESC, created_at DESC
     </select>
 
     <select id="findById" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.WorkItemEntity">

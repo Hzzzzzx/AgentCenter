@@ -50,6 +50,7 @@ public class AgentSessionService {
     private final IdGenerator idGenerator;
     private final AgentRuntimeAdapter agentRuntimeAdapter;
     private final WebSocketSessionRegistry webSocketSessionRegistry;
+    private final RuntimeEventService runtimeEventService;
     private final ExecutorService messageExecutor = Executors.newCachedThreadPool(runnable -> {
         Thread thread = new Thread(runnable, "agentcenter-message-" + MESSAGE_THREAD_COUNTER.getAndIncrement());
         thread.setDaemon(true);
@@ -61,13 +62,15 @@ public class AgentSessionService {
                                RuntimeEventMapper eventMapper,
                                IdGenerator idGenerator,
                                AgentRuntimeAdapter agentRuntimeAdapter,
-                               WebSocketSessionRegistry webSocketSessionRegistry) {
+                               WebSocketSessionRegistry webSocketSessionRegistry,
+                               RuntimeEventService runtimeEventService) {
         this.sessionMapper = sessionMapper;
         this.messageMapper = messageMapper;
         this.eventMapper = eventMapper;
         this.idGenerator = idGenerator;
         this.agentRuntimeAdapter = agentRuntimeAdapter;
         this.webSocketSessionRegistry = webSocketSessionRegistry;
+        this.runtimeEventService = runtimeEventService;
     }
 
     @PreDestroy
@@ -91,14 +94,7 @@ public class AgentSessionService {
 
     public AgentSessionDto createSession(SessionType sessionType, String title,
                                           String workItemId, String workflowInstanceId,
-                                          RuntimeType runtimeType) {
-        // Runtime session is lazily created on first sendMessage when we have the DB session ID.
-        return createSession(sessionType, title, workItemId, workflowInstanceId, runtimeType, null);
-    }
-
-    public AgentSessionDto createSession(SessionType sessionType, String title,
-                                          String workItemId, String workflowInstanceId,
-                                          RuntimeType runtimeType, String runtimeSessionId) {
+                                          RuntimeType runtimeType, String workingDirectory) {
         AgentSessionEntity entity = new AgentSessionEntity();
         entity.setId(idGenerator.nextId());
         entity.setSessionType(sessionType.name());
@@ -106,11 +102,17 @@ public class AgentSessionService {
         entity.setWorkItemId(workItemId);
         entity.setWorkflowInstanceId(workflowInstanceId);
         entity.setRuntimeType(runtimeType.name());
-        entity.setRuntimeSessionId(runtimeSessionId);
+        entity.setWorkingDirectory(workingDirectory);
         entity.setStatus(SessionStatus.ACTIVE.name());
         entity.setCreatedBy("system");
         sessionMapper.insert(entity);
         return toSessionDto(entity);
+    }
+
+    public AgentSessionDto createSession(SessionType sessionType, String title,
+                                          String workItemId, String workflowInstanceId,
+                                          RuntimeType runtimeType) {
+        return createSession(sessionType, title, workItemId, workflowInstanceId, runtimeType, null);
     }
 
     public AgentSessionDto bindRuntimeSession(String sessionId, String runtimeSessionId, RuntimeType runtimeType) {
@@ -163,6 +165,13 @@ public class AgentSessionService {
             return;
         }
 
+        RuntimeType runtimeType = RuntimeType.valueOf(session.getRuntimeType());
+        if (runtimeType == RuntimeType.MOCK) {
+            recordSendMessageEvent(sessionId, session, true, null, content);
+            broadcastMessages(sessionId);
+            return;
+        }
+
         String effectiveRuntimeSessionId = session.getRuntimeSessionId();
         boolean runtimeOk = true;
         String runtimeError = null;
@@ -209,19 +218,17 @@ public class AgentSessionService {
                                         boolean runtimeOk,
                                         String runtimeError,
                                         String content) {
-        RuntimeEventEntity eventEntity = new RuntimeEventEntity();
-        eventEntity.setId(idGenerator.nextId());
-        eventEntity.setSessionId(sessionId);
-        eventEntity.setEventType(RuntimeEventType.STATUS.name());
-        eventEntity.setEventSource(RuntimeEventSource.BRIDGE.name());
         RuntimeType runtimeType = RuntimeType.valueOf(session.getRuntimeType());
-        eventEntity.setPayloadJson("""
+        String payloadJson = """
                 {"action":"sendMessage","runtimeType":"%s","runtimeOk":%s,"runtimeError":"%s","content":"%s"}
-                """.formatted(runtimeType.name(), runtimeOk, jsonEscape(runtimeError), jsonEscape(content)).trim());
+                """.formatted(runtimeType.name(), runtimeOk, jsonEscape(runtimeError), jsonEscape(content)).trim();
+        RuntimeEventDto event = new RuntimeEventDto(
+                null, sessionId, session.getWorkItemId(), session.getWorkflowInstanceId(), null,
+                RuntimeEventType.STATUS, RuntimeEventSource.BRIDGE, payloadJson, null);
         try {
-            eventMapper.insert(eventEntity);
+            runtimeEventService.publishEvent(event);
         } catch (Exception e) {
-            log.debug("Failed to record sendMessage runtime event for {}", sessionId, e);
+            log.debug("Failed to publish sendMessage runtime event for {}", sessionId, e);
         }
     }
 
@@ -282,6 +289,7 @@ public class AgentSessionService {
                 e.getWorkflowInstanceId(),
                 RuntimeType.valueOf(e.getRuntimeType()),
                 SessionStatus.valueOf(e.getStatus()),
+                e.getWorkingDirectory(),
                 parseDateTime(e.getCreatedAt())
         );
     }

@@ -8,6 +8,7 @@ public class AgentSessionEntity {
     private String workflowInstanceId;
     private String runtimeType;
     private String runtimeSessionId;
+    private String workingDirectory;
     private String status;
     private String createdBy;
     private String createdAt;
@@ -29,6 +30,8 @@ public class AgentSessionEntity {
     public void setRuntimeType(String runtimeType) { this.runtimeType = runtimeType; }
     public String getRuntimeSessionId() { return runtimeSessionId; }
     public void setRuntimeSessionId(String runtimeSessionId) { this.runtimeSessionId = runtimeSessionId; }
+    public String getWorkingDirectory() { return workingDirectory; }
+    public void setWorkingDirectory(String workingDirectory) { this.workingDirectory = workingDirectory; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public String getCreatedBy() { return createdBy; }

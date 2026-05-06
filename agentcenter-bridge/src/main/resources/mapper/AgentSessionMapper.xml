@@ -5,29 +5,29 @@
 
     <select id="findAll" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.AgentSessionEntity">
         SELECT id, session_type, title, work_item_id, workflow_instance_id,
-               runtime_type, runtime_session_id, status, created_by, created_at, updated_at
+               runtime_type, runtime_session_id, working_directory, status, created_by, created_at, updated_at
         FROM agent_session
         ORDER BY created_at DESC
     </select>
 
     <select id="findById" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.AgentSessionEntity">
         SELECT id, session_type, title, work_item_id, workflow_instance_id,
-               runtime_type, runtime_session_id, status, created_by, created_at, updated_at
+               runtime_type, runtime_session_id, working_directory, status, created_by, created_at, updated_at
         FROM agent_session WHERE id = #{id}
     </select>
 
     <select id="findByWorkItemId" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.AgentSessionEntity">
         SELECT id, session_type, title, work_item_id, workflow_instance_id,
-               runtime_type, runtime_session_id, status, created_by, created_at, updated_at
+               runtime_type, runtime_session_id, working_directory, status, created_by, created_at, updated_at
         FROM agent_session WHERE work_item_id = #{workItemId}
         ORDER BY created_at DESC
     </select>
 
     <insert id="insert">
         INSERT INTO agent_session (id, session_type, title, work_item_id, workflow_instance_id,
-                                   runtime_type, runtime_session_id, status, created_by)
+                                   runtime_type, runtime_session_id, working_directory, status, created_by)
         VALUES (#{id}, #{sessionType}, #{title}, #{workItemId}, #{workflowInstanceId},
-                #{runtimeType}, #{runtimeSessionId}, #{status}, #{createdBy})
+                #{runtimeType}, #{runtimeSessionId}, #{workingDirectory}, #{status}, #{createdBy})
     </insert>
 
     <update id="update">
@@ -37,6 +37,7 @@
             workflow_instance_id = #{workflowInstanceId},
             runtime_type = #{runtimeType},
             runtime_session_id = #{runtimeSessionId},
+            working_directory = #{workingDirectory},
             status = #{status},
             updated_at = datetime('now')
         WHERE id = #{id}

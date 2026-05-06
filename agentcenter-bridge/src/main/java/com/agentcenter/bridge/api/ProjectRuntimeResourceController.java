@@ -149,9 +149,9 @@ public class ProjectRuntimeResourceController {
     }
 
     @PostMapping("/mcps/refresh")
-    public ResponseEntity<Void> refreshAllMcps(@PathVariable String projectId) {
+    public ResponseEntity<List<ProjectMcpServerDto>> refreshAllMcps(@PathVariable String projectId) {
         mcpRegistryService.refreshAllMcps(projectId);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok(mcpRegistryService.listMcps(projectId));
     }
 
     @GetMapping("/mcps/{mcpId}/audits")

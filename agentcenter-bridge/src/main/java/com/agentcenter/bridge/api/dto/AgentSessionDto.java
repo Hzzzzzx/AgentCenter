@@ -14,5 +14,6 @@ public record AgentSessionDto(
         String workflowInstanceId,
         RuntimeType runtimeType,
         SessionStatus status,
+        String workingDirectory,
         OffsetDateTime createdAt
 ) {}

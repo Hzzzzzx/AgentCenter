@@ -47,7 +47,7 @@ public class AgentSessionController {
         String workflowInstanceId = body.get("workflowInstanceId");
 
         AgentSessionDto created = sessionService.createSession(
-                sessionType, title, workItemId, workflowInstanceId, runtimeType);
+                sessionType, title, workItemId, workflowInstanceId, runtimeType, null);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
