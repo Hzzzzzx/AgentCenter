@@ -13,6 +13,11 @@ public class WorkflowNodeDefinitionEntity {
     private Integer retryLimit;
     private Integer timeoutSeconds;
     private Boolean requiredConfirmation;
+    private String stageKey;
+    private String stageGoal;
+    private String recommendedSkillNamesJson;
+    private Boolean allowDynamicActions;
+    private String confirmationPolicy;
 
     public WorkflowNodeDefinitionEntity() {}
 
@@ -40,4 +45,14 @@ public class WorkflowNodeDefinitionEntity {
     public void setTimeoutSeconds(Integer timeoutSeconds) { this.timeoutSeconds = timeoutSeconds; }
     public Boolean getRequiredConfirmation() { return requiredConfirmation; }
     public void setRequiredConfirmation(Boolean requiredConfirmation) { this.requiredConfirmation = requiredConfirmation; }
+    public String getStageKey() { return stageKey; }
+    public void setStageKey(String stageKey) { this.stageKey = stageKey; }
+    public String getStageGoal() { return stageGoal; }
+    public void setStageGoal(String stageGoal) { this.stageGoal = stageGoal; }
+    public String getRecommendedSkillNamesJson() { return recommendedSkillNamesJson; }
+    public void setRecommendedSkillNamesJson(String recommendedSkillNamesJson) { this.recommendedSkillNamesJson = recommendedSkillNamesJson; }
+    public Boolean getAllowDynamicActions() { return allowDynamicActions; }
+    public void setAllowDynamicActions(Boolean allowDynamicActions) { this.allowDynamicActions = allowDynamicActions; }
+    public String getConfirmationPolicy() { return confirmationPolicy; }
+    public void setConfirmationPolicy(String confirmationPolicy) { this.confirmationPolicy = confirmationPolicy; }
 }

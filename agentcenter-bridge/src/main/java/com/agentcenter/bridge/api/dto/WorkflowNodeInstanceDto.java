@@ -13,5 +13,13 @@ public record WorkflowNodeInstanceDto(
         String agentSessionId,
         OffsetDateTime startedAt,
         OffsetDateTime completedAt,
-        String errorMessage
+        String errorMessage,
+        String nodeKind,
+        String origin,
+        String parentNodeInstanceId,
+        String stageKey,
+        String skillName,
+        String summary,
+        String reason,
+        Integer sequenceNo
 ) {}

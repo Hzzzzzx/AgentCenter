@@ -15,6 +15,7 @@ public interface WorkflowMapper {
     List<WorkflowDefinitionEntity> findAllDefinitions();
     WorkflowDefinitionEntity findDefinitionById(@Param("id") String id);
     List<WorkflowDefinitionEntity> findDefinitionsByWorkItemType(@Param("workItemType") String type);
+    WorkflowDefinitionEntity findDefaultEnabledDefinition();
     List<WorkflowNodeDefinitionEntity> findNodeDefinitionsByWorkflowDefinitionId(@Param("workflowDefinitionId") String id);
 
     // Instances
@@ -26,4 +27,5 @@ public interface WorkflowMapper {
     void updateNodeInstance(WorkflowNodeInstanceEntity entity);
     WorkflowNodeInstanceEntity findNodeInstanceById(@Param("id") String id);
     List<WorkflowInstanceEntity> findInstancesByWorkItemId(@Param("workItemId") String workItemId);
+    int countNodeDefinitionsBySkillName(@Param("skillName") String skillName);
 }

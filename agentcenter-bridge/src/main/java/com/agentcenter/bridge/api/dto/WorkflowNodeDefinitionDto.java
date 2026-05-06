@@ -11,5 +11,10 @@ public record WorkflowNodeDefinitionDto(
         String skillName,
         InputPolicy inputPolicy,
         ArtifactType outputArtifactType,
-        boolean requiredConfirmation
+        boolean requiredConfirmation,
+        String stageKey,
+        String stageGoal,
+        String recommendedSkillNamesJson,
+        boolean allowDynamicActions,
+        String confirmationPolicy
 ) {}

@@ -13,6 +13,14 @@ public class WorkflowNodeInstanceEntity {
     private String completedAt;
     private String errorMessage;
     private Integer version;
+    private String nodeKind;
+    private String origin;
+    private String parentNodeInstanceId;
+    private String stageKey;
+    private String skillName;
+    private String summary;
+    private String reason;
+    private Integer sequenceNo;
 
     public WorkflowNodeInstanceEntity() {}
 
@@ -40,4 +48,20 @@ public class WorkflowNodeInstanceEntity {
     public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
     public Integer getVersion() { return version; }
     public void setVersion(Integer version) { this.version = version; }
+    public String getNodeKind() { return nodeKind; }
+    public void setNodeKind(String nodeKind) { this.nodeKind = nodeKind; }
+    public String getOrigin() { return origin; }
+    public void setOrigin(String origin) { this.origin = origin; }
+    public String getParentNodeInstanceId() { return parentNodeInstanceId; }
+    public void setParentNodeInstanceId(String parentNodeInstanceId) { this.parentNodeInstanceId = parentNodeInstanceId; }
+    public String getStageKey() { return stageKey; }
+    public void setStageKey(String stageKey) { this.stageKey = stageKey; }
+    public String getSkillName() { return skillName; }
+    public void setSkillName(String skillName) { this.skillName = skillName; }
+    public String getSummary() { return summary; }
+    public void setSummary(String summary) { this.summary = summary; }
+    public String getReason() { return reason; }
+    public void setReason(String reason) { this.reason = reason; }
+    public Integer getSequenceNo() { return sequenceNo; }
+    public void setSequenceNo(Integer sequenceNo) { this.sequenceNo = sequenceNo; }
 }

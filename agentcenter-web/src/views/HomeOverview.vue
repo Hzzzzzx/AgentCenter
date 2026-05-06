@@ -3,11 +3,13 @@ import { computed, onMounted, ref } from 'vue'
 import { useWorkItemStore } from '../stores/workItems'
 import { workItemApi } from '../api/workItems'
 import { useWorkflowStore } from '../stores/workflows'
-import type { StartWorkflowResponse, WorkItemDto, WorkItemStatus, WorkItemType } from '../api/types'
+import type { StartWorkflowResponse, WorkItemDto, WorkflowInstanceDto, WorkflowNodeStatus, WorkflowStatus, WorkItemType } from '../api/types'
 
 const store = useWorkItemStore()
 const workflowStore = useWorkflowStore()
 const selectedType = ref<WorkItemType | 'ALL'>('ALL')
+const startingIds = ref<Set<string>>(new Set())
+const startErrors = ref<Record<string, string>>({})
 
 const emit = defineEmits<{
   'select-work-item': [id: string]
@@ -23,15 +25,42 @@ const typeConfig: Record<WorkItemType, { label: string; title: string; color: st
   VULN: { label: '漏洞', title: '漏洞', color: '#991b1b', detail: '1 个处理中 · 1 个待复核' },
 }
 
-const statusLabels: Record<WorkItemStatus, string> = {
-  BACKLOG: '待办',
-  TODO: '计划',
-  IN_PROGRESS: '开发',
-  IN_REVIEW: '评审',
-  DONE: '完成',
+const nodeStatusClass: Record<WorkflowNodeStatus, string> = {
+  PENDING: '',
+  RUNNING: 'home-overview__node--active',
+  WAITING_CONFIRMATION: 'home-overview__node--waiting',
+  COMPLETED: 'home-overview__node--done',
+  FAILED: 'home-overview__node--failed',
+  SKIPPED: 'home-overview__node--skipped',
 }
 
-const workflowStages = ['需求分析', '设计建模', '代码开发', '代码检查', '测试验证', '部署上线']
+const workflowStatusLabels: Record<WorkflowStatus, string> = {
+  PENDING: '待处理',
+  RUNNING: '处理中',
+  BLOCKED: '已阻塞',
+  FAILED: '异常',
+  COMPLETED: '已完成',
+  CANCELLED: '已取消',
+}
+
+type FlowNode = {
+  label: string
+  status: WorkflowNodeStatus
+  kind: 'start' | 'skill' | 'end'
+  dynamicNodeCount?: number
+  recoveryCount?: number
+  pendingConfirmationCount?: number
+  latestSummary?: string | null
+}
+
+const defaultStageLabels: Record<WorkItemType, string[]> = {
+  FE: ['需求', '方案', '实施', '验证', '归档'],
+  US: ['故事', '验收', '拆分', '评审', '归档'],
+  TASK: ['理解', '计划', '执行', '验证', '总结'],
+  WORK: ['分析', 'Runbook', '执行', '校验', '报告'],
+  BUG: ['复现', '根因', '修复', '回归', '关闭'],
+  VULN: ['分级', '影响', '修复', '验证', '归档'],
+}
 
 onMounted(() => {
   store.loadItems()
@@ -54,16 +83,146 @@ const typeStats = computed(() => {
 })
 
 const filteredItems = computed(() => {
-  if (selectedType.value === 'ALL') return store.items
-  return store.items.filter((item) => item.type === selectedType.value)
+  const items = selectedType.value === 'ALL'
+    ? store.items
+    : store.items.filter((item) => item.type === selectedType.value)
+  return [...items].sort((a, b) => itemUpdatedAtValue(b) - itemUpdatedAtValue(a))
 })
 
-function workflowIndex(item: WorkItemDto) {
-  if (item.status === 'BACKLOG') return 0
-  if (item.status === 'TODO') return 1
-  if (item.status === 'IN_PROGRESS') return 2
-  if (item.status === 'IN_REVIEW') return 4
-  return 5
+function itemUpdatedAtValue(item: WorkItemDto) {
+  return Date.parse(item.updatedAt ?? item.createdAt ?? '') || 0
+}
+
+function workflowFor(item: WorkItemDto): WorkflowInstanceDto | null {
+  const cached = workflowStore.instancesByWorkItemId[item.id]
+  if (cached) return cached
+  if (item.workflowSummary) {
+    return {
+      id: item.workflowSummary.instanceId,
+      workItemId: item.id,
+      workflowDefinitionId: '',
+      status: item.workflowSummary.status,
+      currentNodeInstanceId: item.workflowSummary.currentNodeInstanceId,
+      nodes: item.workflowSummary.nodes.map((n) => ({
+        id: n.id,
+        nodeDefinitionId: '',
+        status: n.status,
+        inputArtifactId: null,
+        outputArtifactId: null,
+        agentSessionId: null,
+        startedAt: null,
+        completedAt: null,
+        errorMessage: null,
+        definitionName: n.definitionName,
+        skillName: n.skillName,
+      })),
+      startedAt: null,
+      completedAt: null,
+    } as WorkflowInstanceDto & { nodes: typeof item.workflowSummary.nodes }
+  }
+  return null
+}
+
+function buildFlowWithAnchors(skillNodes: FlowNode[], wfStatus?: WorkflowStatus | null): FlowNode[] {
+  const hasStarted = Boolean(wfStatus)
+  const allSkillsCompleted = skillNodes.length > 0 && skillNodes.every((node) =>
+    ['COMPLETED', 'SKIPPED'].includes(node.status)
+  )
+  return [
+    { label: '开始', status: hasStarted ? 'COMPLETED' : 'RUNNING', kind: 'start' },
+    ...skillNodes,
+    {
+      label: '结束',
+      status: wfStatus === 'COMPLETED' || allSkillsCompleted ? 'COMPLETED' : 'PENDING',
+      kind: 'end',
+    },
+  ]
+}
+
+function flowNodes(item: WorkItemDto): FlowNode[] {
+  const wf = workflowFor(item)
+  const summary = item.workflowSummary
+  if (summary?.stages?.length) {
+    const stages = summary.stages.map((stage) => ({
+      label: stage.name ?? stage.skillName ?? '阶段',
+      status: stage.status,
+      kind: 'skill' as const,
+      dynamicNodeCount: stage.dynamicNodeCount,
+      recoveryCount: stage.recoveryCount,
+      pendingConfirmationCount: stage.pendingConfirmationCount,
+      latestSummary: stage.latestSummary,
+    }))
+    return buildFlowWithAnchors(stages, summary.status)
+  }
+  if (wf && wf.nodes.length > 0) {
+    const stages = wf.nodes.map((n) => ({
+      label: (n as { definitionName?: string | null; skillName?: string | null }).definitionName
+        ?? (n as { definitionName?: string | null; skillName?: string | null }).skillName
+        ?? '阶段',
+      status: n.status as WorkflowNodeStatus,
+      kind: 'skill' as const,
+    }))
+    return buildFlowWithAnchors(stages, wf.status)
+  }
+  return buildFlowWithAnchors(
+    defaultStageNamesFor(item).map((label) => ({
+      label,
+      status: 'PENDING' as WorkflowNodeStatus,
+      kind: 'skill' as const,
+    })),
+    null,
+  )
+}
+
+function defaultStageNamesFor(item: WorkItemDto): string[] {
+  const definition = workflowStore.definitions.find(
+    (candidate) => candidate.workItemType === item.type && candidate.status === 'ENABLED' && candidate.isDefault
+  ) ?? workflowStore.definitions.find(
+    (candidate) => candidate.workItemType === item.type && candidate.status === 'ENABLED'
+  )
+  if (definition?.nodes.length) {
+    return definition.nodes.map((node) => node.name)
+  }
+  return defaultStageLabels[item.type]
+}
+
+function isNodeComplete(status: WorkflowNodeStatus) {
+  return status === 'COMPLETED' || status === 'SKIPPED'
+}
+
+function isConnectorDone(left: FlowNode, right: FlowNode) {
+  return isNodeComplete(left.status) && isNodeComplete(right.status)
+}
+
+function stageMeta(node: FlowNode): string {
+  const parts: string[] = []
+  if (node.dynamicNodeCount) parts.push(`${node.dynamicNodeCount} 动态`)
+  if (node.recoveryCount) parts.push(`${node.recoveryCount} 修复`)
+  if (node.pendingConfirmationCount) parts.push(`${node.pendingConfirmationCount} 确认`)
+  return parts.join(' · ')
+}
+
+function launchLabel(item: WorkItemDto): string {
+  if (startingIds.value.has(item.id)) return '启动中'
+  const wf = workflowFor(item)
+  if (!wf && !item.currentWorkflowInstanceId) return '开始处理'
+  if (!wf) return '开始处理'
+  if (hasStageStatus(item, 'WAITING_CONFIRMATION')) return '待确认'
+  if (hasStageStatus(item, 'RUNNING')) return '处理中'
+  return workflowStatusLabels[wf.status] ?? '开始处理'
+}
+
+function launchDisabled(item: WorkItemDto): boolean {
+  if (startingIds.value.has(item.id)) return true
+  const wf = workflowFor(item)
+  if (!wf) return false
+  return wf.status !== 'FAILED' && wf.status !== 'CANCELLED'
+}
+
+function hasStageStatus(item: WorkItemDto, status: WorkflowNodeStatus) {
+  return item.workflowSummary?.stages?.some((stage) => stage.status === status)
+    || item.workflowSummary?.nodes?.some((node) => node.status === status)
+    || false
 }
 
 function handleSelectItem(id: string) {
@@ -71,8 +230,25 @@ function handleSelectItem(id: string) {
 }
 
 async function handleStartWorkflow(workItemId: string) {
-  const response = await workItemApi.startWorkflow(workItemId, { mode: 'AUTO' })
-  emit('start-workflow', workItemId, response)
+  if (startingIds.value.has(workItemId)) return
+  startingIds.value = new Set([...startingIds.value, workItemId])
+  const { [workItemId]: _removed, ...restErrors } = startErrors.value
+  startErrors.value = restErrors
+  try {
+    const response = await workItemApi.startWorkflow(workItemId, { mode: 'AUTO' })
+    if (response.workflowInstance) {
+      workflowStore.upsertInstance(response.workflowInstance)
+    }
+    emit('start-workflow', workItemId, response)
+    await store.loadItems()
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '启动工作流失败'
+    startErrors.value = { ...startErrors.value, [workItemId]: message }
+  } finally {
+    const next = new Set(startingIds.value)
+    next.delete(workItemId)
+    startingIds.value = next
+  }
 }
 </script>
 
@@ -108,12 +284,16 @@ async function handleStartWorkflow(workItemId: string) {
       <div v-if="store.loading" class="home-overview__loading">加载中...</div>
       <div v-else class="home-overview__content">
         <div v-if="filteredItems.length === 0" class="home-overview__empty">暂无工作项</div>
-        <button
+        <div
           v-for="item in filteredItems"
           v-else
           :key="item.id"
           class="work-item-card home-overview__row"
+          role="button"
+          tabindex="0"
           @click="handleSelectItem(item.id)"
+          @keydown.enter="handleSelectItem(item.id)"
+          @keydown.space.prevent="handleSelectItem(item.id)"
         >
           <div class="home-overview__row-main">
             <span
@@ -123,29 +303,43 @@ async function handleStartWorkflow(workItemId: string) {
               {{ item.code }}
             </span>
             <strong>{{ item.title }}</strong>
-            <p>{{ item.description || '点击卡片后创建会话并注入任务上下文' }}</p>
+            <p>{{ item.description || '' }}</p>
           </div>
           <div class="home-overview__row-side">
             <span class="home-overview__priority" :class="`is-${item.priority.toLowerCase()}`">
               {{ item.priority === 'URGENT' ? 'Urgent' : item.priority[0] + item.priority.slice(1).toLowerCase() }}
             </span>
-            <button class="home-overview__launch" @click.stop="handleStartWorkflow(item.id)">
-              开始处理
+            <button
+              class="home-overview__launch"
+              :disabled="launchDisabled(item)"
+              @click.stop="handleStartWorkflow(item.id)"
+            >
+              {{ launchLabel(item) }}
             </button>
           </div>
           <div class="home-overview__flow" aria-label="工作流进展">
-            <span
-              v-for="(stage, index) in workflowStages"
-              :key="stage"
-              class="home-overview__node"
-              :class="{
-                'home-overview__node--done': index < workflowIndex(item),
-                'home-overview__node--active': index === workflowIndex(item),
-              }"
-            ></span>
-            <em>{{ statusLabels[item.status] }}</em>
+            <template v-for="(node, nIndex) in flowNodes(item)" :key="`${item.id}-${nIndex}`">
+              <span
+                class="home-overview__stage"
+                :title="[node.label, stageMeta(node)].filter(Boolean).join(' · ')"
+              >
+                <span
+                  class="home-overview__node"
+                  :class="nodeStatusClass[node.status]"
+                ></span>
+              </span>
+              <span
+                v-if="nIndex < flowNodes(item).length - 1"
+                class="home-overview__node-line"
+                :class="{ 'home-overview__node-line--done': isConnectorDone(node, flowNodes(item)[nIndex + 1]) }"
+              ></span>
+            </template>
+            <em>{{ launchLabel(item) }}</em>
           </div>
-        </button>
+          <div v-if="startErrors[item.id]" class="home-overview__error">
+            {{ startErrors[item.id] }}
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -153,20 +347,24 @@ async function handleStartWorkflow(workItemId: string) {
 
 <style scoped>
 .home-overview {
+  display: flex;
   height: 100%;
-  padding: 18px 22px;
+  min-height: 0;
+  padding: 0;
   overflow: hidden;
   background: var(--bg-primary);
 }
 
 .home-overview__panel {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   height: 100%;
+  min-height: 0;
   overflow: hidden;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: 0;
 }
 
 .home-overview__header {
@@ -174,8 +372,8 @@ async function handleStartWorkflow(workItemId: string) {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  min-height: 80px;
-  padding: 18px 22px;
+  min-height: 68px;
+  padding: 14px 18px;
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -195,19 +393,19 @@ async function handleStartWorkflow(workItemId: string) {
 
 .home-overview__stats {
   display: grid;
-  grid-template-columns: repeat(6, minmax(128px, 1fr));
-  gap: 12px;
-  padding: 22px;
-  overflow-x: auto;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  padding: 16px 18px;
+  overflow: visible;
 }
 
 .home-overview__stat {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  min-width: 128px;
-  min-height: 118px;
-  padding: 18px 18px 14px;
+  min-width: 0;
+  min-height: 96px;
+  padding: 14px 14px 12px;
   border: 1px solid var(--border-color);
   border-radius: 12px;
   background: var(--bg-primary);
@@ -229,18 +427,18 @@ async function handleStartWorkflow(workItemId: string) {
 }
 
 .home-overview__stat strong {
-  margin-top: 8px;
+  margin-top: 7px;
   color: var(--text-primary);
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 950;
   line-height: 1;
 }
 
 .home-overview__stat em {
-  margin-top: 10px;
+  margin-top: 8px;
   color: var(--text-secondary);
   font-style: normal;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1.4;
 }
@@ -249,7 +447,7 @@ async function handleStartWorkflow(workItemId: string) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 22px 12px;
+  padding: 0 18px 10px;
 }
 
 .home-overview__toolbar h3 {
@@ -277,12 +475,29 @@ async function handleStartWorkflow(workItemId: string) {
 
 .home-overview__content {
   display: flex;
-  flex: 1;
+  flex: 1 1 0;
   flex-direction: column;
   gap: 12px;
   min-height: 0;
-  padding: 0 22px 22px;
-  overflow: auto;
+  padding: 0 18px 18px;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.home-overview__content::-webkit-scrollbar {
+  width: 10px;
+}
+
+.home-overview__content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.home-overview__content::-webkit-scrollbar-thumb {
+  border: 3px solid var(--bg-card);
+  border-radius: 999px;
+  background: rgba(100, 116, 139, 0.35);
 }
 
 .home-overview__row {
@@ -385,67 +600,98 @@ async function handleStartWorkflow(workItemId: string) {
   color: #ffffff;
 }
 
+.home-overview__launch:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
+.home-overview__error {
+  grid-column: 1 / -1;
+  color: #dc2626;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .home-overview__flow {
   grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: repeat(6, minmax(22px, 1fr)) max-content;
+  display: flex;
   align-items: center;
   gap: 0;
-  max-width: 620px;
+  margin-top: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.home-overview__stage {
+  display: inline-flex;
+  align-items: center;
+  min-width: 12px;
 }
 
 .home-overview__node {
-  position: relative;
-  height: 24px;
+  display: inline-flex;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 2px solid var(--border-color);
+  background: transparent;
+  flex-shrink: 0;
 }
 
-.home-overview__node::before {
-  content: '';
-  position: absolute;
-  left: 18px;
-  right: 0;
-  top: 11px;
+.home-overview__node-line {
+  width: 28px;
   height: 2px;
+  flex: 0 0 28px;
   background: var(--border-color);
 }
 
-.home-overview__node:last-of-type::before {
-  display: none;
+.home-overview__flow em {
+  margin-left: 24px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 800;
 }
 
-.home-overview__node::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 6px;
-  width: 12px;
-  height: 12px;
-  border: 3px solid var(--border-color);
-  border-radius: 999px;
-  background: var(--bg-card);
-}
-
-.home-overview__node--done::after {
+.home-overview__node--done {
+  background: var(--success);
   border-color: var(--success);
+}
+
+.home-overview__node-line--done {
   background: var(--success);
 }
 
-.home-overview__node--active::after {
-  border-color: rgba(59, 130, 246, 0.3);
+.home-overview__node--active {
   background: var(--accent-blue);
-  box-shadow: 0 0 0 7px var(--glow-blue);
+  border-color: rgba(59, 130, 246, 0.3);
+  animation: node-pulse 2s ease-in-out infinite;
 }
 
-.home-overview__flow em {
-  color: var(--text-secondary);
-  font-style: normal;
-  font-size: 14px;
-  font-weight: 800;
+@keyframes node-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15); }
+  50% { box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.25); }
+}
+
+.home-overview__node--waiting {
+  background: #f59e0b;
+  border-color: #f59e0b;
+}
+
+.home-overview__node--failed {
+  background: #ef4444;
+  border-color: #ef4444;
+}
+
+.home-overview__node--skipped {
+  background: #9ca3af;
+  border-color: #9ca3af;
+  opacity: 0.5;
 }
 
 @media (max-width: 1360px) {
   .home-overview__stats {
-    grid-template-columns: repeat(3, minmax(128px, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 </style>

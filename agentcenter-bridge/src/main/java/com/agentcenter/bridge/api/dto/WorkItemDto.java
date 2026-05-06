@@ -19,6 +19,7 @@ public record WorkItemDto(
         String iterationId,
         String assigneeUserId,
         String currentWorkflowInstanceId,
+        WorkflowSummaryDto workflowSummary,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt
 ) {}

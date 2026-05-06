@@ -41,7 +41,12 @@ public class WorkflowController {
                                     InputPolicy.valueOf(nodeDef.getInputPolicy()),
                                     nodeDef.getOutputArtifactType() != null
                                             ? ArtifactType.valueOf(nodeDef.getOutputArtifactType()) : null,
-                                    Boolean.TRUE.equals(nodeDef.getRequiredConfirmation())
+                                    Boolean.TRUE.equals(nodeDef.getRequiredConfirmation()),
+                                    nodeDef.getStageKey(),
+                                    nodeDef.getStageGoal(),
+                                    nodeDef.getRecommendedSkillNamesJson(),
+                                    Boolean.TRUE.equals(nodeDef.getAllowDynamicActions()),
+                                    nodeDef.getConfirmationPolicy()
                             ))
                             .toList();
                     return new WorkflowDefinitionDto(

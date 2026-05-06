@@ -19,10 +19,20 @@
         FROM workflow_definition WHERE work_item_type = #{workItemType}
     </select>
 
+    <select id="findDefaultEnabledDefinition" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowDefinitionEntity">
+        SELECT id, work_item_type, name, version_no, status, is_default, created_at, updated_at
+        FROM workflow_definition
+        WHERE status = 'ENABLED' AND is_default = 1
+        ORDER BY CASE WHEN work_item_type = 'FE' THEN 0 ELSE 1 END, created_at DESC
+        LIMIT 1
+    </select>
+
     <select id="findNodeDefinitionsByWorkflowDefinitionId" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowNodeDefinitionEntity">
         SELECT id, workflow_definition_id, node_key, name, order_no, skill_name,
                input_policy, output_artifact_type, output_name_template,
-               retry_limit, timeout_seconds, required_confirmation
+               retry_limit, timeout_seconds, required_confirmation,
+               stage_key, stage_goal, recommended_skill_names_json,
+               allow_dynamic_actions, confirmation_policy
         FROM workflow_node_definition
         WHERE workflow_definition_id = #{workflowDefinitionId}
         ORDER BY order_no ASC
@@ -37,7 +47,9 @@
     <select id="findNodeInstancesByWorkflowInstanceId" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowNodeInstanceEntity">
         SELECT wni.id, wni.workflow_instance_id, wni.node_definition_id, wni.status,
                wni.input_artifact_id, wni.output_artifact_id, wni.agent_session_id, wni.runtime_session_id,
-               wni.started_at, wni.completed_at, wni.error_message, wni.version
+               wni.started_at, wni.completed_at, wni.error_message, wni.version,
+               wni.node_kind, wni.origin, wni.parent_node_instance_id,
+               wni.stage_key, wni.skill_name, wni.summary, wni.reason, wni.sequence_no
         FROM workflow_node_instance wni
         JOIN workflow_node_definition wnd ON wni.node_definition_id = wnd.id
         WHERE wni.workflow_instance_id = #{workflowInstanceId}
@@ -62,11 +74,15 @@
         INSERT INTO workflow_node_instance (id, workflow_instance_id, node_definition_id, status,
                                             input_artifact_id, output_artifact_id, agent_session_id,
                                             runtime_session_id, started_at, completed_at,
-                                            error_message, version)
+                                            error_message, version, node_kind, origin,
+                                            parent_node_instance_id, stage_key, skill_name,
+                                            summary, reason, sequence_no)
         VALUES (#{id}, #{workflowInstanceId}, #{nodeDefinitionId}, #{status},
                 #{inputArtifactId}, #{outputArtifactId}, #{agentSessionId},
                 #{runtimeSessionId}, #{startedAt}, #{completedAt},
-                #{errorMessage}, #{version})
+                #{errorMessage}, #{version}, COALESCE(#{nodeKind}, 'STAGE'),
+                COALESCE(#{origin}, 'DEFINITION'), #{parentNodeInstanceId},
+                #{stageKey}, #{skillName}, #{summary}, #{reason}, #{sequenceNo})
     </insert>
 
     <update id="updateNodeInstance">
@@ -79,6 +95,14 @@
             input_artifact_id = #{inputArtifactId},
             completed_at = #{completedAt},
             error_message = #{errorMessage},
+            node_kind = COALESCE(#{nodeKind}, node_kind),
+            origin = COALESCE(#{origin}, origin),
+            parent_node_instance_id = #{parentNodeInstanceId},
+            stage_key = #{stageKey},
+            skill_name = #{skillName},
+            summary = #{summary},
+            reason = #{reason},
+            sequence_no = #{sequenceNo},
             version = version + 1
         WHERE id = #{id}
     </update>
@@ -86,7 +110,9 @@
     <select id="findNodeInstanceById" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowNodeInstanceEntity">
         SELECT id, workflow_instance_id, node_definition_id, status,
                input_artifact_id, output_artifact_id, agent_session_id, runtime_session_id,
-               started_at, completed_at, error_message, version
+               started_at, completed_at, error_message, version,
+               node_kind, origin, parent_node_instance_id,
+               stage_key, skill_name, summary, reason, sequence_no
         FROM workflow_node_instance WHERE id = #{id}
     </select>
 
@@ -95,6 +121,10 @@
                started_at, completed_at, created_at, updated_at
         FROM workflow_instance WHERE work_item_id = #{workItemId}
         ORDER BY created_at DESC
+    </select>
+
+    <select id="countNodeDefinitionsBySkillName" resultType="int">
+        SELECT COUNT(*) FROM workflow_node_definition WHERE skill_name = #{skillName}
     </select>
 
 </mapper>

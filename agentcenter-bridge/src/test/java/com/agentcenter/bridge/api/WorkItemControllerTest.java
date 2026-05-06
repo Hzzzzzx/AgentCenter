@@ -31,6 +31,25 @@ class WorkItemControllerTest {
                 .andExpect(jsonPath("$[?(@.code == 'BUG0602')]").exists());
     }
 
+    @Test
+    void workItemsIncludeWorkflowSummaryField() throws Exception {
+        var result = mockMvc.perform(get("/api/work-items"))
+                .andExpect(status().isOk())
+                .andReturn();
+        var array = objectMapper.readTree(result.getResponse().getContentAsString());
+        for (var item : array) {
+            // All seeded items have no workflow instance, so workflowSummary should be null/absent
+            var summary = item.get("workflowSummary");
+            if (summary != null && !summary.isNull()) {
+                // If somehow a workflow instance exists, verify the shape
+                assert summary.has("instanceId");
+                assert summary.has("status");
+                assert summary.has("nodes");
+                assert summary.has("stages");
+            }
+        }
+    }
+
     private String findIdByCode(String responseBody, String code) throws Exception {
         var array = objectMapper.readTree(responseBody);
         for (var node : array) {

@@ -6,15 +6,18 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.agentcenter.bridge.api.dto.AgentSessionDto;
@@ -39,6 +42,7 @@ import com.agentcenter.bridge.domain.session.MessageStatus;
 import com.agentcenter.bridge.domain.session.SessionStatus;
 import com.agentcenter.bridge.domain.session.SessionType;
 import com.agentcenter.bridge.domain.workitem.Priority;
+import com.agentcenter.bridge.domain.workitem.WorkItemType;
 import com.agentcenter.bridge.domain.workflow.WorkflowNodeStatus;
 import com.agentcenter.bridge.domain.workflow.WorkflowStatus;
 import com.agentcenter.bridge.infrastructure.id.IdGenerator;
@@ -64,7 +68,6 @@ public class WorkflowCommandService {
     private static final Logger log = LoggerFactory.getLogger(WorkflowCommandService.class);
     private static final DateTimeFormatter SQLITE_DATETIME =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    private static final AtomicInteger WORKFLOW_THREAD_COUNTER = new AtomicInteger(1);
 
     private final WorkflowMapper workflowMapper;
     private final WorkItemMapper workItemMapper;
@@ -76,11 +79,7 @@ public class WorkflowCommandService {
     private final AgentRuntimeAdapter runtimeAdapter;
     private final IdGenerator idGenerator;
     private final RuntimeType workflowRuntimeType;
-    private final ExecutorService workflowExecutor = Executors.newFixedThreadPool(2, runnable -> {
-        Thread thread = new Thread(runnable, "agentcenter-workflow-" + WORKFLOW_THREAD_COUNTER.getAndIncrement());
-        thread.setDaemon(true);
-        return thread;
-    });
+    private final ExecutorService workflowExecutor;
 
     public WorkflowCommandService(WorkflowMapper workflowMapper,
                                    WorkItemMapper workItemMapper,
@@ -91,7 +90,8 @@ public class WorkflowCommandService {
                                    RuntimeEventService runtimeEventService,
                                    AgentRuntimeAdapter runtimeAdapter,
                                    IdGenerator idGenerator,
-                                   @Value("${agentcenter.runtime.default-type:OPENCODE}") String defaultRuntimeType) {
+                                   @Value("${agentcenter.runtime.default-type:OPENCODE}") String defaultRuntimeType,
+                                   @Qualifier("workflowExecutor") ExecutorService workflowExecutor) {
         this.workflowMapper = workflowMapper;
         this.workItemMapper = workItemMapper;
         this.artifactMapper = artifactMapper;
@@ -102,6 +102,7 @@ public class WorkflowCommandService {
         this.runtimeAdapter = runtimeAdapter;
         this.idGenerator = idGenerator;
         this.workflowRuntimeType = RuntimeType.valueOf(defaultRuntimeType.toUpperCase());
+        this.workflowExecutor = workflowExecutor;
     }
 
     @PreDestroy
@@ -117,6 +118,7 @@ public class WorkflowCommandService {
 
         WorkflowInstanceEntity existing = findActiveInstance(workItemId);
         if (existing != null) {
+            touchWorkItem(existing.getWorkItemId(), LocalDateTime.now().format(SQLITE_DATETIME));
             scheduleResume(existing.getId());
             return buildResponse(existing);
         }
@@ -150,6 +152,12 @@ public class WorkflowCommandService {
             nodeInstance.setNodeDefinitionId(nodeDef.getId());
             nodeInstance.setStatus(WorkflowNodeStatus.PENDING.name());
             nodeInstance.setVersion(1);
+            nodeInstance.setNodeKind("STAGE");
+            nodeInstance.setOrigin("DEFINITION");
+            nodeInstance.setStageKey(stageKeyFor(nodeDef));
+            nodeInstance.setSkillName(nodeDef.getSkillName());
+            nodeInstance.setSummary(nodeDef.getName());
+            nodeInstance.setSequenceNo(nodeDef.getOrderNo());
             workflowMapper.insertNodeInstance(nodeInstance);
         }
 
@@ -181,8 +189,7 @@ public class WorkflowCommandService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Workflow instance not found: " + instanceId);
         }
 
-        List<WorkflowNodeInstanceEntity> nodes =
-                workflowMapper.findNodeInstancesByWorkflowInstanceId(instanceId);
+        List<WorkflowNodeInstanceEntity> nodes = getOrderedNodeInstances(instanceId);
 
         String currentNodeId = instance.getCurrentNodeInstanceId();
         WorkflowNodeInstanceEntity currentNode = nodes.stream()
@@ -267,6 +274,22 @@ public class WorkflowCommandService {
         return buildResponse(instance);
     }
 
+    public StartWorkflowResponse completeNodeAndScheduleAdvance(String nodeInstanceId) {
+        WorkflowNodeInstanceEntity node = findNodeInstanceOrThrow(nodeInstanceId);
+        WorkflowInstanceEntity instance = workflowMapper.findInstanceById(node.getWorkflowInstanceId());
+
+        String now = LocalDateTime.now().format(SQLITE_DATETIME);
+        node.setStatus(WorkflowNodeStatus.COMPLETED.name());
+        node.setCompletedAt(now);
+        workflowMapper.updateNodeInstance(node);
+        touchWorkItem(instance.getWorkItemId(), now);
+
+        scheduleResumeAfterCommit(instance.getId());
+
+        instance = workflowMapper.findInstanceById(instance.getId());
+        return buildResponse(instance);
+    }
+
     public WorkflowInstanceDto getWorkflowInstance(String instanceId) {
         WorkflowInstanceEntity instance = workflowMapper.findInstanceById(instanceId);
         if (instance == null) {
@@ -304,6 +327,7 @@ public class WorkflowCommandService {
         instance.setCurrentNodeInstanceId(node.getId());
         instance.setUpdatedAt(now);
         workflowMapper.updateInstance(instance);
+        touchWorkItem(instance.getWorkItemId(), now);
 
         AgentSessionDto session = findWorkflowSession(instance);
         String runtimeSessionId = findWorkflowRuntimeSessionId(instance);
@@ -383,29 +407,21 @@ public class WorkflowCommandService {
         int nextSeqNo = nextMessageSeqNo(sessionId);
         String now = LocalDateTime.now().format(SQLITE_DATETIME);
 
-        AgentMessageEntity toolMsg = new AgentMessageEntity();
-        toolMsg.setId(idGenerator.nextId());
-        toolMsg.setSessionId(sessionId);
-        toolMsg.setRole("TOOL");
-        toolMsg.setContent("Skill: " + skillName + " - " + (result.success() ? "completed" : "failed"));
-        toolMsg.setContentFormat("TEXT");
-        toolMsg.setStatus("COMPLETED");
-        toolMsg.setSeqNo(nextSeqNo);
-        toolMsg.setCreatedBy("workflow-engine");
-        toolMsg.setCreatedAt(now);
-        agentMessageMapper.insert(toolMsg);
-
-        AgentMessageEntity assistantMsg = new AgentMessageEntity();
-        assistantMsg.setId(idGenerator.nextId());
-        assistantMsg.setSessionId(sessionId);
-        assistantMsg.setRole("ASSISTANT");
-        assistantMsg.setContent(result.outputContent() != null ? result.outputContent() : "");
-        assistantMsg.setContentFormat("MARKDOWN");
-        assistantMsg.setStatus("COMPLETED");
-        assistantMsg.setSeqNo(nextSeqNo + 1);
-        assistantMsg.setCreatedBy("workflow-engine");
-        assistantMsg.setCreatedAt(now);
-        agentMessageMapper.insert(assistantMsg);
+        AgentMessageEntity statusMsg = new AgentMessageEntity();
+        statusMsg.setId(idGenerator.nextId());
+        statusMsg.setSessionId(sessionId);
+        statusMsg.setRole(MessageRole.SYSTEM.name());
+        statusMsg.setContent("%s %s %s".formatted(
+                result.success() ? "已完成" : "执行失败",
+                nodeDef.getName(),
+                "（Skill：" + skillName + "）"
+        ));
+        statusMsg.setContentFormat(ContentFormat.TEXT.name());
+        statusMsg.setStatus(MessageStatus.COMPLETED.name());
+        statusMsg.setSeqNo(nextSeqNo);
+        statusMsg.setCreatedBy("workflow-engine");
+        statusMsg.setCreatedAt(now);
+        agentMessageMapper.insert(statusMsg);
 
         boolean needsConfirmation = result.success()
                 && Boolean.TRUE.equals(nodeDef.getRequiredConfirmation());
@@ -422,9 +438,11 @@ public class WorkflowCommandService {
             confirmation.setRuntimeType(workflowRuntimeType.name());
             confirmation.setRuntimeSessionId(node.getRuntimeSessionId());
             confirmation.setSkillName(skillName);
-            confirmation.setTitle("确认节点输出: " + nodeDef.getName());
+            confirmation.setTitle("%s %s · %s 输出待确认".formatted(
+                    workItem.getCode(), workItem.getTitle(), nodeDef.getName()));
             confirmation.setContent(result.outputContent());
-            confirmation.setContextSummary("请确认 " + nodeDef.getName() + " 节点的输出内容");
+            confirmation.setContextSummary("工作项 %s（%s）在 %s 节点需要确认输出，通过后将自动进入下一节点。".formatted(
+                    workItem.getCode(), workItem.getType(), nodeDef.getName()));
             confirmation.setOptionsJson("[\"approve\",\"reject\",\"modify\"]");
             confirmation.setPriority(Priority.MEDIUM.name());
             confirmation.setCreatedAt(now);
@@ -448,6 +466,7 @@ public class WorkflowCommandService {
         }
 
         workflowMapper.updateNodeInstance(node);
+        touchWorkItem(workItem.getId(), now);
     }
 
     private AgentSessionDto findWorkflowSession(WorkflowInstanceEntity instance) {
@@ -480,23 +499,24 @@ public class WorkflowCommandService {
         AgentMessageEntity contextMsg = new AgentMessageEntity();
         contextMsg.setId(idGenerator.nextId());
         contextMsg.setSessionId(sessionId);
-        contextMsg.setRole(MessageRole.SYSTEM.name());
+        contextMsg.setRole(MessageRole.USER.name());
         contextMsg.setContent("""
-                已加载任务上下文
+                请执行工作流节点：%s
 
                 - 工作项：%s %s
                 - 类型：%s
-                - 当前节点：%s
                 - Skill：%s
+
+                这是工作流代用户发起的节点输入，请基于任务上下文和上游产物生成本节点结果。
 
                 ```text
                 %s
                 ```
                 """.formatted(
+                nodeDef.getName(),
                 workItem.getCode(),
                 workItem.getTitle(),
                 workItem.getType(),
-                nodeDef.getName(),
                 nodeDef.getSkillName(),
                 inputContext
         ).trim());
@@ -574,8 +594,7 @@ public class WorkflowCommandService {
     }
 
     private void resumeAutoProgressIfPossible(WorkflowInstanceEntity instance) {
-        List<WorkflowNodeInstanceEntity> nodes =
-                workflowMapper.findNodeInstancesByWorkflowInstanceId(instance.getId());
+        List<WorkflowNodeInstanceEntity> nodes = getOrderedNodeInstances(instance.getId());
 
         boolean isBlocked = nodes.stream()
                 .anyMatch(n -> WorkflowNodeStatus.WAITING_CONFIRMATION.name().equals(n.getStatus())
@@ -594,6 +613,7 @@ public class WorkflowCommandService {
             instance.setCompletedAt(now);
             instance.setUpdatedAt(now);
             workflowMapper.updateInstance(instance);
+            touchWorkItem(instance.getWorkItemId(), now);
             return;
         }
 
@@ -643,6 +663,19 @@ public class WorkflowCommandService {
         });
     }
 
+    private void scheduleResumeAfterCommit(String instanceId) {
+        if (!TransactionSynchronizationManager.isActualTransactionActive()) {
+            scheduleResume(instanceId);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                scheduleResume(instanceId);
+            }
+        });
+    }
+
     private void markNodeFailed(String nodeInstanceId, Exception error) {
         WorkflowNodeInstanceEntity node = workflowMapper.findNodeInstanceById(nodeInstanceId);
         if (node == null) {
@@ -650,13 +683,29 @@ public class WorkflowCommandService {
         }
         node.setStatus(WorkflowNodeStatus.FAILED.name());
         node.setErrorMessage(error.getMessage());
-        node.setCompletedAt(LocalDateTime.now().format(SQLITE_DATETIME));
+        String now = LocalDateTime.now().format(SQLITE_DATETIME);
+        node.setCompletedAt(now);
         workflowMapper.updateNodeInstance(node);
+        WorkflowInstanceEntity instance = workflowMapper.findInstanceById(node.getWorkflowInstanceId());
+        if (instance != null) {
+            touchWorkItem(instance.getWorkItemId(), now);
+        }
+    }
+
+    private List<WorkflowNodeInstanceEntity> getOrderedNodeInstances(String instanceId) {
+        List<WorkflowNodeInstanceEntity> nodes =
+                workflowMapper.findNodeInstancesByWorkflowInstanceId(instanceId);
+        WorkflowInstanceEntity instance = workflowMapper.findInstanceById(instanceId);
+        List<WorkflowNodeDefinitionEntity> nodeDefs =
+                workflowMapper.findNodeDefinitionsByWorkflowDefinitionId(instance.getWorkflowDefinitionId());
+        Map<String, Integer> orderMap = nodeDefs.stream()
+                .collect(Collectors.toMap(WorkflowNodeDefinitionEntity::getId, WorkflowNodeDefinitionEntity::getOrderNo));
+        nodes.sort(Comparator.comparingInt(n -> orderMap.getOrDefault(n.getNodeDefinitionId(), Integer.MAX_VALUE)));
+        return nodes;
     }
 
     private void advanceToNextNode(WorkflowInstanceEntity instance) {
-        List<WorkflowNodeInstanceEntity> nodes =
-                workflowMapper.findNodeInstancesByWorkflowInstanceId(instance.getId());
+        List<WorkflowNodeInstanceEntity> nodes = getOrderedNodeInstances(instance.getId());
 
         WorkflowNodeInstanceEntity nextPending = nodes.stream()
                 .filter(n -> WorkflowNodeStatus.PENDING.name().equals(n.getStatus()))
@@ -668,6 +717,7 @@ public class WorkflowCommandService {
             instance.setCompletedAt(now);
             instance.setUpdatedAt(now);
             workflowMapper.updateInstance(instance);
+            touchWorkItem(instance.getWorkItemId(), now);
             return;
         }
 
@@ -705,7 +755,17 @@ public class WorkflowCommandService {
                 workflowMapper.findDefinitionsByWorkItemType(workItem.getType());
         return defs.stream()
                 .filter(d -> Boolean.TRUE.equals(d.getIsDefault()) && "ENABLED".equals(d.getStatus()))
-                .findFirst().orElse(null);
+                .findFirst()
+                .orElseGet(workflowMapper::findDefaultEnabledDefinition);
+    }
+
+    private void touchWorkItem(String workItemId, String now) {
+        WorkItemEntity workItem = workItemMapper.findById(workItemId);
+        if (workItem == null) {
+            return;
+        }
+        workItem.setUpdatedAt(now);
+        workItemMapper.update(workItem);
     }
 
     private String buildInputContext(WorkItemEntity workItem, WorkflowNodeInstanceEntity node) {
@@ -722,6 +782,13 @@ public class WorkflowCommandService {
             }
         }
         return sb.toString();
+    }
+
+    private String stageKeyFor(WorkflowNodeDefinitionEntity nodeDef) {
+        if (nodeDef.getStageKey() != null && !nodeDef.getStageKey().isBlank()) {
+            return nodeDef.getStageKey();
+        }
+        return nodeDef.getNodeKey();
     }
 
     private StartWorkflowResponse buildResponse(WorkflowInstanceEntity instance) {
@@ -825,7 +892,15 @@ public class WorkflowCommandService {
                 e.getAgentSessionId(),
                 parseDateTime(e.getStartedAt()),
                 parseDateTime(e.getCompletedAt()),
-                e.getErrorMessage()
+                e.getErrorMessage(),
+                e.getNodeKind(),
+                e.getOrigin(),
+                e.getParentNodeInstanceId(),
+                e.getStageKey(),
+                e.getSkillName(),
+                e.getSummary(),
+                e.getReason(),
+                e.getSequenceNo()
         );
     }
 
@@ -843,13 +918,19 @@ public class WorkflowCommandService {
     }
 
     private ConfirmationRequestDto toConfirmationDto(ConfirmationRequestEntity e) {
+        WorkItemEntity workItem = e.getWorkItemId() != null ? workItemMapper.findById(e.getWorkItemId()) : null;
+        String workflowNodeName = resolveWorkflowNodeName(e.getWorkflowNodeInstanceId());
         return new ConfirmationRequestDto(
                 e.getId(),
                 ConfirmationRequestType.valueOf(e.getRequestType()),
                 ConfirmationStatus.valueOf(e.getStatus()),
                 e.getWorkItemId(),
+                workItem != null ? workItem.getCode() : null,
+                workItem != null ? WorkItemType.valueOf(workItem.getType()) : null,
+                workItem != null ? workItem.getTitle() : null,
                 e.getWorkflowInstanceId(),
                 e.getWorkflowNodeInstanceId(),
+                workflowNodeName,
                 e.getAgentSessionId(),
                 e.getSkillName(),
                 e.getTitle(),
@@ -859,6 +940,25 @@ public class WorkflowCommandService {
                 Priority.valueOf(e.getPriority()),
                 parseDateTime(e.getCreatedAt())
         );
+    }
+
+    private String resolveWorkflowNodeName(String nodeInstanceId) {
+        if (nodeInstanceId == null || nodeInstanceId.isBlank()) {
+            return null;
+        }
+        WorkflowNodeInstanceEntity node = workflowMapper.findNodeInstanceById(nodeInstanceId);
+        if (node == null) {
+            return null;
+        }
+        WorkflowInstanceEntity instance = workflowMapper.findInstanceById(node.getWorkflowInstanceId());
+        if (instance == null) {
+            return null;
+        }
+        return workflowMapper.findNodeDefinitionsByWorkflowDefinitionId(instance.getWorkflowDefinitionId()).stream()
+                .filter(def -> def.getId().equals(node.getNodeDefinitionId()))
+                .findFirst()
+                .map(WorkflowNodeDefinitionEntity::getName)
+                .orElse(null);
     }
 
     private OffsetDateTime parseDateTime(String value) {

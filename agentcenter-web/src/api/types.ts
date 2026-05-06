@@ -33,11 +33,25 @@ export interface WorkflowSummaryNodeDto {
   status: WorkflowNodeStatus
 }
 
+export interface WorkflowSummaryStageDto {
+  id: string
+  stageKey: string | null
+  name: string | null
+  skillName: string | null
+  status: WorkflowNodeStatus
+  dynamicNodeCount: number
+  recoveryCount: number
+  pendingConfirmationCount: number
+  latestSummary: string | null
+}
+
 export interface WorkflowSummaryDto {
   instanceId: string
   status: WorkflowStatus
   currentNodeInstanceId: string | null
+  currentStageKey?: string | null
   nodes: WorkflowSummaryNodeDto[]
+  stages?: WorkflowSummaryStageDto[]
 }
 
 export interface WorkItemDto {
@@ -84,6 +98,11 @@ export interface WorkflowNodeDefinitionDto {
   inputPolicy: string
   outputArtifactType: string
   requiredConfirmation: boolean
+  stageKey?: string | null
+  stageGoal?: string | null
+  recommendedSkillNamesJson?: string | null
+  allowDynamicActions?: boolean
+  confirmationPolicy?: string | null
 }
 
 export interface WorkflowInstanceDto {
@@ -107,6 +126,14 @@ export interface WorkflowNodeInstanceDto {
   startedAt: string | null
   completedAt: string | null
   errorMessage: string | null
+  nodeKind?: string | null
+  origin?: string | null
+  parentNodeInstanceId?: string | null
+  stageKey?: string | null
+  skillName?: string | null
+  summary?: string | null
+  reason?: string | null
+  sequenceNo?: number | null
 }
 
 export interface AgentSessionDto {
@@ -175,8 +202,12 @@ export interface ConfirmationRequestDto {
   requestType: ConfirmationRequestType
   status: ConfirmationStatus
   workItemId: string | null
+  workItemCode?: string | null
+  workItemType?: WorkItemType | null
+  workItemTitle?: string | null
   workflowInstanceId: string | null
   workflowNodeInstanceId: string | null
+  workflowNodeName?: string | null
   agentSessionId: string | null
   skillName: string | null
   title: string
