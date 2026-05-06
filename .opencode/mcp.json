@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "gitnexus": {
+      "type": "local",
+      "command": ["/Users/hzz/.npm/_npx/5e786f48223a616c/node_modules/.bin/gitnexus", "mcp"]
+    },
+    "test-fetch-server": {
+      "type": "sse",
+      "url": "http://localhost:3001/sse"
+    }
+  }
+}
