@@ -34,8 +34,8 @@ const settingsOpen = ref(false)
 
 const navItems: NavItem[] = [
   { id: 'home', label: '首页', icon: 'home' },
-  { id: 'board', label: '看板', icon: 'board' },
-  { id: 'workflow', label: '编排策略', icon: 'workflow' },
+  { id: 'board', label: '任务看板', icon: 'board' },
+  { id: 'workflow', label: '任务编排', icon: 'workflow' },
 ]
 
 const generalSessions = computed(() =>

@@ -21,11 +21,25 @@ export const useWorkItemStore = defineStore('workItems', () => {
     selectedItem.value = await workItemApi.getById(id)
   }
 
+  async function refreshItem(id: string) {
+    const updated = await workItemApi.getById(id)
+    const index = items.value.findIndex((item) => item.id === id)
+    if (index >= 0) {
+      items.value.splice(index, 1, updated)
+    } else {
+      items.value.push(updated)
+    }
+    if (selectedItem.value?.id === id) {
+      selectedItem.value = updated
+    }
+    return updated
+  }
+
   async function createItem(data: CreateWorkItemRequest) {
     const item = await workItemApi.create(data)
     items.value.push(item)
     return item
   }
 
-  return { items, selectedItem, loading, loadItems, selectItem, createItem }
+  return { items, selectedItem, loading, loadItems, selectItem, refreshItem, createItem }
 })

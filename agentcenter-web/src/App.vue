@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import AppShell from './components/shell/AppShell.vue'
 import HomeOverview from './views/HomeOverview.vue'
 import BoardView from './views/BoardView.vue'
@@ -24,8 +24,20 @@ const sessionStore = useSessionStore()
 const workflowStore = useWorkflowStore()
 const confirmationStore = useConfirmationStore()
 const workItemStore = useWorkItemStore()
+const refreshTimerIds = new Set<number>()
 
 onMounted(async () => {
+  await refreshWorkItemState()
+})
+
+onUnmounted(() => {
+  for (const timerId of refreshTimerIds) {
+    window.clearTimeout(timerId)
+  }
+  refreshTimerIds.clear()
+})
+
+async function refreshWorkItemState() {
   await workItemStore.loadItems()
   for (const item of workItemStore.items) {
     if (item.workflowSummary) {
@@ -51,7 +63,50 @@ onMounted(async () => {
       })
     }
   }
-})
+  await confirmationStore.loadPending()
+}
+
+async function refreshOneWorkItemState(workItemId: string) {
+  const item = await workItemStore.refreshItem(workItemId)
+  if (item.workflowSummary) {
+    workflowStore.upsertInstance({
+      id: item.workflowSummary.instanceId,
+      workItemId: item.id,
+      workflowDefinitionId: '',
+      status: item.workflowSummary.status,
+      currentNodeInstanceId: item.workflowSummary.currentNodeInstanceId,
+      nodes: item.workflowSummary.nodes.map((n) => ({
+        id: n.id,
+        nodeDefinitionId: '',
+        status: n.status,
+        inputArtifactId: null,
+        outputArtifactId: null,
+        agentSessionId: null,
+        startedAt: null,
+        completedAt: null,
+        errorMessage: null,
+      })),
+      startedAt: null,
+      completedAt: null,
+    })
+  }
+}
+
+function queueWorkflowRefresh(workItemId?: string | null) {
+  const delays = [600, 1500, 3000, 5000, 8000, 12000]
+  for (const delay of delays) {
+    const timerId = window.setTimeout(async () => {
+      refreshTimerIds.delete(timerId)
+      if (workItemId) {
+        await refreshOneWorkItemState(workItemId)
+        await confirmationStore.loadPending()
+      } else {
+        await confirmationStore.loadPending()
+      }
+    }, delay)
+    refreshTimerIds.add(timerId)
+  }
+}
 
 function handleSelectWorkItem(id: string) {
   selectedWorkItemId.value = id
@@ -76,8 +131,17 @@ async function handleStartWorkflow(workItemId: string, response?: StartWorkflowR
   if (response.session) {
     sessionStore.upsertSession(response.session)
   }
-  await workItemStore.loadItems()
+  await refreshOneWorkItemState(workItemId)
   await confirmationStore.loadPending()
+  queueWorkflowRefresh(workItemId)
+}
+
+async function handleConfirmationsChanged(workItemId?: string | null) {
+  if (workItemId) {
+    await refreshOneWorkItemState(workItemId)
+  }
+  await confirmationStore.loadPending()
+  queueWorkflowRefresh(workItemId)
 }
 
 function handleEnterWorkItemConversation(id: string) {
@@ -135,6 +199,7 @@ function handleNavigateSettings(tab: string) {
     @navigate-settings="handleNavigateSettings"
     @start-workflow="handleStartWorkflow"
     @enter-work-item-conversation="handleEnterWorkItemConversation"
+    @confirmations-changed="handleConfirmationsChanged"
   >
     <template #center>
       <HomeOverview
@@ -142,7 +207,10 @@ function handleNavigateSettings(tab: string) {
         @select-work-item="handleSelectWorkItem"
         @start-workflow="handleStartWorkflow"
       />
-      <BoardView v-else-if="activeView === 'board'" />
+      <BoardView
+        v-else-if="activeView === 'board'"
+        @select-work-item="handleSelectWorkItem"
+      />
       <WorkflowConfig v-else-if="activeView === 'workflow'" />
       <RuntimeResources v-else-if="activeView === 'resources'" />
       <SkillManagement v-else-if="activeView === 'settings' && settingsTab === 'skills'" />

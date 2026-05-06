@@ -19,7 +19,7 @@ const emit = defineEmits<{
   'handle-confirmation': [id: string]
   'start-workflow': [workItemId: string]
   'enter-conversation': [id: string]
-  'confirmations-changed': []
+  'confirmations-changed': [workItemId?: string | null]
 }>()
 
 function handleConfirmation(id: string) {
@@ -242,7 +242,7 @@ function handleOpenConfirmations() {
         <ConfirmationPanel
           v-if="activeTab === 'confirmations'"
           @handle="handleConfirmation"
-          @changed="emit('confirmations-changed')"
+          @changed="emit('confirmations-changed', $event)"
         />
         <template v-else-if="activeTab === 'details'">
           <div v-if="selectedWorkItem" class="right-panel__detail">

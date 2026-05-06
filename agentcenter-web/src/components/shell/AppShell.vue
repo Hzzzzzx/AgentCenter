@@ -24,6 +24,7 @@ const emit = defineEmits<{
   'navigate-settings': [tab: string]
   'start-workflow': [workItemId: string]
   'enter-work-item-conversation': [id: string]
+  'confirmations-changed': [workItemId?: string | null]
 }>()
 
 const leftCollapsed = ref(false)
@@ -72,6 +73,7 @@ function handleNavigate(viewId: string) {
         @handle-confirmation="(id: string) => emit('handle-confirmation', id)"
         @start-workflow="(workItemId: string) => emit('start-workflow', workItemId)"
         @enter-conversation="(id: string) => emit('enter-work-item-conversation', id)"
+        @confirmations-changed="(workItemId?: string | null) => emit('confirmations-changed', workItemId)"
       />
     </div>
 

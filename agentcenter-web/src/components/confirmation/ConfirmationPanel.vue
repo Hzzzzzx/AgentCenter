@@ -1,17 +1,50 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useConfirmationStore } from '../../stores/confirmations'
+import { useWorkItemStore } from '../../stores/workItems'
 import ConfirmationCard from './ConfirmationCard.vue'
 
 const store = useConfirmationStore()
+const workItemStore = useWorkItemStore()
 
 const emit = defineEmits<{
   handle: [id: string]
+  resolved: [id: string]
+  rejected: [id: string]
+  changed: [workItemId?: string | null]
 }>()
 
 onMounted(() => {
   store.loadPending()
+  if (workItemStore.items.length === 0) {
+    workItemStore.loadItems()
+  }
 })
+
+function workItemFor(id: string | null) {
+  if (!id) return null
+  return workItemStore.items.find((item) => item.id === id) ?? null
+}
+
+async function refreshAfterDecision(workItemId?: string | null) {
+  emit('changed', workItemId)
+  await Promise.all([
+    store.loadPending(),
+    workItemId ? workItemStore.refreshItem(workItemId) : workItemStore.loadItems(),
+  ])
+}
+
+async function handleResolved(id: string) {
+  const workItemId = store.pendingConfirmations.find((item) => item.id === id)?.workItemId
+  emit('resolved', id)
+  await refreshAfterDecision(workItemId)
+}
+
+async function handleRejected(id: string) {
+  const workItemId = store.pendingConfirmations.find((item) => item.id === id)?.workItemId
+  emit('rejected', id)
+  await refreshAfterDecision(workItemId)
+}
 </script>
 
 <template>
@@ -27,7 +60,10 @@ onMounted(() => {
         v-for="item in store.pendingConfirmations"
         :key="item.id"
         :confirmation="item"
+        :work-item="workItemFor(item.workItemId)"
         @handle="emit('handle', $event)"
+        @resolved="handleResolved"
+        @rejected="handleRejected"
       />
     </div>
   </div>

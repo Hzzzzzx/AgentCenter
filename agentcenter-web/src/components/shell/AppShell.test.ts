@@ -108,7 +108,7 @@ describe('AppShell.vue', () => {
     const labels = wrapper
       .findAll('.left-sidebar__nav-item')
       .map(item => item.text().trim())
-    expect(labels).toEqual(['首页', '看板', '编排策略'])
+    expect(labels).toEqual(['首页', '任务看板', '任务编排'])
   })
 
   it('has correct grid layout structure', () => {
