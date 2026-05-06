@@ -72,6 +72,10 @@ agentcenter-web/
 │       └── workflow/
 ```
 
-## M1 Scope Note
+## 运行时说明
 
-This frontend connects to the Java backend at `localhost:8080`. During M1, it exercises the complete data loop using mock runtime adapters without requiring OpenCode.
+前端连接 Java Bridge（`localhost:8080`）。`runtimeType=OPENCODE` 时走真实 AI 对话：发消息通过 REST，AI 回复通过 SSE 事件流。
+
+- SSE 连接：`src/stores/runtime.ts` 中的 `sseStream()`
+- 对话工作台：`src/views/ConversationWorkbench.vue`（流式文字 + 闪烁光标）
+- API 代理：`vite.config.ts` 中 `/api` → `localhost:8080`

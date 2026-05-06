@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.3.6</version>
+        <version>3.4.5</version>
         <relativePath/>
     </parent>
 
@@ -21,7 +21,7 @@
         <java.version>17</java.version>
         <mybatis-spring-boot.version>3.0.4</mybatis-spring-boot.version>
         <sqlite-jdbc.version>3.45.1.0</sqlite-jdbc.version>
-        <ulid-creator.version>5.2.4</ulid-creator.version>
+        <flyway.version>8.5.13</flyway.version>
     </properties>
 
     <dependencies>
@@ -57,20 +57,6 @@
             <artifactId>flyway-core</artifactId>
         </dependency>
 
-        <!-- ULID -->
-        <dependency>
-            <groupId>com.github.f4b6a3</groupId>
-            <artifactId>ulid-creator</artifactId>
-            <version>${ulid-creator.version}</version>
-        </dependency>
-
-        <!-- Lombok -->
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <optional>true</optional>
-        </dependency>
-
         <!-- Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -91,12 +77,6 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
-                    <excludes>
-                        <exclude>
-                            <groupId>org.projectlombok</groupId>
-                            <artifactId>lombok</artifactId>
-                        </exclude>
-                    </excludes>
                 </configuration>
             </plugin>
             <plugin>

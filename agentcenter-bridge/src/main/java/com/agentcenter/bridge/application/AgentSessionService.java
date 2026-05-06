@@ -3,7 +3,13 @@ package com.agentcenter.bridge.application;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -22,6 +28,7 @@ import com.agentcenter.bridge.domain.session.MessageStatus;
 import com.agentcenter.bridge.domain.session.SessionStatus;
 import com.agentcenter.bridge.domain.session.SessionType;
 import com.agentcenter.bridge.infrastructure.id.IdGenerator;
+import com.agentcenter.bridge.infrastructure.event.WebSocketSessionRegistry;
 import com.agentcenter.bridge.infrastructure.persistence.entity.AgentMessageEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.AgentSessionEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.RuntimeEventEntity;
@@ -29,25 +36,43 @@ import com.agentcenter.bridge.infrastructure.persistence.mapper.AgentMessageMapp
 import com.agentcenter.bridge.infrastructure.persistence.mapper.AgentSessionMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.RuntimeEventMapper;
 
+import jakarta.annotation.PreDestroy;
+
 @Service
 public class AgentSessionService {
+
+    private static final Logger log = LoggerFactory.getLogger(AgentSessionService.class);
+    private static final AtomicInteger MESSAGE_THREAD_COUNTER = new AtomicInteger(1);
 
     private final AgentSessionMapper sessionMapper;
     private final AgentMessageMapper messageMapper;
     private final RuntimeEventMapper eventMapper;
     private final IdGenerator idGenerator;
     private final AgentRuntimeAdapter agentRuntimeAdapter;
+    private final WebSocketSessionRegistry webSocketSessionRegistry;
+    private final ExecutorService messageExecutor = Executors.newCachedThreadPool(runnable -> {
+        Thread thread = new Thread(runnable, "agentcenter-message-" + MESSAGE_THREAD_COUNTER.getAndIncrement());
+        thread.setDaemon(true);
+        return thread;
+    });
 
     public AgentSessionService(AgentSessionMapper sessionMapper,
                                AgentMessageMapper messageMapper,
                                RuntimeEventMapper eventMapper,
                                IdGenerator idGenerator,
-                               AgentRuntimeAdapter agentRuntimeAdapter) {
+                               AgentRuntimeAdapter agentRuntimeAdapter,
+                               WebSocketSessionRegistry webSocketSessionRegistry) {
         this.sessionMapper = sessionMapper;
         this.messageMapper = messageMapper;
         this.eventMapper = eventMapper;
         this.idGenerator = idGenerator;
         this.agentRuntimeAdapter = agentRuntimeAdapter;
+        this.webSocketSessionRegistry = webSocketSessionRegistry;
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        messageExecutor.shutdownNow();
     }
 
     public List<AgentSessionDto> listSessions() {
@@ -128,6 +153,16 @@ public class AgentSessionService {
         entity.setCreatedBy("system");
         messageMapper.insert(entity);
 
+        messageExecutor.submit(() -> dispatchToRuntime(sessionId, request.content()));
+        return toMessageDto(entity);
+    }
+
+    private void dispatchToRuntime(String sessionId, String content) {
+        AgentSessionEntity session = sessionMapper.findById(sessionId);
+        if (session == null) {
+            return;
+        }
+
         String effectiveRuntimeSessionId = session.getRuntimeSessionId();
         boolean runtimeOk = true;
         String runtimeError = null;
@@ -145,13 +180,27 @@ public class AgentSessionService {
 
         if (runtimeOk && effectiveRuntimeSessionId != null) {
             try {
-                agentRuntimeAdapter.sendMessage(effectiveRuntimeSessionId, request.content());
+                agentRuntimeAdapter.sendMessage(effectiveRuntimeSessionId, content);
             } catch (Exception e) {
                 runtimeOk = false;
                 runtimeError = "Runtime sendMessage failed: " + e.getMessage();
             }
         }
 
+        recordSendMessageEvent(sessionId, session, runtimeOk, runtimeError, content);
+
+        if (!runtimeOk && runtimeError != null) {
+            insertRuntimeErrorMessage(sessionId, effectiveRuntimeSessionId, runtimeError);
+        }
+
+        broadcastMessages(sessionId);
+    }
+
+    private void recordSendMessageEvent(String sessionId,
+                                        AgentSessionEntity session,
+                                        boolean runtimeOk,
+                                        String runtimeError,
+                                        String content) {
         RuntimeEventEntity eventEntity = new RuntimeEventEntity();
         eventEntity.setId(idGenerator.nextId());
         eventEntity.setSessionId(sessionId);
@@ -160,24 +209,47 @@ public class AgentSessionService {
         RuntimeType runtimeType = RuntimeType.valueOf(session.getRuntimeType());
         eventEntity.setPayloadJson("""
                 {"action":"sendMessage","runtimeType":"%s","runtimeOk":%s,"runtimeError":"%s","content":"%s"}
-                """.formatted(runtimeType.name(), runtimeOk, jsonEscape(runtimeError), jsonEscape(request.content())).trim());
-        eventMapper.insert(eventEntity);
-
-        if (!runtimeOk && runtimeError != null) {
-            AgentMessageEntity errorMsg = new AgentMessageEntity();
-            errorMsg.setId(idGenerator.nextId());
-            errorMsg.setSessionId(sessionId);
-            errorMsg.setRole(MessageRole.ASSISTANT.name());
-            errorMsg.setContent("Runtime 调用失败：" + runtimeError);
-            errorMsg.setContentFormat(ContentFormat.TEXT.name());
-            errorMsg.setStatus(MessageStatus.COMPLETED.name());
-            errorMsg.setSeqNo(nextSeqNo + 1);
-            errorMsg.setRuntimeMessageId(effectiveRuntimeSessionId);
-            errorMsg.setCreatedBy("runtime");
-            messageMapper.insert(errorMsg);
+                """.formatted(runtimeType.name(), runtimeOk, jsonEscape(runtimeError), jsonEscape(content)).trim());
+        try {
+            eventMapper.insert(eventEntity);
+        } catch (Exception e) {
+            log.debug("Failed to record sendMessage runtime event for {}", sessionId, e);
         }
+    }
 
-        return toMessageDto(entity);
+    private void insertRuntimeErrorMessage(String sessionId, String runtimeSessionId, String runtimeError) {
+        AgentMessageEntity errorMsg = new AgentMessageEntity();
+        errorMsg.setId(idGenerator.nextId());
+        errorMsg.setSessionId(sessionId);
+        errorMsg.setRole(MessageRole.ASSISTANT.name());
+        errorMsg.setContent("Runtime 调用失败：" + runtimeError);
+        errorMsg.setContentFormat(ContentFormat.TEXT.name());
+        errorMsg.setStatus(MessageStatus.COMPLETED.name());
+        errorMsg.setSeqNo(nextMessageSeqNo(sessionId));
+        errorMsg.setRuntimeMessageId(runtimeSessionId);
+        errorMsg.setCreatedBy("runtime");
+        messageMapper.insert(errorMsg);
+    }
+
+    private int nextMessageSeqNo(String sessionId) {
+        return messageMapper.findBySessionId(sessionId).stream()
+                .mapToInt(m -> m.getSeqNo() != null ? m.getSeqNo() : 0)
+                .max()
+                .orElse(0) + 1;
+    }
+
+    private void broadcastMessages(String sessionId) {
+        try {
+            webSocketSessionRegistry.sendToSession(sessionId, Map.of(
+                    "type", "session.messages",
+                    "payload", Map.of(
+                            "sessionId", sessionId,
+                            "messages", getMessages(sessionId)
+                    )
+            ));
+        } catch (Exception e) {
+            log.debug("Failed to broadcast session message snapshot for {}", sessionId, e);
+        }
     }
 
     public void recordEvent(RuntimeEventDto event) {

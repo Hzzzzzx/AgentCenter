@@ -95,7 +95,6 @@ async function ensureActiveSession(): Promise<AgentSessionDto | null> {
     }
 
     await sessionStore.selectSession(session.id)
-    runtimeStore.disconnect()
     runtimeStore.connectSSE(session.id)
 
     if (session.workflowInstanceId) {
@@ -163,9 +162,9 @@ async function refreshSkills() {
         <div class="conversation-workbench__header-actions">
           <span
             class="conversation-workbench__socket"
-            :class="{ 'conversation-workbench__socket--online': runtimeStore.activeSse !== null }"
+            :class="{ 'conversation-workbench__socket--online': runtimeStore.connected }"
           >
-            {{ runtimeStore.activeSse ? 'SSE 已连接' : '连接中' }}
+            {{ runtimeStore.connected ? 'SSE 已连接' : '连接中' }}
           </span>
           <button
             class="conversation-workbench__refresh"

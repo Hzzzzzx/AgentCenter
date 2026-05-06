@@ -6,8 +6,12 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
@@ -19,6 +23,12 @@ import org.springframework.stereotype.Component;
 
 import com.agentcenter.bridge.application.runtime.AgentRuntimeAdapter;
 import com.agentcenter.bridge.application.runtime.SkillRunResult;
+import com.agentcenter.bridge.domain.session.ContentFormat;
+import com.agentcenter.bridge.domain.session.MessageRole;
+import com.agentcenter.bridge.domain.session.MessageStatus;
+import com.agentcenter.bridge.infrastructure.id.IdGenerator;
+import com.agentcenter.bridge.infrastructure.persistence.entity.AgentMessageEntity;
+import com.agentcenter.bridge.infrastructure.persistence.mapper.AgentMessageMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -42,11 +52,16 @@ import jakarta.annotation.PreDestroy;
 public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
     private static final Logger log = LoggerFactory.getLogger(OpenCodeRuntimeAdapter.class);
+    private static final DateTimeFormatter SQLITE_DATETIME =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final OpenCodeProcessManager processManager;
     private final OpenCodeEventSubscriber eventSubscriber;
+    private final AgentMessageMapper agentMessageMapper;
+    private final IdGenerator idGenerator;
     private final ObjectMapper objectMapper;
     private final String agent;
+    private final int responseTimeoutSeconds;
 
     private final Map<String, String> agentToOpencodeSession = new ConcurrentHashMap<>();
 
@@ -57,12 +72,18 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
     public OpenCodeRuntimeAdapter(
             OpenCodeProcessManager processManager,
             OpenCodeEventSubscriber eventSubscriber,
+            AgentMessageMapper agentMessageMapper,
+            IdGenerator idGenerator,
             ObjectMapper objectMapper,
-            @Value("${agentcenter.runtime.opencode.serve.agent:build}") String agent) {
+            @Value("${agentcenter.runtime.opencode.serve.agent:build}") String agent,
+            @Value("${agentcenter.runtime.opencode.timeout-seconds:180}") int responseTimeoutSeconds) {
         this.processManager = processManager;
         this.eventSubscriber = eventSubscriber;
+        this.agentMessageMapper = agentMessageMapper;
+        this.idGenerator = idGenerator;
         this.objectMapper = objectMapper;
         this.agent = agent;
+        this.responseTimeoutSeconds = responseTimeoutSeconds;
     }
 
     @Override
@@ -119,12 +140,50 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
     @Override
     public SkillRunResult runSkill(String sessionId, String skillName, String inputContext) {
-        sendMessage(sessionId, "Execute skill: " + skillName + "\n\n" + inputContext);
-        return new SkillRunResult(true, "Skill dispatched to opencode", "TEXT", null, false);
+        String output = dispatchPromptAndWait(
+                sessionId,
+                buildSkillPrompt(skillName, inputContext),
+                true);
+        if (output == null || output.isBlank()) {
+            output = """
+                    # Skill 已分发到 OpenCode
+
+                    - Skill: `%s`
+                    - 会话: `%s`
+
+                    OpenCode 已接收任务，但在等待窗口内没有返回可展示文本。
+                    """.formatted(skillName, sessionId).trim();
+        }
+        return new SkillRunResult(true, output, "MARKDOWN", null, false);
     }
 
     @Override
     public void sendMessage(String sessionId, String userMessage) {
+        String output = dispatchPromptAndWait(sessionId, userMessage, false);
+        if (output != null && !output.isBlank()) {
+            insertAssistantMessage(sessionId, output);
+        }
+    }
+
+    private String buildSkillPrompt(String skillName, String inputContext) {
+        return """
+                你是 AgentCenter 后台工作流节点执行器。请使用 OpenCode skill `%s` 的规范处理下面的输入。
+
+                约束：
+                - 只返回本节点最终 Markdown 文档。
+                - 不修改文件，不生成补丁，不主动遍历仓库，除非输入上下文明确要求。
+                - 如果信息不足，请在 Markdown 中列出“缺口与待确认项”，不要长时间探索。
+                - 输出使用中文，结构清晰，适合直接作为本节点产物进入下一节点。
+
+                输入上下文：
+
+                ```text
+                %s
+                ```
+                """.formatted(skillName, inputContext).trim();
+    }
+
+    private String dispatchPromptAndWait(String sessionId, String userMessage, boolean allowToolOutputFallback) {
         String opencodeSessionId = agentToOpencodeSession.get(sessionId);
         if (opencodeSessionId == null) {
             throw new IllegalArgumentException("No opencode session mapped for agent session: " + sessionId);
@@ -132,6 +191,7 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
         String baseUrl = processManager.ensureRunning();
         Path cwd = processManager.resolveWorkingDirectory();
+        Set<String> knownMessageIds = fetchMessageIds(baseUrl, cwd, opencodeSessionId);
 
         ObjectNode body = objectMapper.createObjectNode();
         body.put("agent", agent);
@@ -154,6 +214,7 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         }
 
         log.debug("Sent message to opencode session {} (agent session {})", opencodeSessionId, sessionId);
+        return waitForAssistantText(baseUrl, cwd, opencodeSessionId, knownMessageIds, allowToolOutputFallback);
     }
 
     @Override
@@ -173,6 +234,171 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
     public String getOpencodeSessionId(String agentSessionId) {
         return agentToOpencodeSession.get(agentSessionId);
+    }
+
+    private Set<String> fetchMessageIds(String baseUrl, Path cwd, String opencodeSessionId) {
+        Set<String> ids = new HashSet<>();
+        JsonNode messages = fetchMessages(baseUrl, cwd, opencodeSessionId);
+        if (messages != null && messages.isArray()) {
+            for (JsonNode message : messages) {
+                String id = message.path("info").path("id").asText("");
+                if (!id.isBlank()) {
+                    ids.add(id);
+                }
+            }
+        }
+        return ids;
+    }
+
+    private String waitForAssistantText(String baseUrl,
+                                        Path cwd,
+                                        String opencodeSessionId,
+                                        Set<String> knownMessageIds,
+                                        boolean allowToolOutputFallback) {
+        long deadline = System.nanoTime() + Duration.ofSeconds(responseTimeoutSeconds).toNanos();
+        while (System.nanoTime() < deadline) {
+            JsonNode messages = fetchMessages(baseUrl, cwd, opencodeSessionId);
+            String text = extractNewAssistantText(messages, knownMessageIds);
+            if (text != null && !text.isBlank()) {
+                return text;
+            }
+            if (allowToolOutputFallback) {
+                String toolOutput = extractNewCompletedToolOutput(messages, knownMessageIds);
+                if (toolOutput != null && !toolOutput.isBlank()) {
+                    return toolOutput;
+                }
+            }
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private JsonNode fetchMessages(String baseUrl, Path cwd, String opencodeSessionId) {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/session/" + opencodeSessionId + "/message"))
+                .header("x-opencode-directory", cwd.toString())
+                .timeout(Duration.ofSeconds(10))
+                .GET()
+                .build();
+        HttpResponse<String> response = sendRequest(request);
+        if (response.statusCode() >= 300) {
+            log.warn("Failed to fetch opencode messages for {}: HTTP {}", opencodeSessionId, response.statusCode());
+            return null;
+        }
+        return parseJson(response.body());
+    }
+
+    private String extractNewAssistantText(JsonNode messages, Set<String> knownMessageIds) {
+        if (messages == null || !messages.isArray()) {
+            return null;
+        }
+
+        StringBuilder result = new StringBuilder();
+        for (JsonNode message : messages) {
+            JsonNode info = message.path("info");
+            String id = info.path("id").asText("");
+            if (id.isBlank() || knownMessageIds.contains(id)) {
+                continue;
+            }
+            if (!"assistant".equals(info.path("role").asText(""))) {
+                continue;
+            }
+
+            String finish = info.path("finish").asText("");
+            if (finish.isBlank()) {
+                continue;
+            }
+            if ("tool-calls".equals(finish)) {
+                continue;
+            }
+
+            for (JsonNode part : message.path("parts")) {
+                if ("text".equals(part.path("type").asText(""))) {
+                    String text = part.path("text").asText("");
+                    if (!text.isBlank()) {
+                        result.append(text).append("\n\n");
+                    }
+                }
+            }
+        }
+        return result.toString().trim();
+    }
+
+    private String extractNewCompletedToolOutput(JsonNode messages, Set<String> knownMessageIds) {
+        if (messages == null || !messages.isArray()) {
+            return null;
+        }
+
+        StringBuilder result = new StringBuilder();
+        for (JsonNode message : messages) {
+            JsonNode info = message.path("info");
+            String id = info.path("id").asText("");
+            if (id.isBlank() || knownMessageIds.contains(id)) {
+                continue;
+            }
+            if (!"assistant".equals(info.path("role").asText(""))) {
+                continue;
+            }
+
+            for (JsonNode part : message.path("parts")) {
+                if (!"tool".equals(part.path("type").asText(""))) {
+                    continue;
+                }
+                JsonNode state = part.path("state");
+                if (!"completed".equals(state.path("status").asText(""))) {
+                    continue;
+                }
+                JsonNode outputNode = state.path("output");
+                if (outputNode.isMissingNode() || outputNode.isNull()) {
+                    outputNode = state.path("result");
+                }
+                String output = stringifyValue(outputNode);
+                if (!output.isBlank()) {
+                    result.append(output).append("\n\n");
+                }
+            }
+        }
+        return result.toString().trim();
+    }
+
+    private String stringifyValue(JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return "";
+        }
+        if (node.isTextual()) {
+            return node.asText();
+        }
+        try {
+            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(node);
+        } catch (Exception e) {
+            return node.toString();
+        }
+    }
+
+    private void insertAssistantMessage(String sessionId, String output) {
+        AgentMessageEntity message = new AgentMessageEntity();
+        message.setId(idGenerator.nextId());
+        message.setSessionId(sessionId);
+        message.setRole(MessageRole.ASSISTANT.name());
+        message.setContent(output);
+        message.setContentFormat(ContentFormat.MARKDOWN.name());
+        message.setStatus(MessageStatus.COMPLETED.name());
+        message.setSeqNo(nextMessageSeqNo(sessionId));
+        message.setCreatedBy("opencode-runtime");
+        message.setCreatedAt(LocalDateTime.now().format(SQLITE_DATETIME));
+        agentMessageMapper.insert(message);
+    }
+
+    private int nextMessageSeqNo(String sessionId) {
+        return agentMessageMapper.findBySessionId(sessionId).stream()
+                .mapToInt(m -> m.getSeqNo() != null ? m.getSeqNo() : 0)
+                .max()
+                .orElse(0) + 1;
     }
 
     private HttpResponse<String> sendRequest(HttpRequest request) {

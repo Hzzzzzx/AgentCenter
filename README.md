@@ -1,140 +1,224 @@
 # AgentCenter
 
-> 企业智能中枢 — 通过对话编排企业内部全套工具流程
+> 企业智能编排平台 — 通过对话驱动企业内部工具流程
 
 ---
 
-## 项目概述
+## 快速启动
 
-AgentCenter 是一个**企业智能编排平台**，通过对话界面驱动企业内部工具平台的快速编排与调度。
+### 环境要求
 
-### 核心能力
+| 依赖 | 最低版本 | 检查命令 | 安装方式 |
+|------|---------|---------|---------|
+| Java (JDK) | 17 | `java -version` | [Adoptium](https://adoptium.net/) 或 `brew install openjdk@17` |
+| Node.js | 20 | `node --version` | 推荐 [nvm](https://github.com/nvm-sh/nvm) |
+| opencode CLI | 1.14+ | `opencode --version` | `npm install -g opencode-ai` |
+| Git | 任意 | `git --version` | 系统包管理器 |
 
-| 能力层级 | 能力 | 说明 |
-|---------|------|------|
-| **L1: 信息聚合** | 统一搜索、状态总览、上下文继承 | 一次搜索，跨所有平台结果 |
-| **L2: 对话触发** | 自然语言操作、多步骤编排、跨平台协调 | 一句话触发多步骤流程 |
-| **L3: 主动冒泡** | 异常监控、进度同步、智能提醒 | AI 主动推送关键信息 |
-| **L4: 自主执行** | 自动化流水线、多智能体协作、审批流 | 对话描述 → 完整执行 |
+> **opencode 必须登录过**：`opencode auth`。Bridge 会在首次使用时自动启动 `opencode serve`。
 
-### 产品形态
+### 三步启动
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         AgentCenter: 企业智能中枢                             │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│                          用户交互层                                          │
-│              ┌─────────────────┬─────────────────┐                          │
-│              │   网页对话框     │   气泡通知      │                          │
-│              │   (主动编排)     │   (被动冒泡)    │                          │
-│              └────────┬────────┴────────┬────────┘                          │
-│                         │               │                                    │
-│              ┌──────────┴───────────────┴──────────┐                       │
-│              │           智能编排层                  │                       │
-│              │  • 意图理解 • 多步流程编排 • 多智能体协作                   │
-│              └──────────┬─────────────────┬──────────┘                       │
-│                         │                 │                                  │
-│              ┌──────────┴───────────────┴──────────┐                       │
-│              │            工具平台层                │                       │
-│              │  需求管理 | 设计建模 | 代码检查 | 构建部署 | 测试验证 | CICD  │
-│              └───────────────────────────────────────┘                       │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+本项目需要三个服务协同运行：**opencode serve**（AI 引擎）、**Java Bridge**（后端）、**Vue 前端**。
 
----
-
-## 当前首页
-
-当前首页已调整为**白色网页端工作台**，借鉴 VS Code 的信息架构，但不使用深色 IDE 视觉。首页入口以中间对话工作台为主，左右两侧承载上下文与导航能力：
-
-> **接手提示**：本节描述的是 2026-04-27 刚完成并推送到 `main` 的首页改造版本。如果其他 agent 找不到“当前首页”，请直接查看下面三个文件，并以 `main` 最新提交为准：
->
-> - `agent-center-demo/client/index.html`：可运行 React Demo 首页
-> - `docs/prototype/homepage.html`：同步后的静态高保真首页
-> - `agent-center-demo/tests/homepage-workbench.spec.js`：当前首页布局与交互验收测试
-
-- 顶部导航条：支持展开/收起，保留全局搜索、通知、设置和用户角色入口。
-- 顶部全流程阶段面板：默认收起时展示一行阶段，展开后查看阶段详情、节点数量、节点状态和处理建议。
-- 左侧栏：默认展开会话列表，并支持会话列表、角色切换、工作台、工具链、智能体状态分组折叠。
-- 中心区域：对话工作台，支持输入指令和运行示例场景，包括需求转设计、发布风险巡检、故障跟进。
-- 右侧栏：默认显示上下文详情，可切换到主动预警和智能体协作；智能体协作面板展示任务摘要、分工、交接队列、产出物和风险。
-- 底部历史面板：默认收起，展开后查看最近活动和执行记录；全流程节点图已上移到顶部面板。
-
-静态高保真页面：
-
-```text
-docs/prototype/homepage.html
-```
-
-可运行 React Demo：
-
-```text
-agent-center-demo/client/index.html
-```
-
-## 启动查看
-
-运行 React Demo：
+#### 第一步：启动 opencode serve（AI 引擎）
 
 ```bash
-cd agent-center-demo
-npm install
-npm start
+# 在项目根目录下执行
+opencode serve --hostname 127.0.0.1 --port 4097 --print-logs --log-level WARN
 ```
 
-然后打开：
+> **也可以不手动启动**——Java Bridge 会在首次发消息时自动启动 opencode serve。但手动启动方便看日志。
 
-```text
-http://localhost:4000
-```
-
-健康检查：
+验证：
 
 ```bash
-curl http://localhost:4000/health
+curl http://127.0.0.1:4097/path -H 'x-opencode-directory: .'
+# 返回 200 即可
 ```
 
-也可以直接打开静态高保真：
+#### 第二步：启动 Java Bridge（后端）
 
-```text
-docs/prototype/homepage.html
+```bash
+cd agentcenter-bridge
+./mvnw spring-boot:run
+```
+
+等待出现 `Started AgentCenterBridgeApplication in X.XXX seconds`。
+
+验证：
+
+```bash
+curl http://localhost:8080/api/agent-sessions
+# 返回 [] 或 JSON 数组即可
+```
+
+#### 第三步：启动 Vue 前端
+
+```bash
+cd agentcenter-web
+npm install        # 首次需要
+npm run dev
+```
+
+打开浏览器访问 **http://localhost:5173**
+
+### 验证 E2E 对话
+
+1. 打开 http://localhost:5173
+2. 进入任意 work item → 点击进入对话工作台
+3. 输入消息 → 看到 AI 流式回复（文字逐步出现）
+
+---
+
+## 服务端口
+
+| 服务 | 端口 | 说明 |
+|------|------|------|
+| opencode serve | 4097 | AI 引擎，Java Bridge 自动管理 |
+| Java Bridge | 8080 | REST API + SSE 推送，前端唯一后端 |
+| Vue Dev Server | 5173 | 开发服务器，代理 `/api` → 8080 |
+
+> 浏览器**不会**直接访问 4097。所有请求走 Vue(5173) → Java(8080) → opencode(4097)。
+
+---
+
+## 项目结构
+
+```
+AgentCenter/
+├── agentcenter-bridge/        # Java Spring Boot 后端
+│   ├── pom.xml                # Maven 依赖（Spring Boot 3.4.5, MyBatis, SQLite, Flyway）
+│   ├── src/main/resources/
+│   │   ├── application.yml    # 端口、opencode 配置、工作目录
+│   │   ├── mapper/            # MyBatis XML Mapper
+│   │   └── db/migration/      # Flyway 数据库迁移
+│   └── src/main/java/         # DDD 分层：Controller → Application → Domain → Infrastructure
+│
+├── agentcenter-web/           # Vue 3 前端
+│   ├── package.json           # Vue 3, Pinia, Vite, Vitest
+│   ├── vite.config.ts         # 开发代理配置
+│   └── src/
+│       ├── views/             # 页面组件（对话工作台、看板、工作流配置等）
+│       ├── stores/            # Pinia 状态管理（runtime.ts 负责 SSE 连接）
+│       ├── api/               # API 客户端
+│       └── components/        # 可复用组件
+│
+├── agent-center-demo/         # React 首页 Demo（旧版，独立运行）
+│
+├── docs/
+│   ├── architecture/          # 架构文档
+│   │   ├── AGENT-RUNTIME-BRIDGE-M1-RUNBOOK.md  # ← 完整的启动指南和故障排查
+│   │   ├── ADR-001-OPENCODE-BRIDGE-SSE-REST.md # M1 架构决策记录
+│   │   └── ...                # 更多架构和设计文档
+│   └── research/              # 行业调研
+│
+└── AGENTS.md                  # 项目级 Agent 规则（必读）
 ```
 
 ---
 
-## 已有资产
+## 工作目录配置
 
-| 资产 | 说明 |
+opencode serve 需要知道在哪个目录下工作（读文件、执行命令等）。
+
+**默认**：`application.yml` 中 `working-directory: ${user.dir}/..`，即 `agentcenter-bridge/` 的父目录（项目根目录）。
+
+**修改方式**：
+
+```yaml
+# agentcenter-bridge/src/main/resources/application.yml
+agentcenter:
+  runtime:
+    opencode:
+      serve:
+        working-directory: /absolute/path/to/your/project
+```
+
+或环境变量：
+
+```bash
+export AGENTCENTER_RUNTIME_OPENCODE_SERVE_WORKING_DIRECTORY=/my/project
+```
+
+---
+
+## 常见问题
+
+### opencode serve 启动失败（exit code 1）
+
+端口 4097 被占用：
+
+```bash
+lsof -i:4097      # 查看占用进程
+kill <PID>        # 杀掉后重试
+```
+
+### SSE 没有事件返回
+
+Java Bridge 可能用了旧代码，重新编译：
+
+```bash
+cd agentcenter-bridge
+./mvnw clean compile
+./mvnw spring-boot:run
+```
+
+确认 opencode serve 在运行：
+
+```bash
+curl http://127.0.0.1:4097/path -H 'x-opencode-directory: .'
+```
+
+### Vue 前端 API 报 502
+
+Java Bridge 没启动，或没在 8080 端口：
+
+```bash
+curl http://localhost:8080/api/agent-sessions
+```
+
+### 找不到 opencode 命令
+
+```bash
+npm install -g opencode-ai
+opencode --version
+opencode auth    # 需要登录一次
+```
+
+---
+
+## 技术栈
+
+| 模块 | 技术 | 版本 |
+|------|------|------|
+| Java Bridge | Spring Boot | 3.4.5 |
+| 数据库 | SQLite + Flyway | Flyway 8.5.13 |
+| ORM | MyBatis | 3.0.4 |
+| Vue 前端 | Vue 3 + Pinia + Vite | Node 20+ |
+| AI 引擎 | opencode serve | 1.14+ |
+
+---
+
+## 停止所有服务
+
+```bash
+pkill -f "opencode serve"
+pkill -f "AgentCenterBridgeApplication"
+lsof -ti:5173 | xargs kill
+```
+
+---
+
+## 更多文档
+
+| 文档 | 说明 |
 |------|------|
-| **信息气泡** | 关键平台指标告警冒泡（已有基础） |
-| **网页对话框** | 对话管理界面（已有基础） |
-| **MCP/Skill 生态** | OpenClaw 已有成熟的工具集成方案 |
+| [AGENTS.md](./AGENTS.md) | 项目级 Agent 规则和已知陷阱 |
+| [M1 Runbook](./docs/architecture/AGENT-RUNTIME-BRIDGE-M1-RUNBOOK.md) | 完整启动指南、curl 测试、架构图 |
+| [ADR-001](./docs/architecture/ADR-001-OPENCODE-BRIDGE-SSE-REST.md) | M1 架构决策：为什么用 REST+SSE |
+| [docs/README.md](./docs/README.md) | 全部文档索引 |
 
 ---
 
-## 文档结构
-
-```text
-docs/
-├── PRODUCT-VISION.md                           # 产品畅想报告
-├── research/
-│   ├── SDD-ECOSYSTEM.md                         # SDD 生态研究报告
-│   ├── INDUSTRY-RESEARCH.md                     # 业界 AI Agent 产品调研
-│   ├── ENTERPRISE-AI-PLATFORMS.md               # 企业 AI 平台研究
-│   └── agentic-workbench-reference-patterns/     # Agentic Workbench 开源参考项目与可迁移经验
-└── architecture/
-    ├── README.md                                # 架构文档入口、4+1 视图边界和阅读顺序
-    ├── ARCHITECTURE-OVERVIEW.md                 # 4+1 视图架构总览
-    ├── UNIFIED-DOMAIN-MODEL.md                   # 统一对象模型 (8+3 对象)
-    ├── REFERENCE-PROJECTS-AND-RESEARCH.md       # 开源框架、竞品调研和可引入经验登记
-    ├── ENVIRONMENT-AND-PROMOTION.md              # 多环境隔离与晋升机制
-    ├── INTEGRATION-ROADMAP.md                    # 存量系统逐步整合路线
-    ├── AI-NATIVE-DEVELOPMENT.md                  # AI 原生开发流程
-    └── VERIFICATION-FRAMEWORK.md                 # 验证体系与可视化
-```
-
----
-
-*最后更新：2026-04-27*
+*最后更新：2026-05-06*

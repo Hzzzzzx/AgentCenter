@@ -4,6 +4,8 @@ import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import com.agentcenter.bridge.api.dto.RuntimeEventDto;
@@ -17,6 +19,8 @@ import com.agentcenter.bridge.infrastructure.persistence.mapper.RuntimeEventMapp
 
 @Service
 public class RuntimeEventService {
+
+    private static final Logger log = LoggerFactory.getLogger(RuntimeEventService.class);
 
     private final RuntimeEventMapper eventMapper;
     private final IdGenerator idGenerator;
@@ -49,7 +53,13 @@ public class RuntimeEventService {
         entity.setEventType(event.eventType().name());
         entity.setEventSource(event.eventSource().name());
         entity.setPayloadJson(event.payloadJson());
-        eventMapper.insert(entity);
+        boolean persisted = true;
+        try {
+            eventMapper.insert(entity);
+        } catch (Exception e) {
+            persisted = false;
+            log.warn("Runtime event persistence failed; streaming event without DB record: {}", e.getMessage());
+        }
 
         if (event.sessionId() != null) {
             RuntimeEventDto withId = new RuntimeEventDto(
@@ -61,7 +71,7 @@ public class RuntimeEventService {
                     event.eventType(),
                     event.eventSource(),
                     event.payloadJson(),
-                    parseDateTime(entity.getCreatedAt())
+                    persisted ? parseDateTime(entity.getCreatedAt()) : null
             );
             emitterRegistry.sendToSession(event.sessionId(), withId);
             webSocketSessionRegistry.sendToSession(event.sessionId(), java.util.Map.of(
