@@ -35,8 +35,23 @@ __pycache__/
 # Qoder
 .qoder/
 
+# Playwright MCP temp files
+.playwright-mcp/
+
 # Screenshots (generated locally)
 docs/prototype/screenshot-*.png
 
 # Dependencies
 node_modules/
+
+# Java
+target/
+*.class
+*.jar
+*.war
+
+# SQLite database
+*.db
+
+# Maven
+.mvn/wrapper/maven-wrapper.jar

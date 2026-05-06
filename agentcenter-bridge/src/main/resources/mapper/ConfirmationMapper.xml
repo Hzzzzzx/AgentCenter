@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.agentcenter.bridge.infrastructure.persistence.mapper.ConfirmationMapper">
+
+    <select id="findByStatus" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.ConfirmationRequestEntity">
+        SELECT id, request_type, status, project_id, space_id, iteration_id,
+               work_item_id, workflow_instance_id, workflow_node_instance_id,
+               agent_session_id, runtime_type, runtime_session_id, runtime_event_id,
+               skill_name, mcp_server, mcp_tool, title, content, context_summary,
+               options_json, priority, required_role, assignee_user_id,
+               created_at, updated_at, resolved_by, resolved_at,
+               resolution_comment, resolution_payload_json
+        FROM confirmation_request
+        WHERE status = #{status}
+        ORDER BY created_at DESC
+    </select>
+
+    <select id="findById" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.ConfirmationRequestEntity">
+        SELECT id, request_type, status, project_id, space_id, iteration_id,
+               work_item_id, workflow_instance_id, workflow_node_instance_id,
+               agent_session_id, runtime_type, runtime_session_id, runtime_event_id,
+               skill_name, mcp_server, mcp_tool, title, content, context_summary,
+               options_json, priority, required_role, assignee_user_id,
+               created_at, updated_at, resolved_by, resolved_at,
+               resolution_comment, resolution_payload_json
+        FROM confirmation_request WHERE id = #{id}
+    </select>
+
+    <select id="findByWorkItemId" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.ConfirmationRequestEntity">
+        SELECT id, request_type, status, project_id, space_id, iteration_id,
+               work_item_id, workflow_instance_id, workflow_node_instance_id,
+               agent_session_id, runtime_type, runtime_session_id, runtime_event_id,
+               skill_name, mcp_server, mcp_tool, title, content, context_summary,
+               options_json, priority, required_role, assignee_user_id,
+               created_at, updated_at, resolved_by, resolved_at,
+               resolution_comment, resolution_payload_json
+        FROM confirmation_request WHERE work_item_id = #{workItemId}
+        ORDER BY created_at DESC
+    </select>
+
+    <insert id="insert">
+        INSERT INTO confirmation_request (id, request_type, status, project_id, space_id, iteration_id,
+                                          work_item_id, workflow_instance_id, workflow_node_instance_id,
+                                          agent_session_id, runtime_type, runtime_session_id, runtime_event_id,
+                                          skill_name, mcp_server, mcp_tool, title, content, context_summary,
+                                          options_json, priority, required_role, assignee_user_id,
+                                          resolved_by, resolved_at,
+                                          resolution_comment, resolution_payload_json)
+        VALUES (#{id}, #{requestType}, #{status}, #{projectId}, #{spaceId}, #{iterationId},
+                #{workItemId}, #{workflowInstanceId}, #{workflowNodeInstanceId},
+                #{agentSessionId}, #{runtimeType}, #{runtimeSessionId}, #{runtimeEventId},
+                #{skillName}, #{mcpServer}, #{mcpTool}, #{title}, #{content}, #{contextSummary},
+                #{optionsJson}, #{priority}, #{requiredRole}, #{assigneeUserId},
+                #{resolvedBy}, #{resolvedAt},
+                #{resolutionComment}, #{resolutionPayloadJson})
+    </insert>
+
+    <update id="update">
+        UPDATE confirmation_request
+        SET status = #{status}, resolved_by = #{resolvedBy}, resolved_at = #{resolvedAt},
+            resolution_comment = #{resolutionComment}, resolution_payload_json = #{resolutionPayloadJson},
+            updated_at = datetime('now')
+        WHERE id = #{id}
+    </update>
+
+</mapper>

@@ -22,6 +22,9 @@
 | [APPLICATION-ARCHITECTURE-BASELINE.md](./architecture/APPLICATION-ARCHITECTURE-BASELINE.md) | 企业级应用架构基线：统一上下文、多项目多用户、性能并发、安全治理 | 活跃 |
 | [ARCHITECTURE-OVERVIEW.md](./architecture/ARCHITECTURE-OVERVIEW.md) | 4+1 视图架构总览 | 活跃 |
 | [UNIFIED-DOMAIN-MODEL.md](./architecture/UNIFIED-DOMAIN-MODEL.md) | 统一对象模型 (8+3 对象) | 活跃 |
+| [AGENT-RUNTIME-BRIDGE-DEVELOPMENT-BLUEPRINT.md](./architecture/AGENT-RUNTIME-BRIDGE-DEVELOPMENT-BLUEPRINT.md) | Java Bridge、Vue 工作台、OpenCode Runtime Adapter 开发蓝图 | 活跃 |
+| [ADR-001-OPENCODE-BRIDGE-SSE-REST.md](./architecture/ADR-001-OPENCODE-BRIDGE-SSE-REST.md) | M1 实施决策：REST+SSE 方案 | 活跃 |
+| [AGENT-RUNTIME-BRIDGE-M1-RUNBOOK.md](./architecture/AGENT-RUNTIME-BRIDGE-M1-RUNBOOK.md) | M1 快速启动指南：环境准备、工作目录配置、启动步骤 | 活跃 |
 | [REFERENCE-PROJECTS-AND-RESEARCH.md](./architecture/REFERENCE-PROJECTS-AND-RESEARCH.md) | 开源框架、竞品调研和可引入经验登记 | 活跃 |
 | [ENVIRONMENT-AND-PROMOTION.md](./architecture/ENVIRONMENT-AND-PROMOTION.md) | 多环境隔离与晋升机制 | 活跃 |
 | [INTEGRATION-ROADMAP.md](./architecture/INTEGRATION-ROADMAP.md) | 存量系统逐步整合路线 | 活跃 |
@@ -78,12 +81,12 @@
 
 | 类别 | 数量 |
 |------|------|
-| 架构文档 | 10 |
+| 架构文档 | 11 |
 | 原型与高保真 | 1 |
 | 综合调研 | 3 |
 | 平台专项调研 | 13 |
-| **总计** | **27** |
+| **总计** | **28** |
 
 ---
 
-*最后更新：2026-05-02*
+*最后更新：2026-05-05*

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.agentcenter.bridge.infrastructure.persistence.mapper.RuntimeEventMapper">
+
+    <select id="findBySessionId" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.RuntimeEventEntity">
+        SELECT id, session_id, work_item_id, workflow_instance_id, workflow_node_instance_id,
+               event_type, event_source, payload_json, created_at
+        FROM runtime_event
+        WHERE session_id = #{sessionId}
+        ORDER BY created_at ASC
+    </select>
+
+    <insert id="insert">
+        INSERT INTO runtime_event (id, session_id, work_item_id, workflow_instance_id,
+                                   workflow_node_instance_id, event_type, event_source,
+                                   payload_json)
+        VALUES (#{id}, #{sessionId}, #{workItemId}, #{workflowInstanceId},
+                #{workflowNodeInstanceId}, #{eventType}, #{eventSource},
+                #{payloadJson})
+    </insert>
+
+</mapper>

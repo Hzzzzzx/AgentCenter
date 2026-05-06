@@ -1360,6 +1360,17 @@
       border-bottom-left-radius: 4px;
     }
 
+    .message.system .message-bubble {
+      background: rgba(245, 158, 11, 0.08);
+      border: 1px solid rgba(245, 158, 11, 0.24);
+      color: var(--text-secondary);
+      border-bottom-left-radius: 4px;
+    }
+
+    .streaming-text {
+      white-space: pre-wrap;
+    }
+
     .scenario-rail {
       display: flex;
       gap: 8px;
@@ -1388,6 +1399,50 @@
       border-color: var(--accent-blue);
       color: var(--accent-blue);
       background: rgba(59, 130, 246, 0.06);
+    }
+
+    .opencode-status {
+      margin-left: auto;
+      border: 1px solid var(--border-color);
+      background: var(--bg-primary);
+      color: var(--text-secondary);
+      border-radius: 999px;
+      padding: 7px 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .opencode-status[data-status="connected"],
+    .opencode-status[data-status="running"] {
+      color: #047857;
+      border-color: rgba(16, 185, 129, 0.3);
+      background: rgba(16, 185, 129, 0.08);
+    }
+
+    .opencode-status[data-status="failed"] {
+      color: var(--error);
+      border-color: rgba(239, 68, 68, 0.28);
+      background: rgba(239, 68, 68, 0.08);
+    }
+
+    .opencode-status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--text-muted);
+    }
+
+    .opencode-status[data-status="connected"] .opencode-status-dot,
+    .opencode-status[data-status="running"] .opencode-status-dot {
+      background: var(--success);
+    }
+
+    .opencode-status[data-status="failed"] .opencode-status-dot {
+      background: var(--error);
     }
 
     .workbench-view {
@@ -1497,6 +1552,59 @@
       align-items: flex-start;
       justify-content: space-between;
       gap: 10px;
+    }
+
+    .task-row-actions,
+    .kanban-card-actions {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+      margin-left: auto;
+      flex: 0 0 auto;
+    }
+
+    .kanban-card-actions {
+      margin-top: 10px;
+      align-items: flex-start;
+    }
+
+    .task-run-btn,
+    .kanban-run-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      min-height: 28px;
+      padding: 5px 9px;
+      border: 1px solid rgba(59, 130, 246, 0.26);
+      border-radius: 7px;
+      background: rgba(59, 130, 246, 0.08);
+      color: var(--accent-blue);
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.18s ease;
+    }
+
+    .task-run-btn:hover,
+    .kanban-run-btn:hover {
+      background: var(--accent-blue);
+      color: white;
+      border-color: var(--accent-blue);
+      box-shadow: 0 8px 18px rgba(59, 130, 246, 0.22);
+    }
+
+    .task-run-btn i,
+    .kanban-run-btn i {
+      width: 13px;
+      height: 13px;
+    }
+
+    .task-row-actions .priority-badge,
+    .kanban-card-actions .priority-badge {
+      margin-top: 0;
     }
 
     .task-title,
@@ -1938,6 +2046,11 @@
       border-radius: 10px;
       padding: 14px;
       margin-top: 10px;
+    }
+
+    .execution-card.compact {
+      margin-top: 0;
+      padding: 10px;
     }
 
     .execution-header {
@@ -2384,6 +2497,16 @@
     .alert-btn.handle {
       background: rgba(59, 130, 246, 0.1);
       color: var(--accent-blue);
+    }
+
+    .alert-card.is-processing {
+      border-left-color: var(--accent-blue);
+      background: rgba(59, 130, 246, 0.04);
+    }
+
+    .alert-btn.confirm {
+      background: rgba(16, 185, 129, 0.12);
+      color: #047857;
     }
 
     .alert-btn:hover { opacity: 0.8; }
@@ -3134,7 +3257,7 @@
                   <span class="conversation-list-title">首页工作台布局</span>
                   <span class="conversation-list-time">1 周</span>
                 </span>
-                <span class="conversation-list-meta">FE-1 · In Progress · 开发</span>
+                <span class="conversation-list-meta">FE1234 · In Progress · 开发</span>
               </button>
             </div>
           </div>
@@ -3201,7 +3324,7 @@
           <div class="card-header">
             <div class="card-title">
               <span class="card-title-main">工作流配置 · 类型状态模型</span>
-              <span class="card-title-sub">为 6 类事项定义状态、准入准出、自动化与预警规则</span>
+              <span class="card-title-sub">为 6 类事项定义状态、准入准出、自动化与待确认规则</span>
             </div>
             <div class="card-actions">
               <button class="card-action-btn">保存草稿</button>
@@ -3244,6 +3367,10 @@
             <span class="live-dot" aria-hidden="true"></span>
             故障跟进
           </button>
+          <span class="opencode-status" data-testid="opencode-status" data-status="idle">
+            <span class="opencode-status-dot" aria-hidden="true"></span>
+            <span data-testid="opencode-status-text">OpenCode 本地桥未连接</span>
+          </span>
         </div>
         <div class="conversation-messages">
           <!-- User Message -->
@@ -3388,20 +3515,20 @@
     <!-- ── RIGHT COLUMN ── -->
     <aside class="workbench-right" data-testid="workbench-right">
       <div class="right-tabs">
-        <button class="right-tab active" role="tab" aria-selected="true" data-tab="alerts">主动预警</button>
+        <button class="right-tab active" role="tab" aria-selected="true" data-tab="alerts">待确认</button>
         <button class="right-tab" role="tab" aria-selected="false" data-tab="detail">详情</button>
       </div>
 
-      <!-- Tab: 主动预警 -->
+      <!-- Tab: 待确认 -->
       <div class="right-tab-content active" data-tab-content="alerts">
         <div class="alerts-list" data-testid="alerts-list">
           <div class="alert-card critical">
             <div class="alert-header">
-              <span class="alert-title">构建失败 — payment-service</span>
-              <span class="alert-type critical">CRITICAL</span>
+              <span class="alert-title">VULN0301 · security-review skill 异常</span>
+              <span class="alert-type critical">异常确认</span>
             </div>
             <div class="alert-meta">
-              分支 main | 原因: 单元测试未通过 | 时间: 14:32
+              漏洞复核 skill 返回异常，需要进入会话确认复核范围和责任人。
             </div>
             <div class="alert-actions">
               <button class="alert-btn view">查看</button>
@@ -3411,11 +3538,11 @@
 
           <div class="alert-card warning">
             <div class="alert-header">
-              <span class="alert-title">审批超时 — PROJ-456 部署审批</span>
-              <span class="alert-type warning">WARNING</span>
+              <span class="alert-title">FE1234 · build skill 等待确认</span>
+              <span class="alert-type warning">待确认</span>
             </div>
             <div class="alert-meta">
-              已等待 4 小时 | 审批人: @运维工程师 D
+              OpenCode build skill 执行到开发节点，需要用户确认是否继续改动首页原型。
             </div>
             <div class="alert-actions">
               <button class="alert-btn view">查看</button>
@@ -3425,11 +3552,11 @@
 
           <div class="alert-card info">
             <div class="alert-header">
-              <span class="alert-title">Sprint 14 即将结束</span>
-              <span class="alert-type info">INFO</span>
+              <span class="alert-title">今日新增任务</span>
+              <span class="alert-type info">提示确认</span>
             </div>
             <div class="alert-meta">
-              剩余 2 天 | 12 个待办项
+              新增 6 个 Task，建议先按项目分组。
             </div>
             <div class="alert-actions">
               <button class="alert-btn view">查看</button>
@@ -3489,36 +3616,36 @@
   const boardStatuses = ['Backlog', 'Todo', 'In Progress', 'In Review', 'Done'];
   const workflowStages = ['分析', '设计', '开发', '测试', '发布', '运营'];
   const tasks = [
-    { id: 'FE-1', type: 'FE', title: '统一工作台首页框架', desc: '左中右三栏、顶部流程、底部历史与白色 Web 展示基线', status: 'In Progress', stage: 2, priority: 'High', project: 'AgentCenter', space: '研发中台', iteration: 'Sprint 14' },
-    { id: 'US-3', type: 'US', title: '用户从看板进入任务对话', desc: '点击卡片后创建会话并注入任务上下文', status: 'Todo', stage: 1, priority: 'High', project: 'AgentCenter', space: '研发中台', iteration: 'Sprint 14' },
-    { id: 'TASK-8', type: 'Task', title: '梳理 4+1 架构视图文档', desc: '沉淀应用架构、逻辑视图、开发视图与部署视图', status: 'In Review', stage: 4, priority: 'Medium', project: 'AgentCenter', space: '平台工程', iteration: 'Sprint 14' },
-    { id: 'WORK-5', type: 'Work', title: '企业内部平台权限对接', desc: '对接统一身份认证、项目权限和审计日志', status: 'Backlog', stage: 0, priority: 'Medium', project: '平台接入', space: '平台工程', iteration: 'Sprint 15' },
-    { id: 'BUG-2', type: '缺陷', title: '顶部面板展开时节点重叠', desc: '修正流程节点在窄宽度下的换行和间距', status: 'Done', stage: 5, priority: 'Low', project: 'AgentCenter', space: '研发中台', iteration: 'Sprint 14' },
-    { id: 'VULN-1', type: '漏洞', title: '上下文知识库访问边界校验', desc: '补充多租户、多项目数据隔离和敏感信息脱敏策略', status: 'In Progress', stage: 2, priority: 'Urgent', project: '平台接入', space: '安全治理', iteration: 'Sprint 15' },
-    { id: 'FE-4', type: 'FE', title: '主动预警右侧栏联动', desc: '根据首页、看板、工作流、会话上下文展示不同预警', status: 'Todo', stage: 1, priority: 'Medium', project: 'AgentCenter', space: '研发中台', iteration: 'Sprint 15' },
-    { id: 'US-7', type: 'US', title: '按统计指标过滤首页条目', desc: '点击 FE、US、Task 等指标后过滤下方任务列表', status: 'Done', stage: 5, priority: 'Low', project: 'TianYuan', space: '平台工程', iteration: '长期演进' }
+    { id: 'FE1234', type: 'FE', title: '统一工作台首页框架', desc: '左中右三栏、顶部流程、底部历史与白色 Web 展示基线', status: 'In Progress', stage: 2, priority: 'High', project: 'AgentCenter', space: '研发中台', iteration: 'Sprint 14' },
+    { id: 'US1203', type: 'US', title: '用户从看板进入任务对话', desc: '点击卡片后创建会话并注入任务上下文', status: 'Todo', stage: 1, priority: 'High', project: 'AgentCenter', space: '研发中台', iteration: 'Sprint 14' },
+    { id: 'TASK1808', type: 'Task', title: '梳理 4+1 架构视图文档', desc: '沉淀应用架构、逻辑视图、开发视图与部署视图', status: 'In Review', stage: 4, priority: 'Medium', project: 'AgentCenter', space: '平台工程', iteration: 'Sprint 14' },
+    { id: 'WORK0905', type: 'Work', title: '企业内部平台权限对接', desc: '对接统一身份认证、项目权限和审计日志', status: 'Backlog', stage: 0, priority: 'Medium', project: '平台接入', space: '平台工程', iteration: 'Sprint 15' },
+    { id: 'BUG0602', type: '缺陷', title: '顶部面板展开时节点重叠', desc: '修正流程节点在窄宽度下的换行和间距', status: 'Done', stage: 5, priority: 'Low', project: 'AgentCenter', space: '研发中台', iteration: 'Sprint 14' },
+    { id: 'VULN0301', type: '漏洞', title: '上下文知识库访问边界校验', desc: '补充多租户、多项目数据隔离和敏感信息脱敏策略', status: 'In Progress', stage: 2, priority: 'Urgent', project: '平台接入', space: '安全治理', iteration: 'Sprint 15' },
+    { id: 'FE1235', type: 'FE', title: '待确认右侧栏联动', desc: '根据首页、看板、工作流、会话上下文展示不同确认项', status: 'Todo', stage: 1, priority: 'Medium', project: 'AgentCenter', space: '研发中台', iteration: 'Sprint 15' },
+    { id: 'US1207', type: 'US', title: '按统计指标过滤首页条目', desc: '点击 FE、US、Task 等指标后过滤下方任务列表', status: 'Done', stage: 5, priority: 'Low', project: 'TianYuan', space: '平台工程', iteration: '长期演进' }
   ];
 
   const alertsByView = {
     home: [
-      ['warning', '设计评审积压', 'US 与 FE 共 4 项停留在设计阶段超过 1 天'],
-      ['critical', '漏洞事项待确认', 'VULN-1 缺少安全负责人和准出条件'],
-      ['info', '今日新增任务', '新增 6 个 Task，建议先按项目分组']
+      ['warning', 'FE1234 · build skill 等待确认', 'OpenCode build skill 执行到开发节点，需要用户确认是否继续改动首页原型。', 'FE1234', '待确认'],
+      ['critical', 'VULN0301 · security-review skill 异常', '漏洞复核 skill 返回异常，需要进入会话确认复核范围和责任人。', 'VULN0301', '异常确认'],
+      ['info', '今日新增任务', '新增 6 个 Task，建议先按项目分组', '', '提示确认']
     ],
     board: [
-      ['critical', 'In Progress WIP 超限', '进行中列已有 3 项高优先级事项'],
-      ['warning', 'In Review 等待时间偏长', 'TASK-8 已等待架构评审 19 小时'],
-      ['info', 'Done 列可归档', '2 个事项可进入历史归档']
+      ['critical', 'In Progress WIP 超限', '进行中列已有 3 项高优先级事项', '', '异常确认'],
+      ['warning', 'In Review 等待时间偏长', 'TASK1808 已等待架构评审 19 小时', 'TASK1808', '待确认'],
+      ['info', 'Done 列可归档', '2 个事项可进入历史归档', '', '提示确认']
     ],
     workflow: [
-      ['warning', '漏洞工作流缺少复核节点', '建议增加安全复核与审计留痕'],
-      ['info', 'Task 工作流可自动化', '开发完成后可自动触发测试验证'],
-      ['warning', 'Work 类型准出条件不足', '缺少负责人确认和业务验收规则']
+      ['warning', '漏洞工作流缺少复核节点', '建议增加安全复核与审计留痕', '', '待确认'],
+      ['info', 'Task 工作流可自动化', '开发完成后可自动触发测试验证', '', '提示确认'],
+      ['warning', 'Work 类型准出条件不足', '缺少负责人确认和业务验收规则', '', '待确认']
     ],
     chat: [
-      ['critical', '当前事项存在阻塞', '等待 API 设计评审，已挂起 1 天'],
-      ['warning', '依赖服务未确认', '认证服务回调超时策略尚未确认'],
-      ['info', '可生成评审摘要', '当前上下文已足够生成评审材料初稿']
+      ['critical', '当前事项存在阻塞', '等待 API 设计评审，已挂起 1 天', '', '异常确认'],
+      ['warning', '依赖服务未确认', '认证服务回调超时策略尚未确认', '', '待确认'],
+      ['info', '可生成评审摘要', '当前上下文已足够生成评审材料初稿', '', '提示确认']
     ]
   };
 
@@ -3528,10 +3655,21 @@
   let activeWorkflowType = 'FE';
   let activeSearchQuery = '';
   let previousWorkbenchView = 'home';
+  let activeConversationTaskId = null;
   const scopeFilters = {
     project: 'AgentCenter',
     space: '研发中台',
     iteration: 'Sprint 14'
+  };
+  const bridgeState = {
+    sessionsByKey: new Map(),
+    eventSources: new Map(),
+    activeSessionId: '',
+    activeStreamNode: null,
+    activeStreamSessionId: '',
+    alerts: [],
+    resolvedConfirmations: new Set(),
+    conversationHtmlByKey: new Map()
   };
 
   function getTypeMeta(type) {
@@ -3555,25 +3693,105 @@
     }).join('')}<span class="flow-label">${workflowStages[task.stage] || '完成'}</span></div>`;
   }
 
+  function getWorkflowActionLabel(task) {
+    if (task.status === 'Done') return '查看产物';
+    if (task.status === 'Todo' || task.status === 'Backlog') return '启动工作流';
+    return '继续处理';
+  }
+
+  function getWorkflowActionIcon(task) {
+    return task.status === 'Done' ? 'file-text' : 'play';
+  }
+
+  function getWorkflowSkillName(task) {
+    const names = {
+      FE: 'fe.requirement.refine',
+      US: 'us.acceptance.refine',
+      Task: 'task.execution.plan',
+      Work: 'work.integration.prepare',
+      缺陷: 'bug.repair.verify',
+      漏洞: 'security.review'
+    };
+    return names[task.type] || 'workitem.process';
+  }
+
+  function getWorkflowArtifactName(task) {
+    const names = {
+      FE: 'requirement-design.md',
+      US: 'acceptance-criteria.md',
+      Task: 'execution-plan.md',
+      Work: 'integration-checklist.md',
+      缺陷: 'fix-verification.md',
+      漏洞: 'security-review.md'
+    };
+    return names[task.type] || 'workitem-output.md';
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    }[char]));
+  }
+
+  function normalizeAlert(row) {
+    if (!Array.isArray(row)) return row;
+    return {
+      level: row[0],
+      title: row[1],
+      meta: row[2],
+      taskId: row[3] || '',
+      typeLabel: row[4] || ''
+    };
+  }
+
+  function getAlertRows(view, task) {
+    const scopedBridgeAlerts = bridgeState.alerts.filter(alert => !task || alert.taskId === task.id);
+    const rows = task ? [
+        { level: 'warning', title: `${task.id} · ${task.title}`, meta: `${task.type} 当前处于 ${task.status}，流程节点：${workflowStages[task.stage]}`, taskId: task.id, typeLabel: '待确认' },
+        ...scopedBridgeAlerts,
+        ...(alertsByView.chat || []).map(normalizeAlert)
+      ] : [
+      ...scopedBridgeAlerts,
+      ...((alertsByView[view] || alertsByView.home).map(normalizeAlert))
+    ];
+    return rows.filter(alert => !bridgeState.resolvedConfirmations.has(alert.title));
+  }
+
+  function getConfirmationTypeLabel(alert) {
+    if (alert.typeLabel) return alert.typeLabel;
+    if (alert.level === 'critical') return '异常确认';
+    if (alert.level === 'warning') return '待确认';
+    return '提示确认';
+  }
+
   function renderAlerts(view, task) {
     const alertsList = document.querySelector('[data-testid="alerts-list"]');
     if (!alertsList) return;
-    const rows = task
-      ? [['warning', `${task.id} · ${task.title}`, `${task.type} 当前处于 ${task.status}，流程节点：${workflowStages[task.stage]}`], ...(alertsByView.chat || [])]
-      : alertsByView[view] || alertsByView.home;
-    alertsList.innerHTML = rows.map(([level, title, meta]) => `
+    const rows = getAlertRows(view, task);
+    alertsList.innerHTML = rows.map(alert => {
+      const level = alert.level || 'info';
+      const taskId = alert.taskId || '';
+      const title = escapeHtml(alert.title || '待确认');
+      const meta = escapeHtml(alert.meta || '');
+      const typeLabel = escapeHtml(getConfirmationTypeLabel(alert));
+      return `
       <div class="alert-card ${level === 'critical' ? 'critical' : level === 'warning' ? 'warning' : 'info'}">
         <div class="alert-header">
           <span class="alert-title">${title}</span>
-          <span class="alert-type ${level === 'critical' ? 'critical' : level === 'warning' ? 'warning' : 'info'}">${level.toUpperCase()}</span>
+          <span class="alert-type ${level === 'critical' ? 'critical' : level === 'warning' ? 'warning' : 'info'}">${typeLabel}</span>
         </div>
         <div class="alert-meta">${meta}</div>
         <div class="alert-actions">
-          <button class="alert-btn view">查看</button>
-          <button class="alert-btn handle">处理</button>
+          <button class="alert-btn view" data-alert-action="view" data-alert-task-id="${escapeHtml(taskId)}" data-alert-title="${title}">查看</button>
+          <button class="alert-btn handle" data-alert-action="handle" data-alert-task-id="${escapeHtml(taskId)}" data-alert-title="${title}">处理</button>
         </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
   }
 
   function activateRightTab(target) {
@@ -3684,17 +3902,23 @@
     const visibleTasks = getScopedTasks();
     list.innerHTML = visibleTasks.map(task => {
       const type = getTypeMeta(task.type);
-      return `<button type="button" class="task-row" data-task-id="${task.id}">
+      return `<div class="task-row" role="button" tabindex="0" data-task-id="${task.id}">
         <span class="task-row-main">
           <span>
             <span class="type-badge ${type.cls}">${task.id}</span>
             <div class="task-title">${task.title}</div>
             <div class="task-meta">${task.desc}</div>
           </span>
-          <span class="priority-badge">${task.priority}</span>
+          <span class="task-row-actions">
+            <span class="priority-badge">${task.priority}</span>
+            <button type="button" class="task-run-btn" data-workflow-run="${task.id}">
+              <i data-lucide="${getWorkflowActionIcon(task)}"></i>
+              <span>${getWorkflowActionLabel(task)}</span>
+            </button>
+          </span>
         </span>
         ${renderFlow(task)}
-      </button>`;
+      </div>`;
     }).join('');
     document.querySelectorAll('[data-type-filter]').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -3706,6 +3930,7 @@
       list.innerHTML = '<div class="detail-empty">当前筛选条件下暂无事项，试试调整项目、空间、迭代或搜索关键词。</div>';
     }
     bindTaskOpeners();
+    lucide.createIcons();
   }
 
   function getFilterSummary(label, selected, total) {
@@ -3750,13 +3975,19 @@
         <div class="kanban-column-header"><span>${status}</span><span class="kanban-column-count">${columnTasks.length}</span></div>
         ${columnTasks.map(task => {
           const type = getTypeMeta(task.type);
-          return `<button type="button" class="kanban-card" data-task-id="${task.id}">
+          return `<div class="kanban-card" role="button" tabindex="0" data-task-id="${task.id}">
             <div class="kanban-card-code">${task.id}</div>
             <div class="kanban-card-title">${task.title}</div>
             <div class="kanban-card-desc">${task.desc}</div>
-            <span class="type-badge ${type.cls}">${task.type}</span>
-            <span class="priority-badge">${task.priority}</span>
-          </button>`;
+            <div class="kanban-card-actions">
+              <span class="type-badge ${type.cls}">${task.type}</span>
+              <span class="priority-badge">${task.priority}</span>
+              <button type="button" class="kanban-run-btn" data-workflow-run="${task.id}">
+                <i data-lucide="${getWorkflowActionIcon(task)}"></i>
+                <span>${getWorkflowActionLabel(task)}</span>
+              </button>
+            </div>
+          </div>`;
         }).join('')}
       </div>`;
     }).join('');
@@ -3797,7 +4028,7 @@
     `).join('')}`;
     rules.innerHTML = `<div class="card-title-main">规则建议</div>
       <div class="rule-item">自动化：状态进入“测试”后触发质量检查与漏洞扫描。</div>
-      <div class="rule-item">预警：任一节点停留超过 24 小时进入右侧主动预警。</div>
+      <div class="rule-item">待确认：任一节点需要人工确认、审批、补充信息或异常处理时进入右侧待确认。</div>
       <div class="rule-item">安全：漏洞类型必须经过安全复核、审计留痕和负责人确认。</div>
       <div class="rule-item">会话：从任务进入对话时注入类型、标题、当前节点、阻塞项和历史产出。</div>`;
     document.querySelectorAll('[data-workflow-type]').forEach(btn => btn.addEventListener('click', () => {
@@ -3829,7 +4060,9 @@
     list.hidden = !expanded;
   }
 
-  function openTaskConversation(task) {
+  function openTaskConversation(task, options = {}) {
+    persistCurrentConversation();
+    activeConversationTaskId = task.id;
     setWorkbenchView('chat', task);
     setConversationGroupExpanded('task', true);
     const list = document.querySelector('[data-conversation-bucket="task"]') || document.getElementById('conversation-list');
@@ -3846,10 +4079,53 @@
     const current = document.querySelector(`[data-task-conversation="${task.id}"]`);
     if (current) current.classList.add('active');
     if (conversationMessages) {
-      conversationMessages.innerHTML = '';
-      appendConversationMessage('user', `打开 ${task.id}：${task.title}`);
-      appendConversationMessage('ai', `已加载 ${task.type} 上下文：当前状态 ${task.status}，工作流节点为「${workflowStages[task.stage]}」。你可以继续让我生成方案、推进节点、催办负责人或检查风险。`);
+      const restored = restoreConversation(task.id);
+      if (!restored) {
+        conversationMessages.innerHTML = '';
+        appendConversationMessage('user', escapeHtml(`打开 ${task.id}：${task.title}`));
+        appendConversationMessage('ai', `已加载 ${escapeHtml(task.type)} 上下文：唯一 ID 为 <strong>${escapeHtml(task.id)}</strong>，当前状态 ${escapeHtml(task.status)}，工作流节点为「${escapeHtml(workflowStages[task.stage])}」。后续输入会发送到本机 OpenCode 会话，并把回话输出流式展示在这里。`);
+      }
+      if (options.alertTitle) {
+        appendConversationMessage('system', `从待确认进入：${escapeHtml(options.alertTitle)}。该会话与 ${escapeHtml(task.id)} 的工作流执行一对一绑定。`);
+      }
     }
+  }
+
+  function startWorkflowRun(task, options = {}) {
+    openTaskConversation(task, {
+      alertTitle: options.alertTitle,
+    });
+    const skillName = getWorkflowSkillName(task);
+    const currentStage = workflowStages[task.stage] || '完成';
+    const artifactName = getWorkflowArtifactName(task);
+    const actionText = options.fromConfirmation ? '已确认处理该待确认项，工作流将自动连续执行。' : `已触发 ${task.id} 的工作流处理。`;
+
+    appendConversationMessage('system', `${escapeHtml(actionText)} 当前节点：${escapeHtml(currentStage)}，执行 skill：${escapeHtml(skillName)}。`);
+    appendExecutionNotice(`${skillName} 正在执行`, `已读取 ${task.id} 的事项详情、历史产物和当前流程节点`, 'progress');
+    appendExecutionNotice(`${skillName} 执行完成`, `已生成节点产物 ${artifactName}`, 'check');
+
+    if (task.status === 'Todo' || task.status === 'Backlog') {
+      task.status = 'In Progress';
+    }
+
+    if (options.fromConfirmation) {
+      if (task.stage < workflowStages.length - 1) task.stage += 1;
+      appendConversationMessage('ai', `已完成确认并继续推进：${escapeHtml(task.id)} 已从「${escapeHtml(currentStage)}」进入「${escapeHtml(workflowStages[task.stage] || '完成')}」。后续如果新的 skill 需要你确认，会再次出现在右侧「待确认」。`);
+      renderOverview();
+      renderBoard();
+      showTaskDetail(task);
+      return;
+    }
+
+    addBridgeAlert({
+      level: 'warning',
+      title: `${task.id} · ${skillName} 等待确认`,
+      meta: `${skillName} 已完成 ${currentStage} 节点草稿，需要确认后继续进入下一节点。`,
+      taskId: task.id,
+      typeLabel: '待确认'
+    });
+    appendConversationMessage('ai', `工作流已跑到需要确认的位置。我已在右侧「待确认」创建确认项，你可以点击“处理”让它从当前节点继续自动执行。`);
+    activateRightTab('alerts');
   }
 
   const sidebarNewChat = document.querySelector('[data-testid="sidebar-new-chat"]');
@@ -3873,14 +4149,30 @@
       if (current) current.classList.add('active');
       if (conversationMessages) {
         conversationMessages.innerHTML = '';
+        activeConversationTaskId = null;
         appendConversationMessage('ai', '已创建通用会话。你可以直接输入问题，也可以稍后从首页或看板选择任务事项创建任务会话。');
       }
     });
   }
 
   function bindTaskOpeners() {
+    document.querySelectorAll('[data-workflow-run]').forEach(btn => {
+      btn.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        const task = tasks.find(item => item.id === btn.dataset.workflowRun);
+        if (task) startWorkflowRun(task);
+      });
+    });
     document.querySelectorAll('[data-task-id]').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', event => {
+        if (event.target.closest('[data-workflow-run]')) return;
+        const task = tasks.find(item => item.id === btn.dataset.taskId);
+        if (task) showTaskDetail(task);
+      });
+      btn.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
         const task = tasks.find(item => item.id === btn.dataset.taskId);
         if (task) showTaskDetail(task);
       });
@@ -3926,7 +4218,10 @@
     item.addEventListener('click', function() {
       document.querySelectorAll('.conversation-list-item').forEach(i => i.classList.remove('active'));
       this.classList.add('active');
-      setWorkbenchView('chat');
+      const taskId = this.getAttribute('data-task-conversation');
+      activeConversationTaskId = tasks.some(task => task.id === taskId) ? taskId : null;
+      setWorkbenchView('chat', tasks.find(task => task.id === activeConversationTaskId));
+      restoreConversation(activeConversationTaskId);
     });
   });
 
@@ -3953,6 +4248,22 @@
     if (!button) return;
     const task = tasks.find(item => item.id === button.getAttribute('data-detail-enter-chat'));
     if (task) openTaskConversation(task);
+  });
+
+  document.addEventListener('click', function(event) {
+    const button = event.target.closest('[data-alert-action]');
+    if (!button) return;
+    const taskId = button.getAttribute('data-alert-task-id');
+    const task = tasks.find(item => item.id === taskId) || tasks.find(item => item.id === activeConversationTaskId);
+    if (!task) return;
+    if (button.getAttribute('data-alert-action') === 'view') {
+      showTaskDetail(task);
+      return;
+    }
+    const alertTitle = button.getAttribute('data-alert-title') || '待确认';
+    bridgeState.resolvedConfirmations.add(alertTitle);
+    bridgeState.alerts = bridgeState.alerts.filter(alert => alert.title !== alertTitle);
+    startWorkflowRun(task, { alertTitle, fromConfirmation: true });
   });
 
   const chatBack = document.querySelector('[data-testid="chat-back"]');
@@ -4053,6 +4364,224 @@
     }
   };
 
+  function getOpenCodeBridgeUrl() {
+    return (localStorage.getItem('agentCenterOpenCodeBridgeUrl') || 'http://127.0.0.1:4789').replace(/\/$/, '');
+  }
+
+  function updateOpenCodeStatus(status, text) {
+    const statusEl = document.querySelector('[data-testid="opencode-status"]');
+    const statusText = document.querySelector('[data-testid="opencode-status-text"]');
+    if (!statusEl || !statusText) return;
+    statusEl.dataset.status = status;
+    statusText.textContent = text;
+  }
+
+  function getCurrentWorkbenchView() {
+    return document.querySelector('[data-workbench-view].active')?.dataset.workbenchView || 'home';
+  }
+
+  function getActiveConversationTask() {
+    return tasks.find(task => task.id === activeConversationTaskId) || null;
+  }
+
+  function getConversationKey(taskId = activeConversationTaskId) {
+    return taskId || 'GENERAL';
+  }
+
+  function persistCurrentConversation() {
+    if (!conversationMessages) return;
+    bridgeState.conversationHtmlByKey.set(getConversationKey(), conversationMessages.innerHTML);
+  }
+
+  function restoreConversation(taskId) {
+    if (!conversationMessages) return false;
+    const saved = bridgeState.conversationHtmlByKey.get(getConversationKey(taskId));
+    if (!saved) return false;
+    conversationMessages.innerHTML = saved;
+    conversationMessages.scrollTop = conversationMessages.scrollHeight;
+    lucide.createIcons();
+    return true;
+  }
+
+  function getTaskPayload(task) {
+    if (!task) {
+      return {
+        id: 'GENERAL',
+        type: '通用会话',
+        title: '通用会话',
+        status: 'waiting_user',
+        stageName: '对话',
+        priority: 'Normal',
+        desc: '用户手动创建的通用会话'
+      };
+    }
+    return {
+      ...task,
+      stageName: workflowStages[task.stage] || ''
+    };
+  }
+
+  async function ensureOpenCodeSession(task) {
+    const key = task?.id || 'GENERAL';
+    if (bridgeState.sessionsByKey.has(key)) {
+      return bridgeState.sessionsByKey.get(key);
+    }
+
+    updateOpenCodeStatus('running', '正在连接 OpenCode 本地桥');
+    const response = await fetch(`${getOpenCodeBridgeUrl()}/api/opencode/session`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        task: getTaskPayload(task),
+        title: task ? `${task.id} · ${task.title}` : 'AgentCenter 通用会话'
+      })
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      throw new Error(data.error || `OpenCode bridge returned ${response.status}`);
+    }
+    bridgeState.sessionsByKey.set(key, data.sessionId);
+    openBridgeEventStream(data.sessionId);
+    updateOpenCodeStatus('connected', 'OpenCode 本地桥已连接');
+    return data.sessionId;
+  }
+
+  function openBridgeEventStream(sessionId) {
+    if (bridgeState.eventSources.has(sessionId)) return;
+    const source = new EventSource(`${getOpenCodeBridgeUrl()}/api/agentcenter/events?sessionId=${encodeURIComponent(sessionId)}`);
+    bridgeState.eventSources.set(sessionId, source);
+    ['status', 'assistant_delta', 'reasoning_delta', 'skill_started', 'skill_completed', 'permission_required', 'alert', 'debug'].forEach(type => {
+      source.addEventListener(type, event => {
+        try {
+          handleBridgeEvent(sessionId, JSON.parse(event.data));
+        } catch (error) {
+          appendConversationMessage('system', `OpenCode 事件解析失败：${escapeHtml(error.message || error)}`);
+        }
+      });
+    });
+    source.onerror = () => {
+      updateOpenCodeStatus('failed', 'OpenCode 本地桥连接中断');
+    };
+  }
+
+  function handleBridgeEvent(sessionId, event) {
+    const task = tasks.find(item => item.id === event.taskId) || getActiveConversationTask();
+    if (event.type === 'status') {
+      const label = event.label || event.status || 'OpenCode 状态更新';
+      updateOpenCodeStatus(event.status === 'failed' ? 'failed' : event.status === 'running' ? 'running' : 'connected', label);
+      if (event.status === 'failed') appendConversationMessage('system', escapeHtml(label));
+      return;
+    }
+
+    if (event.type === 'assistant_delta') {
+      appendStreamingDelta(sessionId, event.text || '');
+      return;
+    }
+
+    if (event.type === 'reasoning_delta') {
+      appendExecutionNotice('OpenCode reasoning', event.text || '', 'progress');
+      return;
+    }
+
+    if (event.type === 'skill_started') {
+      appendExecutionNotice(`${event.skillName || 'skill'} 正在执行`, `OpenCode skill 已开始处理 ${event.taskId || task?.id || '当前会话'}`, 'progress');
+      return;
+    }
+
+    if (event.type === 'skill_completed') {
+      appendExecutionNotice(`${event.skillName || 'skill'} ${event.isError ? '执行失败' : '执行完成'}`, event.output || 'OpenCode skill 已返回结果', event.isError ? 'error' : 'check');
+      if (event.isError) {
+        addBridgeAlert({
+          level: 'critical',
+          title: `${event.taskId || task?.id || 'OpenCode'} · ${event.skillName || 'skill'} 执行失败`,
+          meta: event.output || 'OpenCode skill 执行失败，需要人工处理。',
+          taskId: event.taskId || task?.id || ''
+        });
+      }
+      return;
+    }
+
+    if (event.type === 'permission_required') {
+      appendConversationMessage('system', `OpenCode skill「${escapeHtml(event.skillName || 'unknown')}」需要用户确认：${escapeHtml(event.title || '权限确认')}`);
+      addBridgeAlert({
+        level: 'warning',
+        title: `${event.taskId || task?.id || 'OpenCode'} · ${event.skillName || 'skill'} 等待确认`,
+        meta: event.title || 'OpenCode skill 执行过程中需要用户确认。',
+        taskId: event.taskId || task?.id || ''
+      });
+      return;
+    }
+
+    if (event.type === 'alert') {
+      addBridgeAlert({
+        level: event.level || 'warning',
+        title: event.title || 'OpenCode 待确认',
+        meta: event.meta || 'OpenCode skill 执行进入阻塞状态。',
+        taskId: event.taskId || task?.id || ''
+      });
+    }
+  }
+
+  function addBridgeAlert(alert) {
+    const exists = bridgeState.alerts.some(item => item.title === alert.title && item.taskId === alert.taskId);
+    if (!exists) bridgeState.alerts.unshift(alert);
+    const task = tasks.find(item => item.id === activeConversationTaskId);
+    renderAlerts(getCurrentWorkbenchView(), task);
+  }
+
+  function appendStreamingDelta(sessionId, text) {
+    if (!text || !conversationMessages) return;
+    if (!bridgeState.activeStreamNode || bridgeState.activeStreamSessionId !== sessionId) {
+      const message = document.createElement('div');
+      message.className = 'message ai';
+      message.innerHTML = '<div class="message-bubble"><div class="streaming-text"></div></div>';
+      conversationMessages.appendChild(message);
+      bridgeState.activeStreamNode = message.querySelector('.streaming-text');
+      bridgeState.activeStreamSessionId = sessionId;
+    }
+    bridgeState.activeStreamNode.textContent += text;
+    conversationMessages.scrollTop = conversationMessages.scrollHeight;
+    persistCurrentConversation();
+  }
+
+  function appendExecutionNotice(title, meta, state) {
+    const icon = state === 'check' ? 'check' : state === 'error' ? 'triangle-alert' : 'loader';
+    const cls = state === 'check' ? 'check' : state === 'error' ? 'pending' : 'progress';
+    appendConversationMessage('ai', `<div class="execution-card compact"><div class="execution-step"><span class="step-icon ${cls}"><i data-lucide="${icon}"></i></span><span class="step-text"><strong>${escapeHtml(title)}</strong><br>${escapeHtml(meta)}</span></div></div>`);
+  }
+
+  async function sendToOpenCodeBridge(message) {
+    const task = getActiveConversationTask();
+    try {
+      const sessionId = await ensureOpenCodeSession(task);
+      bridgeState.activeSessionId = sessionId;
+      bridgeState.activeStreamNode = null;
+      const response = await fetch(`${getOpenCodeBridgeUrl()}/api/opencode/message`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ sessionId, message })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) {
+        throw new Error(data.error || `OpenCode bridge returned ${response.status}`);
+      }
+    } catch (error) {
+      updateOpenCodeStatus('failed', 'OpenCode 本地桥未连接');
+      appendConversationMessage('system', `未能连接本机 OpenCode 桥接服务：${escapeHtml(error.message || error)}<br>启动命令：<code>node tools/opencode-bridge.mjs --port 4789 --cwd /Users/hzz/workspace/AgentCenter</code>`);
+    }
+  }
+
+  async function checkOpenCodeBridgeHealth() {
+    try {
+      const response = await fetch(`${getOpenCodeBridgeUrl()}/health`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      updateOpenCodeStatus('connected', data.mock ? 'OpenCode Mock 已连接' : 'OpenCode 本地桥已连接');
+    } catch {
+      updateOpenCodeStatus('idle', 'OpenCode 本地桥未连接');
+    }
+  }
+
   function appendConversationMessage(type, html) {
     if (!conversationMessages) return;
     const message = document.createElement('div');
@@ -4061,17 +4590,12 @@
     conversationMessages.appendChild(message);
     conversationMessages.scrollTop = conversationMessages.scrollHeight;
     lucide.createIcons();
+    persistCurrentConversation();
   }
 
   function runConversationScenario(scenario) {
-    appendConversationMessage('user', scenario.prompt);
-    appendConversationMessage('ai', scenario.reply);
-    const steps = scenario.steps.map((step, index) => {
-      const cls = index < 1 ? 'check' : index === 1 ? 'progress' : 'pending';
-      const icon = index < 1 ? 'check' : index === 1 ? 'loader' : 'circle';
-      return `<div class="execution-step"><span class="step-icon ${cls}"><i data-lucide="${icon}"></i></span><span class="step-text">${step}</span></div>`;
-    }).join('');
-    appendConversationMessage('ai', `<div class="execution-card"><div class="execution-header"><div class="execution-spinner"></div><span class="execution-title">${scenario.title}</span></div><div class="execution-steps">${steps}</div><div class="execution-progress"><div class="execution-progress-text">1/4 步骤完成</div><div class="execution-progress-bar"><div class="execution-progress-fill" style="width: 25%"></div></div></div></div>`);
+    appendConversationMessage('user', escapeHtml(scenario.prompt));
+    sendToOpenCodeBridge(scenario.prompt);
   }
 
   document.querySelectorAll('.scenario-chip').forEach(btn => {
@@ -4094,10 +4618,11 @@
             ? scenarioReplies.requirement
             : null;
       if (scenario) {
-        runConversationScenario({ ...scenario, prompt: value });
+        appendConversationMessage('user', escapeHtml(value));
+        sendToOpenCodeBridge(value);
       } else {
-        appendConversationMessage('user', value);
-        appendConversationMessage('ai', `收到：“${value}”。你可以继续输入需求、告警、发布风险或服务检查类指令。`);
+        appendConversationMessage('user', escapeHtml(value));
+        sendToOpenCodeBridge(value);
       }
     };
     chatSendBtn.addEventListener('click', sendMessage);
@@ -4105,6 +4630,8 @@
       if (event.key === 'Enter') sendMessage();
     });
   }
+
+  checkOpenCodeBridgeHealth();
 
   // ── Typing indicator animation ──
   setInterval(() => {

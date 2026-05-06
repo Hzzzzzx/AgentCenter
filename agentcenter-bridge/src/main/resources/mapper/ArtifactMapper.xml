@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.agentcenter.bridge.infrastructure.persistence.mapper.ArtifactMapper">
+
+    <select id="findById" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.ArtifactEntity">
+        SELECT id, work_item_id, workflow_instance_id, workflow_node_instance_id, session_id,
+               artifact_type, title, content, storage_uri, version_no, created_by, created_at
+        FROM artifact WHERE id = #{id}
+    </select>
+
+    <select id="findByWorkItemId" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.ArtifactEntity">
+        SELECT id, work_item_id, workflow_instance_id, workflow_node_instance_id, session_id,
+               artifact_type, title, content, storage_uri, version_no, created_by, created_at
+        FROM artifact WHERE work_item_id = #{workItemId}
+        ORDER BY created_at DESC
+    </select>
+
+    <select id="findByWorkflowNodeInstanceId" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.ArtifactEntity">
+        SELECT id, work_item_id, workflow_instance_id, workflow_node_instance_id, session_id,
+               artifact_type, title, content, storage_uri, version_no, created_by, created_at
+        FROM artifact WHERE workflow_node_instance_id = #{nodeInstanceId}
+        ORDER BY created_at DESC
+    </select>
+
+    <insert id="insert">
+        INSERT INTO artifact (id, work_item_id, workflow_instance_id, workflow_node_instance_id,
+                              session_id, artifact_type, title, content, storage_uri,
+                              version_no, created_by)
+        VALUES (#{id}, #{workItemId}, #{workflowInstanceId}, #{workflowNodeInstanceId},
+                #{sessionId}, #{artifactType}, #{title}, #{content}, #{storageUri},
+                #{versionNo}, #{createdBy})
+    </insert>
+
+</mapper>

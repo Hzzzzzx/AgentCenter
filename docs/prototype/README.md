@@ -1,27 +1,51 @@
 # Prototype
 
 > 当前首页高保真原型
-> 最近更新：2026-05-02
+> 最近更新：2026-05-05
 
 ## 当前基线
 
-白色网页端 VS Code 式三栏工作台首页，作为 AgentCenter 首页的初始布局框架。
+白色网页端三栏工作台首页，作为 AgentCenter 首页的初始布局框架。
 
 基线固定的信息架构和布局骨架：
 
-- 顶部导航条：可展开/收起
-- 顶部全流程阶段面板：默认收起，展开展示节点详情
-- 左侧栏：默认展开会话列表，包含平台导航、通用工具链和智能体状态
-- 中心栏：对话工作台，是首页主焦点
-- 右侧栏：上下文详情、主动预警、智能体协作
-- 底部历史面板：默认收起，展开展示最近活动、全流程历史和执行记录
+- 顶部导航条：项目、空间、迭代三级联动筛选，并支持关键字搜索 FE、US、Task、Work、缺陷、漏洞
+- 左侧栏：固定入口为首页、看板、工作流；会话列表按通用会话与任务会话组织，任务会话默认折叠
+- 中心栏：首页展示任务全景，看板展示状态流转，工作流展示类型状态模型，对话工作台承接任务会话
+- 右侧栏：待确认和事项详情；待确认用于承接 skill 阻塞、权限确认、审批和信息补充
 - 状态栏：运行状态、工具连接和在线状态
+- 本地 OpenCode 对话：通过 `tools/opencode-bridge.mjs` 桥接 `opencode serve`，详见 [opencode-bridge.md](./opencode-bridge.md)
+
+## 启动查看
+
+静态高保真：
+
+```text
+docs/prototype/homepage.html
+```
+
+本地 OpenCode 桥接：
+
+```bash
+cd /Users/hzz/workspace/AgentCenter
+node tools/opencode-bridge.mjs --port 4789 --cwd /Users/hzz/workspace/AgentCenter
+```
+
+无 OpenCode 环境时的交互验证：
+
+```bash
+cd /Users/hzz/workspace/AgentCenter
+node tools/opencode-bridge.mjs --mock --port 4789
+```
 
 ## 活跃文件
 
 | 文件 | 说明 |
 |------|------|
 | [homepage.html](./homepage.html) | 静态高保真首页原型（当前基线） |
+| [HOMEPAGE-VUE-HIGH-FI-GAP.md](./HOMEPAGE-VUE-HIGH-FI-GAP.md) | Vue 实现与首页高保真的差距清单和验收合同 |
+| [opencode-bridge.md](./opencode-bridge.md) | 本地 OpenCode 桥接说明 |
+| [../../tools/opencode-bridge.mjs](../../tools/opencode-bridge.mjs) | 本地 OpenCode bridge 脚本 |
 | [../../agent-center-demo/client/index.html](../../agent-center-demo/client/index.html) | React Demo 首页实现 |
 | `screenshot-*.png` | 当前 homepage 截图（1440 / full / viewport） |
 
