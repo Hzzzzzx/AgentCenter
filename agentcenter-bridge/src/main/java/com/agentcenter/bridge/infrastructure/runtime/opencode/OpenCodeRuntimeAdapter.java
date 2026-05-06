@@ -15,8 +15,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
 import com.agentcenter.bridge.application.runtime.AgentRuntimeAdapter;
@@ -39,9 +37,7 @@ import jakarta.annotation.PreDestroy;
  * {@link com.agentcenter.bridge.application.RuntimeEventService} →
  * Java SSE to frontend.</p>
  */
-@Component("openCodeRuntimeAdapter")
-@Primary
-@ConditionalOnProperty(name = "agentcenter.runtime.opencode.serve.enabled", havingValue = "true")
+@Component
 public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
     private static final Logger log = LoggerFactory.getLogger(OpenCodeRuntimeAdapter.class);

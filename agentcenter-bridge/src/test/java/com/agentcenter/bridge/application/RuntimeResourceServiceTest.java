@@ -8,9 +8,19 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import com.agentcenter.bridge.infrastructure.runtime.mock.MockRuntimeAdapter;
+import com.agentcenter.bridge.application.runtime.AgentRuntimeAdapter;
+import com.agentcenter.bridge.application.runtime.SkillRunResult;
 
 class RuntimeResourceServiceTest {
+
+    private static final AgentRuntimeAdapter STUB_ADAPTER = new AgentRuntimeAdapter() {
+        @Override public String createSession(String workItemId, String agentSessionId) { return "stub-session"; }
+        @Override public SkillRunResult runSkill(String sessionId, String skillName, String inputContext) {
+            return new SkillRunResult(true, "stub output", "MARKDOWN", null, true);
+        }
+        @Override public void sendMessage(String sessionId, String userMessage) {}
+        @Override public void cancel(String sessionId) {}
+    };
 
     @TempDir
     Path projectRoot;
@@ -18,7 +28,7 @@ class RuntimeResourceServiceTest {
     @Test
     void refreshSkillsCreatesSkillsDirectoryWhenMissing() {
         RuntimeResourceService service = new RuntimeResourceService(
-                new MockRuntimeAdapter(),
+                STUB_ADAPTER,
                 projectRoot.toString()
         );
 
@@ -41,7 +51,7 @@ class RuntimeResourceServiceTest {
                 使用当前工作项上下文生成 Markdown。
                 """);
         RuntimeResourceService service = new RuntimeResourceService(
-                new MockRuntimeAdapter(),
+                STUB_ADAPTER,
                 projectRoot.toString()
         );
 
