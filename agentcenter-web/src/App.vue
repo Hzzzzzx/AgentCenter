@@ -12,6 +12,7 @@ import { confirmationApi } from './api/confirmations'
 import { workItemApi } from './api/workItems'
 import { useSessionStore } from './stores/sessions'
 import { useConfirmationStore } from './stores/confirmations'
+import { useNotificationStore } from './stores/notifications'
 import { useWorkflowStore } from './stores/workflows'
 import { useWorkItemStore } from './stores/workItems'
 import type { AgentSessionDto, StartWorkflowResponse } from './api/types'
@@ -23,6 +24,7 @@ const settingsTab = ref<string>('skills')
 const sessionStore = useSessionStore()
 const workflowStore = useWorkflowStore()
 const confirmationStore = useConfirmationStore()
+const notificationStore = useNotificationStore()
 const workItemStore = useWorkItemStore()
 const refreshTimerIds = new Set<number>()
 
@@ -163,6 +165,13 @@ async function handleConfirmation(confirmationId: string) {
     activeView.value = 'conversation'
   } catch (e) {
     console.error('Failed to enter confirmation session:', e)
+    notificationStore.push({
+      anchor: 'right-panel',
+      tone: 'error',
+      title: '进入确认会话失败',
+      message: e instanceof Error ? e.message : '请稍后重试',
+      durationMs: 5200,
+    })
   }
 }
 

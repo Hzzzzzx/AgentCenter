@@ -31,7 +31,7 @@ export const mcpApi = {
   disable: (projectId: string, mcpId: string) => post<ProjectMcpServerDto>(`/projects/${projectId}/runtime/mcps/${mcpId}/disable`),
   test: (projectId: string, mcpId: string) => post<ProjectMcpServerDto>(`/projects/${projectId}/runtime/mcps/${mcpId}/test`),
   refreshTools: (projectId: string, mcpId: string) => post<ProjectMcpToolSnapshotDto[]>(`/projects/${projectId}/runtime/mcps/${mcpId}/refresh-tools`),
-  refresh: (projectId: string) => post<void>(`/projects/${projectId}/runtime/mcps/refresh`),
+  refresh: (projectId: string) => post<ProjectMcpServerDto[]>(`/projects/${projectId}/runtime/mcps/refresh`),
   audits: (projectId: string, mcpId: string) => get<RuntimeResourceAuditDto[]>(`/projects/${projectId}/runtime/mcps/${mcpId}/audits`),
 }
 

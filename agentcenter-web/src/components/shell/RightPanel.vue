@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import ConfirmationPanel from '../confirmation/ConfirmationPanel.vue'
+import NotificationBubbles from '../notifications/NotificationBubbles.vue'
 import { useConfirmationStore } from '../../stores/confirmations'
 import type { WorkItemDto, WorkflowNodeStatus, WorkItemType } from '../../api/types'
 
@@ -209,6 +210,8 @@ function handleOpenConfirmations() {
           </span>
         </button>
       </div>
+
+      <NotificationBubbles v-if="!collapsed" anchor="right-panel" />
     </div>
 
     <div v-if="collapsed" class="right-panel__rail" aria-label="右侧快捷入口">
@@ -314,6 +317,7 @@ function handleOpenConfirmations() {
 }
 
 .right-panel__header {
+  position: relative;
   display: flex;
   align-items: center;
   flex-shrink: 0;

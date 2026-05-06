@@ -114,6 +114,18 @@ describe('HomeOverview.vue', () => {
     expect(statTexts.some((t) => t.includes('FE') && t.includes('1'))).toBe(true)
     expect(statTexts.some((t) => t.includes('缺陷') && t.includes('1'))).toBe(true)
     expect(statTexts.some((t) => t.includes('US') && t.includes('1'))).toBe(true)
+
+    const allStatsText = statTexts.join(' ')
+    const compactStatsText = allStatsText.replace(/\s+/g, '')
+    expect(allStatsText).not.toContain('3 个开发中')
+    expect(allStatsText).not.toContain('2 个待评审')
+    expect(allStatsText).not.toContain('活跃节点')
+    expect(allStatsText).toContain('节点分布')
+    expect(allStatsText).toContain('HLD 1')
+    expect(allStatsText).toContain('1 进行中')
+    expect(allStatsText).toContain('100% 节点完成')
+    expect(compactStatsText).toContain('未开始1')
+    expect(compactStatsText).toContain('已完成1')
   })
 
   it('renders work items list', async () => {

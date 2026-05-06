@@ -105,6 +105,26 @@ export interface WorkflowNodeDefinitionDto {
   confirmationPolicy?: string | null
 }
 
+export interface UpdateWorkflowDefinitionRequest {
+  name: string
+  isDefault: boolean
+  nodes: UpdateWorkflowNodeDefinitionRequest[]
+}
+
+export interface UpdateWorkflowNodeDefinitionRequest {
+  nodeKey?: string | null
+  name: string
+  skillName: string
+  inputPolicy: string
+  outputArtifactType: ArtifactType
+  requiredConfirmation: boolean
+  stageKey?: string | null
+  stageGoal?: string | null
+  recommendedSkillNames?: string[]
+  allowDynamicActions?: boolean
+  confirmationPolicy?: string | null
+}
+
 export interface WorkflowInstanceDto {
   id: string
   workItemId: string

@@ -16,13 +16,40 @@ const emit = defineEmits<{
   'start-workflow': [workItemId: string, response: StartWorkflowResponse]
 }>()
 
-const typeConfig: Record<WorkItemType, { label: string; title: string; color: string; detail: string }> = {
-  FE: { label: 'FE', title: 'FE', color: '#6366f1', detail: '3 个开发中 · 2 个待评审' },
-  US: { label: 'US', title: 'US', color: '#10b981', detail: '4 个处理中 · 2 个待拆解' },
-  TASK: { label: 'TASK', title: 'TASK', color: '#f59e0b', detail: '6 个处理中 · 5 个待办' },
-  WORK: { label: 'WORK', title: 'WORK', color: '#0ea5e9', detail: '2 个开发中 · 3 个阻塞' },
-  BUG: { label: '缺陷', title: '缺陷', color: '#ef4444', detail: '2 个修复中 · 1 个待验证' },
-  VULN: { label: '漏洞', title: '漏洞', color: '#991b1b', detail: '1 个处理中 · 1 个待复核' },
+const typeOrder: WorkItemType[] = ['FE', 'US', 'TASK', 'WORK', 'BUG', 'VULN']
+
+const typeConfig: Record<WorkItemType, { label: string; title: string; color: string; tint: string }> = {
+  FE: { label: 'FE', title: 'FE', color: '#6366f1', tint: '#eef2ff' },
+  US: { label: 'US', title: 'US', color: '#10b981', tint: '#ecfdf5' },
+  TASK: { label: 'TASK', title: 'TASK', color: '#f59e0b', tint: '#fffbeb' },
+  WORK: { label: 'WORK', title: 'WORK', color: '#0ea5e9', tint: '#f0f9ff' },
+  BUG: { label: '缺陷', title: '缺陷', color: '#ef4444', tint: '#fef2f2' },
+  VULN: { label: '漏洞', title: '漏洞', color: '#991b1b', tint: '#fff1f2' },
+}
+
+type StatStage = {
+  label: string
+  status: WorkflowNodeStatus
+  pendingConfirmationCount?: number
+}
+
+type StatChipKind = 'running' | 'waiting' | 'blocked' | 'pending' | 'done'
+
+type TypeStatCard = {
+  type: WorkItemType
+  label: string
+  color: string
+  tint: string
+  total: number
+  nodeSummary: string
+  progressLabel: string
+  completionRate: number
+  chips: Array<{ label: string; kind: StatChipKind }>
+}
+
+type NodeDistributionBucket = {
+  label: string
+  priority: number
 }
 
 const nodeStatusClass: Record<WorkflowNodeStatus, string> = {
@@ -67,20 +94,9 @@ onMounted(() => {
   workflowStore.loadDefinitions()
 })
 
-const typeStats = computed(() => {
-  const counts: Record<WorkItemType, number> = {
-    FE: 0,
-    US: 0,
-    TASK: 0,
-    WORK: 0,
-    BUG: 0,
-    VULN: 0,
-  }
-  for (const item of store.items) {
-    counts[item.type] += 1
-  }
-  return counts
-})
+const typeStatCards = computed<TypeStatCard[]>(() =>
+  typeOrder.map((type) => buildTypeStatCard(type, store.items.filter((item) => item.type === type)))
+)
 
 const filteredItems = computed(() => {
   const items = selectedType.value === 'ALL'
@@ -121,6 +137,180 @@ function workflowFor(item: WorkItemDto): WorkflowInstanceDto | null {
     } as WorkflowInstanceDto & { nodes: typeof item.workflowSummary.nodes }
   }
   return null
+}
+
+function buildTypeStatCard(type: WorkItemType, items: WorkItemDto[]): TypeStatCard {
+  const config = typeConfig[type]
+  let runningCount = 0
+  let waitingCount = 0
+  let blockedCount = 0
+  let unstartedCount = 0
+  let completedCount = 0
+  let completedNodeCount = 0
+  let totalNodeCount = 0
+  const nodeDistribution = new Map<string, { count: number; priority: number }>()
+
+  for (const item of items) {
+    const wf = workflowFor(item)
+    const stages = statStagesFor(item)
+    const hasRunning = stages.some((stage) => stage.status === 'RUNNING')
+    const hasWaiting = stages.some((stage) =>
+      stage.status === 'WAITING_CONFIRMATION' || (stage.pendingConfirmationCount ?? 0) > 0
+    )
+    const hasFailed = stages.some((stage) => stage.status === 'FAILED')
+      || wf?.status === 'FAILED'
+      || wf?.status === 'BLOCKED'
+    const isCompleted = wf?.status === 'COMPLETED' || item.status === 'DONE'
+    const isUnstarted = !wf && !item.currentWorkflowInstanceId
+
+    if (hasRunning) runningCount += 1
+    if (hasWaiting) waitingCount += 1
+    if (hasFailed) blockedCount += 1
+    if (isUnstarted) unstartedCount += 1
+    if (isCompleted) completedCount += 1
+
+    stages.forEach((stage) => {
+      if (isNodeComplete(stage.status)) completedNodeCount += 1
+      totalNodeCount += 1
+    })
+
+    addNodeDistribution(nodeDistribution, currentNodeBucketFor(item, stages, wf))
+  }
+
+  const chips = buildStatChips({
+    total: items.length,
+    runningCount,
+    waitingCount,
+    blockedCount,
+    unstartedCount,
+    completedCount,
+  })
+  const completionRate = totalNodeCount > 0 ? Math.round((completedNodeCount / totalNodeCount) * 100) : 0
+
+  return {
+    type,
+    label: config.label,
+    color: config.color,
+    tint: config.tint,
+    total: items.length,
+    nodeSummary: nodeDistributionSummary(nodeDistribution, items.length),
+    progressLabel: `${completionRate}% 节点完成`,
+    completionRate,
+    chips,
+  }
+}
+
+function statStagesFor(item: WorkItemDto): StatStage[] {
+  const summary = item.workflowSummary
+  if (summary?.stages?.length) {
+    return summary.stages.map((stage) => ({
+      label: stage.name ?? stage.skillName ?? '阶段',
+      status: stage.status,
+      pendingConfirmationCount: stage.pendingConfirmationCount,
+    }))
+  }
+  if (summary?.nodes.length) {
+    return summary.nodes.map((node) => ({
+      label: node.definitionName ?? node.skillName ?? '阶段',
+      status: node.status,
+    }))
+  }
+  const wf = workflowFor(item)
+  if (wf?.nodes.length) {
+    return wf.nodes.map((node) => ({
+      label: (node as { definitionName?: string | null; skillName?: string | null }).definitionName
+        ?? (node as { definitionName?: string | null; skillName?: string | null }).skillName
+        ?? '阶段',
+      status: node.status,
+    }))
+  }
+  return defaultStageNamesFor(item).map((label) => ({
+    label,
+    status: 'PENDING',
+  }))
+}
+
+function buildStatChips(counts: {
+  total: number
+  runningCount: number
+  waitingCount: number
+  blockedCount: number
+  unstartedCount: number
+  completedCount: number
+}): Array<{ label: string; kind: StatChipKind }> {
+  if (counts.total === 0) {
+    return [{ label: '暂无事项', kind: 'pending' }]
+  }
+
+  const chips: Array<{ label: string; kind: StatChipKind }> = []
+  if (counts.waitingCount > 0) chips.push({ label: `${counts.waitingCount} 待确认`, kind: 'waiting' })
+  if (counts.runningCount > 0) chips.push({ label: `${counts.runningCount} 进行中`, kind: 'running' })
+  if (counts.blockedCount > 0) chips.push({ label: `${counts.blockedCount} 异常`, kind: 'blocked' })
+  if (counts.unstartedCount > 0) chips.push({ label: `${counts.unstartedCount} 未开始`, kind: 'pending' })
+  if (counts.completedCount > 0 && chips.length < 2) {
+    chips.push({ label: `${counts.completedCount} 已完成`, kind: 'done' })
+  }
+  if (chips.length === 0 && counts.completedCount > 0) {
+    chips.push({ label: `${counts.completedCount} 已完成`, kind: 'done' })
+  }
+  return chips.slice(0, 2)
+}
+
+function currentNodeBucketFor(
+  item: WorkItemDto,
+  stages: StatStage[],
+  wf: WorkflowInstanceDto | null
+): NodeDistributionBucket {
+  const waitingStage = stages.find((stage) =>
+    stage.status === 'WAITING_CONFIRMATION' || (stage.pendingConfirmationCount ?? 0) > 0
+  )
+  if (waitingStage) return { label: waitingStage.label, priority: 0 }
+
+  const runningStage = stages.find((stage) => stage.status === 'RUNNING')
+  if (runningStage) return { label: runningStage.label, priority: 1 }
+
+  const failedStage = stages.find((stage) => stage.status === 'FAILED')
+  if (failedStage) return { label: failedStage.label, priority: 2 }
+
+  if (wf?.status === 'COMPLETED' || item.status === 'DONE') {
+    return { label: '已完成', priority: 5 }
+  }
+
+  if (!wf && !item.currentWorkflowInstanceId) {
+    return { label: '未开始', priority: 4 }
+  }
+
+  const nextStage = stages.find((stage) => !isNodeComplete(stage.status))
+  if (nextStage) return { label: nextStage.label, priority: 3 }
+
+  if (wf?.status === 'FAILED' || wf?.status === 'BLOCKED') {
+    return { label: '异常', priority: 2 }
+  }
+
+  return { label: workflowStatusLabels[wf?.status ?? 'PENDING'] ?? '待处理', priority: 3 }
+}
+
+function addNodeDistribution(
+  distribution: Map<string, { count: number; priority: number }>,
+  bucket: NodeDistributionBucket
+) {
+  const current = distribution.get(bucket.label)
+  distribution.set(bucket.label, {
+    count: (current?.count ?? 0) + 1,
+    priority: Math.min(current?.priority ?? bucket.priority, bucket.priority),
+  })
+}
+
+function nodeDistributionSummary(
+  distribution: Map<string, { count: number; priority: number }>,
+  total: number
+): string {
+  if (total === 0) return '等待创建事项'
+  return [...distribution.entries()]
+    .sort((a, b) => a[1].priority - b[1].priority || b[1].count - a[1].count || a[0].localeCompare(b[0], 'zh-CN'))
+    .slice(0, 3)
+    .map(([label, item]) => `${label} ${item.count}`)
+    .join(' · ')
 }
 
 function buildFlowWithAnchors(skillNodes: FlowNode[], wfStatus?: WorkflowStatus | null): FlowNode[] {
@@ -255,24 +445,40 @@ async function handleStartWorkflow(workItemId: string) {
 <template>
   <section class="home-overview" aria-label="首页概览">
     <div class="home-overview__panel">
-      <header class="home-overview__header">
-        <div>
-          <h2>首页概览 · 任务全景</h2>
-          <p>按 FE、US、Task、Work、缺陷、漏洞聚合当前企业研发事项</p>
-        </div>
-      </header>
-
       <div class="home-overview__stats" aria-label="任务分类指标">
         <button
-          v-for="(info, type) in typeConfig"
-          :key="type"
+          v-for="card in typeStatCards"
+          :key="card.type"
           class="home-overview__stat"
-          :class="{ 'home-overview__stat--active': selectedType === type }"
-          @click="selectedType = selectedType === type ? 'ALL' : type"
+          :class="{ 'home-overview__stat--active': selectedType === card.type }"
+          :style="{ '--stat-color': card.color, '--stat-tint': card.tint }"
+          @click="selectedType = selectedType === card.type ? 'ALL' : card.type"
         >
-          <span class="home-overview__stat-label">{{ info.label }}</span>
-          <strong>{{ typeStats[type] }}</strong>
-          <em>{{ info.detail }}</em>
+          <span class="home-overview__stat-head">
+            <span class="home-overview__stat-mark">{{ card.label }}</span>
+            <span class="home-overview__stat-progress">{{ card.progressLabel }}</span>
+          </span>
+          <span class="home-overview__stat-main">
+            <strong>{{ card.total }}</strong>
+            <span>事项</span>
+          </span>
+          <span class="home-overview__stat-chips">
+            <span
+              v-for="chip in card.chips"
+              :key="chip.label"
+              class="home-overview__stat-chip"
+              :class="`home-overview__stat-chip--${chip.kind}`"
+            >
+              {{ chip.label }}
+            </span>
+          </span>
+          <span class="home-overview__stat-node" :title="card.nodeSummary">
+            <span>节点分布</span>
+            <em>{{ card.nodeSummary }}</em>
+          </span>
+          <span class="home-overview__stat-track" aria-hidden="true">
+            <span :style="{ width: `${card.completionRate}%` }"></span>
+          </span>
         </button>
       </div>
 
@@ -356,6 +562,7 @@ async function handleStartWorkflow(workItemId: string) {
 }
 
 .home-overview__panel {
+  container-type: inline-size;
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -367,87 +574,250 @@ async function handleStartWorkflow(workItemId: string) {
   border-radius: 0;
 }
 
-.home-overview__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 68px;
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.home-overview__header h2 {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: 20px;
-  font-weight: 900;
-}
-
-.home-overview__header p {
-  margin-top: 6px;
-  color: var(--text-muted);
-  font-size: 14px;
-  font-weight: 650;
-}
-
 .home-overview__stats {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 10px;
-  padding: 16px 18px;
-  overflow: visible;
+  grid-template-columns: repeat(6, minmax(132px, 1fr));
+  gap: 8px;
+  padding: 10px 18px 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-bottom: 1px solid var(--border-color);
+  overscroll-behavior-x: contain;
+  scrollbar-gutter: stable;
+}
+
+.home-overview__stats::-webkit-scrollbar {
+  height: 8px;
+}
+
+.home-overview__stats::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.home-overview__stats::-webkit-scrollbar-thumb {
+  border: 2px solid var(--bg-card);
+  border-radius: 999px;
+  background: rgba(100, 116, 139, 0.32);
 }
 
 .home-overview__stat {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: 22px 38px 18px 3px;
+  grid-template-areas:
+    "head head"
+    "main chips"
+    "node node"
+    "track track";
+  gap: 4px 8px;
   min-width: 0;
-  min-height: 96px;
-  padding: 14px 14px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  background: var(--bg-primary);
+  min-height: 92px;
+  padding: 9px 11px 8px;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   color: var(--text-primary);
   text-align: left;
   cursor: pointer;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
 }
 
-.home-overview__stat:hover,
+.home-overview__stat::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--stat-color);
+  content: '';
+  opacity: 0.82;
+}
+
+.home-overview__stat:hover {
+  border-color: rgba(100, 116, 139, 0.45);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  transform: translateY(-1px);
+}
+
 .home-overview__stat--active {
-  border-color: var(--border-color-hover);
-  background: rgba(59, 130, 246, 0.06);
+  border-color: var(--stat-color);
+  background: linear-gradient(180deg, #ffffff 0%, var(--stat-tint) 100%);
+  box-shadow: inset 0 0 0 1px var(--stat-color), 0 12px 26px rgba(15, 23, 42, 0.08);
 }
 
-.home-overview__stat-label {
+.home-overview__stat-head,
+.home-overview__stat-main,
+.home-overview__stat-chips,
+.home-overview__stat-node,
+.home-overview__stat-track {
+  position: relative;
+  z-index: 1;
+}
+
+.home-overview__stat-head {
+  grid-area: head;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.home-overview__stat-mark {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 88px;
+  min-height: 20px;
+  padding: 0 7px;
+  overflow: hidden;
+  border-radius: 7px;
+  background: var(--stat-tint);
+  color: var(--stat-color);
+  font-size: 12px;
+  font-weight: 950;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-overview__stat-progress {
+  min-width: 0;
+  overflow: hidden;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 9px;
   font-weight: 900;
+  line-height: 1.2;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.home-overview__stat strong {
-  margin-top: 7px;
+.home-overview__stat-main {
+  grid-area: main;
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  min-width: 0;
+}
+
+.home-overview__stat-main strong {
   color: var(--text-primary);
   font-size: 28px;
   font-weight: 950;
-  line-height: 1;
+  line-height: 0.95;
 }
 
-.home-overview__stat em {
-  margin-top: 8px;
+.home-overview__stat-main span {
+  margin-bottom: 2px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.home-overview__stat-chips {
+  grid-area: chips;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-content: center;
+  align-self: center;
+  min-width: 0;
+  min-height: 22px;
+}
+
+.home-overview__stat-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 20px;
+  padding: 0 6px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #eef2f7;
+  color: #475569;
+  font-size: 10px;
+  font-weight: 850;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-overview__stat-chip--running {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.home-overview__stat-chip--waiting {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.home-overview__stat-chip--blocked {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.home-overview__stat-chip--pending {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.home-overview__stat-chip--done {
+  background: #d1fae5;
+  color: #047857;
+}
+
+.home-overview__stat-node {
+  grid-area: node;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.home-overview__stat-node > span {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.home-overview__stat-node em {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
   color: var(--text-secondary);
+  font-size: 11px;
   font-style: normal;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.4;
+  font-weight: 760;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-overview__stat-track {
+  grid-area: track;
+  align-self: end;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.home-overview__stat-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--stat-color);
 }
 
 .home-overview__toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 18px 10px;
+  padding: 7px 18px 8px;
 }
 
 .home-overview__toolbar h3 {
@@ -689,9 +1059,4 @@ async function handleStartWorkflow(workItemId: string) {
   opacity: 0.5;
 }
 
-@media (max-width: 1360px) {
-  .home-overview__stats {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
 </style>
