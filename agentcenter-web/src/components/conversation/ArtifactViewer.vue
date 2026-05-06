@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { ArtifactDto } from '../../api/types'
+import MarkdownContent from './MarkdownContent.vue'
 
 const props = defineProps<{
   artifact: ArtifactDto | null
 }>()
 
-const renderedContent = computed(() => {
+const renderedJson = computed(() => {
   if (!props.artifact?.content) return ''
 
   if (props.artifact.artifactType === 'JSON') {
@@ -17,31 +18,13 @@ const renderedContent = computed(() => {
     }
   }
 
-  if (props.artifact.artifactType === 'MARKDOWN') {
-    let html = props.artifact.content
-    // Code blocks
-    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
-    // Inline code
-    html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
-    // Headings
-    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>')
-    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>')
-    // Bold
-    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    // Italic
-    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>')
-    // Links
-    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
-    // Line breaks
-    html = html.replace(/\n/g, '<br />')
-    return html
-  }
-
   return props.artifact.content
 })
 
 const isJson = computed(() => props.artifact?.artifactType === 'JSON')
+const isMarkdownLike = computed(() =>
+  props.artifact?.artifactType === 'MARKDOWN' || props.artifact?.artifactType === 'REPORT'
+)
 </script>
 
 <template>
@@ -55,8 +38,13 @@ const isJson = computed(() => props.artifact?.artifactType === 'JSON')
         <span class="artifact-viewer__type">{{ artifact.artifactType }}</span>
       </div>
       <div class="artifact-viewer__body">
-        <pre v-if="isJson" class="artifact-viewer__json">{{ renderedContent }}</pre>
-        <div v-else class="artifact-viewer__markdown" v-html="renderedContent" />
+        <pre v-if="isJson" class="artifact-viewer__json">{{ renderedJson }}</pre>
+        <MarkdownContent
+          v-else-if="isMarkdownLike"
+          class="artifact-viewer__markdown"
+          :content="artifact.content"
+        />
+        <pre v-else class="artifact-viewer__plain">{{ artifact.content }}</pre>
       </div>
     </template>
   </div>
@@ -107,7 +95,8 @@ const isJson = computed(() => props.artifact?.artifactType === 'JSON')
   overflow-y: auto;
 }
 
-.artifact-viewer__json {
+.artifact-viewer__json,
+.artifact-viewer__plain {
   font-family: 'SF Mono', 'Fira Code', monospace;
   font-size: 12px;
   line-height: 1.5;
@@ -122,56 +111,5 @@ const isJson = computed(() => props.artifact?.artifactType === 'JSON')
 
 .artifact-viewer__markdown {
   font-size: 13px;
-  line-height: 1.6;
-  color: var(--text-primary);
-}
-
-.artifact-viewer__markdown :deep(h1) {
-  font-size: 18px;
-  font-weight: 600;
-  margin: 12px 0 8px;
-}
-
-.artifact-viewer__markdown :deep(h2) {
-  font-size: 16px;
-  font-weight: 600;
-  margin: 10px 0 6px;
-}
-
-.artifact-viewer__markdown :deep(h3) {
-  font-size: 14px;
-  font-weight: 600;
-  margin: 8px 0 4px;
-}
-
-.artifact-viewer__markdown :deep(code) {
-  font-family: 'SF Mono', 'Fira Code', monospace;
-  font-size: 12px;
-  padding: 2px 5px;
-  background-color: #f1f3f5;
-  border-radius: 3px;
-}
-
-.artifact-viewer__markdown :deep(pre) {
-  margin: 8px 0;
-  padding: 12px;
-  background-color: #f8f9fa;
-  border-radius: 6px;
-  border: 1px solid var(--border-color);
-  overflow-x: auto;
-}
-
-.artifact-viewer__markdown :deep(pre code) {
-  padding: 0;
-  background: none;
-}
-
-.artifact-viewer__markdown :deep(a) {
-  color: var(--accent-blue);
-  text-decoration: none;
-}
-
-.artifact-viewer__markdown :deep(a:hover) {
-  text-decoration: underline;
 }
 </style>

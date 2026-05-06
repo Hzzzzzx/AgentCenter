@@ -5,7 +5,7 @@ import AppShell from './AppShell.vue'
 
 vi.mock('../../stores/confirmations', () => ({
   useConfirmationStore: vi.fn(() => ({
-    pendingConfirmations: [],
+    pendingConfirmations: [{ id: 'conf-1' }],
     currentConfirmation: null,
     loading: false,
     loadPending: vi.fn(),
@@ -27,6 +27,14 @@ vi.mock('../../stores/sessions', () => ({
     sendMessage: vi.fn(),
     replaceMessages: vi.fn(),
   })),
+}))
+
+vi.mock('../../api/workItems', () => ({
+  workItemApi: {
+    list: vi.fn().mockResolvedValue([]),
+    getById: vi.fn(),
+    create: vi.fn(),
+  },
 }))
 
 describe('AppShell.vue', () => {
@@ -81,6 +89,18 @@ describe('AppShell.vue', () => {
 
     await wrapper.find('.right-panel__toggle').trigger('click')
     expect(wrapper.find('.right-panel--collapsed').exists()).toBe(true)
+    expect(wrapper.find('.right-panel__toggle-badge').exists()).toBe(false)
+    expect(wrapper.find('.right-panel__rail-badge').text()).toBe('1')
+  })
+
+  it('opens confirmations from collapsed rail shortcut', async () => {
+    const wrapper = mountShell()
+
+    await wrapper.find('.right-panel__toggle').trigger('click')
+    await wrapper.find('.right-panel__rail-action').trigger('click')
+
+    expect(wrapper.find('.right-panel--collapsed').exists()).toBe(false)
+    expect(wrapper.find('.right-panel__tab--active').text()).toContain('待确认')
   })
 
   it('displays correct navigation labels', () => {
@@ -88,7 +108,7 @@ describe('AppShell.vue', () => {
     const labels = wrapper
       .findAll('.left-sidebar__nav-item')
       .map(item => item.text().trim())
-    expect(labels).toEqual(['首页', '看板', '工作流'])
+    expect(labels).toEqual(['首页', '看板', '编排策略'])
   })
 
   it('has correct grid layout structure', () => {

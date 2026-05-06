@@ -35,9 +35,9 @@
   --sidebar-width: 280px;
   --sidebar-collapsed-width: 48px;
   --right-panel-width: 320px;
-  --right-panel-collapsed-width: 48px;
+  --right-panel-collapsed-width: 36px;
   --statusbar-height: 32px;
-  --shell-gutter: 16px;
+  --shell-gutter: 6px;
 }
 
 *,

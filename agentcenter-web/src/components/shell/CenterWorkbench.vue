@@ -12,8 +12,10 @@
   flex: 1;
   display: flex;
   flex-direction: column;
+  height: 100%;
+  min-height: 0;
   min-width: 0;
-  overflow-y: auto;
+  overflow: hidden;
   background-color: var(--bg-primary);
 }
 </style>

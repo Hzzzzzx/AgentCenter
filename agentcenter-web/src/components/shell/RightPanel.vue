@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import ConfirmationPanel from '../confirmation/ConfirmationPanel.vue'
-import type { WorkItemDto, WorkflowNodeStatus } from '../../api/types'
+import { useConfirmationStore } from '../../stores/confirmations'
+import type { WorkItemDto, WorkflowNodeStatus, WorkItemType } from '../../api/types'
 
 interface Props {
   collapsed?: boolean
@@ -18,13 +19,19 @@ const emit = defineEmits<{
   'handle-confirmation': [id: string]
   'start-workflow': [workItemId: string]
   'enter-conversation': [id: string]
+  'confirmations-changed': []
 }>()
 
 function handleConfirmation(id: string) {
   emit('handle-confirmation', id)
 }
 
+const confirmationStore = useConfirmationStore()
 const activeTab = ref<'confirmations' | 'details'>('confirmations')
+const pendingConfirmationCount = computed(() => confirmationStore.pendingConfirmations.length)
+const pendingConfirmationCountLabel = computed(() =>
+  pendingConfirmationCount.value > 99 ? '99+' : String(pendingConfirmationCount.value)
+)
 
 const tabs = [
   { id: 'confirmations' as const, label: '待确认' },
@@ -43,13 +50,20 @@ type DetailWorkflowNode = {
   label: string
   status: WorkflowNodeStatus
   kind: 'start' | 'skill' | 'end'
+  dynamicNodeCount?: number
+  recoveryCount?: number
+  pendingConfirmationCount?: number
+  latestSummary?: string | null
 }
 
-const defaultNodes: DetailWorkflowNode[] = [
-  { id: null, label: 'PRD', status: 'PENDING', kind: 'skill' },
-  { id: null, label: 'HLD', status: 'PENDING', kind: 'skill' },
-  { id: null, label: 'LLD', status: 'PENDING', kind: 'skill' },
-]
+const defaultStageLabels: Record<WorkItemType, string[]> = {
+  FE: ['需求', '方案', '实施', '验证', '归档'],
+  US: ['故事', '验收', '拆分', '评审', '归档'],
+  TASK: ['理解', '计划', '执行', '验证', '总结'],
+  WORK: ['分析', 'Runbook', '执行', '校验', '报告'],
+  BUG: ['复现', '根因', '修复', '回归', '关闭'],
+  VULN: ['分级', '影响', '修复', '验证', '归档'],
+}
 
 function buildWorkflowWithAnchors(skillNodes: DetailWorkflowNode[]): DetailWorkflowNode[] {
   const item = props.selectedWorkItem
@@ -73,16 +87,34 @@ function buildWorkflowWithAnchors(skillNodes: DetailWorkflowNode[]): DetailWorkf
 const workflowNodes = computed(() => {
   const item = props.selectedWorkItem
   if (!item) return []
+  if (item.workflowSummary?.stages?.length) {
+    const stages = item.workflowSummary.stages.map((stage) => ({
+      id: stage.id,
+      label: stage.name ?? stage.skillName ?? '阶段',
+      status: stage.status,
+      kind: 'skill' as const,
+      dynamicNodeCount: stage.dynamicNodeCount,
+      recoveryCount: stage.recoveryCount,
+      pendingConfirmationCount: stage.pendingConfirmationCount,
+      latestSummary: stage.latestSummary,
+    }))
+    return buildWorkflowWithAnchors(stages)
+  }
   if (item.workflowSummary && item.workflowSummary.nodes.length > 0) {
     const skills = item.workflowSummary.nodes.map((n) => ({
       id: n.id,
-      label: n.definitionName ?? n.skillName ?? '节点',
+      label: n.definitionName ?? n.skillName ?? '阶段',
       status: n.status,
       kind: 'skill' as const,
     }))
     return buildWorkflowWithAnchors(skills)
   }
-  return buildWorkflowWithAnchors(defaultNodes)
+  return buildWorkflowWithAnchors(defaultStageLabels[item.type].map((label) => ({
+    id: null,
+    label,
+    status: 'PENDING',
+    kind: 'skill',
+  })))
 })
 
 const hasActiveWorkflow = computed(() => {
@@ -112,6 +144,14 @@ function nodeClass(status: WorkflowNodeStatus): string {
   return map[status]
 }
 
+function nodeMeta(node: DetailWorkflowNode): string {
+  const parts: string[] = []
+  if (node.dynamicNodeCount) parts.push(`${node.dynamicNodeCount} 动态步骤`)
+  if (node.recoveryCount) parts.push(`${node.recoveryCount} 修复`)
+  if (node.pendingConfirmationCount) parts.push(`${node.pendingConfirmationCount} 待确认`)
+  return parts.join(' · ')
+}
+
 function handleStartWorkflow() {
   if (props.selectedWorkItem) {
     emit('start-workflow', props.selectedWorkItem.id)
@@ -123,12 +163,36 @@ function handleEnterConversation() {
     emit('enter-conversation', props.selectedWorkItem.id)
   }
 }
+
+function handleOpenConfirmations() {
+  activeTab.value = 'confirmations'
+  emit('update:collapsed', false)
+}
 </script>
 
 <template>
   <aside class="right-panel" :class="{ 'right-panel--collapsed': collapsed }">
-    <div v-if="!collapsed" class="right-panel__content">
-      <div class="right-panel__tabs">
+    <div class="right-panel__header">
+      <button
+        class="right-panel__toggle"
+        :title="collapsed ? '展开面板' : '收起面板'"
+        :aria-label="collapsed ? '展开面板' : '收起面板'"
+        @click="emit('update:collapsed', !collapsed)"
+      >
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          :class="{ 'is-collapsed': collapsed }"
+        >
+          <rect x="4" y="5" width="16" height="14" rx="2.5" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M15 5v14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M9 9l3 3-3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+
+      <div v-if="!collapsed" class="right-panel__tabs">
         <button
           v-for="tab in tabs"
           :key="tab.id"
@@ -136,12 +200,50 @@ function handleEnterConversation() {
           :class="{ 'right-panel__tab--active': activeTab === tab.id }"
           @click="activeTab = tab.id"
         >
-          {{ tab.label }}
+          <span>{{ tab.label }}</span>
+          <span
+            v-if="tab.id === 'confirmations' && pendingConfirmationCount > 0"
+            class="right-panel__tab-badge"
+          >
+            {{ pendingConfirmationCountLabel }}
+          </span>
         </button>
       </div>
+    </div>
 
+    <div v-if="collapsed" class="right-panel__rail" aria-label="右侧快捷入口">
+      <button
+        class="right-panel__rail-action"
+        :title="`待确认 ${pendingConfirmationCountLabel}`"
+        :aria-label="`待确认 ${pendingConfirmationCountLabel}`"
+        @click="handleOpenConfirmations"
+      >
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+        >
+          <path d="M6 4h12a2 2 0 012 2v10a2 2 0 01-2 2h-5l-4 3v-3H6a2 2 0 01-2-2V6a2 2 0 012-2z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+          <path d="M8 11l2.4 2.4L16 8" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span
+          v-if="pendingConfirmationCount > 0"
+          class="right-panel__rail-badge"
+          aria-label="待确认数量"
+        >
+          {{ pendingConfirmationCountLabel }}
+        </span>
+      </button>
+    </div>
+
+    <div v-if="!collapsed" class="right-panel__content">
       <div class="right-panel__body">
-        <ConfirmationPanel v-if="activeTab === 'confirmations'" @handle="handleConfirmation" />
+        <ConfirmationPanel
+          v-if="activeTab === 'confirmations'"
+          @handle="handleConfirmation"
+          @changed="emit('confirmations-changed')"
+        />
         <template v-else-if="activeTab === 'details'">
           <div v-if="selectedWorkItem" class="right-panel__detail">
             <div class="detail__header">
@@ -161,7 +263,12 @@ function handleEnterConversation() {
                   :class="nodeClass(node.status)"
                 >
                   <span class="detail__node-dot"></span>
-                  <span class="detail__node-label">{{ node.label }}</span>
+                  <span class="detail__node-content">
+                    <span class="detail__node-label">{{ node.label }}</span>
+                    <span v-if="node.latestSummary || nodeMeta(node)" class="detail__node-meta">
+                      {{ node.latestSummary || nodeMeta(node) }}
+                    </span>
+                  </span>
                   <span class="detail__node-status">{{ statusLabels[node.status] }}</span>
                 </div>
               </div>
@@ -190,29 +297,13 @@ function handleEnterConversation() {
         </template>
       </div>
     </div>
-
-    <button
-      class="right-panel__toggle"
-      :title="collapsed ? '展开面板' : '收起面板'"
-      @click="emit('update:collapsed', !collapsed)"
-    >
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        :style="{ transform: collapsed ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }"
-      >
-        <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    </button>
   </aside>
 </template>
 
 <style scoped>
 .right-panel {
   display: flex;
-  flex-direction: row-reverse;
+  flex-direction: column;
   height: 100%;
   background-color: var(--bg-secondary);
   border-left: 1px solid var(--border-color);
@@ -222,22 +313,43 @@ function handleEnterConversation() {
 .right-panel--collapsed {
 }
 
+.right-panel__header {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  min-height: 42px;
+  padding: 6px 10px 0;
+  gap: 8px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.right-panel--collapsed .right-panel__header {
+  justify-content: center;
+  min-height: 38px;
+  padding: 5px 0 0;
+  border-bottom: 0;
+}
+
 .right-panel__content {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  min-width: 0;
 }
 
 .right-panel__tabs {
   display: flex;
-  padding: 12px 16px 0;
+  flex: 1;
+  align-self: stretch;
   gap: 4px;
-  border-bottom: 1px solid var(--border-color);
+  min-width: 0;
 }
 
 .right-panel__tab {
   position: relative;
+  display: inline-flex;
+  align-items: center;
   height: auto;
   padding: 6px 12px;
   border: none;
@@ -285,24 +397,83 @@ function handleEnterConversation() {
 }
 
 .right-panel__toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  margin: 8px;
-  border: 1px solid var(--border-color);
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border: 0;
   border-radius: 6px;
-  background: var(--bg-card);
-  color: var(--text-muted);
+  background: transparent;
+  color: var(--text-secondary);
   cursor: pointer;
-  flex-shrink: 0;
-  align-self: flex-start;
 }
 
 .right-panel__toggle:hover {
   background: var(--bg-tertiary);
   color: var(--text-primary);
+}
+
+.right-panel__toggle svg {
+  transition: transform 0.18s ease;
+}
+
+.right-panel__toggle svg.is-collapsed {
+  transform: rotate(180deg);
+}
+
+.right-panel__rail {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+.right-panel__rail-action {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.right-panel__rail-action:hover {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--accent-blue);
+}
+
+.right-panel__rail-badge,
+.right-panel__tab-badge {
+  display: grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--accent-blue);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.right-panel__rail-badge {
+  position: absolute;
+  top: -4px;
+  right: -5px;
+  border: 2px solid var(--bg-secondary);
+}
+
+.right-panel__tab-badge {
+  margin-left: 6px;
+  background: rgba(59, 130, 246, 0.13);
+  color: var(--accent-blue);
 }
 
 /* Work item detail */
@@ -376,7 +547,7 @@ function handleEnterConversation() {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 28px;
+  min-height: 32px;
 }
 
 .detail__node-dot {
@@ -421,11 +592,27 @@ function handleEnterConversation() {
   opacity: 0.5;
 }
 
-.detail__node-label {
+.detail__node-content {
   flex: 1;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.detail__node-label {
   color: var(--text-primary);
   font-size: 13px;
   font-weight: 650;
+}
+
+.detail__node-meta {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .detail__node-status {

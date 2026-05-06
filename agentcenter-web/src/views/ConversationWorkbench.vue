@@ -6,7 +6,7 @@ import { useRuntimeStore } from '../stores/runtime'
 import { useWorkItemStore } from '../stores/workItems'
 import MessageList from '../components/conversation/MessageList.vue'
 import { runtimeResourceApi } from '../api/runtimeResources'
-import type { AgentSessionDto } from '../api/types'
+import type { AgentSessionDto, WorkflowNodeStatus } from '../api/types'
 
 const props = defineProps<{
   workItemId?: string
@@ -20,6 +20,7 @@ const workItemStore = useWorkItemStore()
 
 const inputText = ref('')
 const inputRef = ref<HTMLInputElement | null>(null)
+const messagesRef = ref<HTMLElement | null>(null)
 const skillRefreshStatus = ref('')
 const refreshingSkills = ref(false)
 const loadingSession = ref(false)
@@ -36,9 +37,32 @@ const activeTitle = computed(() => {
   return sessionStore.activeSession?.title || '对话工作台 · AI 智能中枢'
 })
 
+const nodeStatusIcons: Record<WorkflowNodeStatus, string> = {
+  COMPLETED: '\u2705',
+  RUNNING: '\uD83D\uDD04',
+  WAITING_CONFIRMATION: '\u23F8\uFE0F',
+  FAILED: '\u274C',
+  PENDING: '\u23F3',
+  SKIPPED: '\u23ED\uFE0F',
+}
+
 const activeSubtitle = computed(() => {
+  if (selectedWorkItem.value?.workflowSummary) {
+    const nodes = selectedWorkItem.value.workflowSummary.stages?.length
+      ? selectedWorkItem.value.workflowSummary.stages.map((stage) => ({
+        label: stage.name || stage.skillName || '?',
+        status: stage.status,
+      }))
+      : selectedWorkItem.value.workflowSummary.nodes.map((node) => ({
+        label: node.definitionName || node.skillName || '?',
+        status: node.status,
+      }))
+    return nodes
+      .map((n) => `${n.label} ${nodeStatusIcons[n.status]}`)
+      .join(' \u00B7 ')
+  }
   if (selectedWorkItem.value) {
-    return `${selectedWorkItem.value.type} · ${selectedWorkItem.value.status} · ${selectedWorkItem.value.priority}`
+    return `${selectedWorkItem.value.type} \u00B7 ${selectedWorkItem.value.status} \u00B7 ${selectedWorkItem.value.priority}`
   }
   return '通过对话驱动全流程'
 })
@@ -126,6 +150,19 @@ onUnmounted(() => {
   runtimeStore.disconnectSSE()
 })
 
+function scrollToBottom() {
+  nextTick(() => {
+    const el = messagesRef.value
+    if (el) {
+      el.scrollTop = el.scrollHeight
+    }
+  })
+}
+
+watch(() => sessionStore.messages.length, scrollToBottom)
+watch(() => runtimeStore.streamingText, scrollToBottom)
+watch(() => runtimeStore.events.length, scrollToBottom)
+
 async function handleSend() {
   const text = inputText.value.trim()
   if (!text) return
@@ -192,16 +229,18 @@ async function refreshSkills() {
         {{ skillRefreshStatus }}
       </div>
 
-      <div v-if="loadingSession && sessionStore.messages.length === 0" class="conversation-workbench__loading">
-        正在准备会话...
-      </div>
-      <template v-else>
-        <MessageList :messages="sessionStore.messages" />
-        <div v-if="runtimeStore.streamingText" class="conversation-workbench__streaming">
-          <span class="conversation-workbench__streaming-text">{{ runtimeStore.streamingText }}</span>
-          <span class="conversation-workbench__streaming-cursor">▍</span>
+      <div ref="messagesRef" class="conversation-workbench__messages">
+        <div v-if="loadingSession && sessionStore.messages.length === 0" class="conversation-workbench__loading">
+          正在准备会话...
         </div>
-      </template>
+        <template v-else>
+          <MessageList
+            :messages="sessionStore.messages"
+            :streaming-text="runtimeStore.streamingText"
+            :runtime-events="runtimeStore.events"
+          />
+        </template>
+      </div>
 
       <form class="conversation-workbench__input-area" @submit.prevent="handleSend">
         <input
@@ -234,6 +273,8 @@ async function refreshSkills() {
   height: 100%;
   overflow: hidden;
   background: var(--bg-primary);
+  padding: 18px 22px;
+  box-sizing: border-box;
 }
 
 .conversation-workbench__main {
@@ -241,7 +282,8 @@ async function refreshSkills() {
   flex-direction: column;
   min-width: 0;
   flex: 1;
-  margin: 18px 22px;
+  min-height: 0;
+  height: 100%;
   overflow: hidden;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -254,6 +296,7 @@ async function refreshSkills() {
   justify-content: space-between;
   gap: 16px;
   min-height: 82px;
+  flex-shrink: 0;
   padding: 18px 22px;
   border-bottom: 1px solid var(--border-color);
 }
@@ -331,6 +374,7 @@ async function refreshSkills() {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+  flex-shrink: 0;
   padding: 16px 22px;
   border-bottom: 1px solid var(--border-color);
 }
@@ -364,6 +408,17 @@ async function refreshSkills() {
   box-shadow: 0 0 0 6px #dff8ee;
 }
 
+.conversation-workbench__messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 22px;
+  display: flex;
+  flex-direction: column;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
 .conversation-workbench__notice {
   margin: 10px 22px 0;
   padding: 8px 10px;
@@ -379,6 +434,7 @@ async function refreshSkills() {
   display: grid;
   place-items: center;
   flex: 1;
+  min-height: 200px;
   color: var(--text-muted);
   font-size: 14px;
   font-weight: 750;
@@ -388,6 +444,7 @@ async function refreshSkills() {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 48px;
   gap: 10px;
+  flex-shrink: 0;
   padding: 14px 22px;
   border-top: 1px solid var(--border-color);
   background: var(--bg-card);
@@ -431,26 +488,5 @@ async function refreshSkills() {
 .conversation-workbench__send:disabled {
   opacity: 0.45;
   cursor: not-allowed;
-}
-
-.conversation-workbench__streaming {
-  padding: 12px 22px;
-  color: var(--text-primary);
-  font-size: 14px;
-  line-height: 1.7;
-  white-space: pre-wrap;
-}
-
-.conversation-workbench__streaming-text {
-  white-space: pre-wrap;
-}
-
-.conversation-workbench__streaming-cursor {
-  animation: blink 0.8s step-end infinite;
-  color: #3b82f6;
-}
-
-@keyframes blink {
-  50% { opacity: 0; }
 }
 </style>

@@ -35,7 +35,7 @@ const settingsOpen = ref(false)
 const navItems: NavItem[] = [
   { id: 'home', label: '首页', icon: 'home' },
   { id: 'board', label: '看板', icon: 'board' },
-  { id: 'workflow', label: '工作流', icon: 'workflow' },
+  { id: 'workflow', label: '编排策略', icon: 'workflow' },
 ]
 
 const generalSessions = computed(() =>
@@ -86,6 +86,27 @@ function sessionMeta(session: AgentSessionDto) {
 
 <template>
   <aside class="left-sidebar" :class="{ 'left-sidebar--collapsed': collapsed }">
+    <div class="left-sidebar__topbar">
+      <button
+        class="left-sidebar__collapse"
+        :title="collapsed ? '展开侧栏' : '收起侧栏'"
+        :aria-label="collapsed ? '展开侧栏' : '收起侧栏'"
+        @click="emit('update:collapsed', !collapsed)"
+      >
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          :class="{ 'is-collapsed': collapsed }"
+        >
+          <rect x="4" y="5" width="16" height="14" rx="2.5" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M9 5v14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M15 9l-3 3 3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+
     <div class="left-sidebar__body">
       <nav class="left-sidebar__nav" aria-label="固定工作台入口">
         <button
@@ -232,15 +253,6 @@ function sessionMeta(session: AgentSessionDto) {
       </div>
     </div>
 
-    <button
-      class="left-sidebar__collapse"
-      :title="collapsed ? '展开侧栏' : '收起侧栏'"
-      @click="emit('update:collapsed', !collapsed)"
-    >
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" :style="{ transform: collapsed ? 'rotate(180deg)' : 'none' }">
-        <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    </button>
   </aside>
 </template>
 
@@ -256,6 +268,20 @@ function sessionMeta(session: AgentSessionDto) {
 }
 
 .left-sidebar--collapsed {
+}
+
+.left-sidebar__topbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  height: 36px;
+  padding: 6px 8px 4px;
+}
+
+.left-sidebar--collapsed .left-sidebar__topbar {
+  justify-content: center;
+  padding-inline: 0;
 }
 
 .left-sidebar__body {
@@ -541,22 +567,27 @@ function sessionMeta(session: AgentSessionDto) {
 }
 
 .left-sidebar__collapse {
-  position: absolute;
-  top: 12px;
-  right: 8px;
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
-  border: 1px solid var(--border-color);
-  border-radius: 5px;
-  background: var(--bg-card);
-  color: var(--text-muted);
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
   cursor: pointer;
 }
 
-.left-sidebar--collapsed .left-sidebar__collapse {
-  position: static;
-  margin: 6px auto;
+.left-sidebar__collapse:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.left-sidebar__collapse svg {
+  transition: transform 0.18s ease;
+}
+
+.left-sidebar__collapse svg.is-collapsed {
+  transform: rotate(180deg);
 }
 </style>
