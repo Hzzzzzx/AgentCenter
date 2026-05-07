@@ -4,6 +4,8 @@
 > 最近更新：2026-05-06
 >
 > ⚠️ **M1 实施决策**：OpenCode Bridge M1 采用 HTTP+SSE 方案，详见 [ADR-001](./ADR-001-OPENCODE-BRIDGE-SSE-REST.md)。后续实现以 [OPENCODE-BRIDGE-EXECUTION-DESIGN.md](./OPENCODE-BRIDGE-EXECUTION-DESIGN.md) 为准。
+>
+> **下一阶段目标状态**：多 Agent Runtime 需要统一协议层，支持 `HTTP(S)+SSE` 与 `WebSocket` 两类传输，详见 [AGENT-RUNTIME-PROTOCOL-LAYER-DESIGN.md](./AGENT-RUNTIME-PROTOCOL-LAYER-DESIGN.md)。
 
 本文档用于固定 AgentCenter 后续架构讨论的入口。当前阶段先把文档结构和 4+1 视图边界定下来，后续实现、调研、开源框架参考和产品收敛都围绕这个骨架补充。
 
@@ -30,6 +32,7 @@ AgentCenter 当前首页已经收敛为白色网页端工作台：
 | 4 | [UNIFIED-DOMAIN-MODEL.md](./UNIFIED-DOMAIN-MODEL.md) | 理解核心领域对象和对象关系 |
 | 5 | **[OPENCODE-BRIDGE-EXECUTION-DESIGN.md](./OPENCODE-BRIDGE-EXECUTION-DESIGN.md)** | **OpenCode 实施交接设计：HTTP 命令、SSE 输出、数据模型、工作流、待确认和高保真联动** |
 | 6 | [AGENT-RUNTIME-BRIDGE-DEVELOPMENT-BLUEPRINT.md](./AGENT-RUNTIME-BRIDGE-DEVELOPMENT-BLUEPRINT.md) | Java Bridge 和 Vue 工作台的总体开发蓝图 |
+| 6.1 | **[AGENT-RUNTIME-PROTOCOL-LAYER-DESIGN.md](./AGENT-RUNTIME-PROTOCOL-LAYER-DESIGN.md)** | **下一阶段目标状态：统一 Runtime 协议层、Provider/Transport 分离、同时支持 HTTP(S)+SSE 与 WebSocket** |
 | 6.5 | [ADR-001-OPENCODE-BRIDGE-SSE-REST.md](./ADR-001-OPENCODE-BRIDGE-SSE-REST.md) | M1 实施决策：HTTP+SSE 方案，Java SSE 基础设施对接 opencode serve |
 | 6.6 | [AGENT-RUNTIME-BRIDGE-M1-RUNBOOK.md](./AGENT-RUNTIME-BRIDGE-M1-RUNBOOK.md) | M1 快速启动指南：环境准备、工作目录配置、启动步骤、Troubleshooting |
 | 6.7 | [WORKFLOW-CONVERSATION-CLOSURE-DESIGN.md](./WORKFLOW-CONVERSATION-CLOSURE-DESIGN.md) | 首页工作项、后台工作流、任务会话和右侧待确认的闭环实施设计 |
