@@ -6,14 +6,21 @@ import CenterWorkbench from './CenterWorkbench.vue'
 import RightPanel from './RightPanel.vue'
 import StatusBar from './StatusBar.vue'
 import type { AgentSessionDto, WorkItemDto } from '../../api/types'
+import type { ProjectContextSelection } from '../../types/projectContext'
 
 interface Props {
   activeView?: string
   selectedWorkItem?: WorkItemDto | null
+  projectContext?: ProjectContextSelection
 }
 
 const props = withDefaults(defineProps<Props>(), {
   activeView: 'home',
+  projectContext: () => ({
+    project: 'AgentCenter',
+    space: '研发中台',
+    iteration: 'Sprint 14',
+  }),
 })
 
 const emit = defineEmits<{
@@ -44,7 +51,7 @@ function handleNavigate(viewId: string) {
     }"
   >
     <div class="app-shell__titlebar">
-      <TitleBar />
+      <TitleBar :project-context="props.projectContext" />
     </div>
 
     <div class="app-shell__sidebar-left">

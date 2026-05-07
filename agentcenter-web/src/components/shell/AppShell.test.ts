@@ -57,12 +57,20 @@ describe('AppShell.vue', () => {
 
     expect(wrapper.find('.title-bar').exists()).toBe(true)
     expect(wrapper.find('.title-bar__name').text()).toContain('AI DevOps')
+    expect(wrapper.find('.title-bar__context').text()).toContain('AgentCenter')
     expect(wrapper.find('.left-sidebar').exists()).toBe(true)
     expect(wrapper.find('.center-workbench').exists()).toBe(true)
     expect(wrapper.find('.slot-content').exists()).toBe(true)
     expect(wrapper.find('.right-panel').exists()).toBe(true)
     expect(wrapper.find('.status-bar').exists()).toBe(true)
     expect(wrapper.find('.status-bar__indicator--normal').exists()).toBe(true)
+  })
+
+  it('shows project context as a read-only title bar hint', () => {
+    const wrapper = mountShell()
+
+    expect(wrapper.find('.title-bar__context-project').text()).toBe('AgentCenter')
+    expect(wrapper.find('.title-bar__context select').exists()).toBe(false)
   })
 
   it('navigates when clicking nav items', async () => {
@@ -109,6 +117,21 @@ describe('AppShell.vue', () => {
       .findAll('.left-sidebar__nav-item')
       .map(item => item.text().trim())
     expect(labels).toEqual(['首页', '任务看板', '任务编排'])
+  })
+
+  it('navigates to project management from the settings menu', async () => {
+    const wrapper = mountShell()
+
+    await wrapper.find('.left-sidebar__settings').trigger('click')
+    const projectMenuItem = wrapper
+      .findAll('.left-sidebar__settings-menu-item')
+      .find(item => item.text().includes('项目管理'))
+
+    expect(projectMenuItem).toBeTruthy()
+    await projectMenuItem!.trigger('click')
+
+    expect(wrapper.emitted('navigate-settings')).toBeTruthy()
+    expect(wrapper.emitted('navigate-settings')![0]).toEqual(['project'])
   })
 
   it('has correct grid layout structure', () => {

@@ -1,10 +1,18 @@
 <script setup lang="ts">
+import type { ProjectContextSelection } from '../../types/projectContext'
+
 interface Props {
   searchValue?: string
+  projectContext?: ProjectContextSelection
 }
 
 const props = withDefaults(defineProps<Props>(), {
   searchValue: '',
+  projectContext: () => ({
+    project: 'AgentCenter',
+    space: '研发中台',
+    iteration: 'Sprint 14',
+  }),
 })
 
 const emit = defineEmits<{
@@ -27,31 +35,11 @@ const emit = defineEmits<{
       </div>
     </div>
 
-    <div class="title-bar__scopes" aria-label="项目、空间、迭代筛选">
-      <label class="title-bar__scope">
-        <span>项目</span>
-        <select aria-label="选择项目">
-          <option>AgentCenter</option>
-          <option>TianYuan</option>
-          <option>平台接入</option>
-        </select>
-      </label>
-      <label class="title-bar__scope">
-        <span>空间</span>
-        <select aria-label="选择空间">
-          <option>研发中台</option>
-          <option>平台工程</option>
-          <option>安全治理</option>
-        </select>
-      </label>
-      <label class="title-bar__scope">
-        <span>迭代</span>
-        <select aria-label="选择迭代">
-          <option>Sprint 14</option>
-          <option>Sprint 15</option>
-          <option>长期演进</option>
-        </select>
-      </label>
+    <div class="title-bar__context" aria-label="当前项目空间迭代">
+      <span class="title-bar__context-label">当前项目</span>
+      <strong class="title-bar__context-project">{{ props.projectContext.project }}</strong>
+      <span class="title-bar__context-detail">{{ props.projectContext.space }}</span>
+      <span class="title-bar__context-detail">{{ props.projectContext.iteration }}</span>
     </div>
 
     <div class="title-bar__search">
@@ -105,7 +93,7 @@ const emit = defineEmits<{
 }
 
 .title-bar__brand,
-.title-bar__scopes,
+.title-bar__context,
 .title-bar__actions,
 .title-bar__user {
   display: flex;
@@ -144,36 +132,48 @@ const emit = defineEmits<{
   background: var(--bg-tertiary);
 }
 
-.title-bar__scopes {
+.title-bar__context {
   gap: 8px;
-}
-
-.title-bar__scope {
+  min-width: 0;
+  max-width: 360px;
+  height: 30px;
+  padding: 0 9px;
+  overflow: hidden;
   display: flex;
   align-items: center;
-  gap: 5px;
-  height: 30px;
-  padding: 0 7px;
   border: 1px solid var(--border-color);
   border-radius: 6px;
   background: var(--bg-card);
-  color: var(--text-secondary);
   font-size: 12px;
+  white-space: nowrap;
+}
+
+.title-bar__context-label {
+  flex-shrink: 0;
+  color: var(--text-muted);
   font-weight: 600;
 }
 
-.title-bar__scope span {
-  color: var(--text-muted);
+.title-bar__context-project {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-primary);
+  font-weight: 700;
 }
 
-.title-bar__scope select {
-  min-width: 80px;
-  max-width: 108px;
-  border: 0;
-  background: transparent;
+.title-bar__context-detail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--text-secondary);
-  font: inherit;
-  outline: 0;
+  font-weight: 600;
+}
+
+.title-bar__context-detail::before {
+  content: "/";
+  margin-right: 8px;
+  color: var(--text-muted);
 }
 
 .title-bar__search {
@@ -285,10 +285,10 @@ const emit = defineEmits<{
 
 @media (max-width: 1180px) {
   .title-bar {
-    grid-template-columns: max-content minmax(220px, 1fr) max-content;
+    grid-template-columns: max-content max-content minmax(220px, 1fr) max-content;
   }
 
-  .title-bar__scopes {
+  .title-bar__context-detail {
     display: none;
   }
 }

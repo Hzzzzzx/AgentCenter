@@ -232,6 +232,13 @@ function sessionMeta(session: AgentSessionDto) {
           <span>设置</span>
         </button>
         <div v-if="settingsOpen" class="left-sidebar__settings-menu">
+          <button class="left-sidebar__settings-menu-item" @click="emit('navigate-settings', 'project'); settingsOpen = false">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M4 6.5A2.5 2.5 0 016.5 4h11A2.5 2.5 0 0120 6.5v11a2.5 2.5 0 01-2.5 2.5h-11A2.5 2.5 0 014 17.5v-11z" stroke="currentColor" stroke-width="2"/>
+              <path d="M8 9h8M8 13h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            项目管理
+          </button>
           <button class="left-sidebar__settings-menu-item" @click="emit('navigate-settings', 'skills'); settingsOpen = false">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
               <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
