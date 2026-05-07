@@ -238,6 +238,12 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         }
     }
 
+    @Override
+    public void refreshMcps() {
+        agentToOpencodeSession.clear();
+        processManager.restartIfRunning();
+    }
+
     @PreDestroy
     public void destroy() {
         eventSubscriber.shutdown();

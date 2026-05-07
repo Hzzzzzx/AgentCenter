@@ -148,6 +148,22 @@ public class OpenCodeProcessManager {
         process = null;
     }
 
+    public void restartIfRunning() {
+        if (!enabled) {
+            return;
+        }
+        if (!started && !probeReady()) {
+            return;
+        }
+        startLock.lock();
+        try {
+            shutdown();
+            startProcess();
+        } finally {
+            startLock.unlock();
+        }
+    }
+
     private void startProcess() {
         baseUrl = "http://" + hostname + ":" + port;
         Path cwd = resolveWorkingDirectory();

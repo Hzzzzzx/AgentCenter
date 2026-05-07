@@ -14,4 +14,7 @@ public interface AgentRuntimeAdapter {
     default void refreshSkills(RuntimeSkillSnapshot snapshot) {
         // Runtime implementations that cache project-level skills can override this hook.
     }
+    default void refreshMcps() {
+        // Runtime implementations that cache project-level MCP config can override this hook.
+    }
 }
