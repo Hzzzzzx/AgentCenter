@@ -78,12 +78,14 @@ function mountConfirmationPanel() {
   setActivePinia(pinia)
   return mount(ConfirmationPanel, {
     global: { plugins: [pinia] },
+    attachTo: document.body,
   })
 }
 
 describe('ConfirmationPanel.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    document.body.innerHTML = ''
   })
 
   it('renders confirmation cards', async () => {
@@ -120,14 +122,19 @@ describe('ConfirmationPanel.vue', () => {
     expect(wrapper.find('.confirmation-panel__loading').exists()).toBe(true)
   })
 
-  it('emits handle when 处理 button clicked', async () => {
+  it('emits handle when entering session from处理 dialog', async () => {
     const wrapper = mountConfirmationPanel()
     const store = useConfirmationStore()
     store.pendingConfirmations = [mockConfirmations[0]]
     store.loading = false
     await wrapper.vm.$nextTick()
 
-    await wrapper.find('.confirmation-card__action:not(.confirmation-card__action--approve):not(.confirmation-card__action--reject)').trigger('click')
+    await wrapper.find('.confirmation-card__action').trigger('click')
+    await wrapper.vm.$nextTick()
+    const enterBtn = [...document.body.querySelectorAll<HTMLButtonElement>('.confirmation-card__action')]
+      .find((btn) => btn.textContent?.includes('进入会话'))
+    expect(enterBtn).toBeTruthy()
+    await enterBtn!.click()
     expect(wrapper.emitted('handle')).toBeTruthy()
     expect(wrapper.emitted('handle')![0]).toEqual(['conf-1'])
   })
@@ -142,7 +149,9 @@ describe('ConfirmationPanel.vue', () => {
     vi.clearAllMocks()
     await wrapper.vm.$nextTick()
 
-    await wrapper.find('.confirmation-card__action--approve').trigger('click')
+    await wrapper.find('.confirmation-card__action').trigger('click')
+    await wrapper.vm.$nextTick()
+    document.body.querySelector<HTMLButtonElement>('.confirmation-card__action--approve')!.click()
     await flushPromises()
     await wrapper.vm.$nextTick()
     await flushPromises()

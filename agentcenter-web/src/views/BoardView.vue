@@ -293,7 +293,7 @@ function stageMeta(item: BoardWorkItemCardData): string {
 }
 
 .board-work-card__code {
-  background-color: rgba(59, 130, 246, 0.12);
+  background-color: var(--brand-soft);
   color: var(--accent-blue);
 }
 
@@ -322,7 +322,7 @@ function stageMeta(item: BoardWorkItemCardData): string {
 
 .board-work-card__phase strong {
   flex: 0 0 auto;
-  background-color: rgba(59, 130, 246, 0.1);
+  background-color: var(--brand-soft);
   color: var(--accent-blue);
 }
 

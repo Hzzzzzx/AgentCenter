@@ -1,0 +1,412 @@
+/*
+ * AgentCenter Theme Tokens
+ *
+ * Defines semantic CSS custom properties for all 7 themes.
+ * Components consume only these tokens — never hardcoded theme colours.
+ *
+ * Selector strategy: :root (light-default baseline) + [data-theme='...'] overrides.
+ * Layout tokens (sizes, gutters) remain in app.css.
+ */
+
+/* =========================================================================
+ * light-default  (current white baseline — values must match prior app.css)
+ * ========================================================================= */
+
+:root,
+[data-theme='light-default'] {
+  --surface-page: #f6f8fb;
+  --surface-shell: #ffffff;
+  --surface-panel: #ffffff;
+  --surface-card: #ffffff;
+  --surface-hover: #f8fafc;
+  --surface-muted: #eef2f7;
+  --surface-input: #f6f8fb;
+  --surface-overlay: rgba(255, 255, 255, 0.96);
+
+  --border-default: #d9e2ec;
+  --border-hover: #b9c7d8;
+  --border-strong: #94a3b8;
+
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  --text-inverse: #ffffff;
+
+  --brand-primary: #3b82f6;
+  --brand-secondary: #8b5cf6;
+  --brand-gradient: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  --brand-soft: rgba(59, 130, 246, 0.1);
+  --brand-border: rgba(59, 130, 246, 0.3);
+  --focus-ring: rgba(59, 130, 246, 0.15);
+
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --info: #06b6d4;
+  --success-soft: rgba(16, 185, 129, 0.12);
+  --warning-soft: rgba(245, 158, 11, 0.13);
+  --error-soft: rgba(239, 68, 68, 0.1);
+  --info-soft: rgba(6, 182, 212, 0.12);
+
+  --shadow-card: 0 2px 8px rgba(15, 23, 42, 0.08);
+  --shadow-popover: 0 14px 32px rgba(15, 23, 42, 0.16);
+
+  --code-bg: #0f172a;
+  --code-text: #e2e8f0;
+  --inline-code-bg: rgba(15, 23, 42, 0.06);
+  --inline-code-text: #334155;
+
+  --stat-track-bg: #e2e8f0;
+  --on-success: #052e23;
+  --on-brand: #050e26;
+}
+
+/* =========================================================================
+ * midnight-black
+ * ========================================================================= */
+
+[data-theme='midnight-black'] {
+  --surface-page: #08090c;
+  --surface-shell: #101217;
+  --surface-panel: #101217;
+  --surface-card: #151922;
+  --surface-hover: #1b202a;
+  --surface-muted: #1b202a;
+  --surface-input: #151922;
+  --surface-overlay: rgba(16, 18, 23, 0.96);
+
+  --border-default: #27303d;
+  --border-hover: #3a4759;
+  --border-strong: #4a5a6f;
+
+  --text-primary: #f4f7fb;
+  --text-secondary: #bcc8d6;
+  --text-muted: #9aa7b6;
+  --text-inverse: #08090c;
+
+  --brand-primary: #8ab4ff;
+  --brand-secondary: #c084fc;
+  --brand-gradient: linear-gradient(135deg, #8ab4ff 0%, #c084fc 100%);
+  --brand-soft: rgba(138, 180, 255, 0.12);
+  --brand-border: rgba(138, 180, 255, 0.3);
+  --focus-ring: rgba(138, 180, 255, 0.15);
+
+  --success: #34d399;
+  --warning: #fbbf24;
+  --error: #f87171;
+  --info: #22d3ee;
+  --success-soft: rgba(52, 211, 153, 0.15);
+  --warning-soft: rgba(251, 191, 36, 0.15);
+  --error-soft: rgba(248, 113, 113, 0.12);
+  --info-soft: rgba(34, 211, 238, 0.12);
+
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-popover: 0 14px 32px rgba(0, 0, 0, 0.5);
+
+  --code-bg: #0a0c10;
+  --code-text: #e2e8f0;
+  --inline-code-bg: rgba(255, 255, 255, 0.08);
+  --inline-code-text: #cbd5e1;
+
+  --stat-track-bg: #27303d;
+  --on-success: #042e1e;
+  --on-brand: #0a0f1a;
+}
+
+/* =========================================================================
+ * black-blue-command
+ * ========================================================================= */
+
+[data-theme='black-blue-command'] {
+  --surface-page: #020817;
+  --surface-shell: #061225;
+  --surface-panel: #061225;
+  --surface-card: #0a1b33;
+  --surface-hover: #0f2947;
+  --surface-muted: #0f2947;
+  --surface-input: #0a1b33;
+  --surface-overlay: rgba(6, 18, 37, 0.96);
+
+  --border-default: #16324f;
+  --border-hover: #1e4470;
+  --border-strong: #2a5a8f;
+
+  --text-primary: #e6f2ff;
+  --text-secondary: #a8c8e8;
+  --text-muted: #8eb4d6;
+  --text-inverse: #020817;
+
+  --brand-primary: #38bdf8;
+  --brand-secondary: #60a5fa;
+  --brand-gradient: linear-gradient(135deg, #38bdf8 0%, #60a5fa 100%);
+  --brand-soft: rgba(56, 189, 248, 0.12);
+  --brand-border: rgba(56, 189, 248, 0.3);
+  --focus-ring: rgba(56, 189, 248, 0.15);
+
+  --success: #34d399;
+  --warning: #fbbf24;
+  --error: #f87171;
+  --info: #22d3ee;
+  --success-soft: rgba(52, 211, 153, 0.15);
+  --warning-soft: rgba(251, 191, 36, 0.15);
+  --error-soft: rgba(248, 113, 113, 0.12);
+  --info-soft: rgba(34, 211, 238, 0.12);
+
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-popover: 0 14px 32px rgba(0, 0, 0, 0.6);
+
+  --code-bg: #010610;
+  --code-text: #e2e8f0;
+  --inline-code-bg: rgba(255, 255, 255, 0.06);
+  --inline-code-text: #94a3b8;
+
+  --stat-track-bg: #16324f;
+  --on-success: #042e1e;
+  --on-brand: #020817;
+}
+
+/* =========================================================================
+ * graphite-mint
+ * ========================================================================= */
+
+[data-theme='graphite-mint'] {
+  --surface-page: #111315;
+  --surface-shell: #181c1f;
+  --surface-panel: #181c1f;
+  --surface-card: #1f2528;
+  --surface-hover: #263033;
+  --surface-muted: #263033;
+  --surface-input: #1f2528;
+  --surface-overlay: rgba(24, 28, 31, 0.96);
+
+  --border-default: #2e383a;
+  --border-hover: #3d4c50;
+  --border-strong: #526367;
+
+  --text-primary: #eef5f2;
+  --text-secondary: #b4c4be;
+  --text-muted: #9fb0aa;
+  --text-inverse: #111315;
+
+  --brand-primary: #2dd4bf;
+  --brand-secondary: #a3e635;
+  --brand-gradient: linear-gradient(135deg, #2dd4bf 0%, #a3e635 100%);
+  --brand-soft: rgba(45, 212, 191, 0.12);
+  --brand-border: rgba(45, 212, 191, 0.3);
+  --focus-ring: rgba(45, 212, 191, 0.15);
+
+  --success: #34d399;
+  --warning: #fbbf24;
+  --error: #f87171;
+  --info: #22d3ee;
+  --success-soft: rgba(52, 211, 153, 0.15);
+  --warning-soft: rgba(251, 191, 36, 0.15);
+  --error-soft: rgba(248, 113, 113, 0.12);
+  --info-soft: rgba(34, 211, 238, 0.12);
+
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-popover: 0 14px 32px rgba(0, 0, 0, 0.5);
+
+  --code-bg: #0a0c0d;
+  --code-text: #e2e8f0;
+  --inline-code-bg: rgba(255, 255, 255, 0.08);
+  --inline-code-text: #94a3b8;
+
+  --stat-track-bg: #2e383a;
+  --on-success: #042e1e;
+  --on-brand: #0a0f0d;
+}
+
+/* =========================================================================
+ * mist-cyan
+ * ========================================================================= */
+
+[data-theme='mist-cyan'] {
+  --surface-page: #f4f8f8;
+  --surface-shell: #ffffff;
+  --surface-panel: #ffffff;
+  --surface-card: #fbfefe;
+  --surface-hover: #edf7f8;
+  --surface-muted: #e4eff0;
+  --surface-input: #f4f8f8;
+  --surface-overlay: rgba(255, 255, 255, 0.96);
+
+  --border-default: #d7e5e7;
+  --border-hover: #b3ced2;
+  --border-strong: #8fb5ba;
+
+  --text-primary: #123033;
+  --text-secondary: #3d6b72;
+  --text-muted: #5f7478;
+  --text-inverse: #ffffff;
+
+  --brand-primary: #0891b2;
+  --brand-secondary: #14b8a6;
+  --brand-gradient: linear-gradient(135deg, #0891b2 0%, #14b8a6 100%);
+  --brand-soft: rgba(8, 145, 178, 0.1);
+  --brand-border: rgba(8, 145, 178, 0.3);
+  --focus-ring: rgba(8, 145, 178, 0.15);
+
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --info: #06b6d4;
+  --success-soft: rgba(16, 185, 129, 0.12);
+  --warning-soft: rgba(245, 158, 11, 0.13);
+  --error-soft: rgba(239, 68, 68, 0.1);
+  --info-soft: rgba(6, 182, 212, 0.12);
+
+  --shadow-card: 0 2px 8px rgba(18, 48, 51, 0.08);
+  --shadow-popover: 0 14px 32px rgba(18, 48, 51, 0.16);
+
+  --code-bg: #0f172a;
+  --code-text: #e2e8f0;
+  --inline-code-bg: rgba(8, 145, 178, 0.08);
+  --inline-code-text: #123033;
+
+  --stat-track-bg: #d7e5e7;
+  --on-success: #052e23;
+  --on-brand: #0a1a2e;
+}
+
+/* =========================================================================
+ * forest-ops
+ * ========================================================================= */
+
+[data-theme='forest-ops'] {
+  --surface-page: #f5f7f3;
+  --surface-shell: #ffffff;
+  --surface-panel: #ffffff;
+  --surface-card: #fbfcf8;
+  --surface-hover: #eef4ea;
+  --surface-muted: #e5ece0;
+  --surface-input: #f5f7f3;
+  --surface-overlay: rgba(255, 255, 255, 0.96);
+
+  --border-default: #dce5d6;
+  --border-hover: #c1d4b6;
+  --border-strong: #a3be94;
+
+  --text-primary: #182318;
+  --text-secondary: #3d5a3d;
+  --text-muted: #667466;
+  --text-inverse: #ffffff;
+
+  --brand-primary: #16a34a;
+  --brand-secondary: #0f766e;
+  --brand-gradient: linear-gradient(135deg, #16a34a 0%, #0f766e 100%);
+  --brand-soft: rgba(22, 163, 74, 0.1);
+  --brand-border: rgba(22, 163, 74, 0.3);
+  --focus-ring: rgba(22, 163, 74, 0.15);
+
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --info: #06b6d4;
+  --success-soft: rgba(16, 185, 129, 0.12);
+  --warning-soft: rgba(245, 158, 11, 0.13);
+  --error-soft: rgba(239, 68, 68, 0.1);
+  --info-soft: rgba(6, 182, 212, 0.12);
+
+  --shadow-card: 0 2px 8px rgba(24, 35, 24, 0.08);
+  --shadow-popover: 0 14px 32px rgba(24, 35, 24, 0.16);
+
+  --code-bg: #0f172a;
+  --code-text: #e2e8f0;
+  --inline-code-bg: rgba(22, 163, 74, 0.08);
+  --inline-code-text: #182318;
+
+  --stat-track-bg: #dce5d6;
+  --on-success: #052e23;
+  --on-brand: #071f0e;
+}
+
+/* =========================================================================
+ * plum-graphite
+ * ========================================================================= */
+
+[data-theme='plum-graphite'] {
+  --surface-page: #111016;
+  --surface-shell: #191720;
+  --surface-panel: #191720;
+  --surface-card: #211e2a;
+  --surface-hover: #2a2535;
+  --surface-muted: #2a2535;
+  --surface-input: #211e2a;
+  --surface-overlay: rgba(25, 23, 32, 0.96);
+
+  --border-default: #332d42;
+  --border-hover: #453d58;
+  --border-strong: #5a5072;
+
+  --text-primary: #f5f1fb;
+  --text-secondary: #c4bad4;
+  --text-muted: #a99db8;
+  --text-inverse: #111016;
+
+  --brand-primary: #a78bfa;
+  --brand-secondary: #fb7185;
+  --brand-gradient: linear-gradient(135deg, #a78bfa 0%, #fb7185 100%);
+  --brand-soft: rgba(167, 139, 250, 0.12);
+  --brand-border: rgba(167, 139, 250, 0.3);
+  --focus-ring: rgba(167, 139, 250, 0.15);
+
+  --success: #34d399;
+  --warning: #fbbf24;
+  --error: #f87171;
+  --info: #22d3ee;
+  --success-soft: rgba(52, 211, 153, 0.15);
+  --warning-soft: rgba(251, 191, 36, 0.15);
+  --error-soft: rgba(248, 113, 113, 0.12);
+  --info-soft: rgba(34, 211, 238, 0.12);
+
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-popover: 0 14px 32px rgba(0, 0, 0, 0.5);
+
+  --code-bg: #0c0a12;
+  --code-text: #e2e8f0;
+  --inline-code-bg: rgba(255, 255, 255, 0.08);
+  --inline-code-text: #94a3b8;
+
+  --stat-track-bg: #332d42;
+  --on-success: #042e1e;
+  --on-brand: #0f0a12;
+}
+
+/* =========================================================================
+ * Compatibility mapping  (old var names → new semantic tokens)
+ * Components still using --bg-primary etc. are supported through these aliases.
+ * ========================================================================= */
+
+:root,
+[data-theme='light-default'],
+[data-theme='midnight-black'],
+[data-theme='black-blue-command'],
+[data-theme='graphite-mint'],
+[data-theme='mist-cyan'],
+[data-theme='forest-ops'],
+[data-theme='plum-graphite'] {
+  --bg-primary: var(--surface-page);
+  --bg-secondary: var(--surface-shell);
+  --bg-tertiary: var(--surface-muted);
+  --bg-card: var(--surface-card);
+  --bg-card-hover: var(--surface-hover);
+  --border-color: var(--border-default);
+  --border-color-hover: var(--border-hover);
+  --accent-blue: var(--brand-primary);
+  --accent-purple: var(--brand-secondary);
+  --accent-gradient: var(--brand-gradient);
+  --glow-blue: var(--focus-ring);
+}
+
+/* =========================================================================
+ * Theme transition
+ * ========================================================================= */
+
+body,
+button,
+input,
+select,
+textarea {
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}

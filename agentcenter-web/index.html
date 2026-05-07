@@ -7,6 +7,9 @@
     <title>agentcenter-web</title>
   </head>
   <body>
+    <script>
+      (function(){try{var t=localStorage.getItem('agentcenter.theme');var v=['light-default','midnight-black','black-blue-command','graphite-mint','mist-cyan','forest-ops','plum-graphite'];document.documentElement.dataset.theme=v.indexOf(t)!==-1?t:'light-default'}catch(e){document.documentElement.dataset.theme='light-default'}})();
+    </script>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

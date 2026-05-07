@@ -147,7 +147,7 @@ function formatTime(value?: string) {
   border: none;
   border-radius: 6px;
   background: var(--accent-blue);
-  color: #ffffff;
+  color: var(--on-brand);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;

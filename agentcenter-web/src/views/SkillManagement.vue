@@ -260,7 +260,7 @@ onMounted(loadSkills)
   align-items: center;
   padding: 6px 14px;
   background: var(--accent-blue);
-  color: #fff;
+  color: var(--on-brand);
   border-radius: 6px;
   font-size: 13px;
   font-weight: 500;

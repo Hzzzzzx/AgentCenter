@@ -78,7 +78,7 @@ function buildWorkflowWithAnchors(skillNodes: DetailWorkflowNode[]): DetailWorkf
     ...skillNodes,
     {
       id: 'end',
-      label: '结束',
+      label: '完成',
       status: workflowStatus === 'COMPLETED' || allSkillsCompleted ? 'COMPLETED' : 'PENDING',
       kind: 'end',
     },
@@ -250,8 +250,8 @@ function handleOpenConfirmations() {
         <template v-else-if="activeTab === 'details'">
           <div v-if="selectedWorkItem" class="right-panel__detail">
             <div class="detail__header">
+              <span class="detail__type-tag">{{ selectedWorkItem.type }}</span>
               <span class="detail__code">{{ selectedWorkItem.code }}</span>
-              <span class="detail__type">{{ selectedWorkItem.type }}</span>
             </div>
             <h3 class="detail__title">{{ selectedWorkItem.title }}</h3>
             <p class="detail__desc">{{ selectedWorkItem.description || '暂无描述' }}</p>
@@ -448,7 +448,7 @@ function handleOpenConfirmations() {
 }
 
 .right-panel__rail-action:hover {
-  background: rgba(59, 130, 246, 0.1);
+  background: var(--brand-soft);
   color: var(--accent-blue);
 }
 
@@ -461,7 +461,7 @@ function handleOpenConfirmations() {
   padding: 0 4px;
   border-radius: 999px;
   background: var(--accent-blue);
-  color: #ffffff;
+  color: var(--on-brand);
   font-size: 10px;
   font-weight: 850;
   line-height: 1;
@@ -476,7 +476,7 @@ function handleOpenConfirmations() {
 
 .right-panel__tab-badge {
   margin-left: 6px;
-  background: rgba(59, 130, 246, 0.13);
+  background: var(--brand-soft);
   color: var(--accent-blue);
 }
 
@@ -499,16 +499,22 @@ function handleOpenConfirmations() {
   height: 24px;
   padding: 0 10px;
   border-radius: 6px;
-  background: rgba(59, 130, 246, 0.1);
+  background: var(--brand-soft);
   color: var(--accent-blue);
   font-size: 12px;
   font-weight: 700;
 }
 
-.detail__type {
-  color: var(--text-muted);
+.detail__type-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 6px;
+  background: var(--surface-muted);
+  color: var(--text-secondary);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 800;
 }
 
 .detail__title {
@@ -564,20 +570,20 @@ function handleOpenConfirmations() {
 }
 
 .detail__node--active .detail__node-dot {
-  border-color: rgba(59, 130, 246, 0.3);
+  border-color: var(--brand-border);
   background: var(--accent-blue);
-  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
+  box-shadow: 0 0 0 4px var(--focus-ring);
   animation: detail-pulse 2s ease-in-out infinite;
 }
 
 @keyframes detail-pulse {
-  0%, 100% { box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
-  50% { box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.2); }
+  0%, 100% { box-shadow: 0 0 0 3px var(--focus-ring); }
+  50% { box-shadow: 0 0 0 6px var(--focus-ring); }
 }
 
 .detail__node--waiting .detail__node-dot {
-  border-color: #f59e0b;
-  background: #f59e0b;
+  border-color: var(--warning);
+  background: var(--warning);
 }
 
 .detail__node--done .detail__node-dot {
@@ -586,13 +592,13 @@ function handleOpenConfirmations() {
 }
 
 .detail__node--failed .detail__node-dot {
-  border-color: #ef4444;
-  background: #ef4444;
+  border-color: var(--error);
+  background: var(--error);
 }
 
 .detail__node--skipped .detail__node-dot {
-  border-color: #9ca3af;
-  background: #9ca3af;
+  border-color: var(--text-muted);
+  background: var(--text-muted);
   opacity: 0.5;
 }
 
@@ -646,7 +652,7 @@ function handleOpenConfirmations() {
 
 .detail__btn--primary {
   background: var(--accent-blue);
-  color: #fff;
+  color: var(--on-brand);
 }
 
 .detail__btn--primary:hover {
@@ -656,11 +662,11 @@ function handleOpenConfirmations() {
 .detail__btn--secondary {
   background: var(--bg-card);
   color: var(--accent-blue);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  border: 1px solid var(--brand-border);
 }
 
 .detail__btn--secondary:hover {
   background: var(--accent-blue);
-  color: #fff;
+  color: var(--on-brand);
 }
 </style>

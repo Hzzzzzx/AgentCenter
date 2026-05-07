@@ -18,6 +18,7 @@ const emit = defineEmits<{
 const confirmationStore = useConfirmationStore()
 const notificationStore = useNotificationStore()
 const busyAction = ref<'approve' | 'reject' | null>(null)
+const modalOpen = ref(false)
 
 const typeLabels: Record<ConfirmationRequestType, string> = {
   CONFIRM: '确认',
@@ -104,6 +105,11 @@ async function handleReject() {
     busyAction.value = null
   }
 }
+
+function enterSession() {
+  modalOpen.value = false
+  emit('handle', props.confirmation.id)
+}
 </script>
 
 <template>
@@ -126,35 +132,74 @@ async function handleReject() {
     </div>
     <div class="confirmation-card__title">{{ workItemTitle }}</div>
     <div class="confirmation-card__node">待确认：{{ workflowNodeName }}</div>
-    <div v-if="confirmation.contextSummary" class="confirmation-card__summary">
-      {{ confirmation.contextSummary }}
-    </div>
-    <div v-if="confirmation.content" class="confirmation-card__content">{{ confirmation.content }}</div>
-    <div v-if="confirmation.skillName" class="confirmation-card__skill">
-      Skill：{{ confirmation.skillName }}
-    </div>
     <div class="confirmation-card__actions">
-      <button
-        v-if="confirmation.status === 'PENDING'"
-        class="confirmation-card__action confirmation-card__action--approve"
-        :disabled="!!busyAction"
-        @click="handleApprove"
-      >
-        {{ busyAction === 'approve' ? '推进中...' : '通过' }}
-      </button>
-      <button
-        v-if="confirmation.status === 'PENDING'"
-        class="confirmation-card__action confirmation-card__action--reject"
-        :disabled="!!busyAction"
-        @click="handleReject"
-      >
-        {{ busyAction === 'reject' ? '处理中...' : '拒绝' }}
-      </button>
-      <button class="confirmation-card__action" :disabled="!!busyAction" @click="emit('handle', confirmation.id)">
+      <button class="confirmation-card__action" :disabled="!!busyAction" @click="modalOpen = true">
         处理
       </button>
     </div>
   </div>
+
+  <Teleport to="body">
+    <div v-if="modalOpen" class="confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="confirmation-dialog-title">
+      <button class="confirmation-dialog__scrim" aria-label="关闭确认详情" @click="modalOpen = false"></button>
+      <section class="confirmation-dialog__panel">
+        <header class="confirmation-dialog__header">
+          <div>
+            <span class="confirmation-dialog__eyebrow">{{ typeLabels[confirmation.requestType] }}</span>
+            <h3 id="confirmation-dialog-title">{{ workItemTitle }}</h3>
+          </div>
+          <button class="confirmation-dialog__close" aria-label="关闭" @click="modalOpen = false">×</button>
+        </header>
+
+        <div class="confirmation-dialog__meta">
+          <span>{{ workItemCode }}</span>
+          <span>{{ workItemType }}</span>
+          <span>{{ formatTime(confirmation.createdAt) }}</span>
+        </div>
+
+        <dl class="confirmation-dialog__details">
+          <div>
+            <dt>确认节点</dt>
+            <dd>{{ workflowNodeName }}</dd>
+          </div>
+          <div v-if="confirmation.contextSummary">
+            <dt>上下文</dt>
+            <dd>{{ confirmation.contextSummary }}</dd>
+          </div>
+          <div v-if="confirmation.content">
+            <dt>详情</dt>
+            <dd class="confirmation-dialog__content">{{ confirmation.content }}</dd>
+          </div>
+          <div v-if="confirmation.skillName">
+            <dt>Skill</dt>
+            <dd>{{ confirmation.skillName }}</dd>
+          </div>
+        </dl>
+
+        <footer class="confirmation-dialog__actions">
+          <button
+            v-if="confirmation.status === 'PENDING'"
+            class="confirmation-card__action confirmation-card__action--approve"
+            :disabled="!!busyAction"
+            @click="handleApprove"
+          >
+            {{ busyAction === 'approve' ? '推进中...' : '通过' }}
+          </button>
+          <button
+            v-if="confirmation.status === 'PENDING'"
+            class="confirmation-card__action confirmation-card__action--reject"
+            :disabled="!!busyAction"
+            @click="handleReject"
+          >
+            {{ busyAction === 'reject' ? '处理中...' : '拒绝' }}
+          </button>
+          <button class="confirmation-card__action" :disabled="!!busyAction" @click="enterSession">
+            进入会话
+          </button>
+        </footer>
+      </section>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -203,8 +248,8 @@ async function handleReject() {
 .confirmation-card__work-item span {
   padding: 2px 8px;
   border-radius: 6px;
-  background-color: #eef2ff;
-  color: #3b5bdb;
+  background-color: var(--brand-soft);
+  color: var(--brand-primary);
   font-size: 12px;
   font-weight: 700;
 }
@@ -253,7 +298,7 @@ async function handleReject() {
   border: none;
   border-radius: 4px;
   background-color: var(--accent-blue);
-  color: #ffffff;
+  color: var(--on-brand);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -270,7 +315,8 @@ async function handleReject() {
 }
 
 .confirmation-card__action--approve {
-  background-color: #10b981;
+  background-color: var(--success);
+  color: var(--on-success);
 }
 
 .confirmation-card__action--reject {
@@ -280,8 +326,145 @@ async function handleReject() {
 }
 
 .confirmation-card__action--reject:hover {
-  background-color: #fef2f2;
-  color: #ef4444;
-  border-color: #fca5a5;
+  background-color: var(--error-soft);
+  color: var(--error);
+  border-color: var(--error);
+}
+
+.confirmation-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.confirmation-dialog__scrim {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: color-mix(in srgb, var(--text-primary) 28%, transparent);
+  cursor: pointer;
+}
+
+.confirmation-dialog__panel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: min(560px, calc(100vw - 48px));
+  max-height: min(720px, calc(100vh - 48px));
+  padding: 18px;
+  overflow: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-card);
+  scrollbar-color: color-mix(in srgb, var(--brand-primary) 46%, var(--border-color)) transparent;
+}
+
+.confirmation-dialog__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.confirmation-dialog__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: var(--brand-soft);
+  color: var(--brand-primary);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.confirmation-dialog__header h3 {
+  margin-top: 8px;
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1.35;
+}
+
+.confirmation-dialog__close {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.confirmation-dialog__close:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.confirmation-dialog__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.confirmation-dialog__meta span {
+  min-height: 24px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.confirmation-dialog__details {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.confirmation-dialog__details div {
+  display: grid;
+  gap: 4px;
+}
+
+.confirmation-dialog__details dt {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.confirmation-dialog__details dd {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.confirmation-dialog__content {
+  max-height: 240px;
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+}
+
+.confirmation-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 2px;
 }
 </style>

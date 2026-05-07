@@ -3,11 +3,12 @@ import { computed, onMounted, ref } from 'vue'
 import { useWorkItemStore } from '../stores/workItems'
 import { workItemApi } from '../api/workItems'
 import { useWorkflowStore } from '../stores/workflows'
-import type { StartWorkflowResponse, WorkItemDto, WorkflowInstanceDto, WorkflowNodeStatus, WorkflowStatus, WorkItemType } from '../api/types'
+import type { Priority, StartWorkflowResponse, WorkItemDto, WorkflowInstanceDto, WorkflowNodeStatus, WorkflowStatus, WorkItemStatus, WorkItemType } from '../api/types'
 
 const store = useWorkItemStore()
 const workflowStore = useWorkflowStore()
 const selectedType = ref<WorkItemType | 'ALL'>('ALL')
+const selectedStatus = ref<WorkItemStatus | 'ALL'>('ALL')
 const startingIds = ref<Set<string>>(new Set())
 const startErrors = ref<Record<string, string>>({})
 
@@ -18,13 +19,13 @@ const emit = defineEmits<{
 
 const typeOrder: WorkItemType[] = ['FE', 'US', 'TASK', 'WORK', 'BUG', 'VULN']
 
-const typeConfig: Record<WorkItemType, { label: string; title: string; color: string; tint: string }> = {
-  FE: { label: 'FE', title: 'FE', color: '#6366f1', tint: '#eef2ff' },
-  US: { label: 'US', title: 'US', color: '#10b981', tint: '#ecfdf5' },
-  TASK: { label: 'TASK', title: 'TASK', color: '#f59e0b', tint: '#fffbeb' },
-  WORK: { label: 'WORK', title: 'WORK', color: '#0ea5e9', tint: '#f0f9ff' },
-  BUG: { label: '缺陷', title: '缺陷', color: '#ef4444', tint: '#fef2f2' },
-  VULN: { label: '漏洞', title: '漏洞', color: '#991b1b', tint: '#fff1f2' },
+const typeConfig: Record<WorkItemType, { label: string; title: string; color: string }> = {
+  FE: { label: 'FE', title: 'FE', color: '#6366f1' },
+  US: { label: 'US', title: 'US', color: '#10b981' },
+  TASK: { label: 'TASK', title: 'TASK', color: '#f59e0b' },
+  WORK: { label: 'WORK', title: 'WORK', color: '#0ea5e9' },
+  BUG: { label: '缺陷', title: '缺陷', color: '#ef4444' },
+  VULN: { label: '漏洞', title: '漏洞', color: '#991b1b' },
 }
 
 type StatStage = {
@@ -39,7 +40,6 @@ type TypeStatCard = {
   type: WorkItemType
   label: string
   color: string
-  tint: string
   total: number
   nodeSummary: string
   progressLabel: string
@@ -70,6 +70,30 @@ const workflowStatusLabels: Record<WorkflowStatus, string> = {
   CANCELLED: '已取消',
 }
 
+const workItemStatusLabels: Record<WorkItemStatus, string> = {
+  BACKLOG: '待排期',
+  TODO: '待处理',
+  IN_PROGRESS: '处理中',
+  IN_REVIEW: '评审中',
+  DONE: '已完成',
+}
+
+const priorityLabels: Record<Priority, string> = {
+  LOW: '低',
+  MEDIUM: '中',
+  HIGH: '高',
+  URGENT: '紧急',
+}
+
+const statusFilterOptions: Array<{ value: WorkItemStatus | 'ALL'; label: string }> = [
+  { value: 'ALL', label: '全部状态' },
+  { value: 'BACKLOG', label: workItemStatusLabels.BACKLOG },
+  { value: 'TODO', label: workItemStatusLabels.TODO },
+  { value: 'IN_PROGRESS', label: workItemStatusLabels.IN_PROGRESS },
+  { value: 'IN_REVIEW', label: workItemStatusLabels.IN_REVIEW },
+  { value: 'DONE', label: workItemStatusLabels.DONE },
+]
+
 type FlowNode = {
   label: string
   status: WorkflowNodeStatus
@@ -99,9 +123,12 @@ const typeStatCards = computed<TypeStatCard[]>(() =>
 )
 
 const filteredItems = computed(() => {
-  const items = selectedType.value === 'ALL'
+  const typedItems = selectedType.value === 'ALL'
     ? store.items
     : store.items.filter((item) => item.type === selectedType.value)
+  const items = selectedStatus.value === 'ALL'
+    ? typedItems
+    : typedItems.filter((item) => item.status === selectedStatus.value)
   return [...items].sort((a, b) => itemUpdatedAtValue(b) - itemUpdatedAtValue(a))
 })
 
@@ -191,7 +218,6 @@ function buildTypeStatCard(type: WorkItemType, items: WorkItemDto[]): TypeStatCa
     type,
     label: config.label,
     color: config.color,
-    tint: config.tint,
     total: items.length,
     nodeSummary: nodeDistributionSummary(nodeDistribution, items.length),
     progressLabel: `${completionRate}% 节点完成`,
@@ -322,7 +348,7 @@ function buildFlowWithAnchors(skillNodes: FlowNode[], wfStatus?: WorkflowStatus 
     { label: '开始', status: hasStarted ? 'COMPLETED' : 'RUNNING', kind: 'start' },
     ...skillNodes,
     {
-      label: '结束',
+      label: '完成',
       status: wfStatus === 'COMPLETED' || allSkillsCompleted ? 'COMPLETED' : 'PENDING',
       kind: 'end',
     },
@@ -402,6 +428,19 @@ function launchLabel(item: WorkItemDto): string {
   return workflowStatusLabels[wf.status] ?? '开始处理'
 }
 
+function currentFlowNode(item: WorkItemDto): FlowNode | null {
+  const nodes = flowNodes(item)
+  return nodes.find((node) => node.status === 'WAITING_CONFIRMATION')
+    ?? nodes.find((node) => node.status === 'RUNNING' && node.kind === 'skill')
+    ?? nodes.find((node) => node.status === 'FAILED')
+    ?? null
+}
+
+function flowSummaryLabel(item: WorkItemDto): string {
+  const node = currentFlowNode(item)
+  return node ? node.label : launchLabel(item)
+}
+
 function launchDisabled(item: WorkItemDto): boolean {
   if (startingIds.value.has(item.id)) return true
   const wf = workflowFor(item)
@@ -451,7 +490,7 @@ async function handleStartWorkflow(workItemId: string) {
           :key="card.type"
           class="home-overview__stat"
           :class="{ 'home-overview__stat--active': selectedType === card.type }"
-          :style="{ '--stat-color': card.color, '--stat-tint': card.tint }"
+          :style="{ '--stat-color': card.color }"
           @click="selectedType = selectedType === card.type ? 'ALL' : card.type"
         >
           <span class="home-overview__stat-head">
@@ -484,7 +523,17 @@ async function handleStartWorkflow(workItemId: string) {
 
       <div class="home-overview__toolbar">
         <h3>工作项列表</h3>
-        <span>{{ selectedType === 'ALL' ? '全部类型' : typeConfig[selectedType].label }}</span>
+        <div class="home-overview__filters">
+          <span>{{ selectedType === 'ALL' ? '全部类型' : typeConfig[selectedType].label }}</span>
+          <label class="home-overview__filter">
+            <span>状态</span>
+            <select v-model="selectedStatus" aria-label="按状态筛选工作项">
+              <option v-for="option in statusFilterOptions" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+          </label>
+        </div>
       </div>
 
       <div v-if="store.loading" class="home-overview__loading">加载中...</div>
@@ -513,7 +562,7 @@ async function handleStartWorkflow(workItemId: string) {
           </div>
           <div class="home-overview__row-side">
             <span class="home-overview__priority" :class="`is-${item.priority.toLowerCase()}`">
-              {{ item.priority === 'URGENT' ? 'Urgent' : item.priority[0] + item.priority.slice(1).toLowerCase() }}
+              {{ priorityLabels[item.priority] }}
             </span>
             <button
               class="home-overview__launch"
@@ -540,7 +589,7 @@ async function handleStartWorkflow(workItemId: string) {
                 :class="{ 'home-overview__node-line--done': isConnectorDone(node, flowNodes(item)[nIndex + 1]) }"
               ></span>
             </template>
-            <em>{{ launchLabel(item) }}</em>
+            <em>{{ flowSummaryLabel(item) }}</em>
           </div>
           <div v-if="startErrors[item.id]" class="home-overview__error">
             {{ startErrors[item.id] }}
@@ -584,6 +633,7 @@ async function handleStartWorkflow(workItemId: string) {
   border-bottom: 1px solid var(--border-color);
   overscroll-behavior-x: contain;
   scrollbar-gutter: stable;
+  scrollbar-color: color-mix(in srgb, var(--brand-primary) 42%, var(--border-color)) transparent;
 }
 
 .home-overview__stats::-webkit-scrollbar {
@@ -597,7 +647,7 @@ async function handleStartWorkflow(workItemId: string) {
 .home-overview__stats::-webkit-scrollbar-thumb {
   border: 2px solid var(--bg-card);
   border-radius: 999px;
-  background: rgba(100, 116, 139, 0.32);
+  background: color-mix(in srgb, var(--brand-primary) 42%, var(--border-color));
 }
 
 .home-overview__stat {
@@ -615,9 +665,9 @@ async function handleStartWorkflow(workItemId: string) {
   min-height: 92px;
   padding: 9px 11px 8px;
   overflow: hidden;
-  border: 1px solid rgba(148, 163, 184, 0.28);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  background: linear-gradient(180deg, var(--surface-card) 0%, var(--surface-hover) 100%);
   color: var(--text-primary);
   text-align: left;
   cursor: pointer;
@@ -634,15 +684,15 @@ async function handleStartWorkflow(workItemId: string) {
 }
 
 .home-overview__stat:hover {
-  border-color: rgba(100, 116, 139, 0.45);
+  border-color: var(--border-hover);
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
   transform: translateY(-1px);
 }
 
 .home-overview__stat--active {
   border-color: var(--stat-color);
-  background: linear-gradient(180deg, #ffffff 0%, var(--stat-tint) 100%);
-  box-shadow: inset 0 0 0 1px var(--stat-color), 0 12px 26px rgba(15, 23, 42, 0.08);
+  background: linear-gradient(180deg, var(--surface-card) 0%, color-mix(in srgb, var(--stat-color) 10%, var(--surface-card)) 100%);
+  box-shadow: inset 0 0 0 1px var(--stat-color), var(--shadow-card);
 }
 
 .home-overview__stat-head,
@@ -672,7 +722,7 @@ async function handleStartWorkflow(workItemId: string) {
   padding: 0 7px;
   overflow: hidden;
   border-radius: 7px;
-  background: var(--stat-tint);
+  background: color-mix(in srgb, var(--stat-color) 10%, var(--surface-card));
   color: var(--stat-color);
   font-size: 12px;
   font-weight: 950;
@@ -733,8 +783,8 @@ async function handleStartWorkflow(workItemId: string) {
   padding: 0 6px;
   overflow: hidden;
   border-radius: 6px;
-  background: #eef2f7;
-  color: #475569;
+  background: var(--surface-muted);
+  color: var(--text-secondary);
   font-size: 10px;
   font-weight: 850;
   line-height: 1;
@@ -743,28 +793,28 @@ async function handleStartWorkflow(workItemId: string) {
 }
 
 .home-overview__stat-chip--running {
-  background: #dbeafe;
-  color: #1d4ed8;
+  background: var(--brand-soft);
+  color: var(--brand-primary);
 }
 
 .home-overview__stat-chip--waiting {
-  background: #fef3c7;
-  color: #b45309;
+  background: var(--warning-soft);
+  color: var(--warning);
 }
 
 .home-overview__stat-chip--blocked {
-  background: #fee2e2;
-  color: #b91c1c;
+  background: var(--error-soft);
+  color: var(--error);
 }
 
 .home-overview__stat-chip--pending {
-  background: #f1f5f9;
-  color: #475569;
+  background: var(--surface-muted);
+  color: var(--text-secondary);
 }
 
 .home-overview__stat-chip--done {
-  background: #d1fae5;
-  color: #047857;
+  background: var(--success-soft);
+  color: var(--success);
 }
 
 .home-overview__stat-node {
@@ -803,7 +853,7 @@ async function handleStartWorkflow(workItemId: string) {
   height: 3px;
   overflow: hidden;
   border-radius: 999px;
-  background: #e2e8f0;
+  background: var(--stat-track-bg);
 }
 
 .home-overview__stat-track span {
@@ -827,10 +877,42 @@ async function handleStartWorkflow(workItemId: string) {
   font-weight: 900;
 }
 
-.home-overview__toolbar span {
+.home-overview__filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.home-overview__filters > span,
+.home-overview__filter span {
   color: var(--text-muted);
   font-size: 13px;
   font-weight: 750;
+}
+
+.home-overview__filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.home-overview__filter select {
+  height: 28px;
+  padding: 0 28px 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+  outline: none;
+}
+
+.home-overview__filter select:focus {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px var(--glow-blue);
 }
 
 .home-overview__loading,
@@ -854,6 +936,7 @@ async function handleStartWorkflow(workItemId: string) {
   overflow-y: scroll;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
+  scrollbar-color: color-mix(in srgb, var(--brand-primary) 46%, var(--border-color)) transparent;
 }
 
 .home-overview__content::-webkit-scrollbar {
@@ -867,7 +950,7 @@ async function handleStartWorkflow(workItemId: string) {
 .home-overview__content::-webkit-scrollbar-thumb {
   border: 3px solid var(--bg-card);
   border-radius: 999px;
-  background: rgba(100, 116, 139, 0.35);
+  background: color-mix(in srgb, var(--brand-primary) 46%, var(--border-color));
 }
 
 .home-overview__row {
@@ -942,21 +1025,30 @@ async function handleStartWorkflow(workItemId: string) {
   font-weight: 900;
 }
 
-.home-overview__priority.is-high,
+.home-overview__priority.is-medium {
+  background: var(--brand-soft);
+  color: var(--brand-primary);
+}
+
+.home-overview__priority.is-high {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
 .home-overview__priority.is-urgent {
-  background: #ffedd5;
-  color: #ea580c;
+  background: var(--error-soft);
+  color: var(--error);
 }
 
 .home-overview__priority.is-low {
-  background: #e0f2fe;
-  color: #0284c7;
+  background: var(--surface-muted);
+  color: var(--text-secondary);
 }
 
 .home-overview__launch {
   min-height: 28px;
   padding: 0 12px;
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  border: 1px solid var(--brand-border);
   border-radius: 8px;
   background: var(--bg-card);
   color: var(--accent-blue);
@@ -965,19 +1057,19 @@ async function handleStartWorkflow(workItemId: string) {
   cursor: pointer;
 }
 
-.home-overview__launch:hover {
+.home-overview__launch:not(:disabled):hover {
   background: var(--accent-blue);
-  color: #ffffff;
+  color: var(--on-brand);
 }
 
 .home-overview__launch:disabled {
-  cursor: wait;
+  cursor: default;
   opacity: 0.68;
 }
 
 .home-overview__error {
   grid-column: 1 / -1;
-  color: #dc2626;
+  color: var(--error);
   font-size: 12px;
   font-weight: 700;
 }
@@ -1034,28 +1126,28 @@ async function handleStartWorkflow(workItemId: string) {
 
 .home-overview__node--active {
   background: var(--accent-blue);
-  border-color: rgba(59, 130, 246, 0.3);
+  border-color: var(--brand-border);
   animation: node-pulse 2s ease-in-out infinite;
 }
 
 @keyframes node-pulse {
-  0%, 100% { box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15); }
-  50% { box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.25); }
+  0%, 100% { box-shadow: 0 0 0 4px var(--focus-ring); }
+  50% { box-shadow: 0 0 0 8px var(--focus-ring); }
 }
 
 .home-overview__node--waiting {
-  background: #f59e0b;
-  border-color: #f59e0b;
+  background: var(--warning);
+  border-color: var(--warning);
 }
 
 .home-overview__node--failed {
-  background: #ef4444;
-  border-color: #ef4444;
+  background: var(--error);
+  border-color: var(--error);
 }
 
 .home-overview__node--skipped {
-  background: #9ca3af;
-  border-color: #9ca3af;
+  background: var(--text-muted);
+  border-color: var(--text-muted);
   opacity: 0.5;
 }
 

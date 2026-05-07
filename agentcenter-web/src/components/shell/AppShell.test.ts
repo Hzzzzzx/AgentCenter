@@ -73,6 +73,13 @@ describe('AppShell.vue', () => {
     expect(wrapper.find('.title-bar__context select').exists()).toBe(false)
   })
 
+  it('does not render title bar notification or settings shortcuts', () => {
+    const wrapper = mountShell()
+
+    expect(wrapper.find('[aria-label="通知"]').exists()).toBe(false)
+    expect(wrapper.find('.app-shell__titlebar [aria-label="设置"]').exists()).toBe(false)
+  })
+
   it('navigates when clicking nav items', async () => {
     const wrapper = mountShell()
     const navItems = wrapper.findAll('.left-sidebar__nav-item')

@@ -1,7 +1,7 @@
 # Prototype
 
 > 当前首页高保真原型
-> 最近更新：2026-05-05
+> 最近更新：2026-05-07
 
 ## 当前基线
 
@@ -44,6 +44,8 @@ node tools/opencode-bridge.mjs --mock --port 4789
 |------|------|
 | [homepage.html](./homepage.html) | 静态高保真首页原型（当前基线） |
 | [HOMEPAGE-VUE-HIGH-FI-GAP.md](./HOMEPAGE-VUE-HIGH-FI-GAP.md) | Vue 实现与首页高保真的差距清单和验收合同 |
+| [THEME-SYSTEM-DESIGN.md](./THEME-SYSTEM-DESIGN.md) | Vue 工作台主题切换、配色 token 和 7 套主题方案 |
+| [theme-system-highfi-board.png](./theme-system-highfi-board.png) | 主题高保真对照图 |
 | [opencode-bridge.md](./opencode-bridge.md) | 本地 OpenCode 桥接说明 |
 | [../../tools/opencode-bridge.mjs](../../tools/opencode-bridge.mjs) | 本地 OpenCode bridge 脚本 |
 | [../../agent-center-demo/client/index.html](../../agent-center-demo/client/index.html) | React Demo 首页实现 |

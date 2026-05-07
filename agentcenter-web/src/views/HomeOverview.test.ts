@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import HomeOverview from './HomeOverview.vue'
 import { useWorkItemStore } from '../stores/workItems'
@@ -102,6 +102,7 @@ function mountHomeOverview() {
 describe('HomeOverview.vue', () => {
   it('renders stats bar with type counts', async () => {
     const wrapper = mountHomeOverview()
+    await flushPromises()
     const store = useWorkItemStore()
     store.items = mockItems
     store.loading = false
@@ -137,6 +138,25 @@ describe('HomeOverview.vue', () => {
 
     const cards = wrapper.findAll('.work-item-card')
     expect(cards.length).toBe(3)
+    expect(wrapper.text()).toContain('高')
+    expect(wrapper.text()).toContain('紧急')
+    expect(wrapper.text()).toContain('中')
+  })
+
+  it('filters work items by status', async () => {
+    const wrapper = mountHomeOverview()
+    await flushPromises()
+    const store = useWorkItemStore()
+    store.items = mockItems
+    store.loading = false
+    await wrapper.vm.$nextTick()
+
+    await wrapper.find('select[aria-label="按状态筛选工作项"]').setValue('DONE')
+    await wrapper.vm.$nextTick()
+
+    const cards = wrapper.findAll('.work-item-card')
+    expect(cards.length).toBe(1)
+    expect(cards[0].text()).toContain('US-001')
   })
 
   it('shows loading state', async () => {
@@ -196,6 +216,7 @@ describe('HomeOverview.vue', () => {
     const btn = wrapper.find('.home-overview__launch')
     expect(btn.text()).toBe('处理中')
     expect(btn.attributes('disabled')).toBeDefined()
+    expect(wrapper.find('.home-overview__flow em').text()).toBe('HLD')
   })
 
   it('renders completed workflow with all green nodes', async () => {

@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import DOMPurify from 'dompurify'
 import { marked, Renderer, type Tokens } from 'marked'
+import { useThemeStore } from '../../stores/theme'
 
 const props = withDefaults(defineProps<{
   content: string | null | undefined
@@ -12,6 +13,7 @@ const props = withDefaults(defineProps<{
 
 type MermaidApi = typeof import('mermaid')['default']
 
+const themeStore = useThemeStore()
 const rootRef = ref<HTMLElement | null>(null)
 const renderer = createMarkdownRenderer()
 let mermaidPromise: Promise<MermaidApi> | null = null
@@ -26,7 +28,7 @@ const renderedHtml = computed(() => {
   })
 
   return DOMPurify.sanitize(raw, {
-    ADD_ATTR: ['target', 'rel', 'class', 'data-mermaid-state'],
+    ADD_ATTR: ['target', 'rel', 'class', 'data-mermaid-state', 'data-mermaid-source'],
   })
 })
 
@@ -38,6 +40,35 @@ watch(
     }
   },
   { flush: 'post', immediate: true }
+)
+
+watch(
+  () => themeStore.currentThemeId,
+  async () => {
+    if (!props.renderMermaid) return
+    mermaidPromise = null
+    const root = rootRef.value
+    if (!root) return
+    const blocks = Array.from(root.querySelectorAll<HTMLElement>('.markdown-content__mermaid'))
+    if (blocks.length === 0) return
+    for (const block of blocks) {
+      if (block.dataset.mermaidState === 'rendered') {
+        const svg = block.querySelector('svg')
+        const code = block.querySelector('code')
+        if (svg && !code) {
+          const pre = document.createElement('pre')
+          pre.className = 'markdown-content__mermaid-source'
+          const codeEl = document.createElement('code')
+          codeEl.textContent = block.dataset.mermaidSource ?? ''
+          pre.appendChild(codeEl)
+          block.replaceChildren(pre)
+        }
+        block.dataset.mermaidState = 'pending'
+      }
+    }
+    await nextTick()
+    void renderMermaidBlocks()
+  },
 )
 
 async function renderMermaidBlocks(): Promise<void> {
@@ -61,6 +92,10 @@ async function renderMermaidBlocks(): Promise<void> {
   await Promise.all(blocks.map(async (block, index) => {
     const source = block.querySelector('code')?.textContent?.trim() ?? ''
     if (!source) return
+
+    if (!block.dataset.mermaidSource) {
+      block.dataset.mermaidSource = source
+    }
 
     try {
       const renderId = `agentcenter-mermaid-${Date.now()}-${currentVersion}-${index}-${hashText(source)}`
@@ -88,12 +123,12 @@ async function getMermaid(): Promise<MermaidApi> {
         securityLevel: 'strict',
         theme: 'base',
         themeVariables: {
-          primaryColor: '#eef6ff',
-          primaryTextColor: '#0f172a',
-          primaryBorderColor: '#93c5fd',
-          lineColor: '#64748b',
-          secondaryColor: '#ecfdf5',
-          tertiaryColor: '#f8fafc',
+          primaryColor: getComputedStyle(document.documentElement).getPropertyValue('--brand-soft').trim() || '#eef6ff',
+          primaryTextColor: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() || '#0f172a',
+          primaryBorderColor: getComputedStyle(document.documentElement).getPropertyValue('--brand-border').trim() || '#93c5fd',
+          lineColor: getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim() || '#64748b',
+          secondaryColor: getComputedStyle(document.documentElement).getPropertyValue('--success-soft').trim() || '#ecfdf5',
+          tertiaryColor: getComputedStyle(document.documentElement).getPropertyValue('--surface-hover').trim() || '#f8fafc',
           fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         },
       })
@@ -263,9 +298,9 @@ function hashText(value: string): string {
 .markdown-content :deep(blockquote) {
   margin: 12px 0;
   padding: 8px 12px;
-  border-left: 3px solid rgba(59, 130, 246, 0.45);
+  border-left: 3px solid var(--brand-border);
   border-radius: 0 8px 8px 0;
-  background: rgba(59, 130, 246, 0.06);
+  background: var(--brand-soft);
   color: var(--text-secondary);
 }
 
@@ -277,7 +312,7 @@ function hashText(value: string): string {
 }
 
 .markdown-content :deep(a) {
-  color: #2563eb;
+  color: var(--brand-primary);
   font-weight: 700;
   text-decoration: none;
 }
@@ -288,8 +323,8 @@ function hashText(value: string): string {
 
 .markdown-content :deep(code) {
   border-radius: 5px;
-  background: rgba(15, 23, 42, 0.06);
-  color: #334155;
+  background: var(--inline-code-bg);
+  color: var(--inline-code-text);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.92em;
   padding: 2px 5px;
@@ -299,10 +334,10 @@ function hashText(value: string): string {
   margin: 12px 0;
   padding: 12px 14px;
   overflow-x: auto;
-  border: 1px solid rgba(148, 163, 184, 0.28);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
-  background: #0f172a;
-  color: #e2e8f0;
+  background: var(--code-bg);
+  color: var(--code-text);
   line-height: 1.58;
 }
 
@@ -324,23 +359,23 @@ function hashText(value: string): string {
   max-width: 100%;
   margin: 12px 0;
   overflow-x: auto;
-  border: 1px solid rgba(148, 163, 184, 0.28);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   border-collapse: collapse;
-  background: #ffffff;
+  background: var(--surface-card);
   font-size: 13px;
 }
 
 .markdown-content :deep(th),
 .markdown-content :deep(td) {
   padding: 8px 10px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.24);
+  border-bottom: 1px solid var(--border-color);
   text-align: left;
   vertical-align: top;
 }
 
 .markdown-content :deep(th) {
-  background: #f8fafc;
+  background: var(--surface-hover);
   color: var(--text-primary);
   font-weight: 850;
 }
@@ -355,16 +390,16 @@ function hashText(value: string): string {
   height: auto;
   margin: 12px 0;
   border-radius: 8px;
-  border: 1px solid rgba(148, 163, 184, 0.24);
+  border: 1px solid var(--border-color);
 }
 
 .markdown-content :deep(.markdown-content__mermaid) {
   margin: 12px 0;
   padding: 14px;
   overflow-x: auto;
-  border: 1px solid rgba(148, 163, 184, 0.28);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--surface-card);
 }
 
 .markdown-content :deep(.markdown-content__mermaid svg) {
@@ -381,8 +416,8 @@ function hashText(value: string): string {
 
 .markdown-content :deep(.markdown-content__mermaid-source) {
   margin: 0;
-  border-color: rgba(148, 163, 184, 0.28);
-  background: #f8fafc;
+  border-color: var(--border-color);
+  background: var(--surface-hover);
   color: var(--text-primary);
 }
 

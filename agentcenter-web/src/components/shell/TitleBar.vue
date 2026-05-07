@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ProjectContextSelection } from '../../types/projectContext'
+import ThemeSwitcher from '../theme/ThemeSwitcher.vue'
 
 interface Props {
   searchValue?: string
@@ -56,19 +57,7 @@ const emit = defineEmits<{
     </div>
 
     <div class="title-bar__actions">
-      <button class="title-bar__icon-btn" title="通知" aria-label="通知">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-          <path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M13.7 21a2 2 0 01-3.4 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-        <span class="title-bar__badge">3</span>
-      </button>
-      <button class="title-bar__icon-btn" title="设置" aria-label="设置">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
-          <path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 01-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 01-4 0v-.1a1.7 1.7 0 00-1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 01-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 010-4h.1a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 012.8-2.8l.1.1a1.7 1.7 0 001.8.3 1.7 1.7 0 001-1.5V3a2 2 0 014 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 012.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8 1.7 1.7 0 001.5 1h.1a2 2 0 010 4h-.1a1.7 1.7 0 00-1.5 1z" stroke="currentColor" stroke-width="2"/>
-        </svg>
-      </button>
+      <ThemeSwitcher />
       <div class="title-bar__user">
         <span class="title-bar__avatar">张</span>
         <span class="title-bar__user-text">
@@ -111,8 +100,8 @@ const emit = defineEmits<{
   width: 28px;
   height: 28px;
   border-radius: 6px;
-  color: #ffffff;
-  background: linear-gradient(135deg, #3b82f6, #7c3aed);
+  color: var(--on-brand);
+  background: var(--brand-gradient);
 }
 
 .title-bar__name {
@@ -214,40 +203,6 @@ const emit = defineEmits<{
   gap: 8px;
 }
 
-.title-bar__icon-btn {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.title-bar__icon-btn:hover {
-  color: var(--text-primary);
-  background: var(--bg-tertiary);
-}
-
-.title-bar__badge {
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  display: grid;
-  place-items: center;
-  min-width: 14px;
-  height: 14px;
-  padding: 0 2px;
-  border-radius: 50%;
-  background: var(--error);
-  color: #ffffff;
-  font-size: 9px;
-  font-weight: 600;
-}
-
 .title-bar__user {
   gap: 8px;
   padding-left: 4px;
@@ -259,8 +214,8 @@ const emit = defineEmits<{
   width: 28px;
   height: 28px;
   border-radius: 6px;
-  background: linear-gradient(135deg, #3b82f6, #7c3aed);
-  color: #ffffff;
+  background: var(--brand-gradient);
+  color: var(--on-brand);
   font-size: 12px;
   font-weight: 600;
 }

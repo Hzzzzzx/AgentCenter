@@ -146,11 +146,6 @@ function sessionMeta(session: AgentSessionDto) {
               <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </button>
-          <button class="left-sidebar__new-btn" aria-label="新建会话" @click="emit('create-general-session')">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-              <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
-          </button>
         </div>
 
         <div v-show="conversationOpen" class="left-sidebar__session-body">
@@ -218,11 +213,12 @@ function sessionMeta(session: AgentSessionDto) {
       </section>
     </div>
 
-    <div v-if="!collapsed" class="left-sidebar__footer">
+    <div class="left-sidebar__footer">
       <div class="left-sidebar__settings-wrapper">
         <button
           class="left-sidebar__settings"
           :class="{ 'left-sidebar__settings--active': settingsOpen }"
+          :title="collapsed ? '设置' : undefined"
           @click="settingsOpen = !settingsOpen"
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -231,7 +227,7 @@ function sessionMeta(session: AgentSessionDto) {
           </svg>
           <span>设置</span>
         </button>
-        <div v-if="settingsOpen" class="left-sidebar__settings-menu">
+        <div v-if="settingsOpen && !collapsed" class="left-sidebar__settings-menu">
           <button class="left-sidebar__settings-menu-item" @click="emit('navigate-settings', 'project'); settingsOpen = false">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
               <path d="M4 6.5A2.5 2.5 0 016.5 4h11A2.5 2.5 0 0120 6.5v11a2.5 2.5 0 01-2.5 2.5h-11A2.5 2.5 0 014 17.5v-11z" stroke="currentColor" stroke-width="2"/>
@@ -302,7 +298,7 @@ function sessionMeta(session: AgentSessionDto) {
   flex-direction: column;
   gap: 4px;
   padding: 6px 8px 10px;
-  border-bottom: 1px solid rgba(217, 226, 236, 0.75);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .left-sidebar--collapsed .left-sidebar__nav {
@@ -337,7 +333,7 @@ function sessionMeta(session: AgentSessionDto) {
 
 .left-sidebar__nav-item--active {
   color: var(--accent-blue);
-  background: rgba(59, 130, 246, 0.1);
+  background: var(--brand-soft);
 }
 
 .left-sidebar__sessions {
@@ -360,7 +356,6 @@ function sessionMeta(session: AgentSessionDto) {
 }
 
 .left-sidebar__section-toggle,
-.left-sidebar__new-btn,
 .left-sidebar__group-title button,
 .left-sidebar__group-title--button {
   border: 0;
@@ -390,19 +385,9 @@ function sessionMeta(session: AgentSessionDto) {
   transform: rotate(-90deg);
 }
 
-.left-sidebar__new-btn {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 5px;
-  color: var(--text-muted);
-}
-
-.left-sidebar__new-btn:hover,
 .left-sidebar__group-title button:hover {
   color: var(--accent-blue);
-  background: rgba(59, 130, 246, 0.08);
+  background: var(--brand-soft);
 }
 
 .left-sidebar__group {
@@ -439,7 +424,7 @@ function sessionMeta(session: AgentSessionDto) {
   height: 16px;
   padding: 0 4px;
   border-radius: 999px;
-  background: rgba(59, 130, 246, 0.1);
+  background: var(--brand-soft);
   color: var(--accent-blue);
   font-size: 10px;
   font-weight: 600;
@@ -467,8 +452,8 @@ function sessionMeta(session: AgentSessionDto) {
 }
 
 .left-sidebar__session-item--active {
-  background: rgba(59, 130, 246, 0.1);
-  border-color: rgba(59, 130, 246, 0.28);
+  background: var(--brand-soft);
+  border-color: var(--brand-border);
   color: var(--accent-blue);
 }
 
@@ -500,7 +485,7 @@ function sessionMeta(session: AgentSessionDto) {
 
 .left-sidebar__empty {
   padding: 6px 10px 6px 20px;
-  color: #94a3b8;
+  color: var(--text-muted);
   font-size: 11px;
 }
 
@@ -508,6 +493,10 @@ function sessionMeta(session: AgentSessionDto) {
   flex-shrink: 0;
   padding: 6px 8px;
   border-top: 1px solid var(--border-color);
+}
+
+.left-sidebar--collapsed .left-sidebar__footer {
+  padding-inline: 4px;
 }
 
 .left-sidebar__settings {
@@ -524,6 +513,21 @@ function sessionMeta(session: AgentSessionDto) {
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
+}
+
+.left-sidebar--collapsed .left-sidebar__settings {
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  height: 46px;
+  padding: 4px 0;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.left-sidebar--collapsed .left-sidebar__settings svg {
+  width: 20px;
+  height: 20px;
 }
 
 .left-sidebar__settings:hover {
@@ -548,7 +552,7 @@ function sessionMeta(session: AgentSessionDto) {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-card);
   overflow: hidden;
   z-index: 100;
 }

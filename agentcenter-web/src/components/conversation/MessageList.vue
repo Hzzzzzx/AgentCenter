@@ -362,7 +362,7 @@ function trimDetail(value: string): string {
   padding: 10px 14px;
   border-radius: 18px 18px 4px 18px;
   background: var(--accent-blue);
-  color: #ffffff;
+  color: var(--on-brand);
   font-size: 14px;
   font-weight: 650;
   line-height: 1.58;
@@ -384,9 +384,9 @@ function trimDetail(value: string): string {
   max-width: 760px;
   margin: 0 auto;
   padding: 8px 10px;
-  border: 1px solid rgba(148, 163, 184, 0.24);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
-  background: rgba(248, 250, 252, 0.82);
+  background: var(--surface-overlay);
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.55;
@@ -410,8 +410,8 @@ function trimDetail(value: string): string {
   place-items: center;
   flex: 0 0 auto;
   border-radius: 6px;
-  background: #e0f2fe;
-  color: #0369a1;
+  background: var(--info-soft);
+  color: var(--info);
   font-size: 11px;
   font-weight: 900;
 }
@@ -435,7 +435,7 @@ function trimDetail(value: string): string {
   bottom: -12px;
   left: 14px;
   width: 1px;
-  background: linear-gradient(180deg, rgba(16, 185, 129, 0.36), transparent);
+  background: linear-gradient(180deg, var(--success-soft), transparent);
 }
 
 .assistant-avatar {
@@ -448,14 +448,14 @@ function trimDetail(value: string): string {
   place-items: center;
   border-radius: 8px;
   background: var(--success);
-  color: #052e23;
+  color: var(--on-success);
   font-size: 12px;
   font-weight: 900;
   box-shadow: 0 0 0 4px var(--bg-card);
 }
 
 .assistant-avatar--live {
-  box-shadow: 0 0 0 4px var(--bg-card), 0 0 0 8px rgba(16, 185, 129, 0.12);
+  box-shadow: 0 0 0 4px var(--bg-card), 0 0 0 8px var(--success-soft);
 }
 
 .assistant-card {
@@ -496,8 +496,8 @@ function trimDetail(value: string): string {
   place-items: center;
   flex: 0 0 auto;
   border-radius: 7px;
-  background: rgba(16, 185, 129, 0.1);
-  color: #047857;
+  background: var(--success-soft);
+  color: var(--success);
   font-size: 11px;
   font-weight: 900;
 }
@@ -510,16 +510,16 @@ function trimDetail(value: string): string {
   border: 1px solid rgba(148, 163, 184, 0.32);
   border-radius: 999px;
   color: var(--text-muted);
-  background: #ffffff;
+  background: var(--surface-card);
   font-size: 11px;
   font-weight: 800;
   white-space: nowrap;
 }
 
 .assistant-card__pill--live {
-  border-color: rgba(16, 185, 129, 0.28);
-  color: #047857;
-  background: rgba(16, 185, 129, 0.08);
+  border-color: var(--success);
+  color: var(--success);
+  background: var(--success-soft);
 }
 
 .assistant-card__content {
@@ -543,9 +543,9 @@ function trimDetail(value: string): string {
 
 .assistant-turn--tool .assistant-card__content {
   padding: 10px 12px;
-  border: 1px solid rgba(148, 163, 184, 0.28);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
-  background: #f8fafc;
+  background: var(--surface-hover);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
 }
@@ -603,7 +603,7 @@ function trimDetail(value: string): string {
   gap: 8px;
   margin: 6px 0 2px 28px;
   padding-left: 12px;
-  border-left: 1px solid rgba(148, 163, 184, 0.28);
+  border-left: 1px solid var(--border-color);
 }
 
 .activity-item {
@@ -612,9 +612,9 @@ function trimDetail(value: string): string {
   gap: 9px;
   align-items: start;
   padding: 9px 10px;
-  border: 1px solid rgba(148, 163, 184, 0.26);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
-  background: rgba(248, 250, 252, 0.82);
+  background: var(--surface-overlay);
 }
 
 .activity-item__state {
@@ -627,7 +627,7 @@ function trimDetail(value: string): string {
 
 .activity-item--running .activity-item__state {
   background: var(--warning);
-  box-shadow: 0 0 0 5px rgba(245, 158, 11, 0.13);
+  box-shadow: 0 0 0 5px var(--warning-soft);
 }
 
 .activity-item--done .activity-item__state {

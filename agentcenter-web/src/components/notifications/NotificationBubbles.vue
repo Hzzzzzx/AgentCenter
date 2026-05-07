@@ -76,10 +76,10 @@ const toneLabels: Record<NotificationTone, string> = {
   align-items: start;
   min-height: 44px;
   padding: 9px 10px;
-  border: 1px solid rgba(148, 163, 184, 0.28);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.16);
+  background: var(--surface-overlay);
+  box-shadow: var(--shadow-popover);
   color: var(--text-primary);
   pointer-events: auto;
   backdrop-filter: blur(14px);
@@ -94,15 +94,15 @@ const toneLabels: Record<NotificationTone, string> = {
 }
 
 .notification-bubble--success::before {
-  background: #10b981;
+  background: var(--success);
 }
 
 .notification-bubble--error::before {
-  background: #ef4444;
+  background: var(--error);
 }
 
 .notification-bubble--warning::before {
-  background: #f59e0b;
+  background: var(--warning);
 }
 
 .notification-bubble--info::before {
@@ -115,7 +115,7 @@ const toneLabels: Record<NotificationTone, string> = {
   min-height: 20px;
   padding: 0 7px;
   border-radius: 6px;
-  background: #eff6ff;
+  background: var(--brand-soft);
   color: var(--accent-blue);
   font-size: 10px;
   font-weight: 900;
@@ -123,18 +123,18 @@ const toneLabels: Record<NotificationTone, string> = {
 }
 
 .notification-bubble--success .notification-bubble__tone {
-  background: #d1fae5;
-  color: #047857;
+  background: var(--success-soft);
+  color: var(--success);
 }
 
 .notification-bubble--error .notification-bubble__tone {
-  background: #fee2e2;
-  color: #b91c1c;
+  background: var(--error-soft);
+  color: var(--error);
 }
 
 .notification-bubble--warning .notification-bubble__tone {
-  background: #fef3c7;
-  color: #b45309;
+  background: var(--warning-soft);
+  color: var(--warning);
 }
 
 .notification-bubble__body {

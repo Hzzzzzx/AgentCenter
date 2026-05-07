@@ -1,12 +1,15 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 import MarkdownContent from './MarkdownContent.vue'
+import { useThemeStore } from '../../stores/theme'
 
-function mountMarkdown(content: string) {
+function mountMarkdown(content: string, renderMermaid = false) {
+  setActivePinia(createPinia())
   return mount(MarkdownContent, {
     props: {
       content,
-      renderMermaid: false,
+      renderMermaid,
     },
   })
 }
@@ -61,5 +64,62 @@ describe('MarkdownContent.vue', () => {
 
     expect(wrapper.find('.markdown-content__mermaid').exists()).toBe(true)
     expect(wrapper.find('.markdown-content__mermaid code').text()).toContain('A-->B')
+  })
+})
+
+describe('MarkdownContent.vue — mermaid theme re-render', () => {
+  const mockRender = vi.fn().mockResolvedValue({ svg: '<svg>mock</svg>' })
+  const mockInitialize = vi.fn()
+
+  beforeEach(() => {
+    vi.resetModules()
+    mockRender.mockClear()
+    mockInitialize.mockClear()
+    mockRender.mockResolvedValue({ svg: '<svg>mock</svg>' })
+  })
+
+  async function mountWithMermaidMock() {
+    vi.doMock('mermaid', () => ({
+      default: {
+        initialize: mockInitialize,
+        render: mockRender,
+      },
+    }))
+
+    const { default: MarkdownContentWithMock } = await import('./MarkdownContent.vue')
+    const pinia = createPinia()
+    setActivePinia(pinia)
+
+    const wrapper = mount(MarkdownContentWithMock, {
+      props: {
+        content: '```mermaid\ngraph TD\n  A-->B\n```',
+        renderMermaid: true,
+      },
+    })
+
+    await vi.waitFor(() => expect(mockRender).toHaveBeenCalled(), { timeout: 2000 })
+
+    return { wrapper, pinia }
+  }
+
+  it('re-initializes and re-renders mermaid when theme changes', async () => {
+    const { pinia } = await mountWithMermaidMock()
+
+    const firstRenderCount = mockRender.mock.calls.length
+    const firstInitCount = mockInitialize.mock.calls.length
+    expect(firstInitCount).toBeGreaterThanOrEqual(1)
+    expect(firstRenderCount).toBeGreaterThanOrEqual(1)
+
+    const themeStore = useThemeStore(pinia)
+    themeStore.setTheme('midnight-black')
+
+    await vi.waitFor(() => expect(mockInitialize.mock.calls.length).toBeGreaterThan(firstInitCount), { timeout: 2000 })
+    await vi.waitFor(() => expect(mockRender.mock.calls.length).toBeGreaterThan(firstRenderCount), { timeout: 2000 })
+
+    expect(mockInitialize.mock.calls.length).toBeGreaterThan(firstInitCount)
+    expect(mockRender.mock.calls.length).toBeGreaterThan(firstRenderCount)
+
+    const lastCall = mockRender.mock.calls[mockRender.mock.calls.length - 1]
+    expect(lastCall[1]).toContain('A-->B')
   })
 })

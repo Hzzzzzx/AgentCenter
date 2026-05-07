@@ -23,6 +23,7 @@
 | [ARCHITECTURE-OVERVIEW.md](./architecture/ARCHITECTURE-OVERVIEW.md) | 4+1 视图架构总览 | 活跃 |
 | [UNIFIED-DOMAIN-MODEL.md](./architecture/UNIFIED-DOMAIN-MODEL.md) | 统一对象模型 (8+3 对象) | 活跃 |
 | [AGENT-RUNTIME-BRIDGE-DEVELOPMENT-BLUEPRINT.md](./architecture/AGENT-RUNTIME-BRIDGE-DEVELOPMENT-BLUEPRINT.md) | Java Bridge、Vue 工作台、OpenCode Runtime Adapter 开发蓝图 | 活跃 |
+| [AGENT-RUNTIME-PROTOCOL-LAYER-DESIGN.md](./architecture/AGENT-RUNTIME-PROTOCOL-LAYER-DESIGN.md) | 多 Agent Runtime 统一协议层：Command/Event/Ack、Provider/Transport 分离、HTTP(S)+SSE 与 WebSocket 支持 | 活跃 |
 | [ADR-001-OPENCODE-BRIDGE-SSE-REST.md](./architecture/ADR-001-OPENCODE-BRIDGE-SSE-REST.md) | M1 实施决策：REST+SSE 方案 | 活跃 |
 | [AGENT-RUNTIME-BRIDGE-M1-RUNBOOK.md](./architecture/AGENT-RUNTIME-BRIDGE-M1-RUNBOOK.md) | M1 快速启动指南：环境准备、工作目录配置、启动步骤 | 活跃 |
 | [REFERENCE-PROJECTS-AND-RESEARCH.md](./architecture/REFERENCE-PROJECTS-AND-RESEARCH.md) | 开源框架、竞品调研和可引入经验登记 | 活跃 |
@@ -37,6 +38,7 @@
 |------|------|------|
 | [prototype/README.md](./prototype/README.md) | 当前首页高保真基线和归档入口 | 活跃 |
 | [prototype/homepage.html](./prototype/homepage.html) | 当前静态首页高保真原型 | 活跃 |
+| [prototype/THEME-SYSTEM-DESIGN.md](./prototype/THEME-SYSTEM-DESIGN.md) | Vue 工作台主题切换、配色 token 和 7 套主题方案 | 活跃 |
 | [prototype/archive/homepage-workbench-2026-04-27/](./prototype/archive/homepage-workbench-2026-04-27/README.md) | 工作台基线归档（静态原型 + React Demo 快照） | 归档 |
 | [prototype/archive/client-demo-2026-04-29/](./prototype/archive/client-demo-2026-04-29/) | 早期首页视觉探索草稿（a-version 系列） | 归档 |
 
@@ -81,12 +83,12 @@
 
 | 类别 | 数量 |
 |------|------|
-| 架构文档 | 11 |
-| 原型与高保真 | 1 |
+| 架构文档 | 12 |
+| 原型与高保真 | 2 |
 | 综合调研 | 3 |
 | 平台专项调研 | 13 |
-| **总计** | **28** |
+| **总计** | **30** |
 
 ---
 
-*最后更新：2026-05-05*
+*最后更新：2026-05-07*

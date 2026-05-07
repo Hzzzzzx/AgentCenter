@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import ConfirmationCard from './ConfirmationCard.vue'
@@ -42,31 +42,45 @@ function mountCard(confirmation: ConfirmationRequestDto) {
   return mount(ConfirmationCard, {
     props: { confirmation },
     global: { plugins: [pinia] },
+    attachTo: document.body,
   })
 }
 
 describe('ConfirmationCard.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    document.body.innerHTML = ''
   })
 
-  it('shows 通过 and 拒绝 buttons for PENDING confirmation', async () => {
+  afterEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  async function openDialog(wrapper: ReturnType<typeof mountCard>) {
+    await wrapper.find('.confirmation-card__action').trigger('click')
+    await wrapper.vm.$nextTick()
+  }
+
+  it('keeps only 处理 action in the card and moves approval controls into dialog', async () => {
     const wrapper = mountCard(pendingConfirmation)
 
-    const approveBtn = wrapper.find('.confirmation-card__action--approve')
-    const rejectBtn = wrapper.find('.confirmation-card__action--reject')
+    const cardActions = wrapper.findAll('.confirmation-card > .confirmation-card__actions .confirmation-card__action')
+    expect(cardActions).toHaveLength(1)
+    expect(cardActions[0].text()).toBe('处理')
 
-    expect(approveBtn.exists()).toBe(true)
-    expect(approveBtn.text()).toBe('通过')
-    expect(rejectBtn.exists()).toBe(true)
-    expect(rejectBtn.text()).toBe('拒绝')
+    await openDialog(wrapper)
+    expect(document.body.textContent).toContain('通过')
+    expect(document.body.textContent).toContain('拒绝')
+    expect(document.body.textContent).toContain('进入会话')
   })
 
-  it('hides 通过/拒绝 for non-PENDING confirmation', async () => {
+  it('hides 通过/拒绝 in dialog for non-PENDING confirmation', async () => {
     const wrapper = mountCard(resolvedConfirmation)
 
-    expect(wrapper.find('.confirmation-card__action--approve').exists()).toBe(false)
-    expect(wrapper.find('.confirmation-card__action--reject').exists()).toBe(false)
+    await openDialog(wrapper)
+    expect(document.body.textContent).not.toContain('通过')
+    expect(document.body.textContent).not.toContain('拒绝')
+    expect(document.body.textContent).toContain('进入会话')
   })
 
   it('clicking 通过 calls resolveConfirmation and emits resolved', async () => {
@@ -74,7 +88,8 @@ describe('ConfirmationCard.vue', () => {
     const wrapper = mountCard(pendingConfirmation)
     const notificationStore = useNotificationStore()
 
-    await wrapper.find('.confirmation-card__action--approve').trigger('click')
+    await openDialog(wrapper)
+    await document.body.querySelector<HTMLButtonElement>('.confirmation-card__action--approve')!.click()
     await vi.dynamicImportSettled()
 
     expect(confirmationApi.resolve).toHaveBeenCalledWith('conf-1', { actionType: 'APPROVE' })
@@ -88,7 +103,8 @@ describe('ConfirmationCard.vue', () => {
     const wrapper = mountCard(pendingConfirmation)
     const notificationStore = useNotificationStore()
 
-    await wrapper.find('.confirmation-card__action--reject').trigger('click')
+    await openDialog(wrapper)
+    await document.body.querySelector<HTMLButtonElement>('.confirmation-card__action--reject')!.click()
     await vi.dynamicImportSettled()
 
     expect(confirmationApi.reject).toHaveBeenCalledWith('conf-1', { comment: undefined })
@@ -103,7 +119,8 @@ describe('ConfirmationCard.vue', () => {
     const wrapper = mountCard(pendingConfirmation)
     const notificationStore = useNotificationStore()
 
-    await wrapper.find('.confirmation-card__action--approve').trigger('click')
+    await openDialog(wrapper)
+    await document.body.querySelector<HTMLButtonElement>('.confirmation-card__action--approve')!.click()
     await vi.dynamicImportSettled()
 
     expect(wrapper.emitted('resolved')).toBeFalsy()
@@ -111,14 +128,14 @@ describe('ConfirmationCard.vue', () => {
     expect(notificationStore.rightPanelNotifications[0].message).toBe('Network error')
   })
 
-  it('clicking 处理 emits handle with id', async () => {
+  it('clicking 进入会话 emits handle with id', async () => {
     const wrapper = mountCard(pendingConfirmation)
 
-    const allButtons = wrapper.findAll('.confirmation-card__action')
-    const handleBtn = allButtons.find((btn) => btn.text() === '处理')
-    expect(handleBtn).toBeTruthy()
-
-    await handleBtn!.trigger('click')
+    await openDialog(wrapper)
+    const enterBtn = [...document.body.querySelectorAll<HTMLButtonElement>('.confirmation-card__action')]
+      .find((btn) => btn.textContent?.includes('进入会话'))
+    expect(enterBtn).toBeTruthy()
+    await enterBtn!.click()
 
     expect(wrapper.emitted('handle')).toBeTruthy()
     expect(wrapper.emitted('handle')![0]).toEqual(['conf-1'])

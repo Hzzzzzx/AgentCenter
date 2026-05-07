@@ -13,6 +13,10 @@ const props = defineProps<{
   targetSessionId?: string | null
 }>()
 
+const emit = defineEmits<{
+  back: []
+}>()
+
 const sessionStore = useSessionStore()
 const workflowStore = useWorkflowStore()
 const runtimeStore = useRuntimeStore()
@@ -192,16 +196,23 @@ async function refreshSkills() {
   <div class="conversation-workbench">
     <section class="conversation-workbench__main" aria-label="对话工作台">
       <header class="conversation-workbench__header">
-        <div>
-          <h2>{{ activeTitle }}</h2>
-          <p>{{ activeSubtitle }}</p>
+        <div class="conversation-workbench__heading">
+          <button class="conversation-workbench__back" aria-label="返回上一级" title="返回上一级" @click="emit('back')">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <div>
+            <h2>{{ activeTitle }}</h2>
+            <p>{{ activeSubtitle }}</p>
+          </div>
         </div>
         <div class="conversation-workbench__header-actions">
           <span
             class="conversation-workbench__socket"
             :class="{ 'conversation-workbench__socket--online': runtimeStore.connected }"
           >
-            {{ runtimeStore.connected ? 'SSE 已连接' : '连接中' }}
+            {{ runtimeStore.connected ? '已连接' : '连接中' }}
           </span>
           <button
             class="conversation-workbench__refresh"
@@ -301,6 +312,36 @@ async function refreshSkills() {
   border-bottom: 1px solid var(--border-color);
 }
 
+.conversation-workbench__heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.conversation-workbench__heading > div {
+  min-width: 0;
+}
+
+.conversation-workbench__back {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.conversation-workbench__back:hover {
+  border-color: var(--brand-border);
+  background: var(--brand-soft);
+  color: var(--brand-primary);
+}
+
 .conversation-workbench__header h2 {
   margin: 0;
   color: var(--text-primary);
@@ -341,12 +382,12 @@ async function refreshSkills() {
   width: 8px;
   height: 8px;
   border-radius: 999px;
-  background: #94a3b8;
+  background: var(--text-muted);
 }
 
 .conversation-workbench__socket--online {
-  background: #ecfdf5;
-  color: #047857;
+  background: var(--success-soft);
+  color: var(--success);
 }
 
 .conversation-workbench__socket--online::before {
@@ -396,7 +437,7 @@ async function refreshSkills() {
 
 .conversation-workbench__chip:hover {
   border-color: var(--accent-blue);
-  background: rgba(59, 130, 246, 0.06);
+  background: var(--brand-soft);
   color: var(--accent-blue);
 }
 
@@ -404,8 +445,8 @@ async function refreshSkills() {
   width: 10px;
   height: 10px;
   border-radius: 999px;
-  background: #10b981;
-  box-shadow: 0 0 0 6px #dff8ee;
+  background: var(--success);
+  box-shadow: 0 0 0 6px var(--success-soft);
 }
 
 .conversation-workbench__messages {
@@ -422,9 +463,9 @@ async function refreshSkills() {
 .conversation-workbench__notice {
   margin: 10px 22px 0;
   padding: 8px 10px;
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  border: 1px solid var(--brand-border);
   border-radius: 8px;
-  background: rgba(59, 130, 246, 0.06);
+  background: var(--brand-soft);
   color: var(--accent-blue);
   font-size: 12px;
   font-weight: 800;
@@ -470,7 +511,7 @@ async function refreshSkills() {
 }
 
 .conversation-workbench__input::placeholder {
-  color: #94a3b8;
+  color: var(--text-muted);
 }
 
 .conversation-workbench__send {
@@ -480,8 +521,8 @@ async function refreshSkills() {
   height: 46px;
   border: 0;
   border-radius: 10px;
-  background: linear-gradient(135deg, #3b82f6, #7c3aed);
-  color: #ffffff;
+  background: var(--brand-gradient);
+  color: var(--on-brand);
   cursor: pointer;
 }
 

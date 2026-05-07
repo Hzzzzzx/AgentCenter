@@ -22,6 +22,7 @@ import type { ProjectContextOptions, ProjectContextSelection } from './types/pro
 const activeView = ref('home')
 const selectedWorkItemId = ref<string | undefined>(undefined)
 const targetSessionId = ref<string | null>(null)
+const conversationReturnView = ref('home')
 const settingsTab = ref<string>('skills')
 const projectContextOptions: ProjectContextOptions = {
   projects: ['AgentCenter', 'TianYuan', '平台接入'],
@@ -159,6 +160,7 @@ async function handleConfirmationsChanged(workItemId?: string | null) {
 }
 
 function handleEnterWorkItemConversation(id: string) {
+  rememberConversationReturnView()
   selectedWorkItemId.value = id
   const session = sessionStore.sessions.find((item) => item.workItemId === id)
   targetSessionId.value = session?.id ?? null
@@ -167,6 +169,7 @@ function handleEnterWorkItemConversation(id: string) {
 
 async function handleConfirmation(confirmationId: string) {
   try {
+    rememberConversationReturnView()
     const result = await confirmationApi.enterSession(confirmationId)
     if (result.agentSessionId) {
       targetSessionId.value = result.agentSessionId
@@ -188,12 +191,14 @@ async function handleConfirmation(confirmationId: string) {
 }
 
 function handleSelectSession(session: AgentSessionDto) {
+  rememberConversationReturnView()
   targetSessionId.value = session.id
   selectedWorkItemId.value = session.workItemId || undefined
   activeView.value = 'conversation'
 }
 
 async function handleCreateGeneralSession() {
+  rememberConversationReturnView()
   const session = await sessionStore.createSession({
     sessionType: 'GENERAL',
     title: '通用会话',
@@ -207,6 +212,16 @@ async function handleCreateGeneralSession() {
 function handleNavigateSettings(tab: string) {
   settingsTab.value = tab
   activeView.value = 'settings'
+}
+
+function rememberConversationReturnView() {
+  if (activeView.value !== 'conversation') {
+    conversationReturnView.value = activeView.value
+  }
+}
+
+function handleConversationBack() {
+  activeView.value = conversationReturnView.value || 'home'
 }
 </script>
 
@@ -246,6 +261,7 @@ function handleNavigateSettings(tab: string) {
         v-else-if="activeView === 'conversation'"
         :work-item-id="selectedWorkItemId"
         :target-session-id="targetSessionId"
+        @back="handleConversationBack"
       />
     </template>
   </AppShell>
