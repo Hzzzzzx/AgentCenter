@@ -126,8 +126,9 @@ public class SkillRegistryService {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "ZIP must contain a SKILL.md file");
                 }
 
-                String checksum = computeDirectoryChecksum(tempDir);
-                String skillMdSummary = extractSkillMdSummary(tempDir);
+                Path skillRoot = resolveSkillPackageRoot(tempDir);
+                String checksum = computeDirectoryChecksum(skillRoot);
+                String skillMdSummary = extractSkillMdSummary(skillRoot);
 
                 RuntimeSkillEntity existing = skillMapper.findByProjectIdAndName(projectId, skillName);
                 if (existing != null) {
@@ -136,11 +137,11 @@ public class SkillRegistryService {
                                 "NOOP", "Same checksum, skipped", null, createdBy);
                         return toDetailDto(existing);
                     }
-                    return updateExistingSkill(projectId, existing, tempDir, checksum, fileCount,
+                    return updateExistingSkill(projectId, existing, skillRoot, checksum, fileCount,
                             totalSize, skillMdSummary, createdBy);
                 }
 
-                return installNewSkill(projectId, skillName, tempDir, checksum, fileCount,
+                return installNewSkill(projectId, skillName, skillRoot, checksum, fileCount,
                         totalSize, skillMdSummary, createdBy);
             } finally {
                 deleteRecursively(tempDir);
@@ -164,10 +165,11 @@ public class SkillRegistryService {
             Path tempDir = Files.createTempDirectory("skill-update-");
             try {
                 extractZip(file, tempDir);
-                String checksum = computeDirectoryChecksum(tempDir);
-                String skillMdSummary = extractSkillMdSummary(tempDir);
-                long totalSize = computeDirectorySize(tempDir);
-                int fileCount = countFiles(tempDir);
+                Path skillRoot = resolveSkillPackageRoot(tempDir);
+                String checksum = computeDirectoryChecksum(skillRoot);
+                String skillMdSummary = extractSkillMdSummary(skillRoot);
+                long totalSize = computeDirectorySize(skillRoot);
+                int fileCount = countFiles(skillRoot);
 
                 RuntimeSkillVersionEntity version = createVersion(existing.getId(), checksum, totalSize,
                         fileCount, existing.getRelativePath(), skillMdSummary, createdBy);
@@ -178,7 +180,8 @@ public class SkillRegistryService {
                 existing.setValidationMessage(null);
                 skillMapper.update(existing);
 
-                installToSkillDirectory(existing.getName(), tempDir);
+                installToSkillDirectory(existing.getName(), skillRoot);
+                runtimeResourceService.refreshSkills();
 
                 auditService.recordAudit(projectId, "SKILL", skillId, "UPDATE_ZIP",
                         "SUCCESS", "Updated skill ZIP", null, createdBy);
@@ -215,7 +218,17 @@ public class SkillRegistryService {
                     "Cannot delete skill: referenced by " + refCount + " workflow node definition(s)");
         }
 
+        try {
+            deleteInstalledSkillDirectory(existing);
+        } catch (IOException e) {
+            auditService.recordAudit(projectId, "SKILL", skillId, "DELETE",
+                    "FAILED", "Failed to delete installed skill files: " + e.getMessage(), null, createdBy);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Failed to delete installed skill files: " + e.getMessage(), e);
+        }
+
         skillMapper.deleteById(skillId);
+        runtimeResourceService.refreshSkills();
         auditService.recordAudit(projectId, "SKILL", skillId, "DELETE",
                 "SUCCESS", "Deleted skill", null, createdBy);
     }
@@ -342,6 +355,7 @@ public class SkillRegistryService {
         skillMapper.insert(entity);
 
         installToSkillDirectory(skillName, tempDir);
+        runtimeResourceService.refreshSkills();
 
         auditService.recordAudit(projectId, "SKILL", id, "UPLOAD",
                 "SUCCESS", "Created new skill", null, createdBy);
@@ -367,6 +381,7 @@ public class SkillRegistryService {
         skillMapper.update(existing);
 
         installToSkillDirectory(existing.getName(), tempDir);
+        runtimeResourceService.refreshSkills();
 
         auditService.recordAudit(projectId, "SKILL", existing.getId(), "UPLOAD",
                 "SUCCESS", "Updated existing skill (new version)", null, createdBy);
@@ -411,6 +426,50 @@ public class SkillRegistryService {
                 Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
             }
         }
+    }
+
+    private Path resolveSkillPackageRoot(Path extractedDir) throws IOException {
+        if (Files.isRegularFile(extractedDir.resolve("SKILL.md"))) {
+            return extractedDir;
+        }
+
+        try (Stream<Path> children = Files.list(extractedDir)) {
+            List<Path> directories = children
+                    .filter(Files::isDirectory)
+                    .toList();
+            if (directories.size() == 1 && Files.isRegularFile(directories.get(0).resolve("SKILL.md"))) {
+                return directories.get(0);
+            }
+        }
+
+        try (Stream<Path> walk = Files.walk(extractedDir, 3)) {
+            List<Path> skillFiles = walk
+                    .filter(Files::isRegularFile)
+                    .filter(path -> "SKILL.md".equals(path.getFileName().toString()))
+                    .toList();
+            if (skillFiles.size() == 1) {
+                return skillFiles.get(0).getParent();
+            }
+        }
+
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "ZIP must contain exactly one skill root with SKILL.md");
+    }
+
+    private void deleteInstalledSkillDirectory(RuntimeSkillEntity skill) throws IOException {
+        Path projectRoot = Path.of(workingDirectory).toAbsolutePath().normalize();
+        Path targetDir;
+        if (skill.getRelativePath() != null && !skill.getRelativePath().isBlank()) {
+            targetDir = projectRoot.resolve(skill.getRelativePath()).normalize();
+        } else {
+            targetDir = projectRoot.resolve(".opencode").resolve("skills").resolve(skill.getName()).normalize();
+        }
+
+        Path skillsRoot = projectRoot.resolve(".opencode").resolve("skills").normalize();
+        if (!targetDir.startsWith(skillsRoot)) {
+            throw new IOException("Refusing to delete path outside skills directory: " + targetDir);
+        }
+        deleteRecursively(targetDir);
     }
 
     private void validateZipFile(MultipartFile file) {
