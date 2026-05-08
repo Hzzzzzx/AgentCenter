@@ -130,7 +130,7 @@ describe('MessageList.vue', () => {
     expect(wrapper.find('.system-line').exists()).toBe(true)
   })
 
-  it('accepts runtimeEvents prop without rendering them as message cards', () => {
+  it('groups runtime process events inside an assistant turn', () => {
     const wrapper = mount(MessageList, {
       props: {
         messages: [makeMessage({ role: 'ASSISTANT', content: 'reply' })],
@@ -149,9 +149,124 @@ describe('MessageList.vue', () => {
       },
     })
     expect(wrapper.find('.message-list').exists()).toBe(true)
-    expect(wrapper.find('.mocked-process-trace').exists()).toBe(true)
-    expect(wrapper.text()).not.toContain('reasoning_summary')
+    expect(wrapper.find('.assistant-turn').exists()).toBe(true)
+    expect(wrapper.find('.turn-section').exists()).toBe(true)
+    expect(wrapper.text()).toContain('thinking')
+    expect(wrapper.text()).toContain('build-skill')
     expect(wrapper.text()).not.toContain('skill_started')
+  })
+
+  it('renders real tool completed output inside a collapsible tool block', () => {
+    const wrapper = mount(MessageList, {
+      props: {
+        messages: [makeMessage({ role: 'USER', content: '开始工作流' })],
+        runtimeEvents: [
+          makeRuntimeEvent({
+            id: 'evt-tool-output',
+            eventType: 'SKILL_COMPLETED',
+            payloadJson: '{"type":"skill_completed","label":"skill","output":"## Skill Output\\n\\n真实工具返回内容","isError":false,"toolCallId":"call_1"}',
+          }),
+        ],
+      },
+    })
+
+    expect(wrapper.find('.tool-block').exists()).toBe(true)
+    expect(wrapper.text()).toContain('工具')
+    expect(wrapper.text()).toContain('真实工具返回内容')
+  })
+
+  it('does not render generic node status runtime events as assistant output', () => {
+    const wrapper = mount(MessageList, {
+      props: {
+        messages: [makeMessage({ role: 'ASSISTANT', content: 'reply' })],
+        runtimeEvents: [
+          makeRuntimeEvent({
+            id: 'evt-status',
+            eventType: 'PROCESS_TRACE',
+            payloadJson: '{"kind":"node_status","status":"running","title":"状态","summary":"Agent 正在处理当前请求"}',
+          }),
+        ],
+      },
+    })
+
+    expect(wrapper.find('.turn-section').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('Agent 正在处理当前请求')
+  })
+
+  it('renders confirmations as a gate inside the assistant turn', () => {
+    const wrapper = mount(MessageList, {
+      props: {
+        messages: [
+          makeMessage({
+            id: 'msg-assistant',
+            role: 'ASSISTANT',
+            content: '# PRD',
+            seqNo: 2,
+            createdAt: '2026-05-09T00:00:02Z',
+          }),
+        ],
+        runtimeEvents: [
+          makeRuntimeEvent({
+            id: 'evt-confirm-1',
+            eventType: 'CONFIRMATION_CREATED',
+            payloadJson: '{"confirmationId":"confirm-1"}',
+            createdAt: '2026-05-09T00:00:03Z',
+          }),
+          makeRuntimeEvent({
+            id: 'evt-confirm-2',
+            eventType: 'CONFIRMATION_CREATED',
+            payloadJson: '{"confirmationId":"confirm-2"}',
+            createdAt: '2026-05-09T00:00:03Z',
+          }),
+        ],
+      },
+    })
+
+    expect(wrapper.find('.confirmation-gate').exists()).toBe(true)
+    expect(wrapper.find('.confirmation-gate').text()).toContain('2 个确认项等待处理')
+    expect(wrapper.findAll('.assistant-turn')).toHaveLength(1)
+  })
+
+  it('keeps unresolved confirmations waiting after one confirmation is resolved', () => {
+    const wrapper = mount(MessageList, {
+      props: {
+        messages: [
+          makeMessage({
+            id: 'msg-assistant',
+            role: 'ASSISTANT',
+            content: '# PRD',
+            seqNo: 2,
+            createdAt: '2026-05-09T00:00:02Z',
+          }),
+        ],
+        runtimeEvents: [
+          makeRuntimeEvent({
+            id: 'evt-confirm-1',
+            eventType: 'CONFIRMATION_CREATED',
+            payloadJson: '{"confirmationId":"confirm-1"}',
+            seqNo: 1,
+            createdAt: '2026-05-09T00:00:03Z',
+          }),
+          makeRuntimeEvent({
+            id: 'evt-confirm-2',
+            eventType: 'CONFIRMATION_CREATED',
+            payloadJson: '{"confirmationId":"confirm-2"}',
+            seqNo: 2,
+            createdAt: '2026-05-09T00:00:03Z',
+          }),
+          makeRuntimeEvent({
+            id: 'evt-confirm-resolved',
+            eventType: 'CONFIRMATION_RESOLVED',
+            payloadJson: '{"confirmationId":"confirm-1","actionType":"APPROVE"}',
+            seqNo: 3,
+            createdAt: '2026-05-09T00:00:04Z',
+          }),
+        ],
+      },
+    })
+
+    expect(wrapper.find('.assistant-card__pill').text()).toContain('待确认')
+    expect(wrapper.find('.confirmation-gate').text()).toContain('1 个确认项等待处理')
   })
 
   it('shows empty state when no messages are provided', () => {
@@ -162,7 +277,7 @@ describe('MessageList.vue', () => {
     expect(wrapper.text()).toContain('会话已就绪')
   })
 
-  it('renders ProcessTrace under ASSISTANT message with workflowNodeInstanceId', () => {
+  it('does not render generic tool_call process trace when tool lifecycle events provide the real output', () => {
     const events: RuntimeEventDto[] = [
       makeRuntimeEvent({
         id: 'evt-trace',
@@ -184,18 +299,24 @@ describe('MessageList.vue', () => {
         runtimeEvents: events,
       },
     })
-    const trace = wrapper.findComponent({ name: 'ProcessTrace' })
-    expect(trace.exists()).toBe(true)
-    expect(trace.attributes('data-node-id')).toBe('node-1')
+    expect(wrapper.find('.process-turn').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('read_file')
     const card = wrapper.find('.assistant-card')
-    expect(card.findComponent({ name: 'ProcessTrace' }).exists()).toBe(true)
+    expect(card.text()).toContain('# Output')
   })
 
-  it('renders a live process turn before final assistant text is available', () => {
+  it('does not render a standalone live process turn before real assistant text is available', () => {
     const wrapper = mount(MessageList, {
       props: {
         messages: [makeMessage({ role: 'USER', content: '开始工作流' })],
-        runtimeEvents: [],
+        runtimeEvents: [
+          makeRuntimeEvent({
+            id: 'evt-running',
+            workflowNodeInstanceId: 'node-running',
+            eventType: 'PROCESS_TRACE',
+            payloadJson: '{"kind":"tool_call","status":"running","summary":"真实工具调用"}',
+          }),
+        ],
         activeNodeId: 'node-running',
         activeNodeState: 'RUNNING',
         activeSessionId: 'session-1',
@@ -204,10 +325,8 @@ describe('MessageList.vue', () => {
     })
 
     const traces = wrapper.findAll('.mocked-process-trace')
-    expect(traces).toHaveLength(1)
-    expect(traces[0].attributes('data-node-id')).toBe('node-running')
-    expect(traces[0].attributes('data-expanded')).toBe('true')
-    expect(traces[0].attributes('data-empty')).toBe('true')
-    expect(wrapper.text()).toContain('助手正在处理')
+    expect(traces).toHaveLength(0)
+    expect(wrapper.find('.assistant-turn--live').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('助手正在处理')
   })
 })

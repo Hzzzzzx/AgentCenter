@@ -517,7 +517,7 @@ class OpenCodeRuntimeEventTranslatorTest {
     }
 
     @Test
-    void reasoningWithoutVisibilityReturnsGenericDescription() throws Exception {
+    void reasoningWithoutVisibilityDoesNotEmitSyntheticSummary() throws Exception {
         String json = """
         {
           "type": "message.part.delta",
@@ -530,9 +530,7 @@ class OpenCodeRuntimeEventTranslatorTest {
         RuntimeRawEvent raw = rawEvent("message.part.delta", json);
         List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
 
-        assertEquals(1, result.size());
-        assertEquals(RuntimeEventTypes.PROCESS_TRACE, result.get(0).type());
-        assertEquals("正在分析上下文并规划下一步", result.get(0).payload().path("summary").asText());
+        assertTrue(result.isEmpty());
     }
 
     @Test

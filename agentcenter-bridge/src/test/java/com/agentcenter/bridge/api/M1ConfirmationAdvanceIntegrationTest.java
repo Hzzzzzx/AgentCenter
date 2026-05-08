@@ -195,4 +195,80 @@ class M1ConfirmationAdvanceIntegrationTest {
                 .anyMatch(n -> nodeInstanceId.equals(n.get("id").asText())
                         && "WAITING_CONFIRMATION".equals(n.get("status").asText()))).isTrue();
     }
+
+    @Test
+    void resolvingLastBlockingConfirmation_promotesNextNodeAsCurrent() throws Exception {
+        String fe1234Id = findWorkItemIdByCode("FE1234");
+
+        MvcResult startResult = mockMvc.perform(
+                        post("/api/work-items/" + fe1234Id + "/start-workflow")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.confirmation").exists())
+                .andReturn();
+
+        var startJson = objectMapper.readTree(startResult.getResponse().getContentAsString());
+        String confirmationId = startJson.at("/confirmation/id").asText();
+        String instanceId = startJson.at("/workflowInstance/id").asText();
+        String nodeInstanceId = startJson.at("/confirmation/workflowNodeInstanceId").asText();
+
+        jdbcTemplate.update("""
+                INSERT INTO confirmation_request (
+                    id, request_type, status, work_item_id, workflow_instance_id,
+                    workflow_node_instance_id, title, priority, created_at, updated_at
+                )
+                VALUES (?, 'INPUT_REQUIRED', 'IN_CONVERSATION', ?, ?, ?, '补充信息', 'MEDIUM', datetime('now'), datetime('now'))
+                """, "conf-last-blocker", fe1234Id, instanceId, nodeInstanceId);
+
+        mockMvc.perform(post("/api/confirmations/" + confirmationId + "/resolve")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"actionType\":\"CHOOSE\",\"payload\":{\"choice\":\"低风险方案\"}}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/confirmations/conf-last-blocker/resolve")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"actionType\":\"SUPPLEMENT\",\"payload\":{\"input\":\"补充完成\"}}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("RESOLVED"));
+
+        MvcResult wfResult = mockMvc.perform(get("/api/workflow-instances/" + instanceId))
+                .andExpect(status().isOk())
+                .andReturn();
+        var wfJson = objectMapper.readTree(wfResult.getResponse().getContentAsString());
+        assertThat(wfJson.at("/currentNodeInstanceId").asText()).isNotEqualTo(nodeInstanceId);
+
+        var nodes = wfJson.at("/nodes");
+        assertThat(java.util.stream.StreamSupport.stream(nodes.spliterator(), false)
+                .anyMatch(n -> nodeInstanceId.equals(n.get("id").asText())
+                        && "COMPLETED".equals(n.get("status").asText()))).isTrue();
+        assertThat(TestWorkflowExecutorConfig.CAPTURED_SKILL_NAMES).contains("hld-design");
+    }
+
+    @Test
+    void continueWorkflow_conflictsWhenCurrentNodeIsRunning() throws Exception {
+        String fe1234Id = findWorkItemIdByCode("FE1234");
+
+        MvcResult startResult = mockMvc.perform(
+                        post("/api/work-items/" + fe1234Id + "/start-workflow")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.confirmation").exists())
+                .andReturn();
+
+        var startJson = objectMapper.readTree(startResult.getResponse().getContentAsString());
+        String instanceId = startJson.at("/workflowInstance/id").asText();
+        String nodeInstanceId = startJson.at("/confirmation/workflowNodeInstanceId").asText();
+
+        jdbcTemplate.update("UPDATE workflow_node_instance SET status = 'RUNNING' WHERE id = ?", nodeInstanceId);
+        jdbcTemplate.update("""
+                UPDATE workflow_instance
+                SET status = 'RUNNING', current_node_instance_id = ?
+                WHERE id = ?
+                """, nodeInstanceId, instanceId);
+
+        mockMvc.perform(post("/api/workflow-instances/" + instanceId + "/continue"))
+                .andExpect(status().isConflict());
+    }
 }

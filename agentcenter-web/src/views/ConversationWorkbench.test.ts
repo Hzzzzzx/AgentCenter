@@ -4,7 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import ConversationWorkbench from './ConversationWorkbench.vue'
 
 const mocks = vi.hoisted(() => {
-  const failedWorkItem = {
+  const runningWorkItem = {
     id: 'work-1',
     code: 'FE0003',
     type: 'FE',
@@ -26,8 +26,8 @@ const mocks = vi.hoisted(() => {
           id: 'node-1',
           definitionName: '详细设计 (LLD)',
           skillName: 'lld-design',
-          status: 'FAILED',
-          errorMessage: 'Agent Runtime 超时',
+          status: 'RUNNING',
+          errorMessage: null,
         },
       ],
       stages: [
@@ -36,12 +36,12 @@ const mocks = vi.hoisted(() => {
           stageKey: 'detail_design',
           name: '详细设计 (LLD)',
           skillName: 'lld-design',
-          status: 'FAILED',
+          status: 'RUNNING',
           dynamicNodeCount: 0,
           recoveryCount: 0,
           pendingConfirmationCount: 0,
           latestSummary: '详细设计 (LLD)',
-          errorMessage: 'Agent Runtime 超时',
+          errorMessage: null,
         },
       ],
     },
@@ -49,7 +49,7 @@ const mocks = vi.hoisted(() => {
     updatedAt: '2026-05-08T10:00:00Z',
   }
 
-  const failedSession = {
+  const runningSession = {
     id: 'session-1',
     sessionType: 'WORK_ITEM',
     title: 'FE0003 · 社区共享工具柜借还流程',
@@ -60,7 +60,7 @@ const mocks = vi.hoisted(() => {
     createdAt: '2026-05-08T10:00:00Z',
   }
 
-  const failedWorkflow = {
+  const runningWorkflow = {
     id: 'wf-1',
     workItemId: 'work-1',
     workflowDefinitionId: 'wf-def-1',
@@ -70,13 +70,13 @@ const mocks = vi.hoisted(() => {
       {
         id: 'node-1',
         nodeDefinitionId: 'node-def-1',
-        status: 'FAILED',
+        status: 'RUNNING',
         inputArtifactId: null,
         outputArtifactId: null,
         agentSessionId: 'session-1',
         startedAt: null,
         completedAt: null,
-        errorMessage: 'Agent Runtime 超时',
+        errorMessage: null,
       },
     ],
     startedAt: null,
@@ -104,27 +104,27 @@ const mocks = vi.hoisted(() => {
     ],
   }
 
-  return { failedWorkItem, failedSession, failedWorkflow, workflowDefinition }
+  return { runningWorkItem, runningSession, runningWorkflow, workflowDefinition }
 })
 
 vi.mock('../api/workItems', () => ({
   workItemApi: {
-    list: vi.fn().mockResolvedValue([mocks.failedWorkItem]),
-    getById: vi.fn().mockResolvedValue(mocks.failedWorkItem),
+    list: vi.fn().mockResolvedValue([mocks.runningWorkItem]),
+    getById: vi.fn().mockResolvedValue(mocks.runningWorkItem),
   },
 }))
 
 vi.mock('../api/workflows', () => ({
   workflowApi: {
     listDefinitions: vi.fn().mockResolvedValue([mocks.workflowDefinition]),
-    getInstance: vi.fn().mockResolvedValue(mocks.failedWorkflow),
+    getInstance: vi.fn().mockResolvedValue(mocks.runningWorkflow),
   },
 }))
 
 vi.mock('../api/sessions', () => ({
   sessionApi: {
-    list: vi.fn().mockResolvedValue([mocks.failedSession]),
-    getById: vi.fn().mockResolvedValue(mocks.failedSession),
+    list: vi.fn().mockResolvedValue([mocks.runningSession]),
+    getById: vi.fn().mockResolvedValue(mocks.runningSession),
     getMessages: vi.fn().mockResolvedValue([]),
     create: vi.fn(),
   },
@@ -149,7 +149,7 @@ vi.mock('../api/artifacts', () => ({
 }))
 
 describe('ConversationWorkbench.vue', () => {
-  it('shows a workflow failure notice above the conversation', async () => {
+  it('shows pause action while the workflow node is running', async () => {
     const pinia = createPinia()
     setActivePinia(pinia)
     const wrapper = mount(ConversationWorkbench, {
@@ -164,6 +164,9 @@ describe('ConversationWorkbench.vue', () => {
 
     await flushPromises()
 
-    expect(wrapper.find('.node-state-area--failed').text()).toContain('Agent Runtime 超时')
+    const sendButton = wrapper.find('.conversation-workbench__send')
+    expect(sendButton.classes()).toContain('conversation-workbench__send--pause')
+    expect(sendButton.attributes('aria-label')).toBe('暂停当前回复')
+    expect(wrapper.find('.node-state-area--running').exists()).toBe(false)
   })
 })

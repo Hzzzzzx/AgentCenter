@@ -9,5 +9,6 @@ import java.util.List;
 @Mapper
 public interface RuntimeEventMapper {
     List<RuntimeEventEntity> findBySessionId(@Param("sessionId") String sessionId);
+    int nextSeqNo(@Param("sessionId") String sessionId);
     void insert(RuntimeEventEntity entity);
 }

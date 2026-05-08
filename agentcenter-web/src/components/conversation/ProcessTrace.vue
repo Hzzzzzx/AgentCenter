@@ -31,6 +31,7 @@ interface TraceItem {
   title: string
   summary: string
   toolName?: string | null
+  toolCallId?: string | null
   createdAt: string | null
 }
 
@@ -78,16 +79,7 @@ const traceItems = computed(() => {
 })
 
 const visibleItems = computed<TraceItem[]>(() => {
-  if (traceItems.value.length > 0) return traceItems.value
-  if (!props.showWhenEmpty) return []
-  return [{
-    id: 'process-trace-empty',
-    kind: 'node_status',
-    status: 'running',
-    title: '状态',
-    summary: props.emptyText || '正在准备运行上下文...',
-    createdAt: null,
-  }]
+  return traceItems.value
 })
 
 const hasTraces = computed(() => visibleItems.value.length > 0)
@@ -95,7 +87,11 @@ const hasTraces = computed(() => visibleItems.value.length > 0)
 const summaryLine = computed(() => {
   const events = visibleItems.value
   if (events.length === 0) return ''
-  const toolCalls = events.filter((e) => e.kind === 'tool_call').length
+  const toolCalls = new Set(
+    events
+      .filter((e) => e.kind === 'tool_call')
+      .map((e) => e.toolCallId || e.toolName || e.id)
+  ).size
   const reasoning = events.filter((e) => e.kind === 'reasoning_summary').length
   const confirmations = events.filter((e) => e.kind === 'confirmation').length
   const errors = events.filter((e) => e.status === 'failed' || e.kind === 'error').length
@@ -110,10 +106,6 @@ const summaryLine = computed(() => {
 function isProcessEvent(event: RuntimeEventDto): boolean {
   return [
     'PROCESS_TRACE',
-    'STATUS',
-    'SKILL_STARTED',
-    'SKILL_COMPLETED',
-    'MCP_CALL',
     'PERMISSION_REQUIRED',
     'ERROR',
     'CONFIRMATION_CREATED',
@@ -145,6 +137,7 @@ function toTraceItem(event: RuntimeEventDto): TraceItem | null {
   const payload = parsePayload(event.payloadJson)
   switch (event.eventType) {
     case 'PROCESS_TRACE':
+      if ((payload.kind || 'node_status') === 'node_status') return null
       return {
         id: event.id,
         kind: payload.kind || 'node_status',
@@ -152,43 +145,7 @@ function toTraceItem(event: RuntimeEventDto): TraceItem | null {
         title: payload.title || kindLabel(payload.kind || 'node_status'),
         summary: payload.summary || payload.title || '正在处理',
         toolName: payload.toolName,
-        createdAt: event.createdAt,
-      }
-    case 'STATUS':
-      return statusTrace(event, payload)
-    case 'SKILL_STARTED':
-      return {
-        id: event.id,
-        kind: 'tool_call',
-        status: 'running',
-        title: '工具调用',
-        summary: `${payload.skillName || payload.label || 'Skill'} 开始执行`,
-        toolName: payload.skillName || payload.label,
-        createdAt: event.createdAt,
-      }
-    case 'SKILL_COMPLETED': {
-      const failed = payload.isError === true || payload.success === false
-      const toolName = payload.skillName || payload.label || 'Skill'
-      return {
-        id: event.id,
-        kind: 'tool_call',
-        status: failed ? 'failed' : 'completed',
-        title: '工具调用',
-        summary: failed
-          ? `${toolName} 执行失败：${trimDetail(payload.errorMessage || payload.reason || payload.output || '未返回错误详情')}`
-          : `${toolName} 执行完成`,
-        toolName,
-        createdAt: event.createdAt,
-      }
-    }
-    case 'MCP_CALL':
-      return {
-        id: event.id,
-        kind: 'tool_call',
-        status: 'running',
-        title: '工具调用',
-        summary: payload.label || payload.toolName || payload.type || '正在调用 MCP 工具',
-        toolName: payload.toolName || payload.label,
+        toolCallId: payload.toolCallId,
         createdAt: event.createdAt,
       }
     case 'PERMISSION_REQUIRED':
@@ -232,19 +189,6 @@ function toTraceItem(event: RuntimeEventDto): TraceItem | null {
   }
 }
 
-function statusTrace(event: RuntimeEventDto, payload: TracePayload): TraceItem {
-  const rawStatus = payload.status || payload.label || payload.type || 'running'
-  const status = rawStatus === 'idle' || rawStatus === 'waiting_user' ? 'completed' : rawStatus
-  return {
-    id: event.id,
-    kind: 'node_status',
-    status,
-    title: '状态',
-    summary: statusSummary(rawStatus),
-    createdAt: event.createdAt,
-  }
-}
-
 function parsePayload(payloadJson: string | null): TracePayload {
   if (!payloadJson) return {}
   try {
@@ -261,7 +205,7 @@ function compactTraceItems(items: TraceItem[]): TraceItem[] {
   const out: TraceItem[] = []
   items.forEach((item) => {
     const last = out.at(-1)
-    if (last && last.kind === item.kind && last.status === item.status && last.summary === item.summary) {
+    if (last && traceDedupeKey(last) === traceDedupeKey(item)) {
       return
     }
     out.push(item)
@@ -269,20 +213,11 @@ function compactTraceItems(items: TraceItem[]): TraceItem[] {
   return out
 }
 
-function statusSummary(status: string): string {
-  switch (status) {
-    case 'running':
-    case 'busy':
-      return 'Agent 正在处理当前请求'
-    case 'waiting_user':
-      return 'Agent 正在等待用户输入'
-    case 'idle':
-      return 'Agent 本轮处理已完成'
-    case 'failed':
-      return 'Agent 运行失败'
-    default:
-      return `状态更新：${status}`
+function traceDedupeKey(item: TraceItem): string {
+  if (item.kind === 'tool_call' && item.toolCallId) {
+    return `${item.kind}|${item.status}|${item.toolCallId}|${item.summary}`
   }
+  return `${item.kind}|${item.status}|${item.summary}`
 }
 
 function kindLabel(kind: string): string {
@@ -329,9 +264,10 @@ function formatTime(value: string | null): string {
   return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
 }
 
-function trimDetail(value: string): string {
-  const compact = value.replace(/\s+/g, ' ').trim()
-  return compact.length > 120 ? `${compact.slice(0, 120)}...` : compact
+function traceText(trace: TraceItem): string {
+  const text = trace.summary || trace.title
+  if (!trace.toolName) return text
+  return text.startsWith(trace.toolName) ? text : `${trace.toolName}：${text}`
 }
 
 function toggleExpanded(): void {
@@ -363,12 +299,7 @@ function toggleExpanded(): void {
           {{ statusIcon(trace.status) }}
         </span>
         <span class="trace-item__kind">{{ kindLabel(trace.kind) }}</span>
-        <span class="trace-item__text">
-          <template v-if="trace.toolName">
-            {{ trace.toolName }}：{{ trace.summary }}
-          </template>
-          <template v-else>{{ trace.summary || trace.title }}</template>
-        </span>
+        <span class="trace-item__text">{{ traceText(trace) }}</span>
         <span class="trace-item__time">{{ formatTime(trace.createdAt) }}</span>
       </div>
     </div>

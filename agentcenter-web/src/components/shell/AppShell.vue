@@ -111,6 +111,7 @@ watch(() => props.selectedArtifact, (artifact) => {
       <RightPanel
         :collapsed="rightCollapsed"
         :expanded="rightExpanded"
+        :active-view="activeView"
         :selected-work-item="selectedWorkItem"
         :selected-artifact="selectedArtifact"
         @update:collapsed="handleRightCollapsedChange"

@@ -190,6 +190,7 @@ export interface RuntimeEventDto {
   eventType: RuntimeEventType
   eventSource: string
   payloadJson: string | null
+  seqNo?: number | null
   createdAt: string
 }
 

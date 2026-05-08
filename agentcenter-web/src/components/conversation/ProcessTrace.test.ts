@@ -118,6 +118,51 @@ describe('ProcessTrace', () => {
     expect(wrapper.text()).toContain('调用完成')
   })
 
+  it('does not render legacy skill/status events as process rows', () => {
+    const events = [
+      makeTraceEvent({
+        id: 'evt-skill',
+        eventType: 'SKILL_STARTED',
+        payloadJson: '{"skillName":"hld-design","label":"hld-design"}',
+      }),
+      makeTraceEvent({
+        id: 'evt-status',
+        eventType: 'STATUS',
+        payloadJson: '{"status":"busy"}',
+      }),
+    ]
+    const wrapper = mount(ProcessTrace, {
+      props: { events, nodeId: 'node-1', defaultExpanded: true },
+    })
+    expect(wrapper.find('.process-trace').exists()).toBe(false)
+  })
+
+  it('does not render generic node status process traces', () => {
+    const events = [
+      makeTraceEvent({
+        id: 'evt-node-status',
+        eventType: 'PROCESS_TRACE',
+        payloadJson: '{"kind":"node_status","status":"running","title":"状态","summary":"Agent 正在处理当前请求"}',
+      }),
+    ]
+    const wrapper = mount(ProcessTrace, {
+      props: { events, nodeId: 'node-1', defaultExpanded: true },
+    })
+    expect(wrapper.find('.process-trace').exists()).toBe(false)
+  })
+
+  it('does not create placeholder rows when showWhenEmpty is true', () => {
+    const wrapper = mount(ProcessTrace, {
+      props: {
+        events: [],
+        nodeId: 'node-1',
+        showWhenEmpty: true,
+        emptyText: '正在准备运行上下文...',
+      },
+    })
+    expect(wrapper.find('.process-trace').exists()).toBe(false)
+  })
+
   it('falls back to sessionId when no nodeId', () => {
     const events = [
       makeTraceEvent({ workflowNodeInstanceId: null, sessionId: 'sess-1' }),

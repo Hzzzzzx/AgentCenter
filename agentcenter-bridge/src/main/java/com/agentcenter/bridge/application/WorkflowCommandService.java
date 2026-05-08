@@ -19,8 +19,6 @@ import org.springframework.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.agentcenter.bridge.api.dto.AgentSessionDto;
@@ -212,6 +210,11 @@ public class WorkflowCommandService {
                 .findFirst().orElse(null);
 
         if (currentNode != null
+                && WorkflowNodeStatus.RUNNING.name().equals(currentNode.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Current node is running. Wait until it completes or pauses.");
+        }
+        if (currentNode != null
                 && WorkflowNodeStatus.WAITING_CONFIRMATION.name().equals(currentNode.getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Current node is waiting for confirmation. Resolve confirmation first.");
@@ -321,7 +324,7 @@ public class WorkflowCommandService {
         workflowMapper.updateNodeInstance(node);
         touchWorkItem(instance.getWorkItemId(), now);
 
-        scheduleResumeAfterCommit(instance.getId());
+        scheduleResume(instance.getId());
 
         instance = workflowMapper.findInstanceById(instance.getId());
         return buildResponse(instance);
@@ -1047,45 +1050,6 @@ public class WorkflowCommandService {
                 .orElse(0) + 1;
     }
 
-    private void resumeAutoProgressIfPossible(WorkflowInstanceEntity instance) {
-        List<WorkflowNodeInstanceEntity> nodes = getOrderedNodeInstances(instance.getId());
-
-        boolean isBlocked = nodes.stream()
-                .anyMatch(n -> WorkflowNodeStatus.WAITING_CONFIRMATION.name().equals(n.getStatus())
-                        || WorkflowNodeStatus.RUNNING.name().equals(n.getStatus())
-                        || WorkflowNodeStatus.FAILED.name().equals(n.getStatus()));
-        if (isBlocked) {
-            return;
-        }
-
-        WorkflowNodeInstanceEntity nextPending = nodes.stream()
-                .filter(n -> WorkflowNodeStatus.PENDING.name().equals(n.getStatus()))
-                .findFirst().orElse(null);
-
-        if (nextPending == null) {
-            String now = LocalDateTime.now().format(SQLITE_DATETIME);
-            instance.setStatus(WorkflowStatus.COMPLETED.name());
-            instance.setCompletedAt(now);
-            instance.setUpdatedAt(now);
-            workflowMapper.updateInstance(instance);
-            touchWorkItem(instance.getWorkItemId(), now);
-            return;
-        }
-
-        WorkflowNodeInstanceEntity lastCompleted = nodes.stream()
-                .filter(n -> WorkflowNodeStatus.COMPLETED.name().equals(n.getStatus()))
-                .reduce((first, second) -> second).orElse(null);
-        if (lastCompleted != null && lastCompleted.getOutputArtifactId() != null) {
-            nextPending.setInputArtifactId(lastCompleted.getOutputArtifactId());
-        }
-
-        WorkItemEntity workItem = workItemMapper.findById(instance.getWorkItemId());
-        List<WorkflowNodeDefinitionEntity> nodeDefs =
-                workflowMapper.findNodeDefinitionsByWorkflowDefinitionId(instance.getWorkflowDefinitionId());
-
-        runNode(instance, nextPending, nodeDefs, workItem);
-    }
-
     private void scheduleRunNode(String instanceId, String nodeInstanceId) {
         workflowExecutor.submit(() -> {
             try {
@@ -1106,29 +1070,94 @@ public class WorkflowCommandService {
     }
 
     private void scheduleResume(String instanceId) {
-        workflowExecutor.submit(() -> {
-            try {
-                WorkflowInstanceEntity instance = workflowMapper.findInstanceById(instanceId);
-                if (instance != null) {
-                    resumeAutoProgressIfPossible(instance);
-                }
-            } catch (Exception e) {
-                log.error("Workflow auto-resume failed: instance={}", instanceId, e);
-            }
-        });
-    }
-
-    private void scheduleResumeAfterCommit(String instanceId) {
-        if (!TransactionSynchronizationManager.isActualTransactionActive()) {
-            scheduleResume(instanceId);
+        PreparedWorkflowNode prepared;
+        try {
+            prepared = prepareNextPendingNode(instanceId);
+        } catch (Exception e) {
+            log.error("Workflow auto-resume failed before execution scheduling: instance={}", instanceId, e);
             return;
         }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                scheduleResume(instanceId);
+        if (prepared == null) {
+            return;
+        }
+        workflowExecutor.submit(() -> executePreparedNode(prepared));
+    }
+
+    private PreparedWorkflowNode prepareNextPendingNode(String instanceId) {
+        WorkflowInstanceEntity instance = workflowMapper.findInstanceById(instanceId);
+        if (instance == null) {
+            return null;
+        }
+
+        List<WorkflowNodeInstanceEntity> nodes = getOrderedNodeInstances(instance.getId());
+        boolean isBlocked = nodes.stream()
+                .anyMatch(n -> WorkflowNodeStatus.WAITING_CONFIRMATION.name().equals(n.getStatus())
+                        || WorkflowNodeStatus.RUNNING.name().equals(n.getStatus())
+                        || WorkflowNodeStatus.FAILED.name().equals(n.getStatus()));
+        if (isBlocked) {
+            return null;
+        }
+
+        WorkflowNodeInstanceEntity nextPending = nodes.stream()
+                .filter(n -> WorkflowNodeStatus.PENDING.name().equals(n.getStatus()))
+                .findFirst().orElse(null);
+        if (nextPending == null) {
+            String now = LocalDateTime.now().format(SQLITE_DATETIME);
+            instance.setStatus(WorkflowStatus.COMPLETED.name());
+            instance.setCompletedAt(now);
+            instance.setUpdatedAt(now);
+            workflowMapper.updateInstance(instance);
+            touchWorkItem(instance.getWorkItemId(), now);
+            return null;
+        }
+
+        WorkflowNodeInstanceEntity lastCompleted = nodes.stream()
+                .filter(n -> WorkflowNodeStatus.COMPLETED.name().equals(n.getStatus()))
+                .reduce((first, second) -> second).orElse(null);
+        if (lastCompleted != null && lastCompleted.getOutputArtifactId() != null) {
+            nextPending.setInputArtifactId(lastCompleted.getOutputArtifactId());
+        }
+
+        WorkItemEntity workItem = workItemMapper.findById(instance.getWorkItemId());
+        if (workItem == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "Work item not found: " + instance.getWorkItemId());
+        }
+        List<WorkflowNodeDefinitionEntity> nodeDefs =
+                workflowMapper.findNodeDefinitionsByWorkflowDefinitionId(instance.getWorkflowDefinitionId());
+
+        String now = LocalDateTime.now().format(SQLITE_DATETIME);
+        prepareWorkflowSession(instance, nextPending, nodeDefs, workItem, now);
+
+        WorkflowInstanceEntity preparedInstance = workflowMapper.findInstanceById(instance.getId());
+        WorkflowNodeInstanceEntity preparedNode = workflowMapper.findNodeInstanceById(nextPending.getId());
+        return new PreparedWorkflowNode(
+                preparedInstance != null ? preparedInstance : instance,
+                preparedNode != null ? preparedNode : nextPending,
+                nodeDefs,
+                workItem
+        );
+    }
+
+    private void executePreparedNode(PreparedWorkflowNode prepared) {
+        try {
+            executeSkillOnNode(prepared.instance(), prepared.node(), prepared.nodeDefs(), prepared.workItem());
+            if (WorkflowNodeStatus.COMPLETED.name().equals(prepared.node().getStatus())) {
+                scheduleResume(prepared.instance().getId());
             }
-        });
+        } catch (Exception e) {
+            log.error("Workflow node execution failed: instance={}, node={}",
+                    prepared.instance().getId(), prepared.node().getId(), e);
+            markNodeFailed(prepared.node().getId(), e);
+        }
+    }
+
+    private record PreparedWorkflowNode(
+            WorkflowInstanceEntity instance,
+            WorkflowNodeInstanceEntity node,
+            List<WorkflowNodeDefinitionEntity> nodeDefs,
+            WorkItemEntity workItem
+    ) {
     }
 
     private void markNodeFailed(String nodeInstanceId, Exception error) {

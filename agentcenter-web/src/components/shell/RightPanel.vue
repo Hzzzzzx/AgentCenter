@@ -10,6 +10,7 @@ import type { ArtifactDto, WorkItemDto, WorkflowDefinitionDto, WorkflowNodeStatu
 interface Props {
   collapsed?: boolean
   expanded?: boolean
+  activeView?: string
   selectedWorkItem?: WorkItemDto | null
   selectedArtifact?: ArtifactDto | null
 }
@@ -17,6 +18,7 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   collapsed: false,
   expanded: false,
+  activeView: 'home',
   selectedWorkItem: null,
   selectedArtifact: null,
 })
@@ -177,6 +179,14 @@ const hasActiveWorkflow = computed(() => {
   if (!item) return false
   return !!item.currentWorkflowInstanceId || !!item.workflowSummary
 })
+
+const isSelectedWorkItemConversationOpen = computed(() =>
+  props.activeView === 'conversation' && Boolean(props.selectedWorkItem)
+)
+
+const conversationButtonLabel = computed(() =>
+  isSelectedWorkItemConversationOpen.value ? '会话中' : '进入会话'
+)
 
 const statusLabels: Record<WorkflowNodeStatus, string> = {
   PENDING: '等待中',
@@ -394,7 +404,7 @@ function handleToggleExpanded() {
                 class="detail__btn detail__btn--secondary"
                 @click="handleEnterConversation"
               >
-                进入会话
+                {{ conversationButtonLabel }}
               </button>
             </div>
           </div>

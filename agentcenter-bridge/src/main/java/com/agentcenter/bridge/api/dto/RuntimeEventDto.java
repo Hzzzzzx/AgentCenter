@@ -14,5 +14,21 @@ public record RuntimeEventDto(
         RuntimeEventType eventType,
         RuntimeEventSource eventSource,
         String payloadJson,
+        Integer seqNo,
         OffsetDateTime createdAt
-) {}
+) {
+    public RuntimeEventDto(
+            String id,
+            String sessionId,
+            String workItemId,
+            String workflowInstanceId,
+            String workflowNodeInstanceId,
+            RuntimeEventType eventType,
+            RuntimeEventSource eventSource,
+            String payloadJson,
+            OffsetDateTime createdAt
+    ) {
+        this(id, sessionId, workItemId, workflowInstanceId, workflowNodeInstanceId,
+                eventType, eventSource, payloadJson, null, createdAt);
+    }
+}

@@ -9,6 +9,7 @@ public class RuntimeEventEntity {
     private String eventType;
     private String eventSource;
     private String payloadJson;
+    private Integer seqNo;
     private String createdAt;
 
     public RuntimeEventEntity() {}
@@ -29,6 +30,8 @@ public class RuntimeEventEntity {
     public void setEventSource(String eventSource) { this.eventSource = eventSource; }
     public String getPayloadJson() { return payloadJson; }
     public void setPayloadJson(String payloadJson) { this.payloadJson = payloadJson; }
+    public Integer getSeqNo() { return seqNo; }
+    public void setSeqNo(Integer seqNo) { this.seqNo = seqNo; }
     public String getCreatedAt() { return createdAt; }
     public void setCreatedAt(String createdAt) { this.createdAt = createdAt; }
 }

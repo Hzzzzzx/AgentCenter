@@ -43,7 +43,7 @@ public class RuntimeEventService {
                 .toList();
     }
 
-    public void publishEvent(RuntimeEventDto event) {
+    public synchronized void publishEvent(RuntimeEventDto event) {
         RuntimeEventEntity entity = new RuntimeEventEntity();
         entity.setId(event.id() != null ? event.id() : idGenerator.nextId());
         entity.setSessionId(event.sessionId());
@@ -53,6 +53,8 @@ public class RuntimeEventService {
         entity.setEventType(event.eventType().name());
         entity.setEventSource(event.eventSource().name());
         entity.setPayloadJson(event.payloadJson());
+        entity.setSeqNo(event.seqNo() != null ? event.seqNo() : nextSeqNo(event.sessionId()));
+        entity.setCreatedAt(formatDateTime(event.createdAt() != null ? event.createdAt() : OffsetDateTime.now()));
         boolean persisted = true;
         try {
             eventMapper.insert(entity);
@@ -71,7 +73,8 @@ public class RuntimeEventService {
                     event.eventType(),
                     event.eventSource(),
                     event.payloadJson(),
-                    persisted ? parseDateTime(entity.getCreatedAt()) : null
+                    entity.getSeqNo(),
+                    parseDateTime(entity.getCreatedAt())
             );
             emitterRegistry.sendToSession(event.sessionId(), withId);
             webSocketSessionRegistry.sendToSession(event.sessionId(), java.util.Map.of(
@@ -91,8 +94,20 @@ public class RuntimeEventService {
                 RuntimeEventType.valueOf(e.getEventType()),
                 RuntimeEventSource.valueOf(e.getEventSource()),
                 e.getPayloadJson(),
+                e.getSeqNo(),
                 parseDateTime(e.getCreatedAt())
         );
+    }
+
+    private Integer nextSeqNo(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return null;
+        }
+        return eventMapper.nextSeqNo(sessionId);
+    }
+
+    private String formatDateTime(OffsetDateTime value) {
+        return value.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
     }
 
     private OffsetDateTime parseDateTime(String value) {

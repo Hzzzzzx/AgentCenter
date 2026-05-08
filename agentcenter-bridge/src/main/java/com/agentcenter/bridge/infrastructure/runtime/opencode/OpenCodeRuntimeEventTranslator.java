@@ -303,7 +303,7 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
         String summary = part.path("summary").asText("");
         if (!summary.isBlank() && summary.length() <= 200) return summary;
 
-        return "正在分析上下文并规划下一步";
+        return "";
     }
 
     private String truncate(String s, int maxLen) {
