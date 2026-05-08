@@ -2,12 +2,12 @@ package com.agentcenter.bridge.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.time.OffsetDateTime;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
+import com.agentcenter.bridge.api.dto.RuntimeSkillDto;
 import com.agentcenter.bridge.application.runtime.RuntimeCapabilities;
 import com.agentcenter.bridge.application.runtime.RuntimeGateway;
 import com.agentcenter.bridge.application.runtime.RuntimeDescriptor;
@@ -29,39 +29,59 @@ class RuntimeResourceServiceTest {
         @Override public void refreshMcps(RuntimeType rt) {}
         @Override public RuntimeDescriptor describe(RuntimeType rt) { return new RuntimeDescriptor("Stub", "TEST", "test stub", capabilities(rt)); }
         @Override public RuntimeCapabilities capabilities(RuntimeType rt) { return new RuntimeCapabilities(true, true, true, true); }
+        @Override public List<RuntimeSkillDto> scanSkills(RuntimeType rt) { return List.of(); }
+        @Override public String installSkill(RuntimeType rt, String name, java.nio.file.Path dir) { return ".opencode/skills/" + name; }
+        @Override public void deleteSkillFiles(RuntimeType rt, String rel, String name) {}
+        @Override public java.util.Map<String, Object> readMcpConfig(RuntimeType rt) { return java.util.Map.of(); }
+        @Override public void writeMcpConfig(RuntimeType rt, java.util.Map<String, Object> config) {}
+        @Override public String getSkillsRootPath(RuntimeType rt) { return "/tmp/test/.opencode/skills"; }
     };
 
-    @TempDir
-    Path projectRoot;
-
     @Test
-    void refreshSkillsCreatesSkillsDirectoryWhenMissing() {
+    void refreshSkillsDelegatesScanToGateway() {
         RuntimeResourceService service = new RuntimeResourceService(
                 STUB_GATEWAY,
-                projectRoot.toString()
+                "/tmp/test-project"
         );
 
         var response = service.refreshSkills();
 
         assertThat(response.skillCount()).isZero();
-        assertThat(Files.isDirectory(projectRoot.resolve(".opencode/skills"))).isTrue();
+        assertThat(response.skillsPath()).isEqualTo("/tmp/test/.opencode/skills");
     }
 
     @Test
-    void refreshSkillsScansLocalSkillDirectories() throws Exception {
-        Path skillDir = projectRoot.resolve(".opencode/skills/fe-requirement-refine");
-        Files.createDirectories(skillDir);
-        Files.writeString(skillDir.resolve("SKILL.md"), """
-                ---
-                name: fe-requirement-refine
-                description: 将 FE 需求整理成设计文档
-                ---
+    void refreshSkillsReturnsGatewayScannedSkills() {
+        RuntimeSkillDto skill = new RuntimeSkillDto(
+                "fe-requirement-refine",
+                "将 FE 需求整理成设计文档",
+                ".opencode/skills/fe-requirement-refine",
+                "abc123",
+                OffsetDateTime.now()
+        );
+        RuntimeGateway gatewayWithSkill = new RuntimeGateway() {
+            @Override public String createSession(RuntimeType rt, String workItemId, String agentSessionId) { return "stub-session"; }
+            @Override public String ensureSession(RuntimeType rt, String workItemId, String agentSessionId, String runtimeSessionId) { return runtimeSessionId != null ? runtimeSessionId : "stub-session"; }
+            @Override public SkillRunResult runSkill(RuntimeType rt, String sessionId, String skillName, String inputContext) {
+                return new SkillRunResult(true, "stub output", "MARKDOWN", null, true);
+            }
+            @Override public void sendMessage(RuntimeType rt, String sessionId, String userMessage) {}
+            @Override public void cancel(RuntimeType rt, String sessionId) {}
+            @Override public void refreshSkills(RuntimeType rt, RuntimeSkillSnapshot snapshot) {}
+            @Override public void refreshMcps(RuntimeType rt) {}
+            @Override public RuntimeDescriptor describe(RuntimeType rt) { return new RuntimeDescriptor("Stub", "TEST", "test stub", capabilities(rt)); }
+            @Override public RuntimeCapabilities capabilities(RuntimeType rt) { return new RuntimeCapabilities(true, true, true, true); }
+            @Override public List<RuntimeSkillDto> scanSkills(RuntimeType rt) { return List.of(skill); }
+            @Override public String installSkill(RuntimeType rt, String name, java.nio.file.Path dir) { return ".opencode/skills/" + name; }
+            @Override public void deleteSkillFiles(RuntimeType rt, String rel, String name) {}
+            @Override public java.util.Map<String, Object> readMcpConfig(RuntimeType rt) { return java.util.Map.of(); }
+            @Override public void writeMcpConfig(RuntimeType rt, java.util.Map<String, Object> config) {}
+            @Override public String getSkillsRootPath(RuntimeType rt) { return "/tmp/test/.opencode/skills"; }
+        };
 
-                使用当前工作项上下文生成 Markdown。
-                """);
         RuntimeResourceService service = new RuntimeResourceService(
-                STUB_GATEWAY,
-                projectRoot.toString()
+                gatewayWithSkill,
+                "/tmp/test-project"
         );
 
         var response = service.refreshSkills();

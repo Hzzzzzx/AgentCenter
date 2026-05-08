@@ -1,7 +1,12 @@
 package com.agentcenter.bridge.infrastructure.runtime.opencode;
 
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
+
 import org.springframework.stereotype.Component;
 
+import com.agentcenter.bridge.api.dto.RuntimeSkillDto;
 import com.agentcenter.bridge.application.runtime.*;
 import com.agentcenter.bridge.domain.runtime.RuntimeType;
 
@@ -14,8 +19,8 @@ public class OpenCodeRuntimeProvider implements RuntimeProvider {
 
     private static final RuntimeCapabilities CAPABILITIES = new RuntimeCapabilities(
         true,   // conversationStreaming — SSE-based assistant delta
-        false,  // skillLifecycle — P1: runSkill exists but lifecycle is file-scan driven, not provider-managed
-        false,  // mcpLifecycle — P1: refreshMcps exists but config is written directly to .opencode/mcp.json
+        true,   // skillLifecycle — P3: provider delegates to OpenCodeSkillFileService for scan/install/delete
+        true,   // mcpLifecycle — P3: provider delegates to OpenCodeMcpFileService for read/write
         true    // cancelSupported
     );
 
@@ -80,5 +85,35 @@ public class OpenCodeRuntimeProvider implements RuntimeProvider {
     @Override
     public void refreshMcps() {
         adapter.refreshMcps();
+    }
+
+    @Override
+    public List<RuntimeSkillDto> scanSkills() {
+        return adapter.scanSkills();
+    }
+
+    @Override
+    public String installSkill(String skillName, Path sourceDir) {
+        return adapter.installSkill(skillName, sourceDir);
+    }
+
+    @Override
+    public void deleteSkillFiles(String relativePath, String skillName) {
+        adapter.deleteSkillFiles(relativePath, skillName);
+    }
+
+    @Override
+    public String getSkillsRootPath() {
+        return adapter.getSkillsRootPath();
+    }
+
+    @Override
+    public Map<String, Object> readMcpConfig() {
+        return adapter.readMcpConfig();
+    }
+
+    @Override
+    public void writeMcpConfig(Map<String, Object> config) {
+        adapter.writeMcpConfig(config);
     }
 }

@@ -1,7 +1,12 @@
 package com.agentcenter.bridge.application.runtime;
 
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
+
 import org.springframework.stereotype.Service;
 
+import com.agentcenter.bridge.api.dto.RuntimeSkillDto;
 import com.agentcenter.bridge.domain.runtime.RuntimeType;
 
 /**
@@ -59,5 +64,35 @@ public class DefaultRuntimeGateway implements RuntimeGateway {
     @Override
     public RuntimeCapabilities capabilities(RuntimeType runtimeType) {
         return registry.getProvider(runtimeType).capabilities();
+    }
+
+    @Override
+    public List<RuntimeSkillDto> scanSkills(RuntimeType runtimeType) {
+        return registry.getProvider(runtimeType).scanSkills();
+    }
+
+    @Override
+    public String installSkill(RuntimeType runtimeType, String skillName, Path sourceDir) {
+        return registry.getProvider(runtimeType).installSkill(skillName, sourceDir);
+    }
+
+    @Override
+    public void deleteSkillFiles(RuntimeType runtimeType, String relativePath, String skillName) {
+        registry.getProvider(runtimeType).deleteSkillFiles(relativePath, skillName);
+    }
+
+    @Override
+    public String getSkillsRootPath(RuntimeType runtimeType) {
+        return registry.getProvider(runtimeType).getSkillsRootPath();
+    }
+
+    @Override
+    public Map<String, Object> readMcpConfig(RuntimeType runtimeType) {
+        return registry.getProvider(runtimeType).readMcpConfig();
+    }
+
+    @Override
+    public void writeMcpConfig(RuntimeType runtimeType, Map<String, Object> config) {
+        registry.getProvider(runtimeType).writeMcpConfig(config);
     }
 }

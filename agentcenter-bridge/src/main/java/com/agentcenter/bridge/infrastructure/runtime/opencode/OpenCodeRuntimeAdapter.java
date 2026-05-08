@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import com.agentcenter.bridge.api.dto.RuntimeSkillDto;
 import com.agentcenter.bridge.application.runtime.AgentRuntimeAdapter;
 import com.agentcenter.bridge.application.runtime.SkillRunResult;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -44,8 +45,10 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
     private final OpenCodeProcessManager processManager;
     private final OpenCodeEventSubscriber eventSubscriber;
     private final ObjectMapper objectMapper;
+    private final OpenCodeSkillFileService skillFileService;
     private final String agent;
     private final int responseTimeoutSeconds;
+    private final OpenCodeMcpFileService mcpFileService;
 
     private final Map<String, String> agentToOpencodeSession = new ConcurrentHashMap<>();
 
@@ -57,13 +60,37 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
             OpenCodeProcessManager processManager,
             OpenCodeEventSubscriber eventSubscriber,
             ObjectMapper objectMapper,
+            OpenCodeSkillFileService skillFileService,
+            OpenCodeMcpFileService mcpFileService,
             @Value("${agentcenter.runtime.opencode.serve.agent:build}") String agent,
             @Value("${agentcenter.runtime.opencode.timeout-seconds:180}") int responseTimeoutSeconds) {
         this.processManager = processManager;
         this.eventSubscriber = eventSubscriber;
         this.objectMapper = objectMapper;
+        this.skillFileService = skillFileService;
+        this.mcpFileService = mcpFileService;
         this.agent = agent;
         this.responseTimeoutSeconds = responseTimeoutSeconds;
+    }
+
+    @Override
+    public List<RuntimeSkillDto> scanSkills() {
+        return skillFileService.scanSkills();
+    }
+
+    @Override
+    public String installSkill(String skillName, Path sourceDir) {
+        return skillFileService.installSkill(skillName, sourceDir);
+    }
+
+    @Override
+    public void deleteSkillFiles(String relativePath, String skillName) {
+        skillFileService.deleteSkillFiles(relativePath, skillName);
+    }
+
+    @Override
+    public String getSkillsRootPath() {
+        return skillFileService.getSkillsRootPath();
     }
 
     @Override
@@ -242,6 +269,16 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
     public void refreshMcps() {
         agentToOpencodeSession.clear();
         processManager.restartIfRunning();
+    }
+
+    @Override
+    public Map<String, Object> readMcpConfig() {
+        return mcpFileService.readMcpConfig();
+    }
+
+    @Override
+    public void writeMcpConfig(Map<String, Object> config) {
+        mcpFileService.writeMcpConfig(config);
     }
 
     @PreDestroy

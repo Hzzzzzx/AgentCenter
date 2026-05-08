@@ -39,8 +39,8 @@ class OpenCodeRuntimeProviderTest {
     void capabilitiesDeclaresOpenCodeSupport() {
         RuntimeCapabilities caps = provider.capabilities();
         assertTrue(caps.conversationStreaming());
-        assertFalse(caps.skillLifecycle());
-        assertFalse(caps.mcpLifecycle());
+        assertTrue(caps.skillLifecycle());
+        assertTrue(caps.mcpLifecycle());
         assertTrue(caps.cancelSupported());
     }
 

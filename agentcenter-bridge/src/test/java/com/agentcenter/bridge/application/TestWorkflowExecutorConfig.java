@@ -96,6 +96,19 @@ public class TestWorkflowExecutorConfig {
             public RuntimeCapabilities capabilities(RuntimeType rt) {
                 return new RuntimeCapabilities(true, true, true, true);
             }
+
+            @Override
+            public java.util.List<com.agentcenter.bridge.api.dto.RuntimeSkillDto> scanSkills(RuntimeType rt) { return java.util.List.of(); }
+            @Override
+            public String installSkill(RuntimeType rt, String name, java.nio.file.Path dir) { return ".opencode/skills/" + name; }
+            @Override
+            public void deleteSkillFiles(RuntimeType rt, String rel, String name) {}
+            @Override
+            public String getSkillsRootPath(RuntimeType rt) { return "/tmp/test/.opencode/skills"; }
+            @Override
+            public java.util.Map<String, Object> readMcpConfig(RuntimeType rt) { return java.util.Map.of(); }
+            @Override
+            public void writeMcpConfig(RuntimeType rt, java.util.Map<String, Object> config) {}
         };
     }
 }

@@ -23,6 +23,12 @@ class DefaultRuntimeProviderRegistryTest {
         @Override public void cancel(String s) {}
         @Override public void refreshSkills(RuntimeSkillSnapshot sn) {}
         @Override public void refreshMcps() {}
+        @Override public java.util.List<com.agentcenter.bridge.api.dto.RuntimeSkillDto> scanSkills() { return java.util.List.of(); }
+        @Override public String installSkill(String name, java.nio.file.Path dir) { return ""; }
+        @Override public void deleteSkillFiles(String rel, String name) {}
+        @Override public String getSkillsRootPath() { return ""; }
+        @Override public java.util.Map<String, Object> readMcpConfig() { return java.util.Map.of(); }
+        @Override public void writeMcpConfig(java.util.Map<String, Object> config) {}
     }
 
     @Test

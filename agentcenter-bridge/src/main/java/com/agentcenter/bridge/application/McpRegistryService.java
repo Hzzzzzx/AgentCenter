@@ -11,7 +11,6 @@ import com.agentcenter.bridge.infrastructure.persistence.mapper.ProjectMcpToolSn
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -19,9 +18,6 @@ import org.springframework.web.server.ResponseStatusException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -42,7 +38,6 @@ public class McpRegistryService {
     private final RuntimeResourceAuditService auditService;
     private final IdGenerator idGenerator;
     private final ObjectMapper objectMapper;
-    private final String workingDirectory;
     private final RuntimeGateway runtimeGateway;
 
     public McpRegistryService(ProjectMcpServerMapper mcpServerMapper,
@@ -50,14 +45,12 @@ public class McpRegistryService {
                               RuntimeResourceAuditService auditService,
                               IdGenerator idGenerator,
                               ObjectMapper objectMapper,
-                              @Value("${agentcenter.runtime.opencode.serve.working-directory}") String workingDirectory,
-                               RuntimeGateway runtimeGateway) {
+                              RuntimeGateway runtimeGateway) {
         this.mcpServerMapper = mcpServerMapper;
         this.toolSnapshotMapper = toolSnapshotMapper;
         this.auditService = auditService;
         this.idGenerator = idGenerator;
         this.objectMapper = objectMapper;
-        this.workingDirectory = workingDirectory;
         this.runtimeGateway = runtimeGateway;
     }
 
@@ -75,25 +68,23 @@ public class McpRegistryService {
     }
 
     public List<ProjectMcpServerDto> importMcpConfig(String projectId) {
-        Path configPath = Path.of(workingDirectory).resolve(".opencode").resolve("mcp.json");
-        if (!Files.exists(configPath)) {
-            configPath = Path.of(workingDirectory).resolve(".opencode").resolve("mcp.agentcenter.json");
-        }
-        if (!Files.exists(configPath)) {
+        Map<String, Object> config;
+        try {
+            config = runtimeGateway.readMcpConfig(RuntimeType.OPENCODE);
+        } catch (Exception e) {
+            log.error("Failed to read MCP config for project {}", projectId, e);
             auditService.recordAudit(projectId, "MCP", "", "REFRESH", "FAILED",
                     "No MCP config file found", null, null);
             return listMcps(projectId);
         }
 
-        try {
-            String content = Files.readString(configPath);
-            Map<String, Object> config = objectMapper.readValue(content, Map.class);
-            @SuppressWarnings("unchecked")
-            Map<String, Object> servers = (Map<String, Object>) config.get("mcpServers");
-            if (servers == null) {
-                return listMcps(projectId);
-            }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> servers = (Map<String, Object>) config.get("mcpServers");
+        if (servers == null || servers.isEmpty()) {
+            return listMcps(projectId);
+        }
 
+        try {
             int imported = 0;
             for (Map.Entry<String, Object> entry : servers.entrySet()) {
                 String serverName = entry.getKey();
@@ -138,7 +129,7 @@ public class McpRegistryService {
         ProjectMcpServerEntity entity = findOrThrow(projectId, mcpId);
         entity.setStatus("ENABLED");
         mcpServerMapper.update(entity);
-        syncOpenCodeMcpConfig(projectId);
+        syncMcpConfig(projectId);
         auditService.recordAudit(projectId, "MCP", mcpId, "ENABLE", "SUCCESS",
                 "MCP " + entity.getName() + " enabled", null, null);
         return toDto(entity);
@@ -148,7 +139,7 @@ public class McpRegistryService {
         ProjectMcpServerEntity entity = findOrThrow(projectId, mcpId);
         entity.setStatus("DISABLED");
         mcpServerMapper.update(entity);
-        syncOpenCodeMcpConfig(projectId);
+        syncMcpConfig(projectId);
         auditService.recordAudit(projectId, "MCP", mcpId, "DISABLE", "SUCCESS",
                 "MCP " + entity.getName() + " disabled", null, null);
         return toDto(entity);
@@ -239,7 +230,7 @@ public class McpRegistryService {
 
     public void refreshAllMcps(String projectId) {
         importMcpConfig(projectId);
-        syncOpenCodeMcpConfig(projectId);
+        syncMcpConfig(projectId);
         List<ProjectMcpServerEntity> enabled = mcpServerMapper.findByProjectId(projectId)
                 .stream().filter(e -> "ENABLED".equals(e.getStatus())).toList();
         for (ProjectMcpServerEntity entity : enabled) {
@@ -326,7 +317,7 @@ public class McpRegistryService {
         return "STDIO";
     }
 
-    private void syncOpenCodeMcpConfig(String projectId) {
+    private void syncMcpConfig(String projectId) {
         try {
             Map<String, Object> root = new LinkedHashMap<>();
             Map<String, Object> servers = new TreeMap<>();
@@ -342,16 +333,11 @@ public class McpRegistryService {
 
             root.put("mcpServers", servers);
 
-            Path configPath = Path.of(workingDirectory).toAbsolutePath().normalize()
-                    .resolve(".opencode").resolve("mcp.json");
-            Files.createDirectories(configPath.getParent());
-            Path tempPath = configPath.resolveSibling("mcp.json.tmp");
-            objectMapper.writerWithDefaultPrettyPrinter().writeValue(tempPath.toFile(), root);
-            Files.move(tempPath, configPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-
+            runtimeGateway.writeMcpConfig(RuntimeType.OPENCODE, root);
             runtimeGateway.refreshMcps(RuntimeType.OPENCODE);
+
             auditService.recordAudit(projectId, "MCP", "", "SYNC_OPENCODE_CONFIG", "SUCCESS",
-                    "Wrote " + servers.size() + " enabled MCP server(s) to " + configPath, null, null);
+                    "Wrote " + servers.size() + " enabled MCP server(s)", null, null);
         } catch (Exception e) {
             log.error("Failed to sync MCP config for project {}", projectId, e);
             auditService.recordAudit(projectId, "MCP", "", "SYNC_OPENCODE_CONFIG", "FAILED",

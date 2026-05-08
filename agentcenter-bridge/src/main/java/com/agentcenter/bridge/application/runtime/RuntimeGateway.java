@@ -1,5 +1,10 @@
 package com.agentcenter.bridge.application.runtime;
 
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
+
+import com.agentcenter.bridge.api.dto.RuntimeSkillDto;
 import com.agentcenter.bridge.domain.runtime.RuntimeType;
 
 /**
@@ -16,4 +21,11 @@ public interface RuntimeGateway {
     void refreshMcps(RuntimeType runtimeType);
     RuntimeDescriptor describe(RuntimeType runtimeType);
     RuntimeCapabilities capabilities(RuntimeType runtimeType);
+
+    List<RuntimeSkillDto> scanSkills(RuntimeType runtimeType);
+    String installSkill(RuntimeType runtimeType, String skillName, Path sourceDir);
+    void deleteSkillFiles(RuntimeType runtimeType, String relativePath, String skillName);
+    String getSkillsRootPath(RuntimeType runtimeType);
+    Map<String, Object> readMcpConfig(RuntimeType runtimeType);
+    void writeMcpConfig(RuntimeType runtimeType, Map<String, Object> config);
 }

@@ -4,6 +4,8 @@ import com.agentcenter.bridge.api.dto.RuntimeSkillDetailDto;
 import com.agentcenter.bridge.api.dto.RuntimeSkillRefreshResponse;
 import com.agentcenter.bridge.api.dto.RuntimeSkillVersionDto;
 import com.agentcenter.bridge.api.dto.RuntimeSkillDto;
+import com.agentcenter.bridge.application.runtime.RuntimeGateway;
+import com.agentcenter.bridge.domain.runtime.RuntimeType;
 import com.agentcenter.bridge.infrastructure.id.IdGenerator;
 import com.agentcenter.bridge.infrastructure.persistence.entity.RuntimeSkillEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.RuntimeSkillVersionEntity;
@@ -12,7 +14,6 @@ import com.agentcenter.bridge.infrastructure.persistence.mapper.RuntimeSkillVers
 import com.agentcenter.bridge.infrastructure.persistence.mapper.WorkflowMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -30,7 +31,6 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.HexFormat;
 import java.util.List;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -49,7 +49,7 @@ public class SkillRegistryService {
     private final RuntimeResourceAuditService auditService;
     private final WorkflowMapper workflowMapper;
     private final IdGenerator idGenerator;
-    private final String workingDirectory;
+    private final RuntimeGateway runtimeGateway;
     private final RuntimeResourceService runtimeResourceService;
 
     public SkillRegistryService(RuntimeSkillMapper skillMapper,
@@ -57,14 +57,14 @@ public class SkillRegistryService {
                                 RuntimeResourceAuditService auditService,
                                 WorkflowMapper workflowMapper,
                                 IdGenerator idGenerator,
-                                @Value("${agentcenter.runtime.opencode.serve.working-directory}") String workingDirectory,
+                                RuntimeGateway runtimeGateway,
                                 RuntimeResourceService runtimeResourceService) {
         this.skillMapper = skillMapper;
         this.versionMapper = versionMapper;
         this.auditService = auditService;
         this.workflowMapper = workflowMapper;
         this.idGenerator = idGenerator;
-        this.workingDirectory = workingDirectory;
+        this.runtimeGateway = runtimeGateway;
         this.runtimeResourceService = runtimeResourceService;
     }
 
@@ -180,7 +180,7 @@ public class SkillRegistryService {
                 existing.setValidationMessage(null);
                 skillMapper.update(existing);
 
-                installToSkillDirectory(existing.getName(), skillRoot);
+                installViaGateway(existing.getName(), skillRoot);
                 runtimeResourceService.refreshSkills();
 
                 auditService.recordAudit(projectId, "SKILL", skillId, "UPDATE_ZIP",
@@ -219,8 +219,8 @@ public class SkillRegistryService {
         }
 
         try {
-            deleteInstalledSkillDirectory(existing);
-        } catch (IOException e) {
+            runtimeGateway.deleteSkillFiles(RuntimeType.OPENCODE, existing.getRelativePath(), existing.getName());
+        } catch (Exception e) {
             auditService.recordAudit(projectId, "SKILL", skillId, "DELETE",
                     "FAILED", "Failed to delete installed skill files: " + e.getMessage(), null, createdBy);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
@@ -328,11 +328,9 @@ public class SkillRegistryService {
                                                    String checksum, int fileCount, long totalSize,
                                                    String skillMdSummary, String createdBy) throws IOException {
         String id = idGenerator.nextId();
-        Path projectRoot = Path.of(workingDirectory).toAbsolutePath().normalize();
-        String relativePath = ".opencode/skills/" + skillName;
-        Path installPath = projectRoot.resolve(relativePath);
-
         String now = LocalDateTime.now().format(SQLITE_DATETIME);
+
+        String relativePath = runtimeGateway.installSkill(RuntimeType.OPENCODE, skillName, tempDir);
 
         RuntimeSkillEntity entity = new RuntimeSkillEntity();
         entity.setId(id);
@@ -354,7 +352,6 @@ public class SkillRegistryService {
 
         skillMapper.insert(entity);
 
-        installToSkillDirectory(skillName, tempDir);
         runtimeResourceService.refreshSkills();
 
         auditService.recordAudit(projectId, "SKILL", id, "UPLOAD",
@@ -374,13 +371,17 @@ public class SkillRegistryService {
         RuntimeSkillVersionEntity version = createVersion(existing.getId(), checksum, totalSize,
                 fileCount, existing.getRelativePath(), skillMdSummary, createdBy);
 
+        String newRelativePath = installViaGateway(existing.getName(), tempDir);
+
         existing.setChecksum(checksum);
         existing.setCurrentVersionId(version.getId());
         existing.setValidationStatus("VALID");
         existing.setValidationMessage(null);
+        if (!newRelativePath.equals(existing.getRelativePath())) {
+            existing.setRelativePath(newRelativePath);
+        }
         skillMapper.update(existing);
 
-        installToSkillDirectory(existing.getName(), tempDir);
         runtimeResourceService.refreshSkills();
 
         auditService.recordAudit(projectId, "SKILL", existing.getId(), "UPLOAD",
@@ -411,21 +412,8 @@ public class SkillRegistryService {
         return version;
     }
 
-    private void installToSkillDirectory(String skillName, Path sourceDir) throws IOException {
-        Path projectRoot = Path.of(workingDirectory).toAbsolutePath().normalize();
-        Path targetDir = projectRoot.resolve(".opencode").resolve("skills").resolve(skillName);
-        if (Files.exists(targetDir)) {
-            deleteRecursively(targetDir);
-        }
-        Files.createDirectories(targetDir);
-        try (Stream<Path> walk = Files.walk(sourceDir)) {
-            for (Path source : walk.filter(Files::isRegularFile).toList()) {
-                Path relative = sourceDir.relativize(source);
-                Path target = targetDir.resolve(relative);
-                Files.createDirectories(target.getParent());
-                Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
-            }
-        }
+    private String installViaGateway(String skillName, Path sourceDir) {
+        return runtimeGateway.installSkill(RuntimeType.OPENCODE, skillName, sourceDir);
     }
 
     private Path resolveSkillPackageRoot(Path extractedDir) throws IOException {
@@ -454,22 +442,6 @@ public class SkillRegistryService {
 
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                 "ZIP must contain exactly one skill root with SKILL.md");
-    }
-
-    private void deleteInstalledSkillDirectory(RuntimeSkillEntity skill) throws IOException {
-        Path projectRoot = Path.of(workingDirectory).toAbsolutePath().normalize();
-        Path targetDir;
-        if (skill.getRelativePath() != null && !skill.getRelativePath().isBlank()) {
-            targetDir = projectRoot.resolve(skill.getRelativePath()).normalize();
-        } else {
-            targetDir = projectRoot.resolve(".opencode").resolve("skills").resolve(skill.getName()).normalize();
-        }
-
-        Path skillsRoot = projectRoot.resolve(".opencode").resolve("skills").normalize();
-        if (!targetDir.startsWith(skillsRoot)) {
-            throw new IOException("Refusing to delete path outside skills directory: " + targetDir);
-        }
-        deleteRecursively(targetDir);
     }
 
     private void validateZipFile(MultipartFile file) {
