@@ -14,7 +14,8 @@ const startErrors = ref<Record<string, string>>({})
 
 const emit = defineEmits<{
   'select-work-item': [id: string]
-  'start-workflow': [workItemId: string, response: StartWorkflowResponse]
+  'start-workflow': [workItemId: string, response?: StartWorkflowResponse]
+  'enter-conversation': [workItemId: string]
 }>()
 
 const typeOrder: WorkItemType[] = ['FE', 'US', 'TASK', 'WORK', 'BUG', 'VULN']
@@ -425,6 +426,8 @@ function launchLabel(item: WorkItemDto): string {
   if (!wf) return '开始处理'
   if (hasStageStatus(item, 'WAITING_CONFIRMATION')) return '待确认'
   if (hasStageStatus(item, 'RUNNING')) return '处理中'
+  if (wf.status === 'FAILED' || wf.status === 'BLOCKED') return '查看异常'
+  if (wf.status === 'COMPLETED') return '查看结果'
   return workflowStatusLabels[wf.status] ?? '开始处理'
 }
 
@@ -443,9 +446,7 @@ function flowSummaryLabel(item: WorkItemDto): string {
 
 function launchDisabled(item: WorkItemDto): boolean {
   if (startingIds.value.has(item.id)) return true
-  const wf = workflowFor(item)
-  if (!wf) return false
-  return wf.status !== 'FAILED' && wf.status !== 'CANCELLED'
+  return false
 }
 
 function hasStageStatus(item: WorkItemDto, status: WorkflowNodeStatus) {
@@ -456,6 +457,15 @@ function hasStageStatus(item: WorkItemDto, status: WorkflowNodeStatus) {
 
 function handleSelectItem(id: string) {
   emit('select-work-item', id)
+}
+
+function handleLaunchClick(item: WorkItemDto) {
+  const wf = workflowFor(item)
+  if (!wf || wf.status === 'FAILED' || wf.status === 'BLOCKED') {
+    handleStartWorkflow(item.id)
+  } else {
+    emit('enter-conversation', item.id)
+  }
 }
 
 async function handleStartWorkflow(workItemId: string) {
@@ -567,7 +577,7 @@ async function handleStartWorkflow(workItemId: string) {
             <button
               class="home-overview__launch"
               :disabled="launchDisabled(item)"
-              @click.stop="handleStartWorkflow(item.id)"
+              @click.stop="handleLaunchClick(item)"
             >
               {{ launchLabel(item) }}
             </button>

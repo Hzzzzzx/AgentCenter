@@ -250,6 +250,7 @@ function handleConversationBack() {
         v-if="activeView === 'home'"
         @select-work-item="handleSelectWorkItem"
         @start-workflow="handleStartWorkflow"
+        @enter-conversation="handleEnterWorkItemConversation"
       />
       <BoardView
         v-else-if="activeView === 'board'"

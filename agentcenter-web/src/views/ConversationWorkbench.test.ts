@@ -164,7 +164,6 @@ describe('ConversationWorkbench.vue', () => {
 
     await flushPromises()
 
-    expect(wrapper.find('.conversation-workbench__failure').text()).toContain('详细设计 (LLD) 执行失败')
-    expect(wrapper.find('.conversation-workbench__failure').text()).toContain('Agent Runtime 超时')
+    expect(wrapper.find('.node-state-area--failed').text()).toContain('Agent Runtime 超时')
   })
 })

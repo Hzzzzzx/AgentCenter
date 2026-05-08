@@ -7,7 +7,18 @@ import { useWorkItemStore } from '../stores/workItems'
 import MessageList from '../components/conversation/MessageList.vue'
 import { runtimeResourceApi } from '../api/runtimeResources'
 import { artifactApi } from '../api/artifacts'
-import type { AgentSessionDto, ArtifactDto, WorkflowNodeInstanceDto, WorkflowSummaryNodeDto, WorkflowSummaryStageDto } from '../api/types'
+import type { AgentSessionDto, ArtifactDto, WorkflowNodeInstanceDto, WorkflowNodeStatus } from '../api/types'
+
+interface NodeStateInfo {
+  type: 'RUNNING' | 'WAITING_CONFIRMATION' | 'FAILED' | 'COMPLETED' | 'WORKFLOW_COMPLETED' | null
+  nodeId?: string
+  nodeName?: string
+  skillName?: string
+  errorMessage?: string
+  confirmationType?: string
+  artifactId?: string
+  artifactTitle?: string
+}
 
 const props = defineProps<{
   workItemId?: string
@@ -56,39 +67,64 @@ const currentWorkflowInstance = computed(() => {
   return instance
 })
 
-const workflowFailureNotice = computed(() => {
-  const failedNode = currentWorkflowInstance.value?.nodes.find((node) =>
-    node.status === 'FAILED' && Boolean(node.errorMessage?.trim())
-  ) ?? currentWorkflowInstance.value?.nodes.find((node) => node.status === 'FAILED')
-  if (failedNode) {
-    return {
-      title: `${workflowNodeLabel(failedNode)} 执行失败`,
-      detail: failedNode.errorMessage?.trim() || '工作流节点执行失败，暂无详细错误原因。',
-    }
+const nodeStateInfo = computed<NodeStateInfo>(() => {
+  const instance = currentWorkflowInstance.value
+  if (!instance) return { type: null }
+
+  // Workflow completed
+  if (instance.status === 'COMPLETED') {
+    return { type: 'WORKFLOW_COMPLETED' }
   }
 
-  const summary = selectedWorkItem.value?.workflowSummary
-  const failedStage = summary?.stages?.find((stage) =>
-    stage.status === 'FAILED' && Boolean(stage.errorMessage?.trim())
-  ) ?? summary?.stages?.find((stage) => stage.status === 'FAILED')
-  if (failedStage) {
-    return {
-      title: `${summaryNodeLabel(failedStage)} 执行失败`,
-      detail: failedStage.errorMessage?.trim() || '工作流节点执行失败，暂无详细错误原因。',
-    }
-  }
+  // Find the active node: prefer RUNNING > WAITING_CONFIRMATION > FAILED > latest COMPLETED
+  const activeStatuses: WorkflowNodeStatus[] = ['RUNNING', 'WAITING_CONFIRMATION', 'FAILED']
+  const activeNode =
+    activeStatuses
+      .flatMap((status) => instance.nodes.filter((n) => n.status === status))
+      .sort((a, b) => (a.sequenceNo ?? 0) - (b.sequenceNo ?? 0))[0] ??
+    [...instance.nodes]
+      .filter((n) => n.status === 'COMPLETED')
+      .sort((a, b) => (b.sequenceNo ?? 0) - (a.sequenceNo ?? 0))[0]
 
-  const failedSummaryNode = summary?.nodes.find((node) =>
-    node.status === 'FAILED' && Boolean(node.errorMessage?.trim())
-  ) ?? summary?.nodes.find((node) => node.status === 'FAILED')
-  if (failedSummaryNode) {
-    return {
-      title: `${summaryNodeLabel(failedSummaryNode)} 执行失败`,
-      detail: failedSummaryNode.errorMessage?.trim() || '工作流节点执行失败，暂无详细错误原因。',
-    }
-  }
+  if (!activeNode) return { type: null }
 
-  return null
+  const label = workflowNodeLabel(activeNode)
+
+  switch (activeNode.status) {
+    case 'RUNNING':
+      return {
+        type: 'RUNNING',
+        nodeId: activeNode.id,
+        nodeName: label,
+        skillName: activeNode.skillName ?? undefined,
+      }
+    case 'WAITING_CONFIRMATION':
+      return {
+        type: 'WAITING_CONFIRMATION',
+        nodeId: activeNode.id,
+        nodeName: label,
+        skillName: activeNode.skillName ?? undefined,
+        confirmationType: activeNode.reason ?? '确认',
+      }
+    case 'FAILED':
+      return {
+        type: 'FAILED',
+        nodeId: activeNode.id,
+        nodeName: label,
+        skillName: activeNode.skillName ?? undefined,
+        errorMessage: activeNode.errorMessage?.trim() || '工作流节点执行失败，暂无详细错误原因。',
+      }
+    case 'COMPLETED':
+      return {
+        type: 'COMPLETED',
+        nodeId: activeNode.id,
+        nodeName: label,
+        skillName: activeNode.skillName ?? undefined,
+        artifactId: activeNode.outputArtifactId ?? undefined,
+      }
+    default:
+      return { type: null }
+  }
 })
 
 onMounted(async () => {
@@ -218,18 +254,56 @@ async function handleOpenArtifact(title: string) {
   }
 }
 
+async function handleRetry() {
+  const info = nodeStateInfo.value
+  if (!info?.nodeId) return
+  try {
+    await workflowStore.retryNode(info.nodeId)
+  } catch {
+    // Error handled by store/UI state
+  }
+}
+
+async function handleSkip() {
+  const info = nodeStateInfo.value
+  if (!info?.nodeId) return
+  try {
+    await workflowStore.skipNode(info.nodeId)
+  } catch {
+    // Error handled by store/UI state
+  }
+}
+
+async function handleStop() {
+  // Navigate back — workflow remains blocked at the failed node
+  emit('back')
+}
+
+async function handleConfirmationAction() {
+  const instance = currentWorkflowInstance.value
+  if (!instance) return
+  try {
+    await workflowStore.continueWorkflow(instance.id)
+  } catch {
+    // Error handled by store/UI state
+  }
+}
+
+async function openArtifactById(artifactId: string) {
+  const workItem = selectedWorkItem.value
+  if (!workItem) return
+  const artifacts = await artifactApi.listByWorkItem(workItem.id)
+  const artifact = artifacts.find((item) => item.id === artifactId)
+  if (artifact) {
+    emit('open-artifact', artifact)
+  }
+}
+
 function workflowNodeLabel(node: WorkflowNodeInstanceDto): string {
   const definition = workflowStore.definitions
     .flatMap((item) => item.nodes)
     .find((item) => item.id === node.nodeDefinitionId)
   return definition?.name ?? node.skillName ?? '工作流节点'
-}
-
-function summaryNodeLabel(node: WorkflowSummaryNodeDto | WorkflowSummaryStageDto): string {
-  if ('name' in node) {
-    return node.name ?? node.skillName ?? '工作流节点'
-  }
-  return node.definitionName ?? node.skillName ?? '工作流节点'
 }
 </script>
 
@@ -268,9 +342,50 @@ function summaryNodeLabel(node: WorkflowSummaryNodeDto | WorkflowSummaryStageDto
         {{ skillRefreshStatus }}
       </div>
 
-      <div v-if="workflowFailureNotice" class="conversation-workbench__failure" role="alert">
-        <strong>{{ workflowFailureNotice.title }}</strong>
-        <span>{{ workflowFailureNotice.detail }}</span>
+      <div
+        v-if="nodeStateInfo.type"
+        class="node-state-area"
+        :class="`node-state-area--${nodeStateInfo.type.toLowerCase()}`"
+        role="status"
+      >
+        <!-- RUNNING -->
+        <template v-if="nodeStateInfo.type === 'RUNNING'">
+          <span class="node-state-area__indicator node-state-area__indicator--pulse">&#9679;</span>
+          <span class="node-state-area__label">{{ nodeStateInfo.skillName || nodeStateInfo.nodeName }} 运行中</span>
+        </template>
+
+        <!-- WAITING_CONFIRMATION -->
+        <template v-if="nodeStateInfo.type === 'WAITING_CONFIRMATION'">
+          <span class="node-state-area__indicator">&#9208;</span>
+          <span class="node-state-area__label">等待确认：{{ nodeStateInfo.confirmationType }}</span>
+          <button class="node-state-area__action" @click="handleConfirmationAction">处理</button>
+        </template>
+
+        <!-- FAILED -->
+        <template v-if="nodeStateInfo.type === 'FAILED'">
+          <span class="node-state-area__indicator">&#10005;</span>
+          <span class="node-state-area__label">{{ nodeStateInfo.errorMessage }}</span>
+          <div class="node-state-area__actions">
+            <button @click="handleRetry">重试</button>
+            <button @click="handleSkip">跳过</button>
+            <button @click="handleStop">停止推进</button>
+          </div>
+        </template>
+
+        <!-- COMPLETED (node) -->
+        <template v-if="nodeStateInfo.type === 'COMPLETED'">
+          <span class="node-state-area__indicator">&#10003;</span>
+          <span class="node-state-area__label">{{ nodeStateInfo.nodeName }} 输出完成</span>
+          <button v-if="nodeStateInfo.artifactId" class="node-state-area__action" @click="openArtifactById(nodeStateInfo.artifactId)">
+            查看产物
+          </button>
+        </template>
+
+        <!-- WORKFLOW_COMPLETED -->
+        <template v-if="nodeStateInfo.type === 'WORKFLOW_COMPLETED'">
+          <span class="node-state-area__indicator">&#10003;</span>
+          <span class="node-state-area__label node-state-area__label--prominent">任务已完成</span>
+        </template>
       </div>
 
       <div ref="messagesRef" class="conversation-workbench__messages">
@@ -475,29 +590,138 @@ function summaryNodeLabel(node: WorkflowSummaryNodeDto | WorkflowSummaryStageDto
   font-weight: 800;
 }
 
-.conversation-workbench__failure {
+.node-state-area {
   margin: 10px 22px 0;
-  display: grid;
-  gap: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--error) 34%, var(--border-color));
+  border: 1px solid var(--border-color);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--error) 9%, var(--bg-card));
-  color: var(--text-primary);
+  background: var(--bg-card);
   font-size: 12px;
   line-height: 1.55;
+  flex-wrap: wrap;
 }
 
-.conversation-workbench__failure strong {
-  color: var(--error);
+.node-state-area__indicator {
+  flex-shrink: 0;
   font-size: 13px;
+  line-height: 1;
+}
+
+.node-state-area__indicator--pulse {
+  animation: node-state-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes node-state-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.node-state-area__label {
+  color: var(--text-primary);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.node-state-area__label--prominent {
+  font-size: 14px;
   font-weight: 900;
 }
 
-.conversation-workbench__failure span {
-  overflow-wrap: anywhere;
+.node-state-area__action,
+.node-state-area__actions button {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-primary);
   color: var(--text-secondary);
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.node-state-area__action:hover,
+.node-state-area__actions button:hover {
+  border-color: var(--brand-border);
+  background: var(--brand-soft);
+  color: var(--brand-primary);
+}
+
+.node-state-area__actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+/* State-specific colors */
+.node-state-area--running {
+  border-color: color-mix(in srgb, var(--accent-blue) 34%, var(--border-color));
+  background: color-mix(in srgb, var(--accent-blue) 9%, var(--bg-card));
+}
+
+.node-state-area--running .node-state-area__indicator {
+  color: var(--accent-blue);
+}
+
+.node-state-area--running .node-state-area__label {
+  color: var(--accent-blue);
+}
+
+.node-state-area--waiting_confirmation {
+  border-color: color-mix(in srgb, var(--warning) 34%, var(--border-color));
+  background: color-mix(in srgb, var(--warning) 9%, var(--bg-card));
+}
+
+.node-state-area--waiting_confirmation .node-state-area__indicator {
+  color: var(--warning);
+}
+
+.node-state-area--waiting_confirmation .node-state-area__label {
+  color: var(--warning);
+}
+
+.node-state-area--failed {
+  border-color: color-mix(in srgb, var(--error) 34%, var(--border-color));
+  background: color-mix(in srgb, var(--error) 9%, var(--bg-card));
+}
+
+.node-state-area--failed .node-state-area__indicator {
+  color: var(--error);
+}
+
+.node-state-area--failed .node-state-area__label {
+  color: var(--text-secondary);
+}
+
+.node-state-area--completed {
+  border-color: color-mix(in srgb, var(--success) 34%, var(--border-color));
+  background: color-mix(in srgb, var(--success) 9%, var(--bg-card));
+}
+
+.node-state-area--completed .node-state-area__indicator {
+  color: var(--success);
+}
+
+.node-state-area--completed .node-state-area__label {
+  color: var(--success);
+}
+
+.node-state-area--workflow_completed {
+  border-color: color-mix(in srgb, var(--success) 50%, var(--border-color));
+  background: color-mix(in srgb, var(--success) 14%, var(--bg-card));
+}
+
+.node-state-area--workflow_completed .node-state-area__indicator {
+  color: var(--success);
+  font-size: 16px;
+}
+
+.node-state-area--workflow_completed .node-state-area__label {
+  color: var(--success);
 }
 
 .conversation-workbench__loading {
