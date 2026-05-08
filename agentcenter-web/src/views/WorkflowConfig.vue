@@ -36,9 +36,11 @@ const skills = ref<RuntimeSkillDetailDto[]>([])
 const skillLoading = ref(false)
 const editingDefinitionId = ref<string | null>(null)
 const draft = ref<DefinitionDraft | null>(null)
+const initialDraftSnapshot = ref<string | null>(null)
 const saving = ref(false)
 const error = ref<string | null>(null)
 const savedMessage = ref<string | null>(null)
+const orchestrationIntent = ref('选择可用 Skill 后，由 Agent 先生成可解释的大阶段路线；真正执行时根据工作项信息、上游产物和运行时事件动态决定是否提问、让用户选择方案或进入下一阶段。')
 
 const inputPolicies = [
   { value: 'WORK_ITEM_ONLY', label: '工作项' },
@@ -47,8 +49,21 @@ const inputPolicies = [
 ]
 
 const outputTypes: ArtifactType[] = ['MARKDOWN', 'JSON', 'PATCH', 'LOG', 'REPORT']
-const confirmationTooltip = '开启后，阶段产物会进入右侧待确认，用户通过后才继续下一阶段。适合 PRD、HLD 等需要人工审阅的节点。'
-const dynamicActionTooltip = '开启后，Agent 执行该阶段时可以按实际情况临时追加修复、补充分析、重试等动作，并统一挂在这个阶段下。'
+const confirmationTooltip = '这是产物审阅建议，不是固定阻塞门禁。真正的待确认由 Agent 在输出中触发 ASK_USER、DECISION_REQUIRED、ARTIFACT_REVIEW_REQUESTED 或 PERMISSION_REQUIRED。'
+const dynamicActionTooltip = '开启后，Agent 执行该阶段时可以按实际情况临时追加澄清、修复、补充分析、重试等动作，并统一挂在这个阶段下。'
+const interactionTypes = [
+  { type: 'ASK_USER', label: '信息缺口', desc: '需求、约束或验收标准缺失时再向用户提问' },
+  { type: 'DECISION_REQUIRED', label: '方案选择', desc: '存在多个可行路线且取舍会影响结果时让用户选择' },
+  { type: 'ARTIFACT_REVIEW_REQUESTED', label: '产物审阅', desc: 'PRD/HLD/LLD 风险较高时请求用户确认或退回修改' },
+  { type: 'PERMISSION_REQUIRED', label: '授权动作', desc: '涉及外部系统、写入、生产数据或敏感操作时请求授权' },
+]
+
+const runtimePrinciples = [
+  '编排页只定义大阶段蓝图，不把每一步工具调用写死。',
+  '阶段之间默认通过 Markdown 产物和工作项上下文传递。',
+  '待确认不再由阶段勾选强制产生，而由 Agent 输出的交互事件触发。',
+  '执行中允许 Agent 增加临时修复、澄清、重试和风险检查动作。',
+]
 
 const enabledDefinitions = computed(() =>
   workflowStore.definitions.filter((definition) => definition.status === 'ENABLED')
@@ -66,6 +81,11 @@ const availableSkillNames = computed(() => {
     }
   }
   return [...names].sort((a, b) => a.localeCompare(b))
+})
+
+const isDraftDirty = computed(() => {
+  if (!draft.value || initialDraftSnapshot.value === null) return false
+  return serializeDraft(draft.value) !== initialDraftSnapshot.value
 })
 
 onMounted(() => {
@@ -103,6 +123,24 @@ function recommendedSkills(node: WorkflowNodeDefinitionDto): string {
   return names.length > 0 ? names.join('、') : node.skillName
 }
 
+function blueprintSummary(definition: WorkflowDefinitionDto): string {
+  const dynamicCount = definition.nodes.filter((node) => node.allowDynamicActions !== false).length
+  return `${definition.nodes.length} 个大阶段 · ${dynamicCount} 个阶段允许动态动作 · 交互由 Agent 运行时事件触发`
+}
+
+function stageGoal(node: WorkflowNodeDefinitionDto | NodeDraft): string {
+  if ('stageGoal' in node && node.stageGoal?.trim()) return node.stageGoal
+  if (node.inputPolicy === 'WORK_ITEM_ONLY') return '基于工作项信息生成本阶段产物'
+  if (node.inputPolicy === 'PREVIOUS_ARTIFACT') return '消费上游 Markdown 产物并补齐本阶段输出'
+  return '合并工作项、历史产物和运行时上下文后继续推进'
+}
+
+function interactionHint(node: WorkflowNodeDefinitionDto | NodeDraft): string {
+  if (node.requiredConfirmation) return '建议在高风险产物上触发 ARTIFACT_REVIEW_REQUESTED'
+  if (node.allowDynamicActions === false) return '固定阶段，仅在运行失败时进入异常处理'
+  return '可按实际情况触发 ASK_USER、DECISION_REQUIRED 或临时修复动作'
+}
+
 function inputPolicyLabel(policy: string): string {
   return inputPolicies.find((item) => item.value === policy)?.label ?? policy
 }
@@ -111,7 +149,7 @@ function beginEdit(definition: WorkflowDefinitionDto) {
   error.value = null
   savedMessage.value = null
   editingDefinitionId.value = definition.id
-  draft.value = {
+  const nextDraft: DefinitionDraft = {
     id: definition.id,
     name: definition.name,
     isDefault: definition.isDefault,
@@ -127,11 +165,14 @@ function beginEdit(definition: WorkflowDefinitionDto) {
       confirmationPolicy: node.confirmationPolicy ?? (node.requiredConfirmation ? 'REQUIRED' : 'AUTO'),
     })),
   }
+  draft.value = nextDraft
+  initialDraftSnapshot.value = serializeDraft(nextDraft)
 }
 
 function cancelEdit() {
   editingDefinitionId.value = null
   draft.value = null
+  initialDraftSnapshot.value = null
   error.value = null
 }
 
@@ -147,7 +188,23 @@ function addNode() {
     requiredConfirmation: false,
     stageKey: `stage_${order}`,
     allowDynamicActions: true,
-    confirmationPolicy: 'AUTO',
+    confirmationPolicy: 'EVENT_DRIVEN',
+  })
+}
+
+function appendSkillAsStage(skillName: string) {
+  if (!draft.value) return
+  const order = draft.value.nodes.length + 1
+  draft.value.nodes.push({
+    nodeKey: stageKeyForSkill(skillName, order),
+    name: stageNameForSkill(skillName, order),
+    skillName,
+    inputPolicy: order === 1 ? 'WORK_ITEM_ONLY' : 'PREVIOUS_ARTIFACT',
+    outputArtifactType: 'MARKDOWN',
+    requiredConfirmation: false,
+    stageKey: stageKeyForSkill(skillName, order),
+    allowDynamicActions: true,
+    confirmationPolicy: 'EVENT_DRIVEN',
   })
 }
 
@@ -166,10 +223,78 @@ function moveNode(index: number, direction: -1 | 1) {
   nodes[nextIndex] = current
 }
 
+function generateDraftPlan() {
+  if (!draft.value) return
+  draft.value.nodes = [...draft.value.nodes]
+    .sort((left, right) => skillSortWeight(left.skillName) - skillSortWeight(right.skillName))
+    .map((node, index) => ({
+      ...node,
+      name: node.name.trim() || stageNameForSkill(node.skillName, index + 1),
+      inputPolicy: index === 0 ? 'WORK_ITEM_ONLY' : 'PREVIOUS_ARTIFACT',
+      outputArtifactType: 'MARKDOWN',
+      stageKey: node.stageKey.trim() || stageKeyForSkill(node.skillName, index + 1),
+      allowDynamicActions: true,
+      confirmationPolicy: node.requiredConfirmation ? 'EVENT_DRIVEN_REVIEW' : 'EVENT_DRIVEN',
+    }))
+  savedMessage.value = '已根据当前 Skill 和编排意图生成阶段草案，保存后会成为新版编排'
+}
+
+function skillSortWeight(skillName: string): number {
+  const normalized = skillName.toLowerCase()
+  if (normalized.includes('prd') || normalized.includes('requirement')) return 10
+  if (normalized.includes('hld') || normalized.includes('solution')) return 20
+  if (normalized.includes('lld') || normalized.includes('implementation')) return 30
+  if (normalized.includes('review') || normalized.includes('verification')) return 40
+  if (normalized.includes('archive') || normalized.includes('finalize')) return 50
+  return 100
+}
+
+function stageNameForSkill(skillName: string, order: number): string {
+  const normalized = skillName.toLowerCase()
+  if (normalized.includes('prd') || normalized.includes('requirement')) return '需求整理 (PRD)'
+  if (normalized.includes('hld') || normalized.includes('solution')) return '方案设计 (HLD)'
+  if (normalized.includes('lld') || normalized.includes('implementation')) return '详细设计 (LLD)'
+  if (normalized.includes('review') || normalized.includes('verification')) return '验证与评审'
+  if (normalized.includes('archive') || normalized.includes('finalize')) return '归档完成'
+  return `阶段 ${order}`
+}
+
+function stageKeyForSkill(skillName: string, order: number): string {
+  const normalized = skillName.toLowerCase()
+  if (normalized.includes('prd') || normalized.includes('requirement')) return 'requirement_refine'
+  if (normalized.includes('hld') || normalized.includes('solution')) return 'solution_design'
+  if (normalized.includes('lld') || normalized.includes('implementation')) return 'implementation_plan'
+  if (normalized.includes('review') || normalized.includes('verification')) return 'verification_review'
+  if (normalized.includes('archive') || normalized.includes('finalize')) return 'finalize_archive'
+  return `stage_${order}`
+}
+
+function serializeDraft(value: DefinitionDraft): string {
+  return JSON.stringify({
+    name: value.name.trim(),
+    isDefault: value.isDefault,
+    nodes: value.nodes.map((node) => ({
+      nodeKey: node.nodeKey.trim(),
+      name: node.name.trim(),
+      skillName: node.skillName.trim(),
+      inputPolicy: node.inputPolicy,
+      outputArtifactType: node.outputArtifactType,
+      requiredConfirmation: node.requiredConfirmation,
+      stageKey: node.stageKey.trim(),
+      allowDynamicActions: node.allowDynamicActions,
+      confirmationPolicy: node.confirmationPolicy,
+    })),
+  })
+}
+
 async function saveDraft() {
   if (!draft.value) return
   error.value = null
   savedMessage.value = null
+  if (!isDraftDirty.value) {
+    savedMessage.value = '没有检测到改动，未创建新版本'
+    return
+  }
   const invalidNode = draft.value.nodes.find((node) => !node.name.trim() || !node.skillName.trim())
   if (!draft.value.name.trim()) {
     error.value = '策略名称不能为空'
@@ -194,7 +319,7 @@ async function saveDraft() {
       stageGoal: node.name.trim(),
       recommendedSkillNames: [node.skillName.trim()],
       allowDynamicActions: node.allowDynamicActions,
-      confirmationPolicy: node.requiredConfirmation ? 'REQUIRED' : 'AUTO',
+      confirmationPolicy: node.requiredConfirmation ? 'EVENT_DRIVEN_REVIEW' : 'EVENT_DRIVEN',
     })),
   }
 
@@ -217,13 +342,28 @@ async function saveDraft() {
   <div class="workflow-config">
     <div class="workflow-config__header">
       <div>
-        <h3 class="workflow-config__title">任务编排</h3>
-        <p class="workflow-config__subtitle">按任务类型维护工作流阶段，选择 Skill 并编排执行顺序</p>
+        <h3 class="workflow-config__title">Agent-first 任务编排</h3>
+        <p class="workflow-config__subtitle">选择 Skill 和编排意图，形成可解释的大阶段蓝图；执行细节交给 Agent 根据上下文动态推进</p>
       </div>
       <div class="workflow-config__skill-summary">
         <span>{{ skillLoading ? 'Skill 加载中' : `可选 Skill ${availableSkillNames.length}` }}</span>
       </div>
     </div>
+
+    <section class="workflow-config__model" aria-label="Agent-first 编排模型">
+      <div class="workflow-config__model-step">
+        <strong>1. Skill 池</strong>
+        <span>用户选择已上传的 Skill，作为 Agent 可调用能力</span>
+      </div>
+      <div class="workflow-config__model-step">
+        <strong>2. 阶段蓝图</strong>
+        <span>系统生成 PRD、HLD、LLD 等大阶段，不预先写死所有分支</span>
+      </div>
+      <div class="workflow-config__model-step">
+        <strong>3. 运行时决策</strong>
+        <span>Agent 根据产物、缺口、异常和用户交互事件实时补动作</span>
+      </div>
+    </section>
 
     <div v-if="error" class="workflow-config__notice workflow-config__notice--error">{{ error }}</div>
     <div v-if="savedMessage" class="workflow-config__notice workflow-config__notice--success">{{ savedMessage }}</div>
@@ -245,6 +385,7 @@ async function saveDraft() {
             <span v-if="def.isDefault" class="workflow-definition__default">默认</span>
             <span class="workflow-definition__version">v{{ def.versionNo }}</span>
           </div>
+          <span class="workflow-definition__summary">{{ blueprintSummary(def) }}</span>
           <div class="workflow-definition__actions">
             <button
               v-if="editingDefinitionId !== def.id"
@@ -252,7 +393,7 @@ async function saveDraft() {
               type="button"
               @click="beginEdit(def)"
             >
-              编辑
+              编辑蓝图
             </button>
             <template v-else>
               <button
@@ -266,171 +407,205 @@ async function saveDraft() {
               <button
                 class="workflow-config__button workflow-config__button--primary"
                 type="button"
-                :disabled="saving"
+                :disabled="saving || !isDraftDirty"
                 @click="saveDraft"
               >
-                {{ saving ? '保存中' : '保存新版' }}
+                {{ saving ? '保存中' : isDraftDirty ? '保存新版' : '无改动' }}
               </button>
             </template>
           </div>
         </div>
 
         <div v-if="editingDefinitionId === def.id && draft" class="workflow-editor">
-          <div class="workflow-editor__top">
-            <label>
-              <span>策略名称</span>
+          <div class="workflow-editor__strategy">
+            <label class="workflow-editor__name">
+              <span>编排名称</span>
               <input v-model="draft.name" type="text" />
             </label>
             <label class="workflow-editor__check">
               <input v-model="draft.isDefault" type="checkbox" />
               <span>作为 {{ def.workItemType }} 默认编排</span>
             </label>
+            <label class="workflow-editor__intent">
+              <span>自然语言编排意图</span>
+              <textarea
+                v-model="orchestrationIntent"
+                rows="3"
+                aria-label="自然语言编排意图"
+              />
+            </label>
+            <button
+              class="workflow-config__button workflow-config__button--primary"
+              type="button"
+              @click="generateDraftPlan"
+            >
+              生成阶段草案
+            </button>
           </div>
 
-          <div class="workflow-editor__table" role="table" aria-label="编排阶段编辑">
-            <div class="workflow-editor__row workflow-editor__row--head" role="row">
-              <span>顺序</span>
-              <span>阶段</span>
-              <span>Skill</span>
-              <span>输入</span>
-              <span>输出</span>
-              <span class="workflow-editor__head-label">
-                门禁
-                <button
-                  class="workflow-help"
-                  type="button"
-                  :title="`${confirmationTooltip}\n${dynamicActionTooltip}`"
-                  aria-label="查看门禁设置说明"
-                >
-                  ?
-                </button>
-              </span>
-              <span>操作</span>
-            </div>
-            <div
-              v-for="(node, index) in draft.nodes"
-              :key="`${node.nodeKey}-${index}`"
-              class="workflow-editor__row"
-              role="row"
-            >
-              <div class="workflow-editor__order">
-                <strong>{{ index + 1 }}</strong>
-                <button type="button" :disabled="index === 0" @click="moveNode(index, -1)">上移</button>
-                <button type="button" :disabled="index === draft.nodes.length - 1" @click="moveNode(index, 1)">下移</button>
-              </div>
-              <div class="workflow-editor__field-stack">
-                <input v-model="node.name" type="text" aria-label="阶段名称" placeholder="阶段名称" />
-              </div>
-              <select v-model="node.skillName" aria-label="选择 Skill">
-                <option value="" disabled>选择 Skill</option>
-                <option
-                  v-for="skillName in availableSkillNames"
-                  :key="skillName"
-                  :value="skillName"
-                >
-                  {{ skillName }}
-                </option>
-              </select>
-              <select v-model="node.inputPolicy" aria-label="输入策略">
-                <option
-                  v-for="policy in inputPolicies"
-                  :key="policy.value"
-                  :value="policy.value"
-                >
-                  {{ policy.label }}
-                </option>
-              </select>
-              <select v-model="node.outputArtifactType" aria-label="输出类型">
-                <option v-for="type in outputTypes" :key="type" :value="type">{{ type }}</option>
-              </select>
-              <div class="workflow-editor__toggles">
-                <div class="workflow-editor__toggle-row">
-                  <label>
-                    <input v-model="node.requiredConfirmation" type="checkbox" />
-                    <span>需确认</span>
-                  </label>
-                  <button
-                    class="workflow-help"
-                    type="button"
-                    :title="confirmationTooltip"
-                    aria-label="查看需确认说明"
-                  >
-                    ?
-                  </button>
-                </div>
-                <div class="workflow-editor__toggle-row">
-                  <label>
-                    <input v-model="node.allowDynamicActions" type="checkbox" />
-                    <span>动态动作</span>
-                  </label>
-                  <button
-                    class="workflow-help"
-                    type="button"
-                    :title="dynamicActionTooltip"
-                    aria-label="查看动态动作说明"
-                  >
-                    ?
-                  </button>
-                </div>
+          <div class="workflow-editor__workspace">
+            <aside class="workflow-editor__skills" aria-label="可选 Skill">
+              <div class="workflow-editor__section-title">
+                <strong>Skill 池</strong>
+                <span>点击加入阶段草案</span>
               </div>
               <button
-                class="workflow-config__button workflow-config__button--danger"
+                v-for="skillName in availableSkillNames"
+                :key="skillName"
+                class="workflow-editor__skill"
                 type="button"
-                :disabled="draft.nodes.length <= 1"
-                @click="removeNode(index)"
+                :aria-label="`把 ${skillName} 加入阶段`"
+                @click="appendSkillAsStage(skillName)"
               >
-                删除
+                <span>{{ skillName }}</span>
+                <small>加入</small>
+              </button>
+            </aside>
+
+            <div class="workflow-editor__stages" aria-label="阶段草案">
+              <div class="workflow-editor__section-title">
+                <strong>大阶段草案</strong>
+                <span>阶段顺序只是建议，运行中允许 Agent 动态补动作</span>
+              </div>
+
+              <article
+                v-for="(node, index) in draft.nodes"
+                :key="`${node.nodeKey}-${index}`"
+                class="workflow-editor__stage-card"
+              >
+                <div class="workflow-editor__stage-head">
+                  <span class="workflow-editor__stage-order">{{ index + 1 }}</span>
+                  <input v-model="node.name" type="text" aria-label="阶段名称" placeholder="阶段名称" />
+                  <div class="workflow-editor__stage-actions">
+                    <button type="button" :disabled="index === 0" @click="moveNode(index, -1)">上移</button>
+                    <button type="button" :disabled="index === draft.nodes.length - 1" @click="moveNode(index, 1)">下移</button>
+                    <button type="button" :disabled="draft.nodes.length <= 1" @click="removeNode(index)">删除</button>
+                  </div>
+                </div>
+
+                <div class="workflow-editor__stage-grid">
+                  <label>
+                    <span>Skill</span>
+                    <select v-model="node.skillName" aria-label="选择 Skill">
+                      <option value="" disabled>选择 Skill</option>
+                      <option
+                        v-for="skillName in availableSkillNames"
+                        :key="skillName"
+                        :value="skillName"
+                      >
+                        {{ skillName }}
+                      </option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>输入上下文</span>
+                    <select v-model="node.inputPolicy" aria-label="输入策略">
+                      <option
+                        v-for="policy in inputPolicies"
+                        :key="policy.value"
+                        :value="policy.value"
+                      >
+                        {{ policy.label }}
+                      </option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>产物类型</span>
+                    <select v-model="node.outputArtifactType" aria-label="输出类型">
+                      <option v-for="type in outputTypes" :key="type" :value="type">{{ type }}</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div class="workflow-editor__runtime">
+                  <label>
+                    <input v-model="node.requiredConfirmation" type="checkbox" />
+                    <span>建议审阅产物</span>
+                    <button
+                      class="workflow-help workflow-help--inline"
+                      type="button"
+                      :title="confirmationTooltip"
+                      aria-label="查看交互事件说明"
+                    >
+                      ?
+                    </button>
+                  </label>
+                  <label>
+                    <input v-model="node.allowDynamicActions" type="checkbox" />
+                    <span>允许 Agent 动态动作</span>
+                    <button
+                      class="workflow-help workflow-help--inline"
+                      type="button"
+                      :title="dynamicActionTooltip"
+                      aria-label="查看动态动作说明"
+                    >
+                      ?
+                    </button>
+                  </label>
+                  <p>{{ interactionHint(node) }}</p>
+                </div>
+              </article>
+
+              <button class="workflow-config__button" type="button" @click="addNode">
+                新增空阶段
               </button>
             </div>
           </div>
-
-          <button class="workflow-config__button" type="button" @click="addNode">
-            新增阶段
-          </button>
         </div>
 
-        <div v-else class="workflow-definition__stages">
-          <div
-            v-for="node in def.nodes"
-            :key="node.id"
-            class="workflow-stage"
-          >
-            <div class="workflow-stage__order">{{ node.orderNo }}</div>
-            <div class="workflow-stage__main">
-              <div class="workflow-stage__topline">
-                <strong>{{ node.name }}</strong>
-                <span>{{ node.stageKey || node.nodeKey }}</span>
-              </div>
-              <p>{{ node.stageGoal || node.name }}</p>
-              <div class="workflow-stage__meta">
-                <span>Skill：{{ recommendedSkills(node) }}</span>
-                <span>输入：{{ inputPolicyLabel(node.inputPolicy) }}</span>
-                <span>输出：{{ node.outputArtifactType }}</span>
-                <span>
-                  {{ node.requiredConfirmation ? '需确认' : '自动推进' }}
-                  <button
-                    class="workflow-help workflow-help--inline"
-                    type="button"
-                    :title="confirmationTooltip"
-                    aria-label="查看需确认说明"
-                  >
-                    ?
-                  </button>
-                </span>
-                <span>
-                  {{ node.allowDynamicActions !== false ? '允许动态动作' : '固定阶段' }}
-                  <button
-                    class="workflow-help workflow-help--inline"
-                    type="button"
-                    :title="dynamicActionTooltip"
-                    aria-label="查看动态动作说明"
-                  >
-                    ?
-                  </button>
-                </span>
+        <div v-else class="workflow-definition__body">
+          <div class="workflow-definition__blueprint">
+            <div class="workflow-definition__section-title">
+              <strong>大阶段蓝图</strong>
+              <span>用户确认的是路线，不是固定 DAG</span>
+            </div>
+            <div class="workflow-route" aria-label="阶段路线">
+              <div
+                v-for="node in def.nodes"
+                :key="node.id"
+                class="workflow-route__node"
+              >
+                <span class="workflow-route__order">{{ node.orderNo }}</span>
+                <div class="workflow-route__content">
+                  <div class="workflow-route__top">
+                    <strong>{{ node.name }}</strong>
+                    <span>{{ node.stageKey || node.nodeKey }}</span>
+                  </div>
+                  <p>{{ stageGoal(node) }}</p>
+                  <div class="workflow-route__meta">
+                    <span>Skill：{{ recommendedSkills(node) }}</span>
+                    <span>输入：{{ inputPolicyLabel(node.inputPolicy) }}</span>
+                    <span>产物：{{ node.outputArtifactType }}</span>
+                  </div>
+                  <small>{{ interactionHint(node) }}</small>
+                </div>
               </div>
             </div>
           </div>
+
+          <aside class="workflow-definition__runtime">
+            <div class="workflow-definition__section-title">
+              <strong>运行时原则</strong>
+              <span>Agent 自主推进</span>
+            </div>
+            <ul>
+              <li v-for="principle in runtimePrinciples" :key="principle">{{ principle }}</li>
+            </ul>
+            <div class="workflow-definition__section-title workflow-definition__section-title--compact">
+              <strong>可能交互事件</strong>
+            </div>
+            <div class="workflow-events">
+              <div
+                v-for="event in interactionTypes"
+                :key="event.type"
+                class="workflow-events__item"
+              >
+                <span>{{ event.type }}</span>
+                <strong>{{ event.label }}</strong>
+                <p>{{ event.desc }}</p>
+              </div>
+            </div>
+          </aside>
         </div>
       </section>
     </div>
@@ -477,6 +652,37 @@ async function saveDraft() {
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 700;
+}
+
+.workflow-config__model {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.workflow-config__model-step {
+  min-height: 76px;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background-color: var(--bg-secondary);
+}
+
+.workflow-config__model-step strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.workflow-config__model-step span {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.5;
 }
 
 .workflow-config__notice {
@@ -622,96 +828,195 @@ async function saveDraft() {
   font-weight: 700;
 }
 
-.workflow-definition__stages {
+.workflow-definition__summary {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 750;
+  text-align: right;
+}
+
+.workflow-definition__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 16px;
+  padding: 16px;
+}
+
+.workflow-definition__section-title,
+.workflow-editor__section-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.workflow-definition__section-title strong,
+.workflow-editor__section-title strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.workflow-definition__section-title span,
+.workflow-editor__section-title span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.workflow-definition__section-title--compact {
+  margin-top: 14px;
+}
+
+.workflow-route {
   display: flex;
   flex-direction: column;
+  gap: 10px;
 }
 
-.workflow-stage {
+.workflow-route__node {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr);
+  grid-template-columns: 30px minmax(0, 1fr);
   gap: 12px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-color);
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background-color: var(--bg-primary);
 }
 
-.workflow-stage:last-child {
-  border-bottom: none;
-}
-
-.workflow-stage__order {
+.workflow-route__order,
+.workflow-editor__stage-order {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 28px;
   height: 28px;
   border-radius: 999px;
-  background-color: var(--bg-primary);
-  color: var(--text-secondary);
+  background-color: rgba(59, 130, 246, 0.1);
+  color: var(--accent-blue);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 900;
 }
 
-.workflow-stage__main {
-  min-width: 0;
-}
-
-.workflow-stage__topline {
+.workflow-route__top {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.workflow-stage__topline strong {
+.workflow-route__top strong {
   color: var(--text-primary);
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 900;
 }
 
-.workflow-stage__topline span {
+.workflow-route__top span {
   color: var(--text-muted);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 750;
 }
 
-.workflow-stage__main p {
-  margin: 4px 0 0;
+.workflow-route__content p,
+.workflow-route__content small {
+  display: block;
+  margin-top: 5px;
   color: var(--text-secondary);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 650;
+  line-height: 1.5;
 }
 
-.workflow-stage__meta {
+.workflow-route__content small {
+  color: var(--text-muted);
+}
+
+.workflow-route__meta {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 8px;
 }
 
-.workflow-stage__meta span {
+.workflow-route__meta span,
+.workflow-events__item span {
   display: inline-flex;
   align-items: center;
   min-height: 22px;
   padding: 2px 8px;
   border-radius: 4px;
-  background-color: var(--bg-primary);
+  background-color: var(--bg-secondary);
   color: var(--text-secondary);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 800;
+}
+
+.workflow-definition__runtime {
+  min-width: 0;
+  padding-left: 16px;
+  border-left: 1px solid var(--border-color);
+}
+
+.workflow-definition__runtime ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.6;
+}
+
+.workflow-events {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.workflow-events__item {
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background-color: var(--bg-primary);
+}
+
+.workflow-events__item strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.workflow-events__item p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.45;
 }
 
 .workflow-editor {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 14px 16px 16px;
+  gap: 14px;
+  padding: 16px;
 }
 
-.workflow-editor__top {
+.workflow-editor__strategy {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) auto;
+  grid-template-columns: minmax(220px, 1fr) auto;
   gap: 12px;
   align-items: end;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background-color: var(--bg-primary);
+}
+
+.workflow-editor__intent {
+  grid-column: 1 / -1;
 }
 
 .workflow-editor label {
@@ -730,10 +1035,11 @@ async function saveDraft() {
 }
 
 .workflow-editor input,
-.workflow-editor select {
+.workflow-editor select,
+.workflow-editor textarea {
   min-width: 0;
   min-height: 32px;
-  padding: 5px 8px;
+  padding: 6px 8px;
   border: 1px solid var(--border-color);
   border-radius: 6px;
   background-color: var(--bg-primary);
@@ -742,60 +1048,76 @@ async function saveDraft() {
   font-weight: 700;
 }
 
+.workflow-editor textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+
 .workflow-editor input[type='checkbox'] {
   min-height: auto;
 }
 
-.workflow-editor__table {
+.workflow-editor__workspace {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 14px;
+}
+
+.workflow-editor__skills,
+.workflow-editor__stages {
+  min-width: 0;
+}
+
+.workflow-editor__skill {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.workflow-editor__skill small {
+  color: var(--accent-blue);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.workflow-editor__stage-card {
+  padding: 12px;
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  overflow: hidden;
-}
-
-.workflow-editor__row {
-  display: grid;
-  grid-template-columns: 92px minmax(180px, 1.2fr) minmax(140px, 1fr) 116px 112px 132px 72px;
-  gap: 10px;
-  align-items: center;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.workflow-editor__row:last-child {
-  border-bottom: none;
-}
-
-.workflow-editor__row--head {
-  min-height: 34px;
   background-color: var(--bg-primary);
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 800;
 }
 
-.workflow-editor__head-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
+.workflow-editor__stage-card + .workflow-editor__stage-card {
+  margin-top: 10px;
 }
 
-.workflow-editor__order {
+.workflow-editor__stage-head {
   display: grid;
-  grid-template-columns: 28px 1fr 1fr;
-  gap: 4px;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  gap: 8px;
   align-items: center;
 }
 
-.workflow-editor__order strong {
-  color: var(--text-primary);
-  font-size: 13px;
+.workflow-editor__stage-actions {
+  display: flex;
+  gap: 6px;
 }
 
-.workflow-editor__order button {
-  min-height: 26px;
-  padding: 3px 5px;
+.workflow-editor__stage-actions button {
+  min-height: 28px;
+  padding: 4px 8px;
   border: 1px solid var(--border-color);
   border-radius: 5px;
   background-color: var(--bg-primary);
@@ -804,37 +1126,71 @@ async function saveDraft() {
   font-weight: 800;
 }
 
-.workflow-editor__order button:disabled {
-  opacity: 0.4;
+.workflow-editor__stage-actions button:disabled {
+  opacity: 0.45;
 }
 
-.workflow-editor__field-stack,
-.workflow-editor__toggles {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+.workflow-editor__stage-grid {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) 140px 120px;
+  gap: 10px;
+  margin-top: 10px;
 }
 
-.workflow-editor__toggle-row {
+.workflow-editor__runtime {
   display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
   align-items: center;
-  justify-content: space-between;
-  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border-color);
 }
 
-.workflow-editor__toggle-row label {
+.workflow-editor__runtime label {
   flex-direction: row;
   align-items: center;
   gap: 6px;
 }
 
-@media (max-width: 1120px) {
-  .workflow-editor__table {
-    overflow-x: auto;
+.workflow-editor__runtime p {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+@media (max-width: 1180px) {
+  .workflow-config__model,
+  .workflow-definition__body,
+  .workflow-editor__workspace {
+    grid-template-columns: 1fr;
   }
 
-  .workflow-editor__row {
-    min-width: 900px;
+  .workflow-definition__runtime {
+    padding-left: 0;
+    border-left: none;
+    border-top: 1px solid var(--border-color);
+    padding-top: 14px;
+  }
+}
+
+@media (max-width: 760px) {
+  .workflow-definition__header,
+  .workflow-editor__stage-head,
+  .workflow-editor__stage-grid,
+  .workflow-editor__strategy {
+    grid-template-columns: 1fr;
+  }
+
+  .workflow-definition__header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .workflow-definition__summary {
+    text-align: left;
   }
 }
 </style>
