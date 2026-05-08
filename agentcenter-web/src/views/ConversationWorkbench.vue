@@ -6,7 +6,8 @@ import { useRuntimeStore } from '../stores/runtime'
 import { useWorkItemStore } from '../stores/workItems'
 import MessageList from '../components/conversation/MessageList.vue'
 import { runtimeResourceApi } from '../api/runtimeResources'
-import type { AgentSessionDto, WorkflowNodeStatus } from '../api/types'
+import { artifactApi } from '../api/artifacts'
+import type { AgentSessionDto, ArtifactDto } from '../api/types'
 
 const props = defineProps<{
   workItemId?: string
@@ -15,6 +16,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   back: []
+  'open-artifact': [artifact: ArtifactDto]
 }>()
 
 const sessionStore = useSessionStore()
@@ -28,6 +30,7 @@ const messagesRef = ref<HTMLElement | null>(null)
 const skillRefreshStatus = ref('')
 const refreshingSkills = ref(false)
 const loadingSession = ref(false)
+const cancellingReply = ref(false)
 
 const selectedWorkItem = computed(() => {
   if (!props.workItemId) return null
@@ -41,41 +44,9 @@ const activeTitle = computed(() => {
   return sessionStore.activeSession?.title || '对话工作台 · AI 智能中枢'
 })
 
-const nodeStatusIcons: Record<WorkflowNodeStatus, string> = {
-  COMPLETED: '\u2705',
-  RUNNING: '\uD83D\uDD04',
-  WAITING_CONFIRMATION: '\u23F8\uFE0F',
-  FAILED: '\u274C',
-  PENDING: '\u23F3',
-  SKIPPED: '\u23ED\uFE0F',
-}
-
-const activeSubtitle = computed(() => {
-  if (selectedWorkItem.value?.workflowSummary) {
-    const nodes = selectedWorkItem.value.workflowSummary.stages?.length
-      ? selectedWorkItem.value.workflowSummary.stages.map((stage) => ({
-        label: stage.name || stage.skillName || '?',
-        status: stage.status,
-      }))
-      : selectedWorkItem.value.workflowSummary.nodes.map((node) => ({
-        label: node.definitionName || node.skillName || '?',
-        status: node.status,
-      }))
-    return nodes
-      .map((n) => `${n.label} ${nodeStatusIcons[n.status]}`)
-      .join(' \u00B7 ')
-  }
-  if (selectedWorkItem.value) {
-    return `${selectedWorkItem.value.type} \u00B7 ${selectedWorkItem.value.status} \u00B7 ${selectedWorkItem.value.priority}`
-  }
-  return '通过对话驱动全流程'
-})
-
-const scenarioChips = [
-  '需求转设计',
-  '发布风险巡检',
-  '故障跟进',
-]
+const isConversationRunning = computed(() =>
+  runtimeStore.busy || Boolean(runtimeStore.streamingText.trim())
+)
 
 onMounted(async () => {
   if (workflowStore.definitions.length === 0) {
@@ -128,6 +99,9 @@ async function ensureActiveSession(): Promise<AgentSessionDto | null> {
     if (session.workflowInstanceId) {
       await workflowStore.loadInstance(session.workflowInstanceId)
     }
+    if (props.workItemId) {
+      await workItemStore.refreshItem(props.workItemId)
+    }
 
     await nextTick()
     inputRef.value?.focus()
@@ -135,19 +109,6 @@ async function ensureActiveSession(): Promise<AgentSessionDto | null> {
   } finally {
     loadingSession.value = false
   }
-}
-
-function applyScenario(text: string) {
-  const context = selectedWorkItem.value
-    ? `请基于 ${selectedWorkItem.value.code}《${selectedWorkItem.value.title}》`
-    : '请基于当前上下文'
-  const prompts: Record<string, string> = {
-    需求转设计: `${context}，把需求整理成一份结构化设计说明，并列出关键风险。`,
-    发布风险巡检: `${context}，检查发布前风险、阻塞项和需要用户确认的问题。`,
-    故障跟进: `${context}，整理故障定位路径、下一步操作和需要补充的信息。`,
-  }
-  inputText.value = prompts[text]
-  nextTick(() => inputRef.value?.focus())
 }
 
 onUnmounted(() => {
@@ -169,13 +130,26 @@ watch(() => runtimeStore.events.length, scrollToBottom)
 
 async function handleSend() {
   const text = inputText.value.trim()
-  if (!text) return
+  if (!text || isConversationRunning.value) return
 
   const session = await ensureActiveSession()
   if (!session) return
 
+  runtimeStore.markBusy()
   await sessionStore.sendMessage(text)
   inputText.value = ''
+}
+
+async function handleCancelReply() {
+  if (!sessionStore.activeSession || cancellingReply.value) return
+  cancellingReply.value = true
+  try {
+    await sessionStore.cancelActiveSession()
+    runtimeStore.markIdle()
+    await sessionStore.selectSession(sessionStore.activeSession.id)
+  } finally {
+    cancellingReply.value = false
+  }
 }
 
 async function refreshSkills() {
@@ -188,6 +162,16 @@ async function refreshSkills() {
     skillRefreshStatus.value = error instanceof Error ? error.message : '刷新 Skill 失败'
   } finally {
     refreshingSkills.value = false
+  }
+}
+
+async function handleOpenArtifact(title: string) {
+  const workItem = selectedWorkItem.value
+  if (!workItem) return
+  const artifacts = await artifactApi.listByWorkItem(workItem.id)
+  const artifact = artifacts.find((item) => item.title === title)
+  if (artifact) {
+    emit('open-artifact', artifact)
   }
 }
 </script>
@@ -204,7 +188,6 @@ async function refreshSkills() {
           </button>
           <div>
             <h2>{{ activeTitle }}</h2>
-            <p>{{ activeSubtitle }}</p>
           </div>
         </div>
         <div class="conversation-workbench__header-actions">
@@ -224,18 +207,6 @@ async function refreshSkills() {
         </div>
       </header>
 
-      <div class="conversation-workbench__chips" aria-label="常用场景">
-        <button
-          v-for="chip in scenarioChips"
-          :key="chip"
-          class="conversation-workbench__chip"
-          @click="applyScenario(chip)"
-        >
-          <span></span>
-          {{ chip }}
-        </button>
-      </div>
-
       <div v-if="skillRefreshStatus" class="conversation-workbench__notice">
         {{ skillRefreshStatus }}
       </div>
@@ -249,6 +220,7 @@ async function refreshSkills() {
             :messages="sessionStore.messages"
             :streaming-text="runtimeStore.streamingText"
             :runtime-events="runtimeStore.events"
+            @open-artifact="handleOpenArtifact"
           />
         </template>
       </div>
@@ -259,15 +231,23 @@ async function refreshSkills() {
           v-model="inputText"
           class="conversation-workbench__input"
           type="text"
-          placeholder="输入指令或问题..."
+          :placeholder="isConversationRunning ? '对话运行中，可点击右侧按钮暂停...' : '输入指令或问题...'"
+          :disabled="isConversationRunning || loadingSession"
         />
         <button
           class="conversation-workbench__send"
-          :disabled="!inputText.trim() || loadingSession"
-          type="submit"
-          aria-label="发送消息"
+          :class="{ 'conversation-workbench__send--pause': isConversationRunning }"
+          :disabled="isConversationRunning ? cancellingReply : (!inputText.trim() || loadingSession)"
+          :type="isConversationRunning ? 'button' : 'submit'"
+          :aria-label="isConversationRunning ? '暂停当前回复' : '发送消息'"
+          :title="isConversationRunning ? '暂停当前回复' : '发送消息'"
+          @click="isConversationRunning ? handleCancelReply() : undefined"
         >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <svg v-if="isConversationRunning" width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <rect x="7" y="5" width="3.5" height="14" rx="1.2" fill="currentColor"/>
+            <rect x="13.5" y="5" width="3.5" height="14" rx="1.2" fill="currentColor"/>
+          </svg>
+          <svg v-else width="22" height="22" viewBox="0 0 24 24" fill="none">
             <path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
@@ -411,44 +391,6 @@ async function refreshSkills() {
   cursor: not-allowed;
 }
 
-.conversation-workbench__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  flex-shrink: 0;
-  padding: 16px 22px;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.conversation-workbench__chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 38px;
-  padding: 0 14px;
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  background: var(--bg-card);
-  color: var(--text-secondary);
-  font-size: 14px;
-  font-weight: 850;
-  cursor: pointer;
-}
-
-.conversation-workbench__chip:hover {
-  border-color: var(--accent-blue);
-  background: var(--brand-soft);
-  color: var(--accent-blue);
-}
-
-.conversation-workbench__chip span {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  background: var(--success);
-  box-shadow: 0 0 0 6px var(--success-soft);
-}
-
 .conversation-workbench__messages {
   flex: 1;
   min-height: 0;
@@ -514,6 +456,12 @@ async function refreshSkills() {
   color: var(--text-muted);
 }
 
+.conversation-workbench__input:disabled {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
 .conversation-workbench__send {
   display: grid;
   place-items: center;
@@ -524,6 +472,11 @@ async function refreshSkills() {
   background: var(--brand-gradient);
   color: var(--on-brand);
   cursor: pointer;
+}
+
+.conversation-workbench__send--pause {
+  background: var(--warning);
+  color: #111827;
 }
 
 .conversation-workbench__send:disabled {

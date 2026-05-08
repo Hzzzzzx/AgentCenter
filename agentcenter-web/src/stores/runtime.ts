@@ -5,6 +5,7 @@ import type { RuntimeEventDto } from '../api/types'
 import { useSessionStore } from './sessions'
 import { useWorkflowStore } from './workflows'
 import { useConfirmationStore } from './confirmations'
+import { useWorkItemStore } from './workItems'
 
 const STREAM_FRAME_DELAY_MS = 16
 const STREAM_FRAME_BATCH_SIZE = 8
@@ -17,6 +18,7 @@ export const useRuntimeStore = defineStore('runtime', () => {
   const activeSessionId = ref<string | null>(null)
   const activeSse = ref<EventSource | null>(null)
   const streamingText = ref('')
+  const busy = ref(false)
   const seenEventIds = new Set<string>()
   const streamQueue: string[] = []
   let finalSyncTimer: ReturnType<typeof setTimeout> | null = null
@@ -37,6 +39,7 @@ export const useRuntimeStore = defineStore('runtime', () => {
     events.value = []
     seenEventIds.clear()
     resetStreamingOutput()
+    markIdle()
     finalSyncAttempts = 0
     lastUserSeqNo = latestUserSeqNo()
 
@@ -64,6 +67,7 @@ export const useRuntimeStore = defineStore('runtime', () => {
 
   function applyRuntimeEvent(event: RuntimeEventDto) {
     if (event.eventType === 'ASSISTANT_DELTA') {
+      markBusy()
       const payload = parsePayload(event.payloadJson)
       const text = textField(payload, ['delta', 'text', 'label'])
       if (text && shouldApplyAssistantDelta(event)) {
@@ -80,14 +84,24 @@ export const useRuntimeStore = defineStore('runtime', () => {
       const payload = parsePayload(event.payloadJson)
       const status = textField(payload, ['status', 'label'])
       if (status === 'waiting_user' || status === 'idle') {
+        markIdle()
         scheduleFinalMessageSync()
+      } else if (status) {
+        markBusy()
       }
+    }
+
+    if (event.eventType === 'MCP_CALL') {
+      markBusy()
+    }
+
+    if (event.eventType === 'ERROR') {
+      markIdle()
     }
 
     if (event.eventType === 'SKILL_COMPLETED') {
       if (event.workflowInstanceId) {
-        const workflowStore = useWorkflowStore()
-        workflowStore.refreshInstance(event.workflowInstanceId)
+        void syncWorkflowAndWorkItem(event)
       }
     }
 
@@ -95,9 +109,24 @@ export const useRuntimeStore = defineStore('runtime', () => {
       const confirmationStore = useConfirmationStore()
       confirmationStore.addFromEvent(event)
       if (event.workflowInstanceId) {
-        const workflowStore = useWorkflowStore()
-        workflowStore.refreshInstance(event.workflowInstanceId)
+        void syncWorkflowAndWorkItem(event)
       }
+    }
+  }
+
+  async function syncWorkflowAndWorkItem(event: RuntimeEventDto) {
+    try {
+      const workflowStore = useWorkflowStore()
+      const workItemStore = useWorkItemStore()
+      const instance = event.workflowInstanceId
+        ? await workflowStore.refreshInstance(event.workflowInstanceId)
+        : null
+      const workItemId = event.workItemId ?? instance?.workItemId
+      if (workItemId) {
+        await workItemStore.refreshItem(workItemId)
+      }
+    } catch (error) {
+      console.error('Failed to sync workflow work item state:', error)
     }
   }
 
@@ -208,6 +237,14 @@ export const useRuntimeStore = defineStore('runtime', () => {
     streamingText.value = ''
   }
 
+  function markBusy() {
+    busy.value = true
+  }
+
+  function markIdle() {
+    busy.value = false
+  }
+
   function splitDeltas(text: string): string[] {
     const out: string[] = []
     let buffer = ''
@@ -255,8 +292,11 @@ export const useRuntimeStore = defineStore('runtime', () => {
     activeSessionId,
     activeSse,
     streamingText,
+    busy,
     connectSSE,
     disconnectSSE,
     clearEvents,
+    markBusy,
+    markIdle,
   }
 })

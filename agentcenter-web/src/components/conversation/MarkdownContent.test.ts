@@ -69,19 +69,23 @@ describe('MarkdownContent.vue', () => {
 
 describe('MarkdownContent.vue — mermaid theme re-render', () => {
   const mockRender = vi.fn().mockResolvedValue({ svg: '<svg>mock</svg>' })
+  const mockParse = vi.fn().mockResolvedValue({ diagramType: 'flowchart-v2', config: {} })
   const mockInitialize = vi.fn()
 
   beforeEach(() => {
     vi.resetModules()
     mockRender.mockClear()
+    mockParse.mockClear()
     mockInitialize.mockClear()
     mockRender.mockResolvedValue({ svg: '<svg>mock</svg>' })
+    mockParse.mockResolvedValue({ diagramType: 'flowchart-v2', config: {} })
   })
 
   async function mountWithMermaidMock() {
     vi.doMock('mermaid', () => ({
       default: {
         initialize: mockInitialize,
+        parse: mockParse,
         render: mockRender,
       },
     }))
@@ -121,5 +125,59 @@ describe('MarkdownContent.vue — mermaid theme re-render', () => {
 
     const lastCall = mockRender.mock.calls[mockRender.mock.calls.length - 1]
     expect(lastCall[1]).toContain('A-->B')
+  })
+
+  it('falls back to source when mermaid parse reports invalid syntax', async () => {
+    mockParse.mockResolvedValueOnce(false)
+    vi.doMock('mermaid', () => ({
+      default: {
+        initialize: mockInitialize,
+        parse: mockParse,
+        render: mockRender,
+      },
+    }))
+
+    const { default: MarkdownContentWithMock } = await import('./MarkdownContent.vue')
+    setActivePinia(createPinia())
+    const wrapper = mount(MarkdownContentWithMock, {
+      props: {
+        content: '```mermaid\nflowchart TD\n  A -->\n```',
+        renderMermaid: true,
+      },
+    })
+
+    await vi.waitFor(() => expect(mockParse).toHaveBeenCalled(), { timeout: 2000 })
+
+    expect(mockRender).not.toHaveBeenCalled()
+    expect(wrapper.find('.markdown-content__mermaid').attributes('data-mermaid-state')).toBe('source')
+    expect(wrapper.find('.markdown-content__mermaid code').text()).toContain('A -->')
+  })
+
+  it('does not show Mermaid error SVGs returned by the renderer', async () => {
+    mockRender.mockResolvedValueOnce({
+      svg: '<svg><text>Syntax error in text</text><text>mermaid version 11.14.0</text></svg>',
+    })
+    vi.doMock('mermaid', () => ({
+      default: {
+        initialize: mockInitialize,
+        parse: mockParse,
+        render: mockRender,
+      },
+    }))
+
+    const { default: MarkdownContentWithMock } = await import('./MarkdownContent.vue')
+    setActivePinia(createPinia())
+    const wrapper = mount(MarkdownContentWithMock, {
+      props: {
+        content: '```mermaid\nflowchart TD\n  A-->B\n```',
+        renderMermaid: true,
+      },
+    })
+
+    await vi.waitFor(() => expect(mockRender).toHaveBeenCalled(), { timeout: 2000 })
+
+    expect(wrapper.html()).not.toContain('Syntax error in text')
+    expect(wrapper.find('.markdown-content__mermaid').attributes('data-mermaid-state')).toBe('source')
+    expect(wrapper.find('.markdown-content__mermaid code').text()).toContain('A-->B')
   })
 })

@@ -1,26 +1,34 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import ConfirmationPanel from '../confirmation/ConfirmationPanel.vue'
 import NotificationBubbles from '../notifications/NotificationBubbles.vue'
+import ArtifactViewer from '../conversation/ArtifactViewer.vue'
 import { useConfirmationStore } from '../../stores/confirmations'
-import type { WorkItemDto, WorkflowNodeStatus, WorkItemType } from '../../api/types'
+import { useWorkflowStore } from '../../stores/workflows'
+import type { ArtifactDto, WorkItemDto, WorkflowDefinitionDto, WorkflowNodeStatus } from '../../api/types'
 
 interface Props {
   collapsed?: boolean
+  expanded?: boolean
   selectedWorkItem?: WorkItemDto | null
+  selectedArtifact?: ArtifactDto | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
   collapsed: false,
+  expanded: false,
   selectedWorkItem: null,
+  selectedArtifact: null,
 })
 
 const emit = defineEmits<{
   'update:collapsed': [value: boolean]
+  'update:expanded': [value: boolean]
   'handle-confirmation': [id: string]
   'start-workflow': [workItemId: string]
   'enter-conversation': [id: string]
   'confirmations-changed': [workItemId?: string | null]
+  'close-artifact': []
 }>()
 
 function handleConfirmation(id: string) {
@@ -28,21 +36,49 @@ function handleConfirmation(id: string) {
 }
 
 const confirmationStore = useConfirmationStore()
-const activeTab = ref<'confirmations' | 'details'>('confirmations')
+const workflowStore = useWorkflowStore()
+const activeTab = ref<'confirmations' | 'details' | 'artifact'>('confirmations')
 const pendingConfirmationCount = computed(() => confirmationStore.pendingConfirmations.length)
 const pendingConfirmationCountLabel = computed(() =>
   pendingConfirmationCount.value > 99 ? '99+' : String(pendingConfirmationCount.value)
 )
 
-const tabs = [
-  { id: 'confirmations' as const, label: '待确认' },
-  { id: 'details' as const, label: '详情' },
-]
+type RightPanelTab = {
+  id: 'confirmations' | 'details' | 'artifact'
+  label: string
+  closable: boolean
+}
+
+const tabs = computed(() => {
+  const base: RightPanelTab[] = [
+    { id: 'confirmations', label: '待确认', closable: false },
+    { id: 'details', label: '详情', closable: false },
+  ]
+  if (props.selectedArtifact) {
+    base.push({ id: 'artifact', label: '产物预览', closable: true })
+  }
+  return base
+})
+
+onMounted(() => {
+  if (workflowStore.definitions.length === 0) {
+    workflowStore.loadDefinitions()
+  }
+})
 
 // Auto-switch to details tab when a work item is selected
 watch(() => props.selectedWorkItem, (item) => {
-  if (item) {
+  if (item && !props.selectedArtifact) {
     activeTab.value = 'details'
+  }
+})
+
+watch(() => props.selectedArtifact, (artifact) => {
+  if (artifact) {
+    activeTab.value = 'artifact'
+    emit('update:collapsed', false)
+  } else if (activeTab.value === 'artifact') {
+    activeTab.value = props.selectedWorkItem ? 'details' : 'confirmations'
   }
 })
 
@@ -57,15 +93,6 @@ type DetailWorkflowNode = {
   latestSummary?: string | null
 }
 
-const defaultStageLabels: Record<WorkItemType, string[]> = {
-  FE: ['需求', '方案', '实施', '验证', '归档'],
-  US: ['故事', '验收', '拆分', '评审', '归档'],
-  TASK: ['理解', '计划', '执行', '验证', '总结'],
-  WORK: ['分析', 'Runbook', '执行', '校验', '报告'],
-  BUG: ['复现', '根因', '修复', '回归', '关闭'],
-  VULN: ['分级', '影响', '修复', '验证', '归档'],
-}
-
 function buildWorkflowWithAnchors(skillNodes: DetailWorkflowNode[]): DetailWorkflowNode[] {
   const item = props.selectedWorkItem
   const workflowStatus = item?.workflowSummary?.status
@@ -74,7 +101,7 @@ function buildWorkflowWithAnchors(skillNodes: DetailWorkflowNode[]): DetailWorkf
     ['COMPLETED', 'SKIPPED'].includes(node.status)
   )
   return [
-    { id: 'start', label: '开始', status: hasStarted ? 'COMPLETED' : 'RUNNING', kind: 'start' },
+    { id: 'start', label: '开始', status: hasStarted ? 'COMPLETED' : 'PENDING', kind: 'start' },
     ...skillNodes,
     {
       id: 'end',
@@ -83,6 +110,15 @@ function buildWorkflowWithAnchors(skillNodes: DetailWorkflowNode[]): DetailWorkf
       kind: 'end',
     },
   ]
+}
+
+function pickDefaultDefinition(item: WorkItemDto): WorkflowDefinitionDto | null {
+  const enabledDefinitions = workflowStore.definitions.filter((definition) =>
+    definition.workItemType === item.type && definition.status === 'ENABLED'
+  )
+  return enabledDefinitions.find((definition) => definition.isDefault)
+    ?? enabledDefinitions.sort((a, b) => b.versionNo - a.versionNo)[0]
+    ?? null
 }
 
 const workflowNodes = computed(() => {
@@ -110,12 +146,20 @@ const workflowNodes = computed(() => {
     }))
     return buildWorkflowWithAnchors(skills)
   }
-  return buildWorkflowWithAnchors(defaultStageLabels[item.type].map((label) => ({
-    id: null,
-    label,
-    status: 'PENDING',
-    kind: 'skill',
-  })))
+  const defaultDefinition = pickDefaultDefinition(item)
+  if (defaultDefinition?.nodes.length) {
+    const skills = [...defaultDefinition.nodes]
+      .sort((a, b) => a.orderNo - b.orderNo)
+      .map((node) => ({
+        id: node.id,
+        label: node.name ?? node.skillName ?? '阶段',
+        status: 'PENDING' as WorkflowNodeStatus,
+        kind: 'skill' as const,
+        latestSummary: node.skillName,
+      }))
+    return buildWorkflowWithAnchors(skills)
+  }
+  return buildWorkflowWithAnchors([])
 })
 
 const hasActiveWorkflow = computed(() => {
@@ -169,6 +213,16 @@ function handleOpenConfirmations() {
   activeTab.value = 'confirmations'
   emit('update:collapsed', false)
 }
+
+function handleCloseArtifact(event: MouseEvent) {
+  event.stopPropagation()
+  emit('close-artifact')
+}
+
+function handleToggleExpanded() {
+  emit('update:collapsed', false)
+  emit('update:expanded', !props.expanded)
+}
 </script>
 
 <template>
@@ -202,6 +256,16 @@ function handleOpenConfirmations() {
           @click="activeTab = tab.id"
         >
           <span>{{ tab.label }}</span>
+          <button
+            v-if="tab.closable"
+            type="button"
+            class="right-panel__tab-close"
+            aria-label="关闭产物预览"
+            title="关闭产物预览"
+            @click="handleCloseArtifact"
+          >
+            ×
+          </button>
           <span
             v-if="tab.id === 'confirmations' && pendingConfirmationCount > 0"
             class="right-panel__tab-badge"
@@ -212,6 +276,29 @@ function handleOpenConfirmations() {
       </div>
 
       <NotificationBubbles v-if="!collapsed" anchor="right-panel" />
+
+      <button
+        v-if="!collapsed && selectedArtifact"
+        type="button"
+        class="right-panel__expand"
+        :class="{ 'right-panel__expand--active': expanded }"
+        :aria-label="expanded ? '还原产物预览' : '扩大产物预览'"
+        :title="expanded ? '还原产物预览' : '扩大产物预览'"
+        @click="handleToggleExpanded"
+      >
+        <svg v-if="!expanded" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M8 3H3v5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M3 3l7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <path d="M16 21h5v-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M21 21l-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M10 4H4v6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M4 10l6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <path d="M14 20h6v-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M20 14l-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
     </div>
 
     <div v-if="collapsed" class="right-panel__rail" aria-label="右侧快捷入口">
@@ -298,6 +385,9 @@ function handleOpenConfirmations() {
             <span>选择一个工作项查看详情</span>
           </div>
         </template>
+        <template v-else-if="activeTab === 'artifact'">
+          <ArtifactViewer :artifact="selectedArtifact" />
+        </template>
       </div>
     </div>
   </aside>
@@ -354,6 +444,7 @@ function handleOpenConfirmations() {
   position: relative;
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   height: auto;
   padding: 6px 12px;
   border: none;
@@ -364,6 +455,24 @@ function handleOpenConfirmations() {
   font-weight: 500;
   cursor: pointer;
   transition: color 0.15s;
+}
+
+.right-panel__tab-close {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: currentColor;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.right-panel__tab-close:hover {
+  background: var(--bg-tertiary);
 }
 
 .right-panel__tab:hover {
@@ -478,6 +587,25 @@ function handleOpenConfirmations() {
   margin-left: 6px;
   background: var(--brand-soft);
   color: var(--accent-blue);
+}
+
+.right-panel__expand {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.right-panel__expand:hover,
+.right-panel__expand--active {
+  background: var(--text-primary);
+  color: var(--bg-card);
 }
 
 /* Work item detail */

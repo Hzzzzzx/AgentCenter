@@ -8,6 +8,7 @@ type ActivityStatus = 'running' | 'done' | 'waiting' | 'error'
 
 interface ActivityItem {
   id: string
+  key: string
   title: string
   detail: string
   status: ActivityStatus
@@ -21,6 +22,15 @@ const props = withDefaults(defineProps<{
   streamingText: '',
   runtimeEvents: () => [],
 })
+
+const emit = defineEmits<{
+  'open-artifact': [title: string]
+}>()
+
+type SystemLinePart = {
+  kind: 'text' | 'artifact'
+  text: string
+}
 
 const persistedMessages = computed(() =>
   props.messages.filter((message) => Boolean(message.content?.trim()))
@@ -41,15 +51,19 @@ const liveMessage = computed<AgentMessageDto | null>(() => {
 })
 
 const activityItems = computed(() =>
-  dedupeActivityItems(props.runtimeEvents
+  compactActivityItems(props.runtimeEvents
     .filter((event) => event.eventType !== 'ASSISTANT_DELTA')
     .map(toActivityItem)
     .filter((item): item is ActivityItem => Boolean(item)))
     .slice(-6)
 )
 
+const shouldShowActivity = computed(() =>
+  activityItems.value.some((item) => item.status === 'running')
+)
+
 const hasContent = computed(() =>
-  persistedMessages.value.length > 0 || Boolean(liveMessage.value) || activityItems.value.length > 0
+  persistedMessages.value.length > 0 || Boolean(liveMessage.value) || shouldShowActivity.value
 )
 
 const activityRunning = computed(() => activityItems.value.some((item) => item.status === 'running'))
@@ -99,6 +113,24 @@ function shouldRenderMarkdown(message: AgentMessageDto): boolean {
   return message.role === 'ASSISTANT' || message.contentFormat === 'MARKDOWN'
 }
 
+function systemLineParts(content: string): SystemLinePart[] {
+  const artifactPattern = /([A-Z]+[0-9]+-[^，。\s]+(?:\s\([^)]*\))?\.md)/g
+  const parts: SystemLinePart[] = []
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+  while ((match = artifactPattern.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ kind: 'text', text: content.slice(lastIndex, match.index) })
+    }
+    parts.push({ kind: 'artifact', text: match[1] })
+    lastIndex = match.index + match[1].length
+  }
+  if (lastIndex < content.length) {
+    parts.push({ kind: 'text', text: content.slice(lastIndex) })
+  }
+  return parts.length > 0 ? parts : [{ kind: 'text', text: content }]
+}
+
 function toActivityItem(event: RuntimeEventDto): ActivityItem | null {
   const payload = parsePayload(event.payloadJson)
   const label = textField(payload, ['skillName', 'label', 'title', 'type'])
@@ -109,15 +141,17 @@ function toActivityItem(event: RuntimeEventDto): ActivityItem | null {
     if (status === 'running') {
       return {
         id: event.id,
-        title: 'OpenCode 正在处理',
-        detail: '命令已下发，正在等待模型或工具输出。',
+        key: 'runtime-status',
+        title: '智能体正在处理',
+        detail: '任务已下发，正在等待模型或工具输出。',
         status: 'running',
       }
     }
     if (status === 'waiting_user' || status === 'idle') {
       return {
         id: event.id,
-        title: 'OpenCode 等待下一步',
+        key: 'runtime-status',
+        title: '智能体等待下一步',
         detail: '本轮输出已结束，可以继续输入或处理待确认项。',
         status: 'waiting',
       }
@@ -128,6 +162,7 @@ function toActivityItem(event: RuntimeEventDto): ActivityItem | null {
   if (event.eventType === 'SKILL_STARTED') {
     return {
       id: event.id,
+      key: `skill:${label || event.workflowNodeInstanceId || event.id}`,
       title: `正在调用 ${label || '工具'}`,
       detail: detail || '运行时工具已启动。',
       status: 'running',
@@ -138,6 +173,7 @@ function toActivityItem(event: RuntimeEventDto): ActivityItem | null {
     const isError = payload.isError === true
     return {
       id: event.id,
+      key: `skill:${label || event.workflowNodeInstanceId || event.id}`,
       title: `${label || '工具'} ${isError ? '执行失败' : '执行完成'}`,
       detail: detail ? trimDetail(detail) : '工具调用已返回结果。',
       status: isError ? 'error' : 'done',
@@ -147,6 +183,7 @@ function toActivityItem(event: RuntimeEventDto): ActivityItem | null {
   if (event.eventType === 'PERMISSION_REQUIRED' || event.eventType === 'CONFIRMATION_CREATED') {
     return {
       id: event.id,
+      key: `confirmation:${event.workflowNodeInstanceId || label || event.id}`,
       title: label || '等待用户确认',
       detail: detail || '运行时需要用户确认后继续。',
       status: 'waiting',
@@ -156,13 +193,22 @@ function toActivityItem(event: RuntimeEventDto): ActivityItem | null {
   if (event.eventType === 'ERROR') {
     return {
       id: event.id,
+      key: `error:${event.id}`,
       title: '运行时异常',
-      detail: detail || label || 'OpenCode 运行过程中出现异常。',
+      detail: detail || label || 'Agent 运行过程中出现异常。',
       status: 'error',
     }
   }
 
   return null
+}
+
+function compactActivityItems(items: ActivityItem[]): ActivityItem[] {
+  const latestByKey = new Map<string, ActivityItem>()
+  items.forEach((item) => {
+    latestByKey.set(item.key, item)
+  })
+  return dedupeActivityItems([...latestByKey.values()])
 }
 
 function dedupeActivityItems(items: ActivityItem[]): ActivityItem[] {
@@ -211,7 +257,7 @@ function trimDetail(value: string): string {
   <div class="message-list" aria-live="polite">
     <div v-if="!hasContent" class="message-list__empty">
       <strong>会话已就绪</strong>
-      <span>输入问题，或点击上方场景开始和 OpenCode Runtime 对话。</span>
+      <span>输入问题，或点击上方场景开始和 Agent Runtime 对话。</span>
     </div>
 
     <template v-else>
@@ -237,7 +283,22 @@ function trimDetail(value: string): string {
             class="system-line__content"
             :content="msg.content"
           />
-          <span v-else>{{ msg.content }}</span>
+          <span v-else class="system-line__content">
+            <template
+              v-for="(part, index) in systemLineParts(msg.content ?? '')"
+              :key="`${msg.id}-${index}`"
+            >
+              <button
+                v-if="part.kind === 'artifact'"
+                type="button"
+                class="system-line__artifact"
+                @click="emit('open-artifact', part.text)"
+              >
+                {{ part.text }}
+              </button>
+              <span v-else>{{ part.text }}</span>
+            </template>
+          </span>
         </article>
 
         <article
@@ -268,7 +329,32 @@ function trimDetail(value: string): string {
       </template>
 
       <article
-        v-if="activityItems.length"
+        v-if="liveMessage"
+        class="assistant-turn assistant-turn--live"
+      >
+        <div class="assistant-rail">
+          <div class="assistant-avatar assistant-avatar--live">A</div>
+        </div>
+        <section class="assistant-card assistant-card--live">
+          <header class="assistant-card__head">
+            <div class="assistant-card__title">
+              <span class="assistant-card__glyph">A</span>
+              <span>助手正在回复</span>
+            </div>
+            <span class="assistant-card__pill assistant-card__pill--live">流式中</span>
+          </header>
+          <div class="assistant-card__live-content">
+            <MarkdownContent
+              class="assistant-card__markdown"
+              :content="liveMessage.content"
+            />
+            <span class="stream-cursor">▍</span>
+          </div>
+        </section>
+      </article>
+
+      <article
+        v-if="shouldShowActivity"
         class="assistant-turn assistant-turn--activity"
       >
         <div class="assistant-rail">
@@ -294,31 +380,6 @@ function trimDetail(value: string): string {
             </div>
           </div>
         </details>
-      </article>
-
-      <article
-        v-if="liveMessage"
-        class="assistant-turn assistant-turn--live"
-      >
-        <div class="assistant-rail">
-          <div class="assistant-avatar assistant-avatar--live">A</div>
-        </div>
-        <section class="assistant-card assistant-card--live">
-          <header class="assistant-card__head">
-            <div class="assistant-card__title">
-              <span class="assistant-card__glyph">A</span>
-              <span>助手正在回复</span>
-            </div>
-            <span class="assistant-card__pill assistant-card__pill--live">流式中</span>
-          </header>
-          <div class="assistant-card__live-content">
-            <MarkdownContent
-              class="assistant-card__markdown"
-              :content="liveMessage.content"
-            />
-            <span class="stream-cursor">▍</span>
-          </div>
-        </section>
       </article>
     </template>
   </div>
@@ -395,6 +456,23 @@ function trimDetail(value: string): string {
 .system-line__content {
   min-width: 0;
   flex: 1;
+}
+
+.system-line__artifact {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent-blue);
+  font: inherit;
+  font-weight: 850;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.system-line__artifact:hover {
+  color: var(--brand-primary);
 }
 
 .system-dot,

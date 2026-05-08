@@ -42,6 +42,11 @@ export const useSessionStore = defineStore('sessions', () => {
     return message
   }
 
+  async function cancelActiveSession() {
+    if (!activeSession.value) return
+    await sessionApi.cancel(activeSession.value.id)
+  }
+
   function replaceMessages(nextMessages: AgentMessageDto[]) {
     messages.value = nextMessages
   }
@@ -76,6 +81,7 @@ export const useSessionStore = defineStore('sessions', () => {
     selectSession,
     createSession,
     sendMessage,
+    cancelActiveSession,
     upsertSession,
     replaceMessages,
     appendStreamingMessage,

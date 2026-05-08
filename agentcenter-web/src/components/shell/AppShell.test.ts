@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import AppShell from './AppShell.vue'
+import type { ArtifactDto } from '../../api/types'
 
 vi.mock('../../stores/confirmations', () => ({
   useConfirmationStore: vi.fn(() => ({
@@ -37,11 +38,34 @@ vi.mock('../../api/workItems', () => ({
   },
 }))
 
+vi.mock('../../api/workflows', () => ({
+  workflowApi: {
+    listDefinitions: vi.fn().mockResolvedValue([]),
+    updateDefinition: vi.fn(),
+    getInstance: vi.fn(),
+    continueWorkflow: vi.fn(),
+    retryNode: vi.fn(),
+    skipNode: vi.fn(),
+  },
+}))
+
 describe('AppShell.vue', () => {
-  function mountShell() {
+  const selectedArtifact: ArtifactDto = {
+    id: 'artifact-1',
+    workItemId: 'wi-1',
+    workflowInstanceId: 'wf-1',
+    workflowNodeInstanceId: 'node-1',
+    artifactType: 'MARKDOWN',
+    title: 'FE0001-HLD.md',
+    content: '# HLD',
+    createdAt: '2026-01-01T10:00:00Z',
+  }
+
+  function mountShell(props = {}) {
     return mount(AppShell, {
       props: {
         activeView: 'home',
+        ...props,
       },
       slots: {
         center: '<div class="slot-content">Test Content</div>',
@@ -106,6 +130,19 @@ describe('AppShell.vue', () => {
     expect(wrapper.find('.right-panel--collapsed').exists()).toBe(true)
     expect(wrapper.find('.right-panel__toggle-badge').exists()).toBe(false)
     expect(wrapper.find('.right-panel__rail-badge').text()).toBe('1')
+  })
+
+  it('clears expanded layout when collapsing right panel', async () => {
+    const wrapper = mountShell({ selectedArtifact })
+
+    await wrapper.find('.right-panel__expand').trigger('click')
+    expect(wrapper.find('.app-shell').classes()).toContain('app-shell--right-expanded')
+
+    await wrapper.find('.right-panel__toggle').trigger('click')
+
+    expect(wrapper.find('.right-panel--collapsed').exists()).toBe(true)
+    expect(wrapper.find('.app-shell').classes()).not.toContain('app-shell--right-expanded')
+    expect(wrapper.find('.app-shell__center').attributes('style')).toBeUndefined()
   })
 
   it('opens confirmations from collapsed rail shortcut', async () => {

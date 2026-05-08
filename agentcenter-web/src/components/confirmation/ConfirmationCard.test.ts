@@ -70,16 +70,16 @@ describe('ConfirmationCard.vue', () => {
 
     await openDialog(wrapper)
     expect(document.body.textContent).toContain('通过')
-    expect(document.body.textContent).toContain('拒绝')
+    expect(document.body.textContent).toContain('退回')
     expect(document.body.textContent).toContain('进入会话')
   })
 
-  it('hides 通过/拒绝 in dialog for non-PENDING confirmation', async () => {
+  it('hides pending actions in dialog for non-PENDING confirmation', async () => {
     const wrapper = mountCard(resolvedConfirmation)
 
     await openDialog(wrapper)
     expect(document.body.textContent).not.toContain('通过')
-    expect(document.body.textContent).not.toContain('拒绝')
+    expect(document.body.textContent).not.toContain('退回')
     expect(document.body.textContent).toContain('进入会话')
   })
 
@@ -96,6 +96,56 @@ describe('ConfirmationCard.vue', () => {
     expect(wrapper.emitted('resolved')).toBeTruthy()
     expect(wrapper.emitted('resolved')![0]).toEqual(['conf-1'])
     expect(notificationStore.rightPanelNotifications[0].title).toBe('确认已通过')
+  })
+
+  it('submits DECISION confirmation with selected option', async () => {
+    const { confirmationApi } = await import('../../api/confirmations')
+    const wrapper = mountCard({
+      ...pendingConfirmation,
+      requestType: 'DECISION',
+      optionsJson: '["低风险方案","低成本方案","完整方案"]',
+    })
+
+    await openDialog(wrapper)
+    const option = document.body.querySelector<HTMLInputElement>('input[value="低成本方案"]')
+    expect(option).toBeTruthy()
+    option!.checked = true
+    option!.dispatchEvent(new Event('change'))
+    await wrapper.vm.$nextTick()
+    await document.body.querySelector<HTMLButtonElement>('.confirmation-card__action--approve')!.click()
+    await vi.dynamicImportSettled()
+
+    expect(confirmationApi.resolve).toHaveBeenCalledWith('conf-1', {
+      actionType: 'CHOOSE',
+      payload: { choice: '低成本方案' },
+      comment: '低成本方案',
+    })
+    expect(wrapper.emitted('resolved')![0]).toEqual(['conf-1'])
+  })
+
+  it('submits INPUT_REQUIRED confirmation with supplemental text', async () => {
+    const { confirmationApi } = await import('../../api/confirmations')
+    const wrapper = mountCard({
+      ...pendingConfirmation,
+      requestType: 'INPUT_REQUIRED',
+      content: '请补充目标用户范围',
+    })
+
+    await openDialog(wrapper)
+    const textarea = document.body.querySelector<HTMLTextAreaElement>('.confirmation-dialog__textarea')
+    expect(textarea).toBeTruthy()
+    textarea!.value = '先覆盖企业管理员和运营人员'
+    textarea!.dispatchEvent(new Event('input'))
+    await wrapper.vm.$nextTick()
+    await document.body.querySelector<HTMLButtonElement>('.confirmation-card__action--approve')!.click()
+    await vi.dynamicImportSettled()
+
+    expect(confirmationApi.resolve).toHaveBeenCalledWith('conf-1', {
+      actionType: 'SUPPLEMENT',
+      payload: { input: '先覆盖企业管理员和运营人员' },
+      comment: '先覆盖企业管理员和运营人员',
+    })
+    expect(wrapper.emitted('resolved')![0]).toEqual(['conf-1'])
   })
 
   it('clicking 拒绝 calls rejectConfirmation and emits rejected', async () => {

@@ -2,7 +2,12 @@
 import { computed, ref } from 'vue'
 import { useConfirmationStore } from '../../stores/confirmations'
 import { useNotificationStore } from '../../stores/notifications'
-import type { ConfirmationRequestDto, ConfirmationRequestType, WorkItemDto } from '../../api/types'
+import type {
+  ConfirmationActionType,
+  ConfirmationRequestDto,
+  ConfirmationRequestType,
+  WorkItemDto,
+} from '../../api/types'
 
 const props = defineProps<{
   confirmation: ConfirmationRequestDto
@@ -17,8 +22,10 @@ const emit = defineEmits<{
 
 const confirmationStore = useConfirmationStore()
 const notificationStore = useNotificationStore()
-const busyAction = ref<'approve' | 'reject' | null>(null)
+const busyAction = ref<'approve' | 'reject' | 'submit' | 'retry' | 'skip' | null>(null)
 const modalOpen = ref(false)
+const selectedOption = ref('')
+const supplementText = ref('')
 
 const typeLabels: Record<ConfirmationRequestType, string> = {
   CONFIRM: '确认',
@@ -51,6 +58,45 @@ const workItemCode = computed(() => props.confirmation.workItemCode ?? props.wor
 const workItemType = computed(() => props.confirmation.workItemType ?? props.workItem?.type ?? '事项')
 const workItemTitle = computed(() => props.confirmation.workItemTitle ?? props.workItem?.title ?? '未关联工作项')
 const workflowNodeName = computed(() => props.confirmation.workflowNodeName ?? props.confirmation.title)
+const parsedOptions = computed(() => parseOptions(props.confirmation.optionsJson))
+const isDecision = computed(() => props.confirmation.requestType === 'DECISION')
+const isInputRequired = computed(() => props.confirmation.requestType === 'INPUT_REQUIRED')
+const isException = computed(() => props.confirmation.requestType === 'EXCEPTION')
+const canSubmitDecision = computed(() => {
+  return parsedOptions.value.length > 0 ? !!selectedOption.value : !!supplementText.value.trim()
+})
+const canSubmitInput = computed(() => !!supplementText.value.trim())
+const rejectLabel = computed(() => {
+  if (props.confirmation.requestType === 'PERMISSION') return '拒绝授权'
+  if (props.confirmation.requestType === 'APPROVAL') return '退回'
+  if (props.confirmation.requestType === 'DECISION') return '暂不选择'
+  return '拒绝'
+})
+
+function parseOptions(raw: string | null): string[] {
+  if (!raw || !raw.trim()) return []
+  try {
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed)) {
+      return parsed.map((item) => String(item).trim()).filter(Boolean)
+    }
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.options)) {
+      return parsed.options.map((item: unknown) => String(item).trim()).filter(Boolean)
+    }
+  } catch {
+    // Fall through to the tolerant text splitter below.
+  }
+  return raw
+    .split(/\s*(?:\/|、|，|,|；|;)\s*/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function openDialog() {
+  selectedOption.value = parsedOptions.value[0] ?? ''
+  supplementText.value = ''
+  modalOpen.value = true
+}
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : '操作失败，请稍后重试'
@@ -73,6 +119,91 @@ async function handleApprove() {
       anchor: 'right-panel',
       tone: 'error',
       title: '通过失败',
+      message: errorMessage(error),
+      durationMs: 5200,
+    })
+  } finally {
+    busyAction.value = null
+  }
+}
+
+async function resolveWith(actionType: ConfirmationActionType, payload?: Record<string, unknown>, comment?: string) {
+  await confirmationStore.resolveConfirmation(props.confirmation.id, { actionType, payload, comment })
+  notificationStore.push({
+    anchor: 'right-panel',
+    tone: 'success',
+    title: '交互已提交',
+    message: `${workItemCode.value} 已收到你的处理结果`,
+  })
+  emit('resolved', props.confirmation.id)
+}
+
+async function handleDecision() {
+  if (busyAction.value || !canSubmitDecision.value) return
+  busyAction.value = 'submit'
+  try {
+    const choice = parsedOptions.value.length > 0 ? selectedOption.value : supplementText.value.trim()
+    await resolveWith('CHOOSE', { choice }, choice)
+  } catch (error) {
+    notificationStore.push({
+      anchor: 'right-panel',
+      tone: 'error',
+      title: '提交选择失败',
+      message: errorMessage(error),
+      durationMs: 5200,
+    })
+  } finally {
+    busyAction.value = null
+  }
+}
+
+async function handleSupplement() {
+  if (busyAction.value || !canSubmitInput.value) return
+  busyAction.value = 'submit'
+  try {
+    const input = supplementText.value.trim()
+    await resolveWith('SUPPLEMENT', { input }, input)
+  } catch (error) {
+    notificationStore.push({
+      anchor: 'right-panel',
+      tone: 'error',
+      title: '提交补充失败',
+      message: errorMessage(error),
+      durationMs: 5200,
+    })
+  } finally {
+    busyAction.value = null
+  }
+}
+
+async function handleRetry() {
+  if (busyAction.value) return
+  busyAction.value = 'retry'
+  try {
+    await resolveWith('RETRY')
+  } catch (error) {
+    notificationStore.push({
+      anchor: 'right-panel',
+      tone: 'error',
+      title: '重试失败',
+      message: errorMessage(error),
+      durationMs: 5200,
+    })
+  } finally {
+    busyAction.value = null
+  }
+}
+
+async function handleSkip() {
+  if (busyAction.value) return
+  busyAction.value = 'skip'
+  try {
+    await resolveWith('SKIP')
+  } catch (error) {
+    notificationStore.push({
+      anchor: 'right-panel',
+      tone: 'error',
+      title: '跳过失败',
       message: errorMessage(error),
       durationMs: 5200,
     })
@@ -133,7 +264,7 @@ function enterSession() {
     <div class="confirmation-card__title">{{ workItemTitle }}</div>
     <div class="confirmation-card__node">待确认：{{ workflowNodeName }}</div>
     <div class="confirmation-card__actions">
-      <button class="confirmation-card__action" :disabled="!!busyAction" @click="modalOpen = true">
+      <button class="confirmation-card__action" :disabled="!!busyAction" @click="openDialog">
         处理
       </button>
     </div>
@@ -176,9 +307,70 @@ function enterSession() {
           </div>
         </dl>
 
+        <section v-if="isDecision" class="confirmation-dialog__interaction">
+          <div class="confirmation-dialog__interaction-title">选择处理路径</div>
+          <div v-if="parsedOptions.length" class="confirmation-dialog__options" role="radiogroup" aria-label="选择处理路径">
+            <label
+              v-for="option in parsedOptions"
+              :key="option"
+              class="confirmation-dialog__option"
+              :class="{ 'confirmation-dialog__option--selected': selectedOption === option }"
+            >
+              <input
+                v-model="selectedOption"
+                type="radio"
+                name="confirmation-option"
+                :value="option"
+              >
+              <span>{{ option }}</span>
+            </label>
+          </div>
+          <textarea
+            v-else
+            v-model="supplementText"
+            class="confirmation-dialog__textarea"
+            rows="4"
+            placeholder="输入你希望 Agent 采用的处理方式..."
+          />
+        </section>
+
+        <section v-else-if="isInputRequired" class="confirmation-dialog__interaction">
+          <div class="confirmation-dialog__interaction-title">补充信息</div>
+          <textarea
+            v-model="supplementText"
+            class="confirmation-dialog__textarea"
+            rows="5"
+            placeholder="补充 Agent 继续执行所需的信息..."
+          />
+        </section>
+
         <footer class="confirmation-dialog__actions">
           <button
-            v-if="confirmation.status === 'PENDING'"
+            v-if="confirmation.status === 'PENDING' && isDecision"
+            class="confirmation-card__action confirmation-card__action--approve"
+            :disabled="!!busyAction || !canSubmitDecision"
+            @click="handleDecision"
+          >
+            {{ busyAction === 'submit' ? '提交中...' : '提交选择' }}
+          </button>
+          <button
+            v-else-if="confirmation.status === 'PENDING' && isInputRequired"
+            class="confirmation-card__action confirmation-card__action--approve"
+            :disabled="!!busyAction || !canSubmitInput"
+            @click="handleSupplement"
+          >
+            {{ busyAction === 'submit' ? '提交中...' : '提交补充' }}
+          </button>
+          <button
+            v-else-if="confirmation.status === 'PENDING' && isException"
+            class="confirmation-card__action confirmation-card__action--approve"
+            :disabled="!!busyAction"
+            @click="handleRetry"
+          >
+            {{ busyAction === 'retry' ? '重试中...' : '重试' }}
+          </button>
+          <button
+            v-else-if="confirmation.status === 'PENDING'"
             class="confirmation-card__action confirmation-card__action--approve"
             :disabled="!!busyAction"
             @click="handleApprove"
@@ -186,12 +378,20 @@ function enterSession() {
             {{ busyAction === 'approve' ? '推进中...' : '通过' }}
           </button>
           <button
-            v-if="confirmation.status === 'PENDING'"
+            v-if="confirmation.status === 'PENDING' && isException"
+            class="confirmation-card__action confirmation-card__action--reject"
+            :disabled="!!busyAction"
+            @click="handleSkip"
+          >
+            {{ busyAction === 'skip' ? '处理中...' : '跳过' }}
+          </button>
+          <button
+            v-else-if="confirmation.status === 'PENDING'"
             class="confirmation-card__action confirmation-card__action--reject"
             :disabled="!!busyAction"
             @click="handleReject"
           >
-            {{ busyAction === 'reject' ? '处理中...' : '拒绝' }}
+            {{ busyAction === 'reject' ? '处理中...' : rejectLabel }}
           </button>
           <button class="confirmation-card__action" :disabled="!!busyAction" @click="enterSession">
             进入会话
@@ -459,6 +659,70 @@ function enterSession() {
   border: 1px solid var(--border-color);
   border-radius: 8px;
   background: var(--bg-secondary);
+}
+
+.confirmation-dialog__interaction {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+}
+
+.confirmation-dialog__interaction-title {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.confirmation-dialog__options {
+  display: grid;
+  gap: 8px;
+}
+
+.confirmation-dialog__option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.confirmation-dialog__option--selected {
+  border-color: var(--brand-primary);
+  background: var(--brand-soft);
+  color: var(--text-primary);
+}
+
+.confirmation-dialog__option input {
+  flex: 0 0 auto;
+}
+
+.confirmation-dialog__textarea {
+  width: 100%;
+  min-height: 112px;
+  padding: 10px 12px;
+  resize: vertical;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  outline: none;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font: inherit;
+  line-height: 1.6;
+}
+
+.confirmation-dialog__textarea:focus {
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-primary) 16%, transparent);
 }
 
 .confirmation-dialog__actions {

@@ -78,7 +78,7 @@ function sessionTitle(session: AgentSessionDto) {
 
 function sessionMeta(session: AgentSessionDto) {
   if (session.sessionType === 'WORK_ITEM') {
-    return [session.workItemId ? '任务上下文' : '任务会话', session.runtimeType].filter(Boolean).join(' · ')
+    return [session.workItemId ? '任务上下文' : '任务会话', 'Agent Runtime'].filter(Boolean).join(' · ')
   }
   return '自由讨论 · 平台上下文'
 }

@@ -98,13 +98,21 @@ async function renderMermaidBlocks(): Promise<void> {
     }
 
     try {
+      if (!await isMermaidSourceValid(mermaid, source)) {
+        restoreMermaidSource(block, source)
+        return
+      }
       const renderId = `agentcenter-mermaid-${Date.now()}-${currentVersion}-${index}-${hashText(source)}`
       const result = await mermaid.render(renderId, source)
       if (currentVersion !== mermaidRenderVersion || !rootRef.value?.contains(block)) return
+      if (isMermaidErrorSvg(result.svg)) {
+        restoreMermaidSource(block, source)
+        return
+      }
       block.innerHTML = DOMPurify.sanitize(result.svg)
       block.dataset.mermaidState = 'rendered'
     } catch {
-      block.dataset.mermaidState = 'source'
+      restoreMermaidSource(block, source)
     }
   }))
 }
@@ -115,11 +123,44 @@ function markMermaidBlocksAsSource(blocks: HTMLElement[]): void {
   })
 }
 
+async function isMermaidSourceValid(mermaid: MermaidApi, source: string): Promise<boolean> {
+  if (typeof mermaid.parse !== 'function') {
+    return true
+  }
+  try {
+    const result = await mermaid.parse(source, { suppressErrors: true })
+    return result !== false
+  } catch {
+    return false
+  }
+}
+
+function isMermaidErrorSvg(svg: string): boolean {
+  return /Syntax error in text|mermaid version|id=["']?mermaid-error/i.test(svg)
+}
+
+function restoreMermaidSource(block: HTMLElement, source: string): void {
+  const existingCode = block.querySelector('code')
+  if (existingCode && existingCode.textContent?.trim() === source) {
+    block.dataset.mermaidState = 'source'
+    return
+  }
+
+  const pre = document.createElement('pre')
+  pre.className = 'markdown-content__mermaid-source'
+  const code = document.createElement('code')
+  code.textContent = source
+  pre.appendChild(code)
+  block.replaceChildren(pre)
+  block.dataset.mermaidState = 'source'
+}
+
 async function getMermaid(): Promise<MermaidApi> {
   if (!mermaidPromise) {
     mermaidPromise = import('mermaid').then((module) => {
       module.default.initialize({
         startOnLoad: false,
+        suppressErrorRendering: true,
         securityLevel: 'strict',
         theme: 'base',
         themeVariables: {

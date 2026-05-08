@@ -8,4 +8,5 @@ export const sessionApi = {
   getById: (id: string) => get<AgentSessionDto>(`/agent-sessions/${id}`),
   getMessages: (id: string) => get<AgentMessageDto[]>(`/agent-sessions/${id}/messages`),
   sendMessage: (id: string, data: SendMessageRequest) => post<AgentMessageDto>(`/agent-sessions/${id}/messages`, data),
+  cancel: (id: string) => post<void>(`/agent-sessions/${id}/cancel`),
 }

@@ -16,12 +16,13 @@ import { useConfirmationStore } from './stores/confirmations'
 import { useNotificationStore } from './stores/notifications'
 import { useWorkflowStore } from './stores/workflows'
 import { useWorkItemStore } from './stores/workItems'
-import type { AgentSessionDto, StartWorkflowResponse } from './api/types'
+import type { AgentSessionDto, ArtifactDto, StartWorkflowResponse } from './api/types'
 import type { ProjectContextOptions, ProjectContextSelection } from './types/projectContext'
 
 const activeView = ref('home')
 const selectedWorkItemId = ref<string | undefined>(undefined)
 const targetSessionId = ref<string | null>(null)
+const selectedArtifact = ref<ArtifactDto | null>(null)
 const conversationReturnView = ref('home')
 const settingsTab = ref<string>('skills')
 const projectContextOptions: ProjectContextOptions = {
@@ -125,6 +126,7 @@ function queueWorkflowRefresh(workItemId?: string | null) {
 
 function handleSelectWorkItem(id: string) {
   selectedWorkItemId.value = id
+  selectedArtifact.value = null
   targetSessionId.value = null
   // Stay on home — do NOT navigate to conversation
 }
@@ -134,6 +136,7 @@ const selectedWorkItem = computed(() =>
 )
 
 async function handleStartWorkflow(workItemId: string, response?: StartWorkflowResponse) {
+  selectedArtifact.value = null
   if (!response) {
     response = await workItemApi.startWorkflow(workItemId, { mode: 'AUTO' })
   }
@@ -162,6 +165,7 @@ async function handleConfirmationsChanged(workItemId?: string | null) {
 function handleEnterWorkItemConversation(id: string) {
   rememberConversationReturnView()
   selectedWorkItemId.value = id
+  selectedArtifact.value = null
   const session = sessionStore.sessions.find((item) => item.workItemId === id)
   targetSessionId.value = session?.id ?? null
   activeView.value = 'conversation'
@@ -194,6 +198,7 @@ function handleSelectSession(session: AgentSessionDto) {
   rememberConversationReturnView()
   targetSessionId.value = session.id
   selectedWorkItemId.value = session.workItemId || undefined
+  selectedArtifact.value = null
   activeView.value = 'conversation'
 }
 
@@ -229,6 +234,7 @@ function handleConversationBack() {
   <AppShell
     v-model:activeView="activeView"
     :selected-work-item="selectedWorkItem"
+    :selected-artifact="selectedArtifact"
     :project-context="projectContext"
     @handle-confirmation="handleConfirmation"
     @select-session="handleSelectSession"
@@ -237,6 +243,7 @@ function handleConversationBack() {
     @start-workflow="handleStartWorkflow"
     @enter-work-item-conversation="handleEnterWorkItemConversation"
     @confirmations-changed="handleConfirmationsChanged"
+    @close-artifact="selectedArtifact = null"
   >
     <template #center>
       <HomeOverview
@@ -262,6 +269,7 @@ function handleConversationBack() {
         :work-item-id="selectedWorkItemId"
         :target-session-id="targetSessionId"
         @back="handleConversationBack"
+        @open-artifact="selectedArtifact = $event"
       />
     </template>
   </AppShell>

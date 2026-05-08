@@ -1,16 +1,17 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import TitleBar from './TitleBar.vue'
 import LeftSidebar from './LeftSidebar.vue'
 import CenterWorkbench from './CenterWorkbench.vue'
 import RightPanel from './RightPanel.vue'
 import StatusBar from './StatusBar.vue'
-import type { AgentSessionDto, WorkItemDto } from '../../api/types'
+import type { AgentSessionDto, ArtifactDto, WorkItemDto } from '../../api/types'
 import type { ProjectContextSelection } from '../../types/projectContext'
 
 interface Props {
   activeView?: string
   selectedWorkItem?: WorkItemDto | null
+  selectedArtifact?: ArtifactDto | null
   projectContext?: ProjectContextSelection
 }
 
@@ -32,14 +33,41 @@ const emit = defineEmits<{
   'start-workflow': [workItemId: string]
   'enter-work-item-conversation': [id: string]
   'confirmations-changed': [workItemId?: string | null]
+  'close-artifact': []
 }>()
 
 const leftCollapsed = ref(false)
 const rightCollapsed = ref(false)
+const rightExpanded = ref(false)
 
 function handleNavigate(viewId: string) {
   emit('update:activeView', viewId)
 }
+
+function handleCloseArtifact() {
+  rightExpanded.value = false
+  emit('close-artifact')
+}
+
+function handleRightCollapsedChange(value: boolean) {
+  rightCollapsed.value = value
+  if (value) {
+    rightExpanded.value = false
+  }
+}
+
+function handleRightExpandedChange(value: boolean) {
+  rightExpanded.value = value
+  if (value) {
+    rightCollapsed.value = false
+  }
+}
+
+watch(() => props.selectedArtifact, (artifact) => {
+  if (!artifact) {
+    rightExpanded.value = false
+  }
+})
 </script>
 
 <template>
@@ -48,6 +76,7 @@ function handleNavigate(viewId: string) {
     :class="{
       'app-shell--left-collapsed': leftCollapsed,
       'app-shell--right-collapsed': rightCollapsed,
+      'app-shell--right-expanded': rightExpanded && !rightCollapsed,
     }"
   >
     <div class="app-shell__titlebar">
@@ -75,12 +104,16 @@ function handleNavigate(viewId: string) {
     <div class="app-shell__right-panel">
       <RightPanel
         :collapsed="rightCollapsed"
+        :expanded="rightExpanded"
         :selected-work-item="selectedWorkItem"
-        @update:collapsed="rightCollapsed = $event"
+        :selected-artifact="selectedArtifact"
+        @update:collapsed="handleRightCollapsedChange"
+        @update:expanded="handleRightExpandedChange"
         @handle-confirmation="(id: string) => emit('handle-confirmation', id)"
         @start-workflow="(workItemId: string) => emit('start-workflow', workItemId)"
         @enter-conversation="(id: string) => emit('enter-work-item-conversation', id)"
         @confirmations-changed="(workItemId?: string | null) => emit('confirmations-changed', workItemId)"
+        @close-artifact="handleCloseArtifact"
       />
     </div>
 
@@ -174,6 +207,22 @@ function handleNavigate(viewId: string) {
   grid-area: right;
   min-height: 0;
   overflow: hidden;
+}
+
+.app-shell--right-expanded .app-shell__center {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.app-shell--right-expanded .app-shell__right-panel {
+  grid-column: center-start / right-end;
+  grid-row: 2;
+  z-index: 4;
+  box-shadow: -16px 0 28px rgba(15, 23, 42, 0.08);
+}
+
+.app-shell--left-collapsed.app-shell--right-expanded .app-shell__right-panel {
+  grid-column: gutter-c-start / right-end;
 }
 
 .app-shell--left-collapsed .app-shell__sidebar-left,

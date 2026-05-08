@@ -30,6 +30,30 @@ vi.mock('../api/workflows', () => ({
   },
 }))
 
+vi.mock('../api/workItems', () => ({
+  workItemApi: {
+    list: vi.fn().mockResolvedValue([]),
+    getById: vi.fn().mockResolvedValue({
+      id: 'work-1',
+      code: 'FE1236',
+      type: 'FE',
+      title: '移动端适配优化',
+      description: null,
+      status: 'IN_PROGRESS',
+      priority: 'MEDIUM',
+      projectId: null,
+      spaceId: null,
+      iterationId: null,
+      assigneeUserId: null,
+      currentWorkflowInstanceId: 'inst-42',
+      workflowSummary: null,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    }),
+    create: vi.fn(),
+  },
+}))
+
 vi.mock('../api/sessions', () => ({
   sessionApi: {
     list: vi.fn().mockResolvedValue([]),
@@ -65,6 +89,7 @@ describe('useRuntimeStore — SSE event handlers', () => {
 
   it('SKILL_COMPLETED refreshes workflow store when workflowInstanceId present', async () => {
     const { workflowApi } = await import('../api/workflows')
+    const { workItemApi } = await import('../api/workItems')
     const runtimeStore = useRuntimeStore()
 
     runtimeStore.connectSSE('sess-1')
@@ -73,11 +98,13 @@ describe('useRuntimeStore — SSE event handlers', () => {
     capturedOnEvent!(makeEvent({
       eventType: 'SKILL_COMPLETED',
       workflowInstanceId: 'inst-42',
+      workItemId: 'work-1',
     }))
 
     await vi.dynamicImportSettled()
 
     expect(workflowApi.getInstance).toHaveBeenCalledWith('inst-42')
+    expect(workItemApi.getById).toHaveBeenCalledWith('work-1')
     const workflowStore = useWorkflowStore()
     expect(workflowStore.activeWorkflowInstance?.id).toBe('inst-1')
   })
