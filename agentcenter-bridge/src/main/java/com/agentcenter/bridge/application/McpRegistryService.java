@@ -2,7 +2,8 @@ package com.agentcenter.bridge.application;
 
 import com.agentcenter.bridge.api.dto.ProjectMcpServerDto;
 import com.agentcenter.bridge.api.dto.ProjectMcpToolSnapshotDto;
-import com.agentcenter.bridge.application.runtime.AgentRuntimeAdapter;
+import com.agentcenter.bridge.application.runtime.RuntimeGateway;
+import com.agentcenter.bridge.domain.runtime.RuntimeType;
 import com.agentcenter.bridge.infrastructure.id.IdGenerator;
 import com.agentcenter.bridge.infrastructure.persistence.entity.ProjectMcpServerEntity;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.ProjectMcpServerMapper;
@@ -42,7 +43,7 @@ public class McpRegistryService {
     private final IdGenerator idGenerator;
     private final ObjectMapper objectMapper;
     private final String workingDirectory;
-    private final AgentRuntimeAdapter runtimeAdapter;
+    private final RuntimeGateway runtimeGateway;
 
     public McpRegistryService(ProjectMcpServerMapper mcpServerMapper,
                               ProjectMcpToolSnapshotMapper toolSnapshotMapper,
@@ -50,14 +51,14 @@ public class McpRegistryService {
                               IdGenerator idGenerator,
                               ObjectMapper objectMapper,
                               @Value("${agentcenter.runtime.opencode.serve.working-directory}") String workingDirectory,
-                              AgentRuntimeAdapter runtimeAdapter) {
+                               RuntimeGateway runtimeGateway) {
         this.mcpServerMapper = mcpServerMapper;
         this.toolSnapshotMapper = toolSnapshotMapper;
         this.auditService = auditService;
         this.idGenerator = idGenerator;
         this.objectMapper = objectMapper;
         this.workingDirectory = workingDirectory;
-        this.runtimeAdapter = runtimeAdapter;
+        this.runtimeGateway = runtimeGateway;
     }
 
     public List<ProjectMcpServerDto> listMcps(String projectId) {
@@ -348,7 +349,7 @@ public class McpRegistryService {
             objectMapper.writerWithDefaultPrettyPrinter().writeValue(tempPath.toFile(), root);
             Files.move(tempPath, configPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
 
-            runtimeAdapter.refreshMcps();
+            runtimeGateway.refreshMcps(RuntimeType.OPENCODE);
             auditService.recordAudit(projectId, "MCP", "", "SYNC_OPENCODE_CONFIG", "SUCCESS",
                     "Wrote " + servers.size() + " enabled MCP server(s) to " + configPath, null, null);
         } catch (Exception e) {

@@ -20,22 +20,23 @@ import org.springframework.stereotype.Service;
 
 import com.agentcenter.bridge.api.dto.RuntimeSkillDto;
 import com.agentcenter.bridge.api.dto.RuntimeSkillRefreshResponse;
-import com.agentcenter.bridge.application.runtime.AgentRuntimeAdapter;
+import com.agentcenter.bridge.application.runtime.RuntimeGateway;
 import com.agentcenter.bridge.application.runtime.RuntimeSkillSnapshot;
+import com.agentcenter.bridge.domain.runtime.RuntimeType;
 
 @Service
 public class RuntimeResourceService {
 
     private static final String FRONTMATTER_FIELD = "(?m)^%s\\s*:\\s*[\"']?([^\"'\\n]+)[\"']?\\s*$";
 
-    private final AgentRuntimeAdapter runtimeAdapter;
+    private final RuntimeGateway runtimeGateway;
     private final String configuredProjectRoot;
     private final AtomicReference<RuntimeSkillSnapshot> skillSnapshot =
             new AtomicReference<>(new RuntimeSkillSnapshot(null, null, List.of()));
 
-    public RuntimeResourceService(AgentRuntimeAdapter runtimeAdapter,
+    public RuntimeResourceService(RuntimeGateway runtimeGateway,
                                   @Value("${agentcenter.runtime.project-root:}") String configuredProjectRoot) {
-        this.runtimeAdapter = runtimeAdapter;
+        this.runtimeGateway = runtimeGateway;
         this.configuredProjectRoot = configuredProjectRoot;
     }
 
@@ -61,7 +62,7 @@ public class RuntimeResourceService {
                 skills
         );
         skillSnapshot.set(snapshot);
-        runtimeAdapter.refreshSkills(snapshot);
+        runtimeGateway.refreshSkills(RuntimeType.OPENCODE, snapshot);
         return toResponse(refreshedAt, projectRoot, skills);
     }
 

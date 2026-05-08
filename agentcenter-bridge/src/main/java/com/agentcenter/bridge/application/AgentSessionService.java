@@ -18,7 +18,7 @@ import com.agentcenter.bridge.api.dto.AgentMessageDto;
 import com.agentcenter.bridge.api.dto.AgentSessionDto;
 import com.agentcenter.bridge.api.dto.RuntimeEventDto;
 import com.agentcenter.bridge.api.dto.SendMessageRequest;
-import com.agentcenter.bridge.application.runtime.AgentRuntimeAdapter;
+import com.agentcenter.bridge.application.runtime.RuntimeGateway;
 import com.agentcenter.bridge.domain.runtime.RuntimeEventSource;
 import com.agentcenter.bridge.domain.runtime.RuntimeEventType;
 import com.agentcenter.bridge.domain.runtime.RuntimeType;
@@ -48,7 +48,7 @@ public class AgentSessionService {
     private final AgentMessageMapper messageMapper;
     private final RuntimeEventMapper eventMapper;
     private final IdGenerator idGenerator;
-    private final AgentRuntimeAdapter agentRuntimeAdapter;
+    private final RuntimeGateway runtimeGateway;
     private final WebSocketSessionRegistry webSocketSessionRegistry;
     private final RuntimeEventService runtimeEventService;
     private final ExecutorService messageExecutor = Executors.newCachedThreadPool(runnable -> {
@@ -61,14 +61,14 @@ public class AgentSessionService {
                                AgentMessageMapper messageMapper,
                                RuntimeEventMapper eventMapper,
                                IdGenerator idGenerator,
-                               AgentRuntimeAdapter agentRuntimeAdapter,
+                               RuntimeGateway runtimeGateway,
                                WebSocketSessionRegistry webSocketSessionRegistry,
                                RuntimeEventService runtimeEventService) {
         this.sessionMapper = sessionMapper;
         this.messageMapper = messageMapper;
         this.eventMapper = eventMapper;
         this.idGenerator = idGenerator;
-        this.agentRuntimeAdapter = agentRuntimeAdapter;
+        this.runtimeGateway = runtimeGateway;
         this.webSocketSessionRegistry = webSocketSessionRegistry;
         this.runtimeEventService = runtimeEventService;
     }
@@ -177,8 +177,8 @@ public class AgentSessionService {
         String runtimeError = null;
 
         try {
-            effectiveRuntimeSessionId = agentRuntimeAdapter.ensureSession(
-                    session.getWorkItemId(), sessionId, effectiveRuntimeSessionId);
+            effectiveRuntimeSessionId = runtimeGateway.ensureSession(
+                    runtimeType, session.getWorkItemId(), sessionId, effectiveRuntimeSessionId);
             if (!effectiveRuntimeSessionId.equals(session.getRuntimeSessionId())) {
                 session.setRuntimeSessionId(effectiveRuntimeSessionId);
                 sessionMapper.update(session);
@@ -190,13 +190,13 @@ public class AgentSessionService {
 
         if (runtimeOk && effectiveRuntimeSessionId != null) {
             try {
-                agentRuntimeAdapter.sendMessage(effectiveRuntimeSessionId, content);
-            } catch (Exception e) {
-                try {
-                    effectiveRuntimeSessionId = agentRuntimeAdapter.createSession(session.getWorkItemId(), sessionId);
-                    session.setRuntimeSessionId(effectiveRuntimeSessionId);
-                    sessionMapper.update(session);
-                    agentRuntimeAdapter.sendMessage(effectiveRuntimeSessionId, content);
+                    runtimeGateway.sendMessage(runtimeType, effectiveRuntimeSessionId, content);
+                } catch (Exception e) {
+                    try {
+                        effectiveRuntimeSessionId = runtimeGateway.createSession(runtimeType, session.getWorkItemId(), sessionId);
+                        session.setRuntimeSessionId(effectiveRuntimeSessionId);
+                        sessionMapper.update(session);
+                        runtimeGateway.sendMessage(runtimeType, effectiveRuntimeSessionId, content);
                 } catch (Exception retryError) {
                     runtimeOk = false;
                     runtimeError = "Runtime sendMessage failed: " + retryError.getMessage();

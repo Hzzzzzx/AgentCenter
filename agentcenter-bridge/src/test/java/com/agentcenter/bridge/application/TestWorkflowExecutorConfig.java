@@ -9,8 +9,8 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 
-import com.agentcenter.bridge.application.runtime.AgentRuntimeAdapter;
-import com.agentcenter.bridge.application.runtime.SkillRunResult;
+import com.agentcenter.bridge.application.runtime.*;
+import com.agentcenter.bridge.domain.runtime.RuntimeType;
 
 @TestConfiguration
 public class TestWorkflowExecutorConfig {
@@ -52,15 +52,20 @@ public class TestWorkflowExecutorConfig {
 
     @Bean
     @Primary
-    public AgentRuntimeAdapter stubRuntimeAdapter() {
-        return new AgentRuntimeAdapter() {
+    public RuntimeGateway stubRuntimeGateway() {
+        return new RuntimeGateway() {
             @Override
-            public String createSession(String workItemId, String agentSessionId) {
+            public String createSession(RuntimeType rt, String workItemId, String agentSessionId) {
                 return "stub-session-" + (workItemId != null ? workItemId : "test");
             }
 
             @Override
-            public SkillRunResult runSkill(String sessionId, String skillName, String inputContext) {
+            public String ensureSession(RuntimeType rt, String workItemId, String agentSessionId, String runtimeSessionId) {
+                return runtimeSessionId != null ? runtimeSessionId : "stub-session-" + (workItemId != null ? workItemId : "test");
+            }
+
+            @Override
+            public SkillRunResult runSkill(RuntimeType rt, String sessionId, String skillName, String inputContext) {
                 String output = switch (skillName) {
                     case "fe.requirement.refine", "prd-desingn" -> "# PRD\n\n测试 PRD 输出";
                     case "fe.solution.design", "hld-design" -> "# HLD\n\n测试 HLD 输出";
@@ -71,13 +76,25 @@ public class TestWorkflowExecutorConfig {
             }
 
             @Override
-            public void sendMessage(String sessionId, String userMessage) {
-                // stub: no-op
+            public void sendMessage(RuntimeType rt, String sessionId, String userMessage) {}
+
+            @Override
+            public void cancel(RuntimeType rt, String sessionId) {}
+
+            @Override
+            public void refreshSkills(RuntimeType rt, RuntimeSkillSnapshot snapshot) {}
+
+            @Override
+            public void refreshMcps(RuntimeType rt) {}
+
+            @Override
+            public RuntimeDescriptor describe(RuntimeType rt) {
+                return new RuntimeDescriptor("Stub", "TEST", "test stub", capabilities(rt));
             }
 
             @Override
-            public void cancel(String sessionId) {
-                // stub: no-op
+            public RuntimeCapabilities capabilities(RuntimeType rt) {
+                return new RuntimeCapabilities(true, true, true, true);
             }
         };
     }

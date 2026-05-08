@@ -28,7 +28,7 @@ import com.agentcenter.bridge.api.dto.StartWorkflowRequest;
 import com.agentcenter.bridge.api.dto.StartWorkflowResponse;
 import com.agentcenter.bridge.api.dto.WorkflowInstanceDto;
 import com.agentcenter.bridge.api.dto.WorkflowNodeInstanceDto;
-import com.agentcenter.bridge.application.runtime.AgentRuntimeAdapter;
+import com.agentcenter.bridge.application.runtime.RuntimeGateway;
 import com.agentcenter.bridge.application.runtime.SkillRunResult;
 import com.agentcenter.bridge.domain.artifact.ArtifactType;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationRequestType;
@@ -76,7 +76,7 @@ public class WorkflowCommandService {
     private final AgentMessageMapper agentMessageMapper;
     private final AgentSessionService agentSessionService;
     private final RuntimeEventService runtimeEventService;
-    private final AgentRuntimeAdapter runtimeAdapter;
+    private final RuntimeGateway runtimeGateway;
     private final IdGenerator idGenerator;
     private final RuntimeType workflowRuntimeType;
     private final ExecutorService workflowExecutor;
@@ -88,7 +88,7 @@ public class WorkflowCommandService {
                                    AgentMessageMapper agentMessageMapper,
                                    AgentSessionService agentSessionService,
                                    RuntimeEventService runtimeEventService,
-                                   AgentRuntimeAdapter runtimeAdapter,
+                                   RuntimeGateway runtimeGateway,
                                    IdGenerator idGenerator,
                                    @Value("${agentcenter.runtime.default-type:OPENCODE}") String defaultRuntimeType,
                                    @Qualifier("workflowExecutor") ExecutorService workflowExecutor) {
@@ -99,7 +99,7 @@ public class WorkflowCommandService {
         this.agentMessageMapper = agentMessageMapper;
         this.agentSessionService = agentSessionService;
         this.runtimeEventService = runtimeEventService;
-        this.runtimeAdapter = runtimeAdapter;
+        this.runtimeGateway = runtimeGateway;
         this.idGenerator = idGenerator;
         this.workflowRuntimeType = RuntimeType.valueOf(defaultRuntimeType.toUpperCase());
         this.workflowExecutor = workflowExecutor;
@@ -343,7 +343,7 @@ public class WorkflowCommandService {
             );
         }
 
-        String ensuredRuntimeSessionId = runtimeAdapter.ensureSession(workItem.getId(), session.id(), runtimeSessionId);
+        String ensuredRuntimeSessionId = runtimeGateway.ensureSession(workflowRuntimeType, workItem.getId(), session.id(), runtimeSessionId);
         if (!ensuredRuntimeSessionId.equals(runtimeSessionId)) {
             runtimeSessionId = ensuredRuntimeSessionId;
             agentSessionService.bindRuntimeSession(session.id(), runtimeSessionId, workflowRuntimeType);
@@ -374,8 +374,8 @@ public class WorkflowCommandService {
                 "{\"skillName\":\"" + skillName + "\"}", null
         ));
 
-        SkillRunResult result = runtimeAdapter.runSkill(
-                node.getRuntimeSessionId(), skillName, inputContext);
+        SkillRunResult result = runtimeGateway.runSkill(
+                workflowRuntimeType, node.getRuntimeSessionId(), skillName, inputContext);
 
         ArtifactEntity artifact = null;
         if (result.success() && result.outputContent() != null) {
