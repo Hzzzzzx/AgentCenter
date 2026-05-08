@@ -1,7 +1,7 @@
 # Agent Runtime Protocol Layer Design
 
 > 状态：未来目标架构 / 目标状态设计稿
-> 最近更新：2026-05-07
+> 最近更新：2026-05-08
 > 目标读者：后续负责 Runtime 适配器重构、OpenCode/Codex/其他 Agent Runtime 接入的 Agent
 
 本文档沉淀 AgentCenter 与底层 Agent Runtime 之间的通用协议层设计。它不是 M1 OpenCode Bridge 的替代说明，而是下一阶段重构目标：把对话通信、Skill 生命周期、MCP 生命周期、权限确认和运行事件统一到一套协议语义里，再根据 Runtime 能力选择 `HTTP(S)+SSE` 或 `WebSocket` 传输。
@@ -20,6 +20,8 @@ AgentCenter 应将“业务语义协议”和“网络传输方式”分开：
 ```text
 业务层稳定，协议语义统一，传输可替换，Runtime 私有协议被关进 Provider。
 ```
+
+这里的“传输可替换”指 Provider 可以按 Runtime 能力和操作类型选择 `WebSocket`、`HTTP(S)+SSE` 或其他传输策略；不表示同一次业务操作可以在执行中随意热切换传输。
 
 ## 2. 背景与边界
 
@@ -523,7 +525,7 @@ runtime_operation
 
 | 阶段 | 目标 | 结果 |
 |------|------|------|
-| P0 | 文档和协议确认 | 本文档作为目标设计基线 |
+| P0 | 文档和协议确认 | 本文档作为目标设计基线，并确认第 16 节硬约束 |
 | P1 | 引入 `RuntimeAdapterRegistry` | 应用层按 `runtimeType` 选择 Provider |
 | P2 | 引入统一 Envelope | 内部先用统一命令/事件对象，不改外部行为 |
 | P3 | 拆 OpenCode Provider | `.opencode`、`prompt_async`、`/event` 都收进 OpenCode Provider |
@@ -544,7 +546,156 @@ runtime_operation
 - WebSocket Runtime 是否具备 ack/nack、correlationId、operationId、heartbeat、reconnect 策略。
 - HTTP+SSE Runtime 是否具备幂等键、事件 cursor 或重连恢复策略。
 
-## 16. 与现有文档关系
+## 16. 设计修订：进入重构前的硬约束
+
+本节是 2026-05-08 对目标设计的二次审视结论，用来收紧本文档口径。统一协议层的核心承诺是“业务语义稳定、Runtime 私有协议可替换”，不是“任何交互都能无条件随意切换传输”。
+
+### 16.1 传输选择不是任意热切换
+
+传输策略必须由 `RuntimeProvider` 根据 Runtime 能力、操作类型和失败恢复策略选择。应用层只看到统一命令和统一事件，不直接关心底层走 WebSocket 还是 HTTP+SSE。
+
+| 操作域 | 可选传输 | 设计约束 |
+|--------|----------|----------|
+| 对话发送和流式回复 | WebSocket 或 HTTP(S)+SSE | 同一次 conversation operation 内传输策略应保持稳定；失败后按显式 retry/failover policy 处理 |
+| Tool/Skill 执行事件 | WebSocket 或 SSE | 统一翻译为 `tool.started`、`tool.completed`、`skill.run.*` 等平台事件 |
+| Skill 生命周期管理 | WebSocket command 或 HTTP API | HTTP+SSE 本身只适合事件订阅，不能单独承担管理命令；管理结果要通过状态事件确认 |
+| MCP 生命周期管理 | WebSocket command 或 HTTP API | `mcp.upsert`、`mcp.delete`、`mcp.tools.refresh` 必须可追踪 operationId |
+| 健康检查和能力声明 | HTTP request/response 或 WebSocket request/response | Provider 必须声明 capabilities，前端和应用层不能硬编码 OpenCode 能力 |
+| 事件恢复和重放 | SSE cursor 或 WebSocket resume | 必须具备 lastEventId、operationId 或等价恢复点 |
+
+### 16.2 数据面和控制面必须分离
+
+对话流、工具调用流属于数据面；Skill/MCP、能力声明、健康检查、权限和资源变更属于控制面。两者可以共用统一 Envelope，但不能混用状态语义。
+
+```mermaid
+flowchart TB
+  App["应用层<br/>只处理 AgentCenter 领域对象<br/>不感知 Runtime 私有协议"]
+  Gateway["RuntimeGateway<br/>统一入口<br/>分发命令并接收事件"]
+
+  subgraph DataPlane["数据面 Data Plane<br/>高频会话流与工具执行事件"]
+    ConversationPort["ConversationRuntimePort<br/>sendMessage / cancel / stream<br/>承载对话和工具输出"]
+    DataEvents["Conversation / Tool Events<br/>delta、tool.started、tool.completed<br/>用于界面流式展示"]
+  end
+
+  subgraph ControlPlane["控制面 Control Plane<br/>低频资源治理与能力管理"]
+    ResourcePort["RuntimeResourcePort<br/>skill / mcp lifecycle<br/>管理资源变更命令"]
+    CapabilityPort["RuntimeCapabilityProvider<br/>health / capabilities<br/>声明 Runtime 能力边界"]
+    ControlEvents["Resource / Capability Events<br/>skill.changed、mcp.changed<br/>更新平台投影状态"]
+  end
+
+  Provider["RuntimeProvider<br/>按 runtimeType 选择实现<br/>例如 OpenCode / Codex / Internal"]
+  Client["RuntimeProtocolClient<br/>统一 Envelope 编码解码<br/>处理 ack、correlationId、operationId"]
+  Transport["TransportStrategy<br/>按操作选择传输<br/>WebSocket 或 HTTP(S)+SSE"]
+
+  App --> Gateway
+  Gateway --> ConversationPort
+  Gateway --> ResourcePort
+  Gateway --> CapabilityPort
+  ConversationPort --> Provider
+  ResourcePort --> Provider
+  CapabilityPort --> Provider
+  Provider --> Client
+  Client --> Transport
+  Transport --> DataEvents
+  Transport --> ControlEvents
+```
+
+### 16.3 Skill/MCP 必须按异步状态机处理
+
+对于支持 WebSocket 管理 Skill/MCP 的 Runtime，Bridge 不能把 WebSocket ack 当成资源已生效。ack 只表示 Runtime 或 Provider 已接收命令；资源真正可用必须以 `skill.changed`、`mcp.changed`、`mcp.tools.changed` 或后续 capability query 为准。
+
+```mermaid
+flowchart LR
+  Pending["PENDING<br/>平台已创建 operation<br/>尚未发送到 Runtime"]
+  Accepted["ACCEPTED<br/>Runtime 已确认接收<br/>资源还未保证生效"]
+  Applying["APPLYING<br/>Runtime 正在安装、更新<br/>或刷新资源"]
+  Active["ACTIVE<br/>Runtime 已发布 changed 事件<br/>平台投影可用"]
+  Failed["FAILED<br/>Runtime 拒绝或执行失败<br/>保留错误和审计"]
+  RolledBack["ROLLED_BACK<br/>平台或 Runtime 已回滚<br/>资源恢复到旧版本"]
+
+  Pending -->|"发送 skill/mcp command"| Accepted
+  Accepted -->|"开始应用资源"| Applying
+  Applying -->|"skill.changed / mcp.changed"| Active
+  Accepted -->|"nack / validation error"| Failed
+  Applying -->|"runtime error / timeout"| Failed
+  Failed -->|"rollback policy"| RolledBack
+```
+
+建议把 Skill/MCP 管理统一建模为 `runtime_operation`，用 `operationId` 做幂等、审计、重试和事件关联。
+
+### 16.4 WebSocket 连接生命周期要显式设计
+
+WebSocket Provider 推荐按 `runtimeType + project/workspace + security context` 维护长连接，而不是每条消息临时建连。单条连接内可以通过 `agentSessionId`、`operationId` 和 `correlationId` 复用多个会话或多个资源操作。
+
+必须明确以下策略：
+
+- heartbeat：检测 Runtime 是否仍可用。
+- reconnect：断线后按 lastEventId 或 resume token 恢复。
+- backpressure：Runtime 输出过快时保护 Java Bridge 和前端 SSE。
+- ordering：同一 operation 内事件有序；不同 operation 之间不要求全局有序。
+- close policy：项目关闭、Runtime 失效、用户取消时如何关闭或保留连接。
+
+### 16.5 安全和审计不能放到 Provider 之外假设
+
+协议层需要把安全边界当成一等设计对象，而不是只靠 Runtime 私有实现：
+
+- Bridge 到 Runtime 的认证方式必须可声明，例如 token、mTLS、signed request。
+- `projectId`、`workspace`、`workingDirectory` 必须由服务端绑定，不能信任前端透传。
+- Skill/MCP 中的 secret 只能传 secret reference，不能把明文密钥写入事件、日志或普通配置。
+- 每个管理命令必须落审计：谁发起、目标 Runtime、operationId、资源 ID、旧版本、新版本、结果。
+- Runtime Provider 需要执行能力白名单，不能因为底层 Runtime 支持某功能就默认开放给所有项目。
+
+### 16.6 事件投影要区分“展示事件”和“权威事件”
+
+`conversation.delta` 只能用于实时展示，不能作为最终消息的唯一权威来源。最终持久化应优先依赖 `conversation.completed`，其中包含 `finalMessageId`、最终内容、产物引用、usage 和 finishReason。
+
+投影规则建议如下：
+
+- `conversation.delta`：进入流式缓冲，可丢失后通过 resume/replay 补齐。
+- `tool.started` / `tool.completed`：写运行事件和工具执行轨迹。
+- `permission.requested`：创建平台确认项，确认结果再由 Bridge 回写 Runtime。
+- `skill.changed` / `mcp.changed`：更新平台资源投影状态。
+- `conversation.completed`：落最终 assistant message，是会话结果的权威事件。
+
+`RuntimeEventProjector` 必须按 `operationId`、`runtimeEventId` 或 `finalMessageId` 做幂等，避免断线重放造成重复消息、重复确认项或重复资源版本。
+
+### 16.7 修订后的组件边界
+
+```mermaid
+flowchart LR
+  RuntimeGateway["RuntimeGateway<br/>应用层唯一入口<br/>隐藏 Provider 和 Transport"]
+  Registry["RuntimeProviderRegistry<br/>按 runtimeType 解析 Provider<br/>读取 descriptor 和 capabilities"]
+  Provider["RuntimeProvider<br/>封装某个 Runtime 私有协议<br/>例如 OpenCodeProvider 或 CodexProvider"]
+
+  ConversationPort["ConversationRuntimePort<br/>对话发送、取消、流式事件<br/>属于数据面"]
+  ResourcePort["RuntimeResourcePort<br/>Skill/MCP 管理命令<br/>属于控制面"]
+  CapabilityProvider["RuntimeCapabilityProvider<br/>健康检查和能力声明<br/>供前端和服务端决策"]
+  Translator["RuntimeEventTranslator<br/>私有事件转统一事件<br/>不写业务主数据"]
+  Projector["RuntimeEventProjector<br/>统一事件投影到平台主数据<br/>消息、确认项、资源状态"]
+
+  ProtocolClient["RuntimeProtocolClient<br/>Envelope 编解码<br/>ack/nack、operationId、correlationId"]
+  Strategy["TransportStrategy<br/>按 operation 选择传输<br/>不暴露给业务服务"]
+  WSTransport["WebSocketTransport<br/>双向命令和事件<br/>适合对话与资源控制"]
+  HttpSseTransport["HttpSseTransport<br/>HTTP 命令 + SSE 事件<br/>适合 OpenCode 当前形态"]
+
+  RuntimeGateway --> Registry
+  Registry --> Provider
+  Provider --> ConversationPort
+  Provider --> ResourcePort
+  Provider --> CapabilityProvider
+  Provider --> Translator
+  ConversationPort --> ProtocolClient
+  ResourcePort --> ProtocolClient
+  CapabilityProvider --> ProtocolClient
+  ProtocolClient --> Strategy
+  Strategy --> WSTransport
+  Strategy --> HttpSseTransport
+  Translator --> Projector
+```
+
+这版边界意味着后续真正重构时，优先拆 `RuntimeGateway`、`RuntimeProviderRegistry`、`RuntimeResourcePort` 和 `RuntimeEventProjector`，再把 OpenCode 的 `.opencode` 文件访问、`prompt_async`、`/event` SSE 收回 `OpenCodeProvider` 内部。
+
+## 17. 与现有文档关系
 
 - [ADR-001-OPENCODE-BRIDGE-SSE-REST.md](./ADR-001-OPENCODE-BRIDGE-SSE-REST.md)：M1 OpenCode 接入决策，仍然有效。
 - [OPENCODE-BRIDGE-EXECUTION-DESIGN.md](./OPENCODE-BRIDGE-EXECUTION-DESIGN.md)：OpenCode M1 实施口径，仍然是当前实现参考。
