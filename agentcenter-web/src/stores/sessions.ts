@@ -69,6 +69,7 @@ export const useSessionStore = defineStore('sessions', () => {
       status: 'STREAMING',
       seqNo: (messages.value.length + 1),
       createdAt: new Date().toISOString(),
+      workflowNodeInstanceId: null,
     })
   }
 

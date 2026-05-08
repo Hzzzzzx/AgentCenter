@@ -2,25 +2,23 @@
 import { computed } from 'vue'
 import type { AgentMessageDto, RuntimeEventDto } from '../../api/types'
 import MarkdownContent from './MarkdownContent.vue'
-
-type RuntimePayload = Record<string, unknown>
-type ActivityStatus = 'running' | 'done' | 'waiting' | 'error'
-
-interface ActivityItem {
-  id: string
-  key: string
-  title: string
-  detail: string
-  status: ActivityStatus
-}
+import ProcessTrace from './ProcessTrace.vue'
 
 const props = withDefaults(defineProps<{
   messages: AgentMessageDto[]
   streamingText?: string
   runtimeEvents?: RuntimeEventDto[]
+  activeNodeId?: string | null
+  activeNodeState?: string | null
+  activeSessionId?: string | null
+  running?: boolean
 }>(), {
   streamingText: '',
   runtimeEvents: () => [],
+  activeNodeId: null,
+  activeNodeState: null,
+  activeSessionId: null,
+  running: false,
 })
 
 const emit = defineEmits<{
@@ -33,61 +31,76 @@ type SystemLinePart = {
 }
 
 const persistedMessages = computed(() =>
-  props.messages.filter((message) => Boolean(message.content?.trim()))
+  props.messages
+    .map((message, index) => ({ message, index }))
+    .filter(({ message }) => Boolean(message.content?.trim()))
+    .sort((a, b) => compareMessages(a.message, b.message, a.index, b.index))
+    .map(({ message }) => message)
 )
 
 const liveMessage = computed<AgentMessageDto | null>(() => {
   if (!props.streamingText.trim()) return null
   return {
     id: 'streaming-assistant',
-    sessionId: persistedMessages.value.at(-1)?.sessionId ?? '',
+    sessionId: activeSessionId.value,
     role: 'ASSISTANT',
     content: props.streamingText,
     contentFormat: 'MARKDOWN',
     status: 'STREAMING',
     seqNo: (persistedMessages.value.at(-1)?.seqNo ?? 0) + 1,
     createdAt: new Date().toISOString(),
+    workflowNodeInstanceId: props.activeNodeId,
   }
 })
 
-const activityItems = computed(() =>
-  compactActivityItems(props.runtimeEvents
-    .filter((event) => event.eventType !== 'ASSISTANT_DELTA')
-    .map(toActivityItem)
-    .filter((item): item is ActivityItem => Boolean(item)))
-    .slice(-6)
+const activeSessionId = computed(() =>
+  props.activeSessionId
+  ?? persistedMessages.value.at(-1)?.sessionId
+  ?? ''
 )
 
-const shouldShowActivity = computed(() =>
-  activityItems.value.some((item) => item.status === 'running' || item.status === 'error')
+const hasAssistantForActiveNode = computed(() =>
+  Boolean(props.activeNodeId)
+  && persistedMessages.value.some((message) =>
+    message.role === 'ASSISTANT' && message.workflowNodeInstanceId === props.activeNodeId
+  )
+)
+
+const shouldShowActiveProcessTurn = computed(() =>
+  Boolean(activeSessionId.value)
+  && (
+    Boolean(props.activeNodeId)
+      ? !hasAssistantForActiveNode.value && ['RUNNING', 'WAITING_CONFIRMATION', 'FAILED'].includes(props.activeNodeState ?? '')
+      : props.running
+  )
+)
+
+const liveTurnVisible = computed(() =>
+  Boolean(liveMessage.value) || shouldShowActiveProcessTurn.value
 )
 
 const hasContent = computed(() =>
-  persistedMessages.value.length > 0 || Boolean(liveMessage.value) || shouldShowActivity.value
+  persistedMessages.value.length > 0 || liveTurnVisible.value
 )
-
-const activityRunning = computed(() => activityItems.value.some((item) => item.status === 'running'))
-
-const activitySummary = computed(() => {
-  const items = activityItems.value
-  if (items.length === 0) return ''
-  const running = items.filter((item) => item.status === 'running').length
-  const done = items.filter((item) => item.status === 'done').length
-  const waiting = items.filter((item) => item.status === 'waiting').length
-  const failed = items.filter((item) => item.status === 'error').length
-  const parts = []
-  if (running) parts.push(`正在处理 ${running} 项`)
-  if (done) parts.push(`已完成 ${done} 项`)
-  if (waiting) parts.push(`等待确认 ${waiting} 项`)
-  if (failed) parts.push(`异常 ${failed} 项`)
-  return parts.join('，') || `已记录 ${items.length} 条运行活动`
-})
 
 function formatTime(dateStr: string | null | undefined): string {
   if (!dateStr) return '刚刚'
   const d = new Date(dateStr)
   if (Number.isNaN(d.getTime())) return '刚刚'
   return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+}
+
+function compareMessages(a: AgentMessageDto, b: AgentMessageDto, aIndex: number, bIndex: number): number {
+  if (a.seqNo !== b.seqNo) return a.seqNo - b.seqNo
+  const timeDiff = timestamp(a.createdAt) - timestamp(b.createdAt)
+  if (timeDiff !== 0) return timeDiff
+  return aIndex - bIndex
+}
+
+function timestamp(value: string | null | undefined): number {
+  if (!value) return 0
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) ? parsed : 0
 }
 
 function roleTitle(message: AgentMessageDto): string {
@@ -133,111 +146,50 @@ function systemLineParts(content: string): SystemLinePart[] {
   return parts.length > 0 ? parts : [{ kind: 'text', text: content }]
 }
 
-function toActivityItem(event: RuntimeEventDto): ActivityItem | null {
-  const payload = parsePayload(event.payloadJson)
-  const label = textField(payload, ['skillName', 'label', 'title', 'type'])
-  const detail = textField(payload, ['errorMessage', 'reason', 'output', 'summary', 'content', 'permissionId', 'toolCallId'])
-
-  // Filter out STATUS, SKILL_STARTED, and successful SKILL_COMPLETED
-  if (event.eventType === 'STATUS') {
-    return null
-  }
-
-  if (event.eventType === 'SKILL_STARTED') {
-    return null
-  }
-
-  if (event.eventType === 'SKILL_COMPLETED') {
-    const isError = payload.isError === true || payload.success === false
-    // Only keep failed SKILL_COMPLETED
-    if (!isError) {
-      return null
-    }
-    return {
-      id: event.id,
-      key: `skill:${label || event.workflowNodeInstanceId || event.id}`,
-      title: `${label || '工具'} 执行失败`,
-      detail: detail ? trimDetail(detail) : '工具调用已返回结果。',
-      status: 'error',
-    }
-  }
-
-  // Filter out MCP_CALL - not handled here
-  if (event.eventType === 'MCP_CALL') {
-    return null
-  }
-
-  if (event.eventType === 'PERMISSION_REQUIRED' || event.eventType === 'CONFIRMATION_CREATED') {
-    return {
-      id: event.id,
-      key: `confirmation:${event.workflowNodeInstanceId || label || event.id}`,
-      title: label || '等待用户确认',
-      detail: detail || '运行时需要用户确认后继续。',
-      status: 'waiting',
-    }
-  }
-
-  if (event.eventType === 'ERROR') {
-    return {
-      id: event.id,
-      key: `error:${event.id}`,
-      title: '运行时异常',
-      detail: detail || label || 'Agent 运行过程中出现异常。',
-      status: 'error',
-    }
-  }
-
-  return null
+function traceWindowStart(message: AgentMessageDto): string | null {
+  const index = persistedMessages.value.findIndex((item) => item.id === message.id)
+  if (index <= 0) return null
+  return persistedMessages.value[index - 1]?.createdAt ?? null
 }
 
-function compactActivityItems(items: ActivityItem[]): ActivityItem[] {
-  const latestByKey = new Map<string, ActivityItem>()
-  items.forEach((item) => {
-    latestByKey.set(item.key, item)
-  })
-  return dedupeActivityItems([...latestByKey.values()])
+function traceWindowEnd(message: AgentMessageDto): string | null {
+  const index = persistedMessages.value.findIndex((item) => item.id === message.id)
+  if (index < 0) return null
+  const nextTurn = persistedMessages.value
+    .slice(index + 1)
+    .find((item) => item.role === 'USER' || item.role === 'ASSISTANT')
+  return nextTurn?.createdAt ?? null
 }
 
-function dedupeActivityItems(items: ActivityItem[]): ActivityItem[] {
-  const out: ActivityItem[] = []
-  items.forEach((item) => {
-    const last = out.at(-1)
-    if (last && last.title === item.title && last.detail === item.detail && last.status === item.status) {
-      return
-    }
-    out.push(item)
-  })
-  return out
+function shouldExpandTrace(message: AgentMessageDto): boolean {
+  return Boolean(props.activeNodeId && message.workflowNodeInstanceId === props.activeNodeId)
+    && ['RUNNING', 'WAITING_CONFIRMATION', 'FAILED'].includes(props.activeNodeState ?? '')
 }
 
-function parsePayload(payloadJson: string | null): RuntimePayload {
-  if (!payloadJson) return {}
-  try {
-    const parsed: unknown = JSON.parse(payloadJson)
-    return isRuntimePayload(parsed) ? parsed : {}
-  } catch {
-    return {}
+function activeProcessTitle(): string {
+  switch (props.activeNodeState) {
+    case 'WAITING_CONFIRMATION': return '助手等待用户确认'
+    case 'FAILED': return '助手执行遇到异常'
+    default: return '助手正在处理'
   }
 }
 
-function isRuntimePayload(value: unknown): value is RuntimePayload {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function textField(payload: RuntimePayload, keys: string[]): string {
-  for (const key of keys) {
-    const value = payload[key]
-    if (typeof value === 'string' && value.trim()) {
-      return value
-    }
+function activeProcessPill(): string {
+  switch (props.activeNodeState) {
+    case 'WAITING_CONFIRMATION': return '等待确认'
+    case 'FAILED': return '执行失败'
+    default: return '运行中'
   }
-  return ''
 }
 
-function trimDetail(value: string): string {
-  const compact = value.replace(/\s+/g, ' ').trim()
-  return compact.length > 180 ? `${compact.slice(0, 180)}...` : compact
+function activeProcessEmptyText(): string {
+  switch (props.activeNodeState) {
+    case 'WAITING_CONFIRMATION': return '正在等待用户处理确认项...'
+    case 'FAILED': return '节点执行失败，正在等待用户选择重试、跳过或停止...'
+    default: return '正在准备运行上下文...'
+  }
 }
+
 </script>
 
 <template>
@@ -304,6 +256,16 @@ function trimDetail(value: string): string {
               </div>
               <span class="assistant-card__pill">{{ statusLabel(msg) }}</span>
             </header>
+            <ProcessTrace
+              v-if="msg.role === 'ASSISTANT'"
+              :events="runtimeEvents"
+              :node-id="msg.workflowNodeInstanceId"
+              :session-id="msg.sessionId"
+              :from="traceWindowStart(msg)"
+              :to="traceWindowEnd(msg)"
+              :default-expanded="shouldExpandTrace(msg)"
+              :include-session-window="!msg.workflowNodeInstanceId"
+            />
             <MarkdownContent
               v-if="shouldRenderMarkdown(msg)"
               class="assistant-card__markdown"
@@ -316,7 +278,7 @@ function trimDetail(value: string): string {
       </template>
 
       <article
-        v-if="liveMessage"
+        v-if="liveTurnVisible"
         class="assistant-turn assistant-turn--live"
       >
         <div class="assistant-rail">
@@ -326,11 +288,21 @@ function trimDetail(value: string): string {
           <header class="assistant-card__head">
             <div class="assistant-card__title">
               <span class="assistant-card__glyph">A</span>
-              <span>助手正在回复</span>
+              <span>{{ activeProcessTitle() }}</span>
             </div>
-            <span class="assistant-card__pill assistant-card__pill--live">流式中</span>
+            <span class="assistant-card__pill assistant-card__pill--live">{{ liveMessage ? '流式中' : activeProcessPill() }}</span>
           </header>
-          <div class="assistant-card__live-content">
+          <ProcessTrace
+            :events="runtimeEvents"
+            :node-id="activeNodeId"
+            :session-id="activeSessionId"
+            :from="persistedMessages.at(-1)?.createdAt"
+            :default-expanded="true"
+            :show-when-empty="true"
+            :empty-text="activeProcessEmptyText()"
+            include-session-window
+          />
+          <div v-if="liveMessage" class="assistant-card__live-content">
             <MarkdownContent
               class="assistant-card__markdown"
               :content="liveMessage.content"
@@ -340,34 +312,6 @@ function trimDetail(value: string): string {
         </section>
       </article>
 
-      <article
-        v-if="shouldShowActivity"
-        class="assistant-turn assistant-turn--activity"
-      >
-        <div class="assistant-rail">
-          <div class="assistant-avatar">A</div>
-        </div>
-        <details class="activity-group" :open="activityRunning">
-          <summary class="activity-summary">
-            <span class="activity-summary__icon">↳</span>
-            <span>{{ activitySummary }}</span>
-          </summary>
-          <div class="activity-body">
-            <div
-              v-for="item in activityItems"
-              :key="item.id"
-              class="activity-item"
-              :class="`activity-item--${item.status}`"
-            >
-              <span class="activity-item__state"></span>
-              <div class="activity-item__copy">
-                <strong>{{ item.title }}</strong>
-                <span>{{ item.detail }}</span>
-              </div>
-            </div>
-          </div>
-        </details>
-      </article>
     </template>
   </div>
 </template>
@@ -617,113 +561,6 @@ function trimDetail(value: string): string {
 
 .assistant-card__time {
   margin-top: 6px;
-}
-
-.activity-group {
-  min-width: 0;
-  padding: 2px 0 10px;
-}
-
-.activity-summary {
-  display: inline-flex;
-  max-width: 100%;
-  align-items: center;
-  gap: 7px;
-  min-height: 28px;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 760;
-  list-style: none;
-}
-
-.activity-summary::-webkit-details-marker {
-  display: none;
-}
-
-.activity-summary__icon {
-  width: 20px;
-  height: 20px;
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  color: var(--text-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 12px;
-}
-
-.activity-summary::after {
-  content: '›';
-  color: var(--text-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  transition: transform 160ms ease;
-}
-
-.activity-group[open] .activity-summary::after {
-  transform: rotate(90deg);
-}
-
-.activity-body {
-  display: grid;
-  gap: 8px;
-  margin: 6px 0 2px 28px;
-  padding-left: 12px;
-  border-left: 1px solid var(--border-color);
-}
-
-.activity-item {
-  display: grid;
-  grid-template-columns: 12px minmax(0, 1fr);
-  gap: 9px;
-  align-items: start;
-  padding: 9px 10px;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background: var(--surface-overlay);
-}
-
-.activity-item__state {
-  width: 9px;
-  height: 9px;
-  margin-top: 5px;
-  border-radius: 999px;
-  background: var(--text-muted);
-}
-
-.activity-item--running .activity-item__state {
-  background: var(--warning);
-  box-shadow: 0 0 0 5px var(--warning-soft);
-}
-
-.activity-item--done .activity-item__state {
-  background: var(--success);
-}
-
-.activity-item--waiting .activity-item__state {
-  background: var(--accent-blue);
-}
-
-.activity-item--error .activity-item__state {
-  background: var(--error);
-}
-
-.activity-item__copy {
-  min-width: 0;
-  display: grid;
-  gap: 3px;
-}
-
-.activity-item__copy strong {
-  color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 850;
-}
-
-.activity-item__copy span {
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
 }
 
 .stream-cursor {

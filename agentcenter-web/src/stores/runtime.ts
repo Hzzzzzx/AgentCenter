@@ -95,8 +95,24 @@ export const useRuntimeStore = defineStore('runtime', () => {
       markBusy()
     }
 
+    if (event.eventType === 'SKILL_STARTED') {
+      markBusy()
+      if (event.workflowInstanceId) {
+        void syncWorkflowAndWorkItem(event)
+      }
+    }
+
     if (event.eventType === 'ERROR') {
       markIdle()
+      if (event.workflowInstanceId) {
+        void syncWorkflowAndWorkItem(event)
+      }
+    }
+
+    if (event.eventType === 'PERMISSION_REQUIRED') {
+      if (event.workflowInstanceId) {
+        void syncWorkflowAndWorkItem(event)
+      }
     }
 
     if (event.eventType === 'SKILL_COMPLETED') {
@@ -108,6 +124,17 @@ export const useRuntimeStore = defineStore('runtime', () => {
     if (event.eventType === 'CONFIRMATION_CREATED') {
       const confirmationStore = useConfirmationStore()
       confirmationStore.addFromEvent(event)
+    }
+
+    if (event.eventType === 'CONFIRMATION_RESOLVED') {
+      const confirmationStore = useConfirmationStore()
+      confirmationStore.removeFromPending(event)
+      if (event.workflowInstanceId) {
+        void syncWorkflowAndWorkItem(event)
+      }
+    }
+
+    if (event.eventType === 'PROCESS_TRACE') {
       if (event.workflowInstanceId) {
         void syncWorkflowAndWorkItem(event)
       }

@@ -208,7 +208,7 @@ describe('useRuntimeStore — SSE event handlers', () => {
     expect(confirmationApi.list).toHaveBeenCalledWith('PENDING')
   })
 
-  it('CONFIRMATION_CREATED also refreshes workflow when workflowInstanceId present', async () => {
+  it('CONFIRMATION_CREATED does not refresh workflow (that is CONFIRMATION_RESOLVED)', async () => {
     const { workflowApi } = await import('../api/workflows')
     const runtimeStore = useRuntimeStore()
 
@@ -239,7 +239,30 @@ describe('useRuntimeStore — SSE event handlers', () => {
 
     await vi.dynamicImportSettled()
 
-    expect(workflowApi.getInstance).toHaveBeenCalledWith('inst-99')
+    expect(workflowApi.getInstance).not.toHaveBeenCalled()
+  })
+
+  it('CONFIRMATION_RESOLVED removes from pending and refreshes workflow', async () => {
+    const { workflowApi } = await import('../api/workflows')
+    const runtimeStore = useRuntimeStore()
+
+    runtimeStore.connectSSE('sess-1')
+
+    const confirmationStore = useConfirmationStore()
+    ;(confirmationStore as any).pendingConfirmations = [
+      { id: 'conf-resolve', requestType: 'APPROVAL', status: 'PENDING', title: 'Test' } as any,
+    ]
+
+    capturedOnEvent!(makeEvent({
+      eventType: 'CONFIRMATION_RESOLVED',
+      workflowInstanceId: 'inst-100',
+      payloadJson: JSON.stringify({ confirmationId: 'conf-resolve', actionType: 'APPROVE', requestType: 'APPROVAL' }),
+    }))
+
+    await vi.dynamicImportSettled()
+
+    expect(workflowApi.getInstance).toHaveBeenCalledWith('inst-100')
+    expect(confirmationStore.pendingConfirmations).toHaveLength(0)
   })
 
   it('deduplicates ASSISTANT_DELTA events by runtime event id', () => {
@@ -281,6 +304,7 @@ describe('useRuntimeStore — SSE event handlers', () => {
         status: 'COMPLETED',
         seqNo: 1,
         createdAt: '2026-05-06T23:50:00Z',
+        workflowNodeInstanceId: null,
       },
       {
         id: 'msg-assistant',
@@ -291,6 +315,7 @@ describe('useRuntimeStore — SSE event handlers', () => {
         status: 'COMPLETED',
         seqNo: 2,
         createdAt: '2026-05-06T23:51:00Z',
+        workflowNodeInstanceId: null,
       },
     ]
     sessionStore.messages = messages
@@ -305,5 +330,56 @@ describe('useRuntimeStore — SSE event handlers', () => {
 
     vi.advanceTimersByTime(40)
     expect(runtimeStore.streamingText).toBe('')
+  })
+
+  it('PROCESS_TRACE with workflowInstanceId refreshes workflow store', async () => {
+    const { workflowApi } = await import('../api/workflows')
+    const { workItemApi } = await import('../api/workItems')
+    const runtimeStore = useRuntimeStore()
+
+    runtimeStore.connectSSE('sess-1')
+    expect(capturedOnEvent).toBeTruthy()
+
+    capturedOnEvent!(makeEvent({
+      eventType: 'PROCESS_TRACE',
+      workflowInstanceId: 'inst-42',
+      workItemId: 'work-1',
+    }))
+
+    await vi.dynamicImportSettled()
+
+    expect(workflowApi.getInstance).toHaveBeenCalledWith('inst-42')
+    expect(workItemApi.getById).toHaveBeenCalledWith('work-1')
+  })
+
+  it('PROCESS_TRACE without workflowInstanceId does not call refreshInstance', async () => {
+    const { workflowApi } = await import('../api/workflows')
+    const runtimeStore = useRuntimeStore()
+
+    runtimeStore.connectSSE('sess-1')
+
+    capturedOnEvent!(makeEvent({
+      eventType: 'PROCESS_TRACE',
+      workflowInstanceId: null,
+    }))
+
+    await vi.dynamicImportSettled()
+
+    expect(workflowApi.getInstance).not.toHaveBeenCalled()
+  })
+
+  it('PROCESS_TRACE does not modify streamingText or busy state', () => {
+    const runtimeStore = useRuntimeStore()
+
+    runtimeStore.connectSSE('sess-1')
+    runtimeStore.markIdle()
+
+    capturedOnEvent!(makeEvent({
+      eventType: 'PROCESS_TRACE',
+      workflowInstanceId: null,
+    }))
+
+    expect(runtimeStore.streamingText).toBe('')
+    expect(runtimeStore.busy).toBe(false)
   })
 })

@@ -56,5 +56,19 @@ export const useConfirmationStore = defineStore('confirmations', () => {
     }
   }
 
-  return { pendingConfirmations, currentConfirmation, loading, loadPending, selectConfirmation, resolveConfirmation, rejectConfirmation, addFromEvent }
+  function removeFromPending(event: RuntimeEventDto) {
+    try {
+      const payload = event.payloadJson ? JSON.parse(event.payloadJson) : {}
+      const id = payload.confirmationId || payload.id
+      if (id) {
+        pendingConfirmations.value = pendingConfirmations.value.filter((c) => c.id !== id)
+      } else {
+        loadPending()
+      }
+    } catch {
+      loadPending()
+    }
+  }
+
+  return { pendingConfirmations, currentConfirmation, loading, loadPending, selectConfirmation, resolveConfirmation, rejectConfirmation, addFromEvent, removeFromPending }
 })

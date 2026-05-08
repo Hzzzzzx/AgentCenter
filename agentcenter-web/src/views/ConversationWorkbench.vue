@@ -4,6 +4,7 @@ import { useSessionStore } from '../stores/sessions'
 import { useWorkflowStore } from '../stores/workflows'
 import { useRuntimeStore } from '../stores/runtime'
 import { useWorkItemStore } from '../stores/workItems'
+import { useConfirmationStore } from '../stores/confirmations'
 import MessageList from '../components/conversation/MessageList.vue'
 import { runtimeResourceApi } from '../api/runtimeResources'
 import { artifactApi } from '../api/artifacts'
@@ -28,12 +29,14 @@ const props = defineProps<{
 const emit = defineEmits<{
   back: []
   'open-artifact': [artifact: ArtifactDto]
+  'show-confirmation': [confirmationId: string]
 }>()
 
 const sessionStore = useSessionStore()
 const workflowStore = useWorkflowStore()
 const runtimeStore = useRuntimeStore()
 const workItemStore = useWorkItemStore()
+const confirmationStore = useConfirmationStore()
 
 const inputText = ref('')
 const inputRef = ref<HTMLInputElement | null>(null)
@@ -254,36 +257,75 @@ async function handleOpenArtifact(title: string) {
   }
 }
 
-async function handleRetry() {
+async function refreshAfterAction() {
+  const instance = currentWorkflowInstance.value
+  if (instance) {
+    await Promise.all([
+      workflowStore.loadInstance(instance.id),
+      confirmationStore.loadPending(),
+    ])
+  }
+}
+
+function findConfirmationForNode(requestType?: string) {
   const info = nodeStateInfo.value
-  if (!info?.nodeId) return
+  if (!info?.nodeId) return null
+  return confirmationStore.pendingConfirmations.find((c) => {
+    if (c.workflowNodeInstanceId !== info.nodeId) return false
+    if (requestType && c.requestType !== requestType) return false
+    return true
+  }) ?? null
+}
+
+async function handleRetry() {
+  const confirmation = findConfirmationForNode('EXCEPTION')
+  if (!confirmation) return
   try {
-    await workflowStore.retryNode(info.nodeId)
+    await confirmationStore.resolveConfirmation(confirmation.id, { actionType: 'RETRY' })
+    await refreshAfterAction()
   } catch {
     // Error handled by store/UI state
   }
 }
 
 async function handleSkip() {
-  const info = nodeStateInfo.value
-  if (!info?.nodeId) return
+  const confirmation = findConfirmationForNode('EXCEPTION')
+  if (!confirmation) return
   try {
-    await workflowStore.skipNode(info.nodeId)
+    await confirmationStore.resolveConfirmation(confirmation.id, { actionType: 'SKIP' })
+    await refreshAfterAction()
   } catch {
     // Error handled by store/UI state
   }
 }
 
 async function handleStop() {
-  // Navigate back — workflow remains blocked at the failed node
-  emit('back')
+  const confirmation = findConfirmationForNode('EXCEPTION')
+  if (!confirmation) return
+  try {
+    await confirmationStore.resolveConfirmation(confirmation.id, { actionType: 'REJECT' })
+    await refreshAfterAction()
+  } catch {
+    // Error handled by store/UI state
+  }
 }
 
 async function handleConfirmationAction() {
-  const instance = currentWorkflowInstance.value
-  if (!instance) return
+  const info = nodeStateInfo.value
+  if (!info?.nodeId) return
+
+  // Find any pending confirmation for this node (non-EXCEPTION)
+  const confirmation = confirmationStore.pendingConfirmations.find(
+    (c) => c.workflowNodeInstanceId === info.nodeId && c.requestType !== 'EXCEPTION'
+  )
+
+  if (!confirmation) return
+
+  // For ALL confirmation types, select the confirmation and emit event
+  // so the user sees the content and can approve/reject it
   try {
-    await workflowStore.continueWorkflow(instance.id)
+    await confirmationStore.selectConfirmation(confirmation.id)
+    emit('show-confirmation', confirmation.id)
   } catch {
     // Error handled by store/UI state
   }
@@ -397,6 +439,10 @@ function workflowNodeLabel(node: WorkflowNodeInstanceDto): string {
             :messages="sessionStore.messages"
             :streaming-text="runtimeStore.streamingText"
             :runtime-events="runtimeStore.events"
+            :active-node-id="nodeStateInfo.nodeId ?? null"
+            :active-node-state="nodeStateInfo.type"
+            :active-session-id="sessionStore.activeSession?.id ?? null"
+            :running="isConversationRunning"
             @open-artifact="handleOpenArtifact"
           />
         </template>
