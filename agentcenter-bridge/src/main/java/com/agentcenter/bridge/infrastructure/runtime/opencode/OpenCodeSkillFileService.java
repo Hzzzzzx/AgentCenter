@@ -43,13 +43,18 @@ public class OpenCodeSkillFileService {
     }
 
     public List<RuntimeSkillDto> scanSkills() {
-        Path skillsRoot = skillsRoot();
+        return scanSkills(null);
+    }
+
+    public List<RuntimeSkillDto> scanSkills(Path projectWorkdir) {
+        Path workspace = resolveWorkingDirectory(projectWorkdir);
+        Path skillsRoot = skillsRoot(workspace);
         ensureDirectory(skillsRoot);
 
         try (var stream = Files.list(skillsRoot)) {
             return stream
                     .filter(Files::isDirectory)
-                    .map(this::readSkill)
+                    .map(skillDir -> readSkill(workspace, skillDir))
                     .flatMap(List::stream)
                     .sorted(Comparator.comparing(RuntimeSkillDto::name))
                     .toList();
@@ -59,8 +64,12 @@ public class OpenCodeSkillFileService {
     }
 
     public String installSkill(String skillName, Path sourceDir) {
+        return installSkill(null, skillName, sourceDir);
+    }
+
+    public String installSkill(Path projectWorkdir, String skillName, Path sourceDir) {
         validateSkillName(skillName);
-        Path skillsRoot = skillsRoot();
+        Path skillsRoot = skillsRoot(resolveWorkingDirectory(projectWorkdir));
         Path targetDir = skillsRoot.resolve(skillName).normalize();
         if (targetDir.equals(skillsRoot) || !targetDir.startsWith(skillsRoot)) {
             throw new IllegalStateException("Refusing to install skill outside skills directory: " + targetDir);
@@ -90,14 +99,19 @@ public class OpenCodeSkillFileService {
     }
 
     public void deleteSkillFiles(String relativePath, String skillName) {
+        deleteSkillFiles(null, relativePath, skillName);
+    }
+
+    public void deleteSkillFiles(Path projectWorkdir, String relativePath, String skillName) {
+        Path workspace = resolveWorkingDirectory(projectWorkdir);
         Path targetDir;
         if (relativePath != null && !relativePath.isBlank()) {
-            targetDir = workingDir.resolve(relativePath).normalize();
+            targetDir = workspace.resolve(relativePath).normalize();
         } else {
-            targetDir = skillsRoot().resolve(skillName).normalize();
+            targetDir = skillsRoot(workspace).resolve(skillName).normalize();
         }
 
-        Path skillsRoot = skillsRoot();
+        Path skillsRoot = skillsRoot(workspace);
         if (targetDir.equals(skillsRoot) || !targetDir.startsWith(skillsRoot)) {
             throw new IllegalStateException("Refusing to delete path outside skills directory: " + targetDir);
         }
@@ -113,14 +127,18 @@ public class OpenCodeSkillFileService {
     }
 
     public String getSkillsRootPath() {
-        return skillsRoot().toString();
+        return getSkillsRootPath(null);
     }
 
-    private Path skillsRoot() {
+    public String getSkillsRootPath(Path projectWorkdir) {
+        return skillsRoot(resolveWorkingDirectory(projectWorkdir)).toString();
+    }
+
+    private Path skillsRoot(Path workingDir) {
         return workingDir.resolve(".opencode").resolve("skills").normalize();
     }
 
-    private List<RuntimeSkillDto> readSkill(Path skillDir) {
+    private List<RuntimeSkillDto> readSkill(Path workspace, Path skillDir) {
         Path skillFile = skillDir.resolve("SKILL.md");
         if (!Files.isRegularFile(skillFile)) {
             return List.of();
@@ -128,7 +146,10 @@ public class OpenCodeSkillFileService {
         try {
             String content = Files.readString(skillFile, StandardCharsets.UTF_8);
             String directoryName = skillDir.getFileName().toString();
-            String name = firstFrontmatterValue(content, "name", directoryName);
+            // OpenCode loads skills by directory. Treat the directory as the
+            // stable identity so editing SKILL.md metadata does not create a
+            // second logical skill in AgentCenter.
+            String name = directoryName;
             String description = firstFrontmatterValue(content, "description", "");
             String checksum = sha256(content);
             OffsetDateTime updatedAt = OffsetDateTime.ofInstant(
@@ -138,7 +159,7 @@ public class OpenCodeSkillFileService {
             return List.of(new RuntimeSkillDto(
                     name,
                     description,
-                    workingDir.relativize(skillDir).toString(),
+                    workspace.relativize(skillDir).toString(),
                     checksum,
                     updatedAt
             ));
@@ -181,6 +202,16 @@ public class OpenCodeSkillFileService {
             throw new IllegalArgumentException(
                     "Skill name contains unsafe characters (allowed: alphanumeric, dot, hyphen, underscore): " + skillName);
         }
+    }
+
+    private Path resolveWorkingDirectory(Path projectWorkdir) {
+        if (projectWorkdir != null) {
+            Path normalized = projectWorkdir.toAbsolutePath().normalize();
+            if (Files.isDirectory(normalized)) {
+                return normalized;
+            }
+        }
+        return workingDir;
     }
 
     private void deleteRecursivelyOrThrow(Path dir) throws IOException {

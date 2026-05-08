@@ -3,6 +3,7 @@ package com.agentcenter.bridge.infrastructure.runtime.opencode;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.slf4j.Logger;
@@ -13,7 +14,7 @@ import org.springframework.stereotype.Component;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
- * Handles all .opencode/mcp.json file I/O for the OpenCode runtime.
+ * Handles OpenCode project-level MCP config file I/O.
  * Extracted from McpRegistryService to keep file knowledge in the infrastructure layer.
  */
 @Component
@@ -32,19 +33,70 @@ public class OpenCodeMcpFileService {
     }
 
     /**
-     * Reads the MCP config from .opencode/mcp.json (falling back to .opencode/mcp.agentcenter.json).
-     * Returns an empty map if neither file exists.
+     * Reads the OpenCode project config from opencode.json.
+     * Legacy .opencode/mcp.json files are only used as an import fallback.
      */
-    @SuppressWarnings("unchecked")
     public Map<String, Object> readMcpConfig() {
-        Path configPath = Path.of(workingDirectory).resolve(".opencode").resolve("mcp.json");
-        if (!Files.exists(configPath)) {
-            configPath = Path.of(workingDirectory).resolve(".opencode").resolve("mcp.agentcenter.json");
-        }
-        if (!Files.exists(configPath)) {
-            return Map.of();
+        return readMcpConfig(null);
+    }
+
+    public Map<String, Object> readMcpConfig(Path projectWorkdir) {
+        Path workspace = resolveWorkingDirectory(projectWorkdir);
+        Path projectConfigPath = workspace.resolve("opencode.json");
+        if (Files.exists(projectConfigPath)) {
+            return readConfig(projectConfigPath);
         }
 
+        Path legacyConfigPath = workspace.resolve(".opencode").resolve("mcp.json");
+        if (Files.exists(legacyConfigPath)) {
+            return readConfig(legacyConfigPath);
+        }
+
+        Path agentCenterConfigPath = workspace.resolve(".opencode").resolve("mcp.agentcenter.json");
+        if (Files.exists(agentCenterConfigPath)) {
+            return readConfig(agentCenterConfigPath);
+        }
+
+        return Map.of();
+    }
+
+    /**
+     * Writes enabled MCP servers into the project opencode.json `mcp` section.
+     * Existing project config fields are preserved.
+     */
+    public void writeMcpConfig(Map<String, Object> config) {
+        writeMcpConfig(null, config);
+    }
+
+    public void writeMcpConfig(Path projectWorkdir, Map<String, Object> config) {
+        try {
+            Path configPath = resolveWorkingDirectory(projectWorkdir).resolve("opencode.json");
+            Map<String, Object> root = new LinkedHashMap<>();
+            if (Files.exists(configPath)) {
+                root.putAll(readConfig(configPath));
+            }
+
+            Object mcpServers = config.get("mcp");
+            if (mcpServers == null) {
+                mcpServers = config.get("mcpServers");
+            }
+            if (mcpServers == null) {
+                mcpServers = Map.of();
+            }
+
+            root.put("mcp", mcpServers);
+            Files.createDirectories(configPath.getParent());
+            Path tempPath = configPath.resolveSibling("opencode.json.tmp");
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(tempPath.toFile(), root);
+            Files.move(tempPath, configPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            log.info("Wrote MCP config to {}", configPath);
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to write MCP config", e);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> readConfig(Path configPath) {
         try {
             String content = Files.readString(configPath);
             return objectMapper.readValue(content, Map.class);
@@ -53,21 +105,18 @@ public class OpenCodeMcpFileService {
         }
     }
 
-    /**
-     * Writes the MCP config to .opencode/mcp.json using atomic file replacement.
-     * Creates parent directories if needed.
-     */
-    public void writeMcpConfig(Map<String, Object> config) {
-        try {
-            Path configPath = Path.of(workingDirectory).toAbsolutePath().normalize()
-                    .resolve(".opencode").resolve("mcp.json");
-            Files.createDirectories(configPath.getParent());
-            Path tempPath = configPath.resolveSibling("mcp.json.tmp");
-            objectMapper.writerWithDefaultPrettyPrinter().writeValue(tempPath.toFile(), config);
-            Files.move(tempPath, configPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-            log.info("Wrote MCP config to {}", configPath);
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed to write MCP config", e);
+    private Path resolveWorkingDirectory(Path projectWorkdir) {
+        if (projectWorkdir != null) {
+            Path normalized = projectWorkdir.toAbsolutePath().normalize();
+            if (Files.isDirectory(normalized)) {
+                return normalized;
+            }
         }
+        Path configured = Path.of(workingDirectory).toAbsolutePath().normalize();
+        if (Files.isDirectory(configured)) {
+            return configured;
+        }
+        return Path.of(System.getProperty("user.dir")).toAbsolutePath().normalize();
     }
+
 }

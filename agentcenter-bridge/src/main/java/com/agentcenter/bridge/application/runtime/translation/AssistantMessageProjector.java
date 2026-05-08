@@ -39,7 +39,7 @@ public class AssistantMessageProjector {
 
         switch (envelope.type()) {
             case RuntimeEventTypes.CONVERSATION_DELTA -> {
-                String text = envelope.payload() != null ? envelope.payload().path("label").asText("") : "";
+                String text = envelope.payload() != null ? firstText(envelope.payload(), "delta", "text", "label", "assistant_delta") : "";
                 if (!text.isEmpty()) {
                     StringBuilder buffer = buffers.computeIfAbsent(sessionId, k -> new StringBuilder());
                     synchronized (buffer) {
@@ -49,6 +49,16 @@ public class AssistantMessageProjector {
             }
             case RuntimeEventTypes.CONVERSATION_COMPLETED -> flushBuffer(sessionId);
         }
+    }
+
+    private String firstText(com.fasterxml.jackson.databind.JsonNode payload, String... fields) {
+        for (String field : fields) {
+            String text = payload.path(field).asText("");
+            if (!text.isEmpty()) {
+                return text;
+            }
+        }
+        return "";
     }
 
     public void cleanupSession(String agentSessionId) {

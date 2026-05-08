@@ -112,9 +112,8 @@ public class ConfirmationService {
         }
         confirmationMapper.update(entity);
 
-        // resolve() always advances — reject goes through the /reject endpoint
         var nodeInstanceId = entity.getWorkflowNodeInstanceId();
-        if (nodeInstanceId != null) {
+        if (nodeInstanceId != null && !hasOtherBlockingForNode(entity)) {
             workflowCommandService.completeNodeAndScheduleAdvance(nodeInstanceId);
         }
 
@@ -136,6 +135,18 @@ public class ConfirmationService {
         entity.setUpdatedAt(now);
         confirmationMapper.update(entity);
         return toDto(entity);
+    }
+
+    private boolean hasOtherBlockingForNode(ConfirmationRequestEntity current) {
+        if (current.getWorkItemId() == null || current.getWorkflowNodeInstanceId() == null) {
+            return false;
+        }
+        return confirmationMapper.findByWorkItemId(current.getWorkItemId()).stream()
+                .anyMatch(candidate ->
+                        !candidate.getId().equals(current.getId())
+                                && current.getWorkflowNodeInstanceId().equals(candidate.getWorkflowNodeInstanceId())
+                                && (ConfirmationStatus.PENDING.name().equals(candidate.getStatus())
+                                || ConfirmationStatus.IN_CONVERSATION.name().equals(candidate.getStatus())));
     }
 
     private ConfirmationRequestDto toDto(ConfirmationRequestEntity e) {

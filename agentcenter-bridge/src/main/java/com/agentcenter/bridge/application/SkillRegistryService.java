@@ -30,7 +30,10 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.HexFormat;
+import java.util.Map;
+import java.util.Objects;
 import java.util.List;
+import java.util.function.Function;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -84,8 +87,6 @@ public class SkillRegistryService {
 
     public RuntimeSkillDetailDto uploadSkill(String projectId, MultipartFile file, String createdBy) {
         validateZipFile(file);
-        String skillName = extractSkillNameFromFilename(file.getOriginalFilename());
-
         try {
             Path tempDir = Files.createTempDirectory("skill-upload-");
             try {
@@ -127,6 +128,11 @@ public class SkillRegistryService {
                 }
 
                 Path skillRoot = resolveSkillPackageRoot(tempDir);
+                String skillName = extractSkillNameFromSkillMd(skillRoot);
+                if (skillName == null || skillName.isBlank()) {
+                    skillName = extractSkillNameFromFilename(file.getOriginalFilename());
+                }
+                validateSkillName(skillName);
                 String checksum = computeDirectoryChecksum(skillRoot);
                 String skillMdSummary = extractSkillMdSummary(skillRoot);
 
@@ -242,9 +248,30 @@ public class SkillRegistryService {
     private void scanAndSyncSkillsToDb(String projectId, List<RuntimeSkillDto> scannedSkills) {
         String now = LocalDateTime.now().format(SQLITE_DATETIME);
         int synced = 0;
+        List<RuntimeSkillEntity> existingSkills = skillMapper.findByProjectId(projectId);
+        Map<String, RuntimeSkillEntity> existingByPath = existingSkills.stream()
+                .filter(skill -> skill.getRelativePath() != null && !skill.getRelativePath().isBlank())
+                .collect(java.util.stream.Collectors.toMap(
+                        RuntimeSkillEntity::getRelativePath,
+                        Function.identity(),
+                        (first, ignored) -> first
+                ));
+        Map<String, RuntimeSkillEntity> existingByName = existingSkills.stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        RuntimeSkillEntity::getName,
+                        Function.identity(),
+                        (first, ignored) -> first
+                ));
+        java.util.Set<String> scannedPaths = new java.util.HashSet<>();
+        java.util.Set<String> scannedNames = new java.util.HashSet<>();
 
         for (RuntimeSkillDto scanned : scannedSkills) {
-            RuntimeSkillEntity existing = skillMapper.findByProjectIdAndName(projectId, scanned.name());
+            scannedPaths.add(scanned.relativePath());
+            scannedNames.add(scanned.name());
+            RuntimeSkillEntity existing = existingByPath.get(scanned.relativePath());
+            if (existing == null) {
+                existing = existingByName.get(scanned.name());
+            }
 
             if (existing == null) {
                 String id = idGenerator.nextId();
@@ -285,13 +312,48 @@ public class SkillRegistryService {
                 skillMapper.insert(entity);
                 synced++;
             } else {
-                if (!scanned.checksum().equals(existing.getChecksum())) {
+                boolean changed = false;
+                if (!Objects.equals(existing.getName(), scanned.name())) {
+                    existing.setName(scanned.name());
+                    existing.setDisplayName(scanned.name());
+                    changed = true;
+                }
+                if (!Objects.equals(existing.getRelativePath(), scanned.relativePath())) {
+                    existing.setRelativePath(scanned.relativePath());
+                    changed = true;
+                }
+                if (!Objects.equals(existing.getChecksum(), scanned.checksum())) {
                     existing.setChecksum(scanned.checksum());
-                    existing.setUpdatedAt(now);
+                    changed = true;
+                }
+                if (!"ENABLED".equals(existing.getStatus()) || !"VALID".equals(existing.getValidationStatus())
+                        || existing.getValidationMessage() != null) {
+                    existing.setStatus("ENABLED");
                     existing.setValidationStatus("VALID");
+                    existing.setValidationMessage(null);
+                    changed = true;
+                }
+                if (changed) {
+                    existing.setUpdatedAt(now);
                     skillMapper.update(existing);
                     synced++;
                 }
+            }
+        }
+
+        for (RuntimeSkillEntity existing : existingSkills) {
+            boolean missingByPath = existing.getRelativePath() != null
+                    && !existing.getRelativePath().isBlank()
+                    && !scannedPaths.contains(existing.getRelativePath());
+            boolean missingByNameWithoutPath = (existing.getRelativePath() == null || existing.getRelativePath().isBlank())
+                    && !scannedNames.contains(existing.getName());
+            if ((missingByPath || missingByNameWithoutPath) && !"DELETED".equals(existing.getStatus())) {
+                existing.setStatus("DISABLED");
+                existing.setValidationStatus("MISSING");
+                existing.setValidationMessage("Skill files were not found during the latest filesystem refresh");
+                existing.setUpdatedAt(now);
+                skillMapper.update(existing);
+                synced++;
             }
         }
 
@@ -492,6 +554,31 @@ public class SkillRegistryService {
         if (lastSlash >= 0) name = name.substring(lastSlash + 1);
         if (name.toLowerCase().endsWith(".zip")) name = name.substring(0, name.length() - 4);
         return name.isEmpty() ? "unnamed-skill" : name;
+    }
+
+    private String extractSkillNameFromSkillMd(Path dir) throws IOException {
+        Path skillFile = dir.resolve("SKILL.md");
+        if (!Files.isRegularFile(skillFile)) {
+            return null;
+        }
+        String content = Files.readString(skillFile, StandardCharsets.UTF_8);
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("(?m)^name\\s*:\\s*[\"']?([^\"'\\n]+)[\"']?\\s*$")
+                .matcher(content);
+        if (matcher.find()) {
+            return matcher.group(1).trim();
+        }
+        return null;
+    }
+
+    private void validateSkillName(String skillName) {
+        if (skillName == null || skillName.isBlank() || ".".equals(skillName) || "..".equals(skillName)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Skill name must not be blank, '.', or '..'");
+        }
+        if (!skillName.matches("[a-zA-Z0-9._-]+")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Skill name contains unsafe characters: " + skillName);
+        }
     }
 
     private String extractSkillMdSummary(Path dir) throws IOException {

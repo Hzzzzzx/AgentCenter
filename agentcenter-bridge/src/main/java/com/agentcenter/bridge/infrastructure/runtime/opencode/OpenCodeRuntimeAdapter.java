@@ -78,9 +78,17 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         return skillFileService.scanSkills();
     }
 
+    public List<RuntimeSkillDto> scanSkills(Path projectWorkdir) {
+        return skillFileService.scanSkills(projectWorkdir);
+    }
+
     @Override
     public String installSkill(String skillName, Path sourceDir) {
         return skillFileService.installSkill(skillName, sourceDir);
+    }
+
+    public String installSkill(Path projectWorkdir, String skillName, Path sourceDir) {
+        return skillFileService.installSkill(projectWorkdir, skillName, sourceDir);
     }
 
     @Override
@@ -88,9 +96,17 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         skillFileService.deleteSkillFiles(relativePath, skillName);
     }
 
+    public void deleteSkillFiles(Path projectWorkdir, String relativePath, String skillName) {
+        skillFileService.deleteSkillFiles(projectWorkdir, relativePath, skillName);
+    }
+
     @Override
     public String getSkillsRootPath() {
         return skillFileService.getSkillsRootPath();
+    }
+
+    public String getSkillsRootPath(Path projectWorkdir) {
+        return skillFileService.getSkillsRootPath(projectWorkdir);
     }
 
     @Override
@@ -167,16 +183,16 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         String output = dispatchPromptAndWait(
                 sessionId,
                 buildSkillPrompt(skillName, inputContext),
-                true);
+                false);
         if (output == null || output.isBlank()) {
-            output = """
-                    # Skill 已分发到 OpenCode
-
-                    - Skill: `%s`
-                    - 会话: `%s`
-
-                    OpenCode 已接收任务，但在等待窗口内没有返回可展示文本。
-                    """.formatted(skillName, sessionId).trim();
+            return new SkillRunResult(
+                    false,
+                    null,
+                    "MARKDOWN",
+                    "Agent Runtime 已接收 Skill `" + skillName + "`，但在 "
+                            + responseTimeoutSeconds + " 秒内没有返回可用输出。",
+                    false
+            );
         }
         return new SkillRunResult(true, output, "MARKDOWN", null, false);
     }
@@ -188,12 +204,16 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
     private String buildSkillPrompt(String skillName, String inputContext) {
         return """
-                你是 AgentCenter 后台工作流节点执行器。请使用 OpenCode skill `%s` 的规范处理下面的输入。
+                你是 AgentCenter 后台工作流节点执行器。请使用当前 Agent Runtime 中 skill `%s` 的规范处理下面的输入。
 
                 约束：
                 - 只返回本节点最终 Markdown 文档。
                 - 不修改文件，不生成补丁，不主动遍历仓库，除非输入上下文明确要求。
                 - 如果信息不足，请在 Markdown 中列出"缺口与待确认项"，不要长时间探索。
+                - 如果 Skill 模板包含 Mermaid 流程图、分支建议、用户交互点或 Agent 执行路线，请完整保留并结合当前任务填写。
+                - Mermaid 必须使用 Mermaid 11 兼容语法：节点 ID 使用英文，中文放在引号标签里；连线使用 A --> B 或 A -->|label| B，不要使用 A -- "label" --> B。
+                - 用户交互点请使用 ASK_USER、DECISION_REQUIRED、ARTIFACT_REVIEW_REQUESTED、PERMISSION_REQUIRED 这些类型表达，作为运行时后续生成待确认事件的依据。
+                - 用户交互点表必须包含"是否触发"和"选项"；只有本轮确实需要用户参与时才把"是否触发"填为"是"。
                 - 输出使用中文，结构清晰，适合直接作为本节点产物进入下一节点。
 
                 输入上下文：
@@ -265,14 +285,26 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         processManager.restartIfRunning();
     }
 
+    public void refreshMcps(Path projectWorkdir) {
+        refreshMcps();
+    }
+
     @Override
     public Map<String, Object> readMcpConfig() {
         return mcpFileService.readMcpConfig();
     }
 
+    public Map<String, Object> readMcpConfig(Path projectWorkdir) {
+        return mcpFileService.readMcpConfig(projectWorkdir);
+    }
+
     @Override
     public void writeMcpConfig(Map<String, Object> config) {
         mcpFileService.writeMcpConfig(config);
+    }
+
+    public void writeMcpConfig(Path projectWorkdir, Map<String, Object> config) {
+        mcpFileService.writeMcpConfig(projectWorkdir, config);
     }
 
     @PreDestroy

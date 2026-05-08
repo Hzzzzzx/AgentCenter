@@ -70,20 +70,35 @@ public class DefaultRuntimeGateway implements RuntimeGateway {
         return registry.getProvider(runtimeType).getSkillsRootPath();
     }
 
+    @Override
+    public String getSkillsRootPath(RuntimeType runtimeType, Path projectWorkdir) {
+        return registry.getProvider(runtimeType).getSkillsRootPath(projectWorkdir);
+    }
+
     // --- Tracked methods (operation lifecycle) ---
 
     @Override
     public String installSkill(RuntimeType runtimeType, String skillName, Path sourceDir) {
+        return installSkill(runtimeType, null, skillName, sourceDir);
+    }
+
+    @Override
+    public String installSkill(RuntimeType runtimeType, Path projectWorkdir, String skillName, Path sourceDir) {
         return trackOperation(
                 RuntimeOperationType.SKILL_INSTALL.value(), "skill", skillName,
-                runtimeType, () -> registry.getProvider(runtimeType).installSkill(skillName, sourceDir));
+                runtimeType, () -> registry.getProvider(runtimeType).installSkill(projectWorkdir, skillName, sourceDir));
     }
 
     @Override
     public void deleteSkillFiles(RuntimeType runtimeType, String relativePath, String skillName) {
+        deleteSkillFiles(runtimeType, null, relativePath, skillName);
+    }
+
+    @Override
+    public void deleteSkillFiles(RuntimeType runtimeType, Path projectWorkdir, String relativePath, String skillName) {
         trackVoidOperation(
                 RuntimeOperationType.SKILL_DELETE.value(), "skill", skillName,
-                runtimeType, () -> registry.getProvider(runtimeType).deleteSkillFiles(relativePath, skillName));
+                runtimeType, () -> registry.getProvider(runtimeType).deleteSkillFiles(projectWorkdir, relativePath, skillName));
     }
 
     @Override
@@ -95,30 +110,50 @@ public class DefaultRuntimeGateway implements RuntimeGateway {
 
     @Override
     public void refreshMcps(RuntimeType runtimeType) {
+        refreshMcps(runtimeType, null);
+    }
+
+    @Override
+    public void refreshMcps(RuntimeType runtimeType, Path projectWorkdir) {
         trackVoidOperation(
                 RuntimeOperationType.MCP_REFRESH.value(), "mcp", "mcp_config",
-                runtimeType, () -> registry.getProvider(runtimeType).refreshMcps());
+                runtimeType, () -> registry.getProvider(runtimeType).refreshMcps(projectWorkdir));
     }
 
     @Override
     public void writeMcpConfig(RuntimeType runtimeType, Map<String, Object> config) {
+        writeMcpConfig(runtimeType, null, config);
+    }
+
+    @Override
+    public void writeMcpConfig(RuntimeType runtimeType, Path projectWorkdir, Map<String, Object> config) {
         trackVoidOperation(
                 RuntimeOperationType.MCP_WRITE_CONFIG.value(), "mcp", "mcp_config",
-                runtimeType, () -> registry.getProvider(runtimeType).writeMcpConfig(config));
+                runtimeType, () -> registry.getProvider(runtimeType).writeMcpConfig(projectWorkdir, config));
     }
 
     @Override
     public Map<String, Object> readMcpConfig(RuntimeType runtimeType) {
+        return readMcpConfig(runtimeType, null);
+    }
+
+    @Override
+    public Map<String, Object> readMcpConfig(RuntimeType runtimeType, Path projectWorkdir) {
         return trackOperation(
                 RuntimeOperationType.MCP_READ_CONFIG.value(), "mcp", "mcp_config",
-                runtimeType, () -> registry.getProvider(runtimeType).readMcpConfig());
+                runtimeType, () -> registry.getProvider(runtimeType).readMcpConfig(projectWorkdir));
     }
 
     @Override
     public List<RuntimeSkillDto> scanSkills(RuntimeType runtimeType) {
+        return scanSkills(runtimeType, null);
+    }
+
+    @Override
+    public List<RuntimeSkillDto> scanSkills(RuntimeType runtimeType, Path projectWorkdir) {
         return trackOperation(
                 RuntimeOperationType.SKILL_SCAN.value(), "skill", null,
-                runtimeType, () -> registry.getProvider(runtimeType).scanSkills());
+                runtimeType, () -> registry.getProvider(runtimeType).scanSkills(projectWorkdir));
     }
 
     // --- Operation tracking helpers ---

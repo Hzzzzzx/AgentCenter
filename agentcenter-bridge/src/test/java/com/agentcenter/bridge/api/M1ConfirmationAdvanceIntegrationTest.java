@@ -34,6 +34,7 @@ class M1ConfirmationAdvanceIntegrationTest {
 
     @BeforeEach
     void cleanWorkflowData() {
+        TestWorkflowExecutorConfig.clearCapturedRuntimeInputs();
         jdbcTemplate.execute("DELETE FROM confirmation_request");
         jdbcTemplate.execute("DELETE FROM artifact");
         jdbcTemplate.execute("DELETE FROM runtime_event");
@@ -82,11 +83,13 @@ class M1ConfirmationAdvanceIntegrationTest {
         mockMvc.perform(get("/api/confirmations/" + confirmationId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.requestType").value("DECISION"))
+                .andExpect(jsonPath("$.optionsJson").value(org.hamcrest.Matchers.containsString("低风险方案")))
                 .andExpect(jsonPath("$.workflowInstanceId").value(instanceId));
 
         mockMvc.perform(post("/api/confirmations/" + confirmationId + "/resolve")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"actionType\":\"APPROVE\",\"comment\":\"Confirm and continue\"}"))
+                        .content("{\"actionType\":\"CHOOSE\",\"comment\":\"低风险方案\",\"payload\":{\"choice\":\"低风险方案\"}}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("RESOLVED"));
 
@@ -102,6 +105,18 @@ class M1ConfirmationAdvanceIntegrationTest {
                 .filter("COMPLETED"::equals)
                 .count();
         assertThat(completedStatuses).isGreaterThanOrEqualTo(2);
+        assertThat(TestWorkflowExecutorConfig.CAPTURED_SKILL_NAMES).contains("hld-design");
+        int hldInputIndex = TestWorkflowExecutorConfig.CAPTURED_SKILL_NAMES.indexOf("hld-design");
+        String hldInputContext = TestWorkflowExecutorConfig.CAPTURED_INPUT_CONTEXTS.get(hldInputIndex);
+        assertThat(hldInputContext)
+                .contains("## 工作项")
+                .contains("FE1234")
+                .contains("用户登录优化")
+                .contains("## 上游产物")
+                .contains("artifactId")
+                .contains("测试 PRD 输出")
+                .contains("## 当前节点")
+                .contains("hld-design");
     }
 
     @Test
@@ -138,5 +153,46 @@ class M1ConfirmationAdvanceIntegrationTest {
                 .filter("COMPLETED"::equals)
                 .count();
         assertThat(completedCount).isEqualTo(1);
+    }
+
+    @Test
+    void resolvingOneConfirmation_keepsNodeBlockedWhenAnotherInteractionIsInConversation() throws Exception {
+        String fe1234Id = findWorkItemIdByCode("FE1234");
+
+        MvcResult startResult = mockMvc.perform(
+                        post("/api/work-items/" + fe1234Id + "/start-workflow")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.confirmation").exists())
+                .andReturn();
+
+        var startJson = objectMapper.readTree(startResult.getResponse().getContentAsString());
+        String confirmationId = startJson.at("/confirmation/id").asText();
+        String instanceId = startJson.at("/workflowInstance/id").asText();
+        String nodeInstanceId = startJson.at("/confirmation/workflowNodeInstanceId").asText();
+
+        jdbcTemplate.update("""
+                INSERT INTO confirmation_request (
+                    id, request_type, status, work_item_id, workflow_instance_id,
+                    workflow_node_instance_id, title, priority, created_at, updated_at
+                )
+                VALUES (?, 'INPUT_REQUIRED', 'IN_CONVERSATION', ?, ?, ?, '补充信息', 'MEDIUM', datetime('now'), datetime('now'))
+                """, "conf-blocker", fe1234Id, instanceId, nodeInstanceId);
+
+        mockMvc.perform(post("/api/confirmations/" + confirmationId + "/resolve")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"actionType\":\"CHOOSE\",\"comment\":\"低风险方案\",\"payload\":{\"choice\":\"低风险方案\"}}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("RESOLVED"));
+
+        MvcResult wfResult = mockMvc.perform(get("/api/workflow-instances/" + instanceId))
+                .andExpect(status().isOk())
+                .andReturn();
+        var wfJson = objectMapper.readTree(wfResult.getResponse().getContentAsString());
+        var nodes = wfJson.at("/nodes");
+        assertThat(java.util.stream.StreamSupport.stream(nodes.spliterator(), false)
+                .anyMatch(n -> nodeInstanceId.equals(n.get("id").asText())
+                        && "WAITING_CONFIRMATION".equals(n.get("status").asText()))).isTrue();
     }
 }

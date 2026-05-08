@@ -99,6 +99,7 @@ class OpenCodeRuntimeEventTranslatorTest {
         assertEquals(AGENT_SESSION_ID, env.agentSessionId());
         assertRuntimeSessionId(env);
         assertEquals("Hello", env.payload().path("label").asText());
+        assertEquals("Hello", env.payload().path("delta").asText());
     }
 
     @Test
@@ -118,6 +119,7 @@ class OpenCodeRuntimeEventTranslatorTest {
         assertEquals(1, result.size());
         assertEquals(RuntimeEventTypes.CONVERSATION_DELTA, result.get(0).type());
         assertEquals("Full text", result.get(0).payload().path("label").asText());
+        assertEquals("Full text", result.get(0).payload().path("delta").asText());
 
         // Second call with same part.id should produce nothing (dedup)
         List<RuntimeEventEnvelope> result2 = translator.translate(raw, fixedContext());

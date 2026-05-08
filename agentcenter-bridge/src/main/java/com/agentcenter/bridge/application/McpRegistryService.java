@@ -78,7 +78,10 @@ public class McpRegistryService {
             return listMcps(projectId);
         }
 
-        Object serversRaw = config.get("mcpServers");
+        Object serversRaw = config.get("mcp");
+        if (serversRaw == null) {
+            serversRaw = config.get("mcpServers");
+        }
         if (!(serversRaw instanceof Map<?, ?> serversMap)) {
             return listMcps(projectId);
         }
@@ -332,7 +335,7 @@ public class McpRegistryService {
                 servers.put(entity.getName(), config);
             }
 
-            root.put("mcpServers", servers);
+            root.put("mcp", servers);
 
             runtimeGateway.writeMcpConfig(RuntimeType.OPENCODE, root);
             runtimeGateway.refreshMcps(RuntimeType.OPENCODE);

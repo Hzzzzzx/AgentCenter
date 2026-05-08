@@ -3,6 +3,7 @@ package com.agentcenter.bridge.application;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.AbstractExecutorService;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -14,6 +15,14 @@ import com.agentcenter.bridge.domain.runtime.RuntimeType;
 
 @TestConfiguration
 public class TestWorkflowExecutorConfig {
+
+    public static final List<String> CAPTURED_SKILL_NAMES = new CopyOnWriteArrayList<>();
+    public static final List<String> CAPTURED_INPUT_CONTEXTS = new CopyOnWriteArrayList<>();
+
+    public static void clearCapturedRuntimeInputs() {
+        CAPTURED_SKILL_NAMES.clear();
+        CAPTURED_INPUT_CONTEXTS.clear();
+    }
 
     @Bean
     @Primary
@@ -66,9 +75,27 @@ public class TestWorkflowExecutorConfig {
 
             @Override
             public SkillRunResult runSkill(RuntimeType rt, String sessionId, String skillName, String inputContext) {
+                CAPTURED_SKILL_NAMES.add(skillName);
+                CAPTURED_INPUT_CONTEXTS.add(inputContext);
                 String output = switch (skillName) {
-                    case "fe.requirement.refine", "prd-desingn" -> "# PRD\n\n测试 PRD 输出";
-                    case "fe.solution.design", "hld-design" -> "# HLD\n\n测试 HLD 输出";
+                    case "fe.requirement.refine", "prd-desingn" -> """
+                            # PRD
+
+                            测试 PRD 输出
+
+                            | 交互点 | 类型 | 是否触发 | 选项 | 触发条件 | 建议问题/动作 | 默认处理 |
+                            | --- | --- | --- | --- | --- | --- | --- |
+                            | 需求澄清 | ASK_USER | 否 |  | 信息完整 | 无需用户补充 | 自动进入 HLD |
+                            """.trim();
+                    case "fe.solution.design", "hld-design" -> """
+                            # HLD
+
+                            测试 HLD 输出
+
+                            | 交互点 | 类型 | 是否触发 | 选项 | 触发条件 | 建议问题/动作 | 默认处理 |
+                            | --- | --- | --- | --- | --- | --- | --- |
+                            | 方案选择 | DECISION_REQUIRED | 是 | 低风险方案 / 低成本方案 / 完整方案 | 存在多个成本/风险差异明显的方案 | 请用户选择推荐方案 | 默认选择低风险方案 |
+                            """.trim();
                     case "fe.implementation.plan", "lld-design" -> "# LLD\n\n测试 LLD 输出";
                     default -> "# %s 输出\n\n测试节点输出".formatted(skillName);
                 };

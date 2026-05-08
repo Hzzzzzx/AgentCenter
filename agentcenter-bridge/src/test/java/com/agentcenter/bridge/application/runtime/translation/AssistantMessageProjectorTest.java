@@ -36,9 +36,13 @@ class AssistantMessageProjectorTest {
     }
 
     private RuntimeEventEnvelope deltaEnvelope(String text) {
+        return deltaEnvelope("label", text);
+    }
+
+    private RuntimeEventEnvelope deltaEnvelope(String fieldName, String text) {
         var payload = JsonNodeFactory.instance.objectNode();
         payload.put("type", "assistant_delta");
-        payload.put("label", text);
+        payload.put(fieldName, text);
         return new RuntimeEventEnvelope("runtime-event", RuntimeEventTypes.CONVERSATION_DELTA,
             null, null, null, RuntimeType.OPENCODE, SESSION_ID, null, null, null, null,
             payload, OffsetDateTime.now());
@@ -65,6 +69,18 @@ class AssistantMessageProjectorTest {
             && "runtime-projector".equals(msg.getCreatedBy())
         ));
         verify(idGenerator).nextId();
+    }
+
+    @Test
+    void aggregateDeltaFieldAndFlushOnCompleted() {
+        projector.onEnvelope(deltaEnvelope("delta", "Agent output"));
+        projector.onEnvelope(completedEnvelope());
+
+        verify(mapper).insert(argThat(msg ->
+            SESSION_ID.equals(msg.getSessionId())
+            && "ASSISTANT".equals(msg.getRole())
+            && "Agent output".equals(msg.getContent())
+        ));
     }
 
     @Test

@@ -42,7 +42,7 @@ class OpenCodeSkillFileServiceTest {
         var skills = service.scanSkills();
 
         assertThat(skills).hasSize(1);
-        assertThat(skills.get(0).name()).isEqualTo("My Skill");
+        assertThat(skills.get(0).name()).isEqualTo("my-skill");
         assertThat(skills.get(0).description()).isEqualTo("A test skill");
         assertThat(skills.get(0).relativePath()).contains("my-skill");
     }
@@ -64,8 +64,8 @@ class OpenCodeSkillFileServiceTest {
         var skills = service.scanSkills();
 
         assertThat(skills).hasSize(2);
-        assertThat(skills.get(0).name()).isEqualTo("Alpha");
-        assertThat(skills.get(1).name()).isEqualTo("Beta");
+        assertThat(skills.get(0).name()).isEqualTo("alpha-skill");
+        assertThat(skills.get(1).name()).isEqualTo("beta-skill");
     }
 
     @Test

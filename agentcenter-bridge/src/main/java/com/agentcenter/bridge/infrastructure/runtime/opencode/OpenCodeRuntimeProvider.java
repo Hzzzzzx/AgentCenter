@@ -88,8 +88,18 @@ public class OpenCodeRuntimeProvider implements RuntimeProvider {
     }
 
     @Override
+    public void refreshMcps(Path projectWorkdir) {
+        adapter.refreshMcps(projectWorkdir);
+    }
+
+    @Override
     public List<RuntimeSkillDto> scanSkills() {
         return adapter.scanSkills();
+    }
+
+    @Override
+    public List<RuntimeSkillDto> scanSkills(Path projectWorkdir) {
+        return adapter.scanSkills(projectWorkdir);
     }
 
     @Override
@@ -98,8 +108,18 @@ public class OpenCodeRuntimeProvider implements RuntimeProvider {
     }
 
     @Override
+    public String installSkill(Path projectWorkdir, String skillName, Path sourceDir) {
+        return adapter.installSkill(projectWorkdir, skillName, sourceDir);
+    }
+
+    @Override
     public void deleteSkillFiles(String relativePath, String skillName) {
         adapter.deleteSkillFiles(relativePath, skillName);
+    }
+
+    @Override
+    public void deleteSkillFiles(Path projectWorkdir, String relativePath, String skillName) {
+        adapter.deleteSkillFiles(projectWorkdir, relativePath, skillName);
     }
 
     @Override
@@ -108,12 +128,27 @@ public class OpenCodeRuntimeProvider implements RuntimeProvider {
     }
 
     @Override
+    public String getSkillsRootPath(Path projectWorkdir) {
+        return adapter.getSkillsRootPath(projectWorkdir);
+    }
+
+    @Override
     public Map<String, Object> readMcpConfig() {
         return adapter.readMcpConfig();
     }
 
     @Override
+    public Map<String, Object> readMcpConfig(Path projectWorkdir) {
+        return adapter.readMcpConfig(projectWorkdir);
+    }
+
+    @Override
     public void writeMcpConfig(Map<String, Object> config) {
         adapter.writeMcpConfig(config);
+    }
+
+    @Override
+    public void writeMcpConfig(Path projectWorkdir, Map<String, Object> config) {
+        adapter.writeMcpConfig(projectWorkdir, config);
     }
 }

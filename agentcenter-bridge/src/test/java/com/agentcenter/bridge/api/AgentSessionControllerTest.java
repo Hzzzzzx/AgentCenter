@@ -139,6 +139,27 @@ class AgentSessionControllerTest {
     }
 
     @Test
+    void cancelSessionReturnsNoContent() throws Exception {
+        var result = mockMvc.perform(post("/api/agent-sessions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "sessionType": "GENERAL",
+                                    "title": "Cancel message test session",
+                                    "runtimeType": "MOCK"
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String response = result.getResponse().getContentAsString();
+        String id = com.jayway.jsonpath.JsonPath.read(response, "$.id");
+
+        mockMvc.perform(post("/api/agent-sessions/" + id + "/cancel"))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
     void getNonexistentSessionReturns404() throws Exception {
         mockMvc.perform(get("/api/agent-sessions/nonexistent-id"))
                 .andExpect(status().isNotFound());

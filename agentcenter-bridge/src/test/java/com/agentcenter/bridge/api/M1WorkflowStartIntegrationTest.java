@@ -34,6 +34,7 @@ class M1WorkflowStartIntegrationTest {
 
     @BeforeEach
     void cleanWorkflowData() {
+        TestWorkflowExecutorConfig.clearCapturedRuntimeInputs();
         jdbcTemplate.execute("DELETE FROM confirmation_request");
         jdbcTemplate.execute("DELETE FROM artifact");
         jdbcTemplate.execute("DELETE FROM runtime_event");
@@ -88,6 +89,17 @@ class M1WorkflowStartIntegrationTest {
         var firstNode = json.at("/workflowInstance/nodes/0");
         assertThat(firstNode.get("status").asText()).isEqualTo("COMPLETED");
         assertThat(firstNode.get("outputArtifactId").asText()).isNotEmpty();
+        assertThat(TestWorkflowExecutorConfig.CAPTURED_INPUT_CONTEXTS).isNotEmpty();
+        String firstInputContext = TestWorkflowExecutorConfig.CAPTURED_INPUT_CONTEXTS.get(0);
+        assertThat(firstInputContext)
+                .contains("## 工作项")
+                .contains("编号")
+                .contains("FE1234")
+                .contains("用户登录优化")
+                .contains("优先级")
+                .contains("## 当前节点")
+                .contains("Skill")
+                .contains("prd-desingn");
 
         var secondNode = json.at("/workflowInstance/nodes/1");
         assertThat(secondNode.get("status").asText()).isEqualTo("WAITING_CONFIRMATION");
@@ -111,6 +123,8 @@ class M1WorkflowStartIntegrationTest {
         var confirmation = json.get("confirmation");
         assertThat(confirmation).isNotNull();
         assertThat(confirmation.get("id").asText()).isNotEmpty();
+        assertThat(confirmation.get("requestType").asText()).isEqualTo("DECISION");
+        assertThat(confirmation.get("optionsJson").asText()).contains("低风险方案", "低成本方案", "完整方案");
 
         MvcResult workItemResult = mockMvc.perform(get("/api/work-items/" + fe1234Id))
                 .andExpect(status().isOk())

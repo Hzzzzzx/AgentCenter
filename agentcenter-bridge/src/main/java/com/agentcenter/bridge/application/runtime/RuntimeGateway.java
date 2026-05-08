@@ -23,9 +23,36 @@ public interface RuntimeGateway {
     RuntimeCapabilities capabilities(RuntimeType runtimeType);
 
     List<RuntimeSkillDto> scanSkills(RuntimeType runtimeType);
+    default List<RuntimeSkillDto> scanSkills(RuntimeType runtimeType, Path projectWorkdir) {
+        return scanSkills(runtimeType);
+    }
+
     String installSkill(RuntimeType runtimeType, String skillName, Path sourceDir);
+    default String installSkill(RuntimeType runtimeType, Path projectWorkdir, String skillName, Path sourceDir) {
+        return installSkill(runtimeType, skillName, sourceDir);
+    }
+
     void deleteSkillFiles(RuntimeType runtimeType, String relativePath, String skillName);
+    default void deleteSkillFiles(RuntimeType runtimeType, Path projectWorkdir, String relativePath, String skillName) {
+        deleteSkillFiles(runtimeType, relativePath, skillName);
+    }
+
     String getSkillsRootPath(RuntimeType runtimeType);
+    default String getSkillsRootPath(RuntimeType runtimeType, Path projectWorkdir) {
+        return getSkillsRootPath(runtimeType);
+    }
+
     Map<String, Object> readMcpConfig(RuntimeType runtimeType);
+    default Map<String, Object> readMcpConfig(RuntimeType runtimeType, Path projectWorkdir) {
+        return readMcpConfig(runtimeType);
+    }
+
     void writeMcpConfig(RuntimeType runtimeType, Map<String, Object> config);
+    default void writeMcpConfig(RuntimeType runtimeType, Path projectWorkdir, Map<String, Object> config) {
+        writeMcpConfig(runtimeType, config);
+    }
+
+    default void refreshMcps(RuntimeType runtimeType, Path projectWorkdir) {
+        refreshMcps(runtimeType);
+    }
 }

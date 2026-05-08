@@ -4,8 +4,11 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
@@ -54,9 +57,11 @@ import com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowDefiniti
 import com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowInstanceEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowNodeDefinitionEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowNodeInstanceEntity;
+import com.agentcenter.bridge.infrastructure.persistence.entity.RuntimeSkillEntity;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.AgentMessageMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.ArtifactMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.ConfirmationMapper;
+import com.agentcenter.bridge.infrastructure.persistence.mapper.RuntimeSkillMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.WorkItemMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.WorkflowMapper;
 
@@ -68,6 +73,12 @@ public class WorkflowCommandService {
     private static final Logger log = LoggerFactory.getLogger(WorkflowCommandService.class);
     private static final DateTimeFormatter SQLITE_DATETIME =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final List<String> INTERACTION_TYPES = List.of(
+            "ASK_USER",
+            "DECISION_REQUIRED",
+            "ARTIFACT_REVIEW_REQUESTED",
+            "PERMISSION_REQUIRED"
+    );
 
     private final WorkflowMapper workflowMapper;
     private final WorkItemMapper workItemMapper;
@@ -77,6 +88,7 @@ public class WorkflowCommandService {
     private final AgentSessionService agentSessionService;
     private final RuntimeEventService runtimeEventService;
     private final RuntimeGateway runtimeGateway;
+    private final RuntimeSkillMapper runtimeSkillMapper;
     private final IdGenerator idGenerator;
     private final RuntimeType workflowRuntimeType;
     private final ExecutorService workflowExecutor;
@@ -89,6 +101,7 @@ public class WorkflowCommandService {
                                    AgentSessionService agentSessionService,
                                    RuntimeEventService runtimeEventService,
                                    RuntimeGateway runtimeGateway,
+                                   RuntimeSkillMapper runtimeSkillMapper,
                                    IdGenerator idGenerator,
                                    @Value("${agentcenter.runtime.default-type:OPENCODE}") String defaultRuntimeType,
                                    @Qualifier("workflowExecutor") ExecutorService workflowExecutor) {
@@ -100,6 +113,7 @@ public class WorkflowCommandService {
         this.agentSessionService = agentSessionService;
         this.runtimeEventService = runtimeEventService;
         this.runtimeGateway = runtimeGateway;
+        this.runtimeSkillMapper = runtimeSkillMapper;
         this.idGenerator = idGenerator;
         this.workflowRuntimeType = RuntimeType.valueOf(defaultRuntimeType.toUpperCase());
         this.workflowExecutor = workflowExecutor;
@@ -363,7 +377,7 @@ public class WorkflowCommandService {
                 .filter(d -> d.getId().equals(node.getNodeDefinitionId()))
                 .findFirst().orElseThrow();
 
-        String inputContext = buildInputContext(workItem, node);
+        String inputContext = buildInputContext(workItem, node, nodeDef);
         String skillName = nodeDef.getSkillName();
         insertWorkflowContextMessage(node.getAgentSessionId(), nodeDef, workItem, inputContext);
 
@@ -374,8 +388,11 @@ public class WorkflowCommandService {
                 "{\"skillName\":\"" + skillName + "\"}", null
         ));
 
-        SkillRunResult result = runtimeGateway.runSkill(
-                workflowRuntimeType, node.getRuntimeSessionId(), skillName, inputContext);
+        SkillRunResult result = validateSkillRunnable(workItem, skillName);
+        if (result == null) {
+            result = runtimeGateway.runSkill(
+                    workflowRuntimeType, node.getRuntimeSessionId(), skillName, inputContext);
+        }
 
         ArtifactEntity artifact = null;
         if (result.success() && result.outputContent() != null) {
@@ -385,16 +402,21 @@ public class WorkflowCommandService {
             artifact.setWorkflowInstanceId(instance.getId());
             artifact.setWorkflowNodeInstanceId(node.getId());
             artifact.setSessionId(node.getAgentSessionId());
-            artifact.setArtifactType(result.artifactType());
-            artifact.setTitle(skillName + " output");
+            artifact.setArtifactType(ArtifactType.MARKDOWN.name());
+            artifact.setTitle("%s-%s.md".formatted(workItem.getCode(), nodeDef.getName()));
             artifact.setContent(result.outputContent());
             artifact.setVersionNo(1);
-            artifact.setCreatedBy("mock-runtime");
+            artifact.setCreatedBy(workflowRuntimeType.name());
             artifact.setCreatedAt(LocalDateTime.now().format(SQLITE_DATETIME));
             artifactMapper.insert(artifact);
 
             node.setOutputArtifactId(artifact.getId());
         }
+
+        List<InteractionPoint> triggeredInteractions = result.success()
+                ? parseTriggeredInteractionPoints(result.outputContent())
+                : List.of();
+        boolean needsConfirmation = !triggeredInteractions.isEmpty();
 
         runtimeEventService.publishEvent(new RuntimeEventDto(
                 null, node.getAgentSessionId(), workItem.getId(),
@@ -411,11 +433,8 @@ public class WorkflowCommandService {
         statusMsg.setId(idGenerator.nextId());
         statusMsg.setSessionId(sessionId);
         statusMsg.setRole(MessageRole.SYSTEM.name());
-        statusMsg.setContent("%s %s %s".formatted(
-                result.success() ? "已完成" : "执行失败",
-                nodeDef.getName(),
-                "（Skill：" + skillName + "）"
-        ));
+        statusMsg.setContent(buildNodeStatusMessage(
+                result, nodeDef, skillName, artifact, triggeredInteractions.size()));
         statusMsg.setContentFormat(ContentFormat.TEXT.name());
         statusMsg.setStatus(MessageStatus.COMPLETED.name());
         statusMsg.setSeqNo(nextSeqNo);
@@ -423,38 +442,19 @@ public class WorkflowCommandService {
         statusMsg.setCreatedAt(now);
         agentMessageMapper.insert(statusMsg);
 
-        boolean needsConfirmation = result.success()
-                && Boolean.TRUE.equals(nodeDef.getRequiredConfirmation());
-
         if (needsConfirmation) {
-            ConfirmationRequestEntity confirmation = new ConfirmationRequestEntity();
-            confirmation.setId(idGenerator.nextId());
-            confirmation.setRequestType(ConfirmationRequestType.CONFIRM.name());
-            confirmation.setStatus(ConfirmationStatus.PENDING.name());
-            confirmation.setWorkItemId(workItem.getId());
-            confirmation.setWorkflowInstanceId(instance.getId());
-            confirmation.setWorkflowNodeInstanceId(node.getId());
-            confirmation.setAgentSessionId(node.getAgentSessionId());
-            confirmation.setRuntimeType(workflowRuntimeType.name());
-            confirmation.setRuntimeSessionId(node.getRuntimeSessionId());
-            confirmation.setSkillName(skillName);
-            confirmation.setTitle("%s %s · %s 输出待确认".formatted(
-                    workItem.getCode(), workItem.getTitle(), nodeDef.getName()));
-            confirmation.setContent(result.outputContent());
-            confirmation.setContextSummary("工作项 %s（%s）在 %s 节点需要确认输出，通过后将自动进入下一节点。".formatted(
-                    workItem.getCode(), workItem.getType(), nodeDef.getName()));
-            confirmation.setOptionsJson("[\"approve\",\"reject\",\"modify\"]");
-            confirmation.setPriority(Priority.MEDIUM.name());
-            confirmation.setCreatedAt(now);
-            confirmation.setUpdatedAt(now);
-            confirmationMapper.insert(confirmation);
+            for (InteractionPoint interaction : triggeredInteractions) {
+                ConfirmationRequestEntity confirmation = buildInteractionConfirmation(
+                        interaction, instance, node, nodeDef, workItem, skillName, artifact, now);
+                confirmationMapper.insert(confirmation);
 
-            runtimeEventService.publishEvent(new RuntimeEventDto(
-                    null, node.getAgentSessionId(), workItem.getId(),
-                    instance.getId(), node.getId(),
-                    RuntimeEventType.CONFIRMATION_CREATED, RuntimeEventSource.BRIDGE,
-                    "{\"confirmationId\":\"" + confirmation.getId() + "\"}", null
-            ));
+                runtimeEventService.publishEvent(new RuntimeEventDto(
+                        null, node.getAgentSessionId(), workItem.getId(),
+                        instance.getId(), node.getId(),
+                        RuntimeEventType.CONFIRMATION_CREATED, RuntimeEventSource.BRIDGE,
+                        "{\"confirmationId\":\"" + confirmation.getId() + "\"}", null
+                ));
+            }
 
             node.setStatus(WorkflowNodeStatus.WAITING_CONFIRMATION.name());
         } else if (result.success()) {
@@ -467,6 +467,261 @@ public class WorkflowCommandService {
 
         workflowMapper.updateNodeInstance(node);
         touchWorkItem(workItem.getId(), now);
+    }
+
+    private SkillRunResult validateSkillRunnable(WorkItemEntity workItem, String skillName) {
+        RuntimeSkillEntity skill = runtimeSkillMapper.findByProjectIdAndName(workItem.getProjectId(), skillName);
+        if (skill == null) {
+            if (runtimeSkillMapper.countByProjectId(workItem.getProjectId()) == 0) {
+                log.debug("Runtime skill registry is empty for project {}; allowing legacy skill execution: {}",
+                        workItem.getProjectId(), skillName);
+                return null;
+            }
+            return new SkillRunResult(false, null, null,
+                    "Skill is not registered for project " + workItem.getProjectId() + ": " + skillName, false);
+        }
+        if (!"ENABLED".equals(skill.getStatus()) || !"VALID".equals(skill.getValidationStatus())) {
+            String status = skill.getStatus() == null ? "UNKNOWN" : skill.getStatus();
+            String validation = skill.getValidationStatus() == null ? "UNKNOWN" : skill.getValidationStatus();
+            return new SkillRunResult(false, null, null,
+                    "Skill is not runnable: " + skillName + " status=" + status + ", validation=" + validation, false);
+        }
+        return null;
+    }
+
+    private record InteractionPoint(
+            String name,
+            String type,
+            String options,
+            String condition,
+            String action,
+            String defaultHandling
+    ) {}
+
+    private List<InteractionPoint> parseTriggeredInteractionPoints(String content) {
+        if (content == null || content.isBlank()) {
+            return List.of();
+        }
+
+        List<String> lines = content.lines().toList();
+        List<InteractionPoint> points = new ArrayList<>();
+        for (int i = 0; i < lines.size(); i += 1) {
+            String line = lines.get(i).trim();
+            if (!line.startsWith("|") || !line.contains("类型") || !line.contains("是否触发")) {
+                continue;
+            }
+
+            List<String> headers = splitMarkdownRow(line);
+            if (headers.isEmpty()) {
+                continue;
+            }
+
+            int rowIndex = i + 1;
+            if (rowIndex < lines.size() && isSeparatorRow(lines.get(rowIndex))) {
+                rowIndex += 1;
+            }
+
+            while (rowIndex < lines.size()) {
+                String row = lines.get(rowIndex).trim();
+                if (!row.startsWith("|")) {
+                    break;
+                }
+                List<String> cells = splitMarkdownRow(row);
+                if (cells.size() >= 2) {
+                    InteractionPoint point = interactionPointFromRow(headers, cells);
+                    if (point != null) {
+                        points.add(point);
+                    }
+                }
+                rowIndex += 1;
+            }
+            i = rowIndex;
+        }
+        return points;
+    }
+
+    private InteractionPoint interactionPointFromRow(List<String> headers, List<String> cells) {
+        String type = cell(headers, cells, "类型");
+        if (!INTERACTION_TYPES.contains(type)) {
+            return null;
+        }
+        String triggered = cell(headers, cells, "是否触发");
+        if (!isTriggered(triggered)) {
+            return null;
+        }
+
+        String name = firstNonBlank(
+                cell(headers, cells, "交互点"),
+                cell(headers, cells, "节点/动作"),
+                cell(headers, cells, "节点"),
+                cells.isEmpty() ? "" : cells.get(0)
+        );
+        return new InteractionPoint(
+                nonBlank(name, "用户交互"),
+                type,
+                cell(headers, cells, "选项"),
+                cell(headers, cells, "触发条件"),
+                cell(headers, cells, "建议问题/动作"),
+                cell(headers, cells, "默认处理")
+        );
+    }
+
+    private ConfirmationRequestEntity buildInteractionConfirmation(InteractionPoint interaction,
+                                                                   WorkflowInstanceEntity instance,
+                                                                   WorkflowNodeInstanceEntity node,
+                                                                   WorkflowNodeDefinitionEntity nodeDef,
+                                                                   WorkItemEntity workItem,
+                                                                   String skillName,
+                                                                   ArtifactEntity artifact,
+                                                                   String now) {
+        ConfirmationRequestEntity confirmation = new ConfirmationRequestEntity();
+        confirmation.setId(idGenerator.nextId());
+        confirmation.setRequestType(requestTypeFor(interaction.type()).name());
+        confirmation.setStatus(ConfirmationStatus.PENDING.name());
+        confirmation.setProjectId(workItem.getProjectId());
+        confirmation.setSpaceId(workItem.getSpaceId());
+        confirmation.setIterationId(workItem.getIterationId());
+        confirmation.setWorkItemId(workItem.getId());
+        confirmation.setWorkflowInstanceId(instance.getId());
+        confirmation.setWorkflowNodeInstanceId(node.getId());
+        confirmation.setAgentSessionId(node.getAgentSessionId());
+        confirmation.setRuntimeType(workflowRuntimeType.name());
+        confirmation.setRuntimeSessionId(node.getRuntimeSessionId());
+        confirmation.setSkillName(skillName);
+        confirmation.setTitle("%s %s · %s".formatted(workItem.getCode(), nodeDef.getName(), interaction.name()));
+        confirmation.setContent(nonBlank(interaction.action(), interaction.condition()));
+        confirmation.setContextSummary(buildInteractionSummary(interaction, artifact));
+        confirmation.setOptionsJson(optionsJsonFor(interaction));
+        confirmation.setPriority(Priority.MEDIUM.name());
+        if ("PERMISSION_REQUIRED".equals(interaction.type())) {
+            confirmation.setPriority(Priority.HIGH.name());
+        }
+        confirmation.setCreatedAt(now);
+        confirmation.setUpdatedAt(now);
+        return confirmation;
+    }
+
+    private ConfirmationRequestType requestTypeFor(String interactionType) {
+        return switch (interactionType) {
+            case "ASK_USER" -> ConfirmationRequestType.INPUT_REQUIRED;
+            case "DECISION_REQUIRED" -> ConfirmationRequestType.DECISION;
+            case "PERMISSION_REQUIRED" -> ConfirmationRequestType.PERMISSION;
+            case "ARTIFACT_REVIEW_REQUESTED" -> ConfirmationRequestType.APPROVAL;
+            default -> ConfirmationRequestType.CONFIRM;
+        };
+    }
+
+    private String buildInteractionSummary(InteractionPoint interaction, ArtifactEntity artifact) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Agent 在节点产物中触发了 ")
+                .append(interaction.type())
+                .append(" 交互。");
+        if (artifact != null) {
+            sb.append("关联产物：").append(artifact.getTitle()).append("。");
+        }
+        if (interaction.condition() != null && !interaction.condition().isBlank()) {
+            sb.append("触发条件：").append(interaction.condition()).append("。");
+        }
+        if (interaction.defaultHandling() != null && !interaction.defaultHandling().isBlank()) {
+            sb.append("默认处理：").append(interaction.defaultHandling()).append("。");
+        }
+        return sb.toString();
+    }
+
+    private String optionsJsonFor(InteractionPoint interaction) {
+        List<String> options = splitOptions(interaction.options());
+        if (options.isEmpty() && "DECISION_REQUIRED".equals(interaction.type())) {
+            options = splitOptions(interaction.action());
+        }
+        if (options.isEmpty()) {
+            return null;
+        }
+        return options.stream()
+                .map(value -> "\"" + escapeJson(value) + "\"")
+                .collect(Collectors.joining(",", "[", "]"));
+    }
+
+    private List<String> splitOptions(String value) {
+        if (value == null || value.isBlank()) {
+            return List.of();
+        }
+        String cleaned = value
+                .replace("请用户选择", "")
+                .replace("用户选择", "")
+                .replace("选择", "")
+                .trim();
+        List<String> options = new ArrayList<>();
+        for (String part : cleaned.split("\\s*(?:/|、|，|,|；|;)\\s*")) {
+            String option = part.trim();
+            if (!option.isBlank() && !"-".equals(option)) {
+                options.add(option);
+            }
+        }
+        return options;
+    }
+
+    private List<String> splitMarkdownRow(String row) {
+        String text = row.trim();
+        if (text.startsWith("|")) {
+            text = text.substring(1);
+        }
+        if (text.endsWith("|")) {
+            text = text.substring(0, text.length() - 1);
+        }
+        String[] raw = text.split("\\|", -1);
+        List<String> cells = new ArrayList<>();
+        for (String cell : raw) {
+            cells.add(cell.trim());
+        }
+        return cells;
+    }
+
+    private boolean isSeparatorRow(String row) {
+        if (row == null || !row.trim().startsWith("|")) {
+            return false;
+        }
+        return splitMarkdownRow(row).stream()
+                .allMatch(cell -> cell.matches(":?-{3,}:?"));
+    }
+
+    private String cell(List<String> headers, List<String> cells, String headerName) {
+        Map<String, Integer> index = new LinkedHashMap<>();
+        for (int i = 0; i < headers.size(); i += 1) {
+            index.put(headers.get(i).replace(" ", ""), i);
+        }
+        for (Map.Entry<String, Integer> entry : index.entrySet()) {
+            if (entry.getKey().contains(headerName)) {
+                int position = entry.getValue();
+                return position < cells.size() ? cells.get(position).trim() : "";
+            }
+        }
+        return "";
+    }
+
+    private boolean isTriggered(String value) {
+        String normalized = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+        return normalized.equals("是")
+                || normalized.equals("yes")
+                || normalized.equals("true")
+                || normalized.equals("y")
+                || normalized.equals("triggered")
+                || normalized.equals("需要")
+                || normalized.equals("已触发");
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
+    }
+
+    private String escapeJson(String value) {
+        return value
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"");
     }
 
     private AgentSessionDto findWorkflowSession(WorkflowInstanceEntity instance) {
@@ -499,15 +754,15 @@ public class WorkflowCommandService {
         AgentMessageEntity contextMsg = new AgentMessageEntity();
         contextMsg.setId(idGenerator.nextId());
         contextMsg.setSessionId(sessionId);
-        contextMsg.setRole(MessageRole.USER.name());
+        contextMsg.setRole(MessageRole.SYSTEM.name());
         contextMsg.setContent("""
-                请执行工作流节点：%s
+                工作流正在执行节点：%s
 
                 - 工作项：%s %s
                 - 类型：%s
                 - Skill：%s
 
-                这是工作流代用户发起的节点输入，请基于任务上下文和上游产物生成本节点结果。
+                以下是发送给 Runtime 的节点输入上下文。
 
                 ```text
                 %s
@@ -768,20 +1023,96 @@ public class WorkflowCommandService {
         workItemMapper.update(workItem);
     }
 
-    private String buildInputContext(WorkItemEntity workItem, WorkflowNodeInstanceEntity node) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("Work Item: ").append(workItem.getTitle()).append("\n");
-        sb.append("Type: ").append(workItem.getType()).append("\n");
-        if (workItem.getDescription() != null) {
-            sb.append("Description: ").append(workItem.getDescription()).append("\n");
+    private String buildNodeStatusMessage(SkillRunResult result,
+                                          WorkflowNodeDefinitionEntity nodeDef,
+                                          String skillName,
+                                          ArtifactEntity artifact,
+                                          int pendingInteractionCount) {
+        if (result.success()) {
+            String artifactText = artifact != null ? "，产物：" + artifact.getTitle() : "";
+            if (pendingInteractionCount > 0) {
+                return "已生成 %s（Skill：%s）的节点产物%s，触发 %d 个用户交互点，等待处理。"
+                        .formatted(nodeDef.getName(), skillName, artifactText, pendingInteractionCount);
+            }
+            return "已完成 %s（Skill：%s）%s".formatted(nodeDef.getName(), skillName, artifactText);
         }
+        String reason = result.errorMessage() != null && !result.errorMessage().isBlank()
+                ? "：" + result.errorMessage()
+                : "";
+        return "执行失败 %s（Skill：%s）%s".formatted(nodeDef.getName(), skillName, reason);
+    }
+
+    private String buildInputContext(WorkItemEntity workItem,
+                                     WorkflowNodeInstanceEntity node,
+                                     WorkflowNodeDefinitionEntity nodeDef) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("# 工作流节点执行输入\n\n");
+        sb.append("## 工作项\n");
+        appendField(sb, "ID", workItem.getId());
+        appendField(sb, "编号", workItem.getCode());
+        appendField(sb, "标题", workItem.getTitle());
+        appendField(sb, "类型", workItem.getType());
+        appendField(sb, "状态", workItem.getStatus());
+        appendField(sb, "优先级", workItem.getPriority());
+        appendField(sb, "项目", workItem.getProjectId());
+        appendField(sb, "空间", workItem.getSpaceId());
+        appendField(sb, "迭代", workItem.getIterationId());
+        appendField(sb, "负责人", workItem.getAssigneeUserId());
+        sb.append("- 描述：\n\n");
+        sb.append("```text\n");
+        sb.append(nonBlank(workItem.getDescription(), "暂无描述"));
+        sb.append("\n```\n\n");
+
+        sb.append("## 当前节点\n");
+        appendField(sb, "节点ID", node.getId());
+        appendField(sb, "节点名称", nodeDef.getName());
+        appendField(sb, "节点Key", nodeDef.getNodeKey());
+        appendField(sb, "阶段Key", nonBlank(node.getStageKey(), nodeDef.getStageKey()));
+        appendField(sb, "Skill", nodeDef.getSkillName());
+        appendField(sb, "输入策略", nodeDef.getInputPolicy());
+        appendField(sb, "输出类型", ArtifactType.MARKDOWN.name());
+        appendField(sb, "需要确认", Boolean.TRUE.equals(nodeDef.getRequiredConfirmation()) ? "是" : "否");
+        if (nodeDef.getStageGoal() != null && !nodeDef.getStageGoal().isBlank()) {
+            appendField(sb, "阶段目标", nodeDef.getStageGoal());
+        }
+        sb.append("\n");
+
         if (node.getInputArtifactId() != null) {
             ArtifactEntity input = artifactMapper.findById(node.getInputArtifactId());
             if (input != null && input.getContent() != null) {
-                sb.append("\nPrevious Output:\n").append(input.getContent());
+                sb.append("## 上游产物\n");
+                appendField(sb, "artifactId", input.getId());
+                appendField(sb, "title", input.getTitle());
+                appendField(sb, "type", input.getArtifactType());
+                appendField(sb, "sourceNodeInstanceId", input.getWorkflowNodeInstanceId());
+                sb.append("\n### 上游产物内容\n\n");
+                sb.append("```markdown\n");
+                sb.append(input.getContent());
+                sb.append("\n```\n\n");
             }
+        } else {
+            sb.append("## 上游产物\n");
+            sb.append("无。该节点应基于工作项本身生成结果。\n\n");
         }
+
+        sb.append("## 输出要求\n");
+        sb.append("- 输出必须是一份完整 Markdown 文档。\n");
+        sb.append("- 必须基于上述工作项信息和上游产物，不要只复述 Skill 名称。\n");
+        sb.append("- 如果 Skill 模板包含 Agent 执行路线、Mermaid 流程图、分支建议或用户交互点，请完整输出并结合当前工作项填写。\n");
+        sb.append("- Mermaid 必须使用 Mermaid 11 兼容语法：节点 ID 使用英文，中文放在引号标签里；连线使用 A --> B 或 A -->|label| B，不要使用 A -- \"label\" --> B。\n");
+        sb.append("- 用户交互点类型请使用 ASK_USER、DECISION_REQUIRED、ARTIFACT_REVIEW_REQUESTED、PERMISSION_REQUIRED。\n");
+        sb.append("- 用户交互点表必须包含“是否触发”和“选项”；只有本轮确实需要用户参与时才把“是否触发”填为“是”。\n");
+        sb.append("- 除非工作项明确要求代码审计、源码分析或实现改造，不要读取当前工作目录源码。\n");
+        sb.append("- 如果信息不足，请列出缺口与需要用户确认的问题。\n");
         return sb.toString();
+    }
+
+    private void appendField(StringBuilder sb, String label, String value) {
+        sb.append("- ").append(label).append("：").append(nonBlank(value, "未提供")).append("\n");
+    }
+
+    private String nonBlank(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
     }
 
     private String stageKeyFor(WorkflowNodeDefinitionEntity nodeDef) {

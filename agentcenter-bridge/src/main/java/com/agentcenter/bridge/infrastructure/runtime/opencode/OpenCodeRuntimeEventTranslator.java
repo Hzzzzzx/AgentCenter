@@ -85,7 +85,7 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
             String text = resolvePartText(opencodeSessionId, part, delta);
             if (!text.isEmpty()) {
                 result.add(buildEnvelope(RuntimeEventTypes.CONVERSATION_DELTA, agentSessionId,
-                    opencodeSessionId, payloadNode("assistant_delta", text)));
+                    opencodeSessionId, payloadNode("assistant_delta", text, Map.of("delta", text))));
             }
         } else if ("tool".equals(partType)) {
             result.addAll(translateToolPart(opencodeSessionId, agentSessionId, part));

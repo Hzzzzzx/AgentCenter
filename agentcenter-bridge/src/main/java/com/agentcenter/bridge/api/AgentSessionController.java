@@ -67,4 +67,10 @@ public class AgentSessionController {
         AgentMessageDto created = sessionService.sendMessage(id, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
+
+    @PostMapping("/{id}/cancel")
+    public ResponseEntity<Void> cancelMessage(@PathVariable String id) {
+        sessionService.cancelRuntime(id);
+        return ResponseEntity.noContent().build();
+    }
 }

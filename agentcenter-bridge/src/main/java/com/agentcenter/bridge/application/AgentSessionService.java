@@ -159,6 +159,29 @@ public class AgentSessionService {
         return toMessageDto(entity);
     }
 
+    public void cancelRuntime(String sessionId) {
+        AgentSessionEntity session = sessionMapper.findById(sessionId);
+        if (session == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found: " + sessionId);
+        }
+
+        RuntimeType runtimeType = RuntimeType.valueOf(session.getRuntimeType());
+        if (runtimeType != RuntimeType.MOCK && session.getRuntimeSessionId() != null
+                && !session.getRuntimeSessionId().isBlank()) {
+            runtimeGateway.cancel(runtimeType, session.getRuntimeSessionId());
+        }
+
+        RuntimeEventDto event = new RuntimeEventDto(
+                null, sessionId, session.getWorkItemId(), session.getWorkflowInstanceId(), null,
+                RuntimeEventType.STATUS, RuntimeEventSource.BRIDGE,
+                "{\"status\":\"idle\",\"label\":\"用户已请求暂停当前回复\"}", null);
+        try {
+            runtimeEventService.publishEvent(event);
+        } catch (Exception e) {
+            log.debug("Failed to publish cancel runtime event for {}", sessionId, e);
+        }
+    }
+
     private void dispatchToRuntime(String sessionId, String content) {
         AgentSessionEntity session = sessionMapper.findById(sessionId);
         if (session == null) {
