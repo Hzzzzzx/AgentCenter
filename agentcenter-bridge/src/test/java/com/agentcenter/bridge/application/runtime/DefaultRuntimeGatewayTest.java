@@ -104,7 +104,7 @@ class DefaultRuntimeGatewayTest {
     @Test
     void installSkillCreatesAndTracksOperation() {
         stubOperationCreation();
-        when(provider.installSkill("mySkill", null)).thenReturn("installed_ok");
+        when(provider.installSkill(isNull(), eq("mySkill"), isNull())).thenReturn("installed_ok");
 
         String result = gateway.installSkill(RuntimeType.OPENCODE, "mySkill", null);
 
@@ -121,7 +121,7 @@ class DefaultRuntimeGatewayTest {
     @Test
     void installSkillTracksFailedOperationOnException() {
         stubOperationCreation();
-        when(provider.installSkill("badSkill", null)).thenThrow(new RuntimeException("install failed"));
+        when(provider.installSkill(isNull(), eq("badSkill"), isNull())).thenThrow(new RuntimeException("install failed"));
 
         RuntimeException ex = assertThrows(RuntimeException.class,
                 () -> gateway.installSkill(RuntimeType.OPENCODE, "badSkill", null));
@@ -138,7 +138,7 @@ class DefaultRuntimeGatewayTest {
 
         gateway.deleteSkillFiles(RuntimeType.OPENCODE, "skills/mySkill", "mySkill");
 
-        verify(provider).deleteSkillFiles("skills/mySkill", "mySkill");
+        verify(provider).deleteSkillFiles(isNull(), eq("skills/mySkill"), eq("mySkill"));
         verify(operationService).createOperation(
                 eq("default"), eq("OPENCODE"), eq(RuntimeOperationType.SKILL_DELETE.value()),
                 isNull(), isNull(), isNull(), isNull(), isNull(),
@@ -169,7 +169,7 @@ class DefaultRuntimeGatewayTest {
 
         gateway.refreshMcps(RuntimeType.OPENCODE);
 
-        verify(provider).refreshMcps();
+        verify(provider).refreshMcps(isNull());
         verify(operationService).createOperation(
                 eq("default"), eq("OPENCODE"), eq(RuntimeOperationType.MCP_REFRESH.value()),
                 isNull(), isNull(), isNull(), isNull(), isNull(),
@@ -185,7 +185,7 @@ class DefaultRuntimeGatewayTest {
 
         gateway.writeMcpConfig(RuntimeType.OPENCODE, config);
 
-        verify(provider).writeMcpConfig(config);
+        verify(provider).writeMcpConfig(isNull(), eq(config));
         verify(operationService).createOperation(
                 eq("default"), eq("OPENCODE"), eq(RuntimeOperationType.MCP_WRITE_CONFIG.value()),
                 isNull(), isNull(), isNull(), isNull(), isNull(),
@@ -198,7 +198,7 @@ class DefaultRuntimeGatewayTest {
     void readMcpConfigCreatesAndTracksOperation() {
         stubOperationCreation();
         Map<String, Object> config = Map.of("key", "value");
-        when(provider.readMcpConfig()).thenReturn(config);
+        when(provider.readMcpConfig(isNull())).thenReturn(config);
 
         Map<String, Object> result = gateway.readMcpConfig(RuntimeType.OPENCODE);
 
@@ -214,7 +214,7 @@ class DefaultRuntimeGatewayTest {
     @Test
     void scanSkillsCreatesAndTracksOperation() {
         stubOperationCreation();
-        when(provider.scanSkills()).thenReturn(List.of());
+        when(provider.scanSkills(isNull())).thenReturn(List.of());
 
         var result = gateway.scanSkills(RuntimeType.OPENCODE);
 

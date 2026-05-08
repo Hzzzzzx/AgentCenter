@@ -6,6 +6,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.env.MockEnvironment;
 
 import com.agentcenter.bridge.api.dto.RuntimeSkillDto;
 import com.agentcenter.bridge.application.runtime.RuntimeCapabilities;
@@ -41,7 +42,8 @@ class RuntimeResourceServiceTest {
     void refreshSkillsDelegatesScanToGateway() {
         RuntimeResourceService service = new RuntimeResourceService(
                 STUB_GATEWAY,
-                "/tmp/test-project"
+                "/tmp/test-project",
+                resolver("/tmp/test-project")
         );
 
         var response = service.refreshSkills();
@@ -81,7 +83,8 @@ class RuntimeResourceServiceTest {
 
         RuntimeResourceService service = new RuntimeResourceService(
                 gatewayWithSkill,
-                "/tmp/test-project"
+                "/tmp/test-project",
+                resolver("/tmp/test-project")
         );
 
         var response = service.refreshSkills();
@@ -90,5 +93,9 @@ class RuntimeResourceServiceTest {
         assertThat(response.skills().get(0).name()).isEqualTo("fe-requirement-refine");
         assertThat(response.skills().get(0).description()).isEqualTo("将 FE 需求整理成设计文档");
         assertThat(response.skills().get(0).relativePath()).isEqualTo(".opencode/skills/fe-requirement-refine");
+    }
+
+    private static ProjectRuntimeWorkspaceResolver resolver(String defaultWorkingDirectory) {
+        return new ProjectRuntimeWorkspaceResolver(new MockEnvironment(), defaultWorkingDirectory);
     }
 }
