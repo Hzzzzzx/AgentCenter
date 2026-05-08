@@ -20,13 +20,16 @@ public class RuntimeResourceService {
 
     private final RuntimeGateway runtimeGateway;
     private final String configuredProjectRoot;
+    private final ProjectRuntimeWorkspaceResolver workspaceResolver;
     private final AtomicReference<RuntimeSkillSnapshot> skillSnapshot =
             new AtomicReference<>(new RuntimeSkillSnapshot(null, null, List.of()));
 
     public RuntimeResourceService(RuntimeGateway runtimeGateway,
-                                  @Value("${agentcenter.runtime.project-root:}") String configuredProjectRoot) {
+                                  @Value("${agentcenter.runtime.project-root:}") String configuredProjectRoot,
+                                  ProjectRuntimeWorkspaceResolver workspaceResolver) {
         this.runtimeGateway = runtimeGateway;
         this.configuredProjectRoot = configuredProjectRoot;
+        this.workspaceResolver = workspaceResolver;
     }
 
     public RuntimeSkillRefreshResponse listSkills() {
@@ -40,9 +43,14 @@ public class RuntimeResourceService {
     }
 
     public RuntimeSkillRefreshResponse refreshSkills() {
-        List<RuntimeSkillDto> skills = runtimeGateway.scanSkills(RuntimeType.OPENCODE);
+        return refreshSkills(null);
+    }
+
+    public RuntimeSkillRefreshResponse refreshSkills(String projectId) {
+        Path projectWorkdir = resolveProjectWorkdir(projectId);
+        List<RuntimeSkillDto> skills = runtimeGateway.scanSkills(RuntimeType.OPENCODE, projectWorkdir);
         OffsetDateTime refreshedAt = OffsetDateTime.now();
-        String projectRootStr = resolveProjectRoot().toString();
+        String projectRootStr = projectWorkdir.toString();
         RuntimeSkillSnapshot snapshot = new RuntimeSkillSnapshot(
                 refreshedAt,
                 projectRootStr,
@@ -50,7 +58,7 @@ public class RuntimeResourceService {
         );
         skillSnapshot.set(snapshot);
         runtimeGateway.refreshSkills(RuntimeType.OPENCODE, snapshot);
-        String skillsPath = runtimeGateway.getSkillsRootPath(RuntimeType.OPENCODE);
+        String skillsPath = runtimeGateway.getSkillsRootPath(RuntimeType.OPENCODE, projectWorkdir);
         return toResponse(refreshedAt, projectRootStr, skillsPath, skills);
     }
 
@@ -83,5 +91,12 @@ public class RuntimeResourceService {
             return userDir;
         }
         return userDir;
+    }
+
+    private Path resolveProjectWorkdir(String projectId) {
+        if (projectId != null && !projectId.isBlank()) {
+            return workspaceResolver.resolve(projectId);
+        }
+        return resolveProjectRoot();
     }
 }

@@ -54,6 +54,7 @@ public class SkillRegistryService {
     private final IdGenerator idGenerator;
     private final RuntimeGateway runtimeGateway;
     private final RuntimeResourceService runtimeResourceService;
+    private final ProjectRuntimeWorkspaceResolver workspaceResolver;
 
     public SkillRegistryService(RuntimeSkillMapper skillMapper,
                                 RuntimeSkillVersionMapper versionMapper,
@@ -61,7 +62,8 @@ public class SkillRegistryService {
                                 WorkflowMapper workflowMapper,
                                 IdGenerator idGenerator,
                                 RuntimeGateway runtimeGateway,
-                                RuntimeResourceService runtimeResourceService) {
+                                RuntimeResourceService runtimeResourceService,
+                                ProjectRuntimeWorkspaceResolver workspaceResolver) {
         this.skillMapper = skillMapper;
         this.versionMapper = versionMapper;
         this.auditService = auditService;
@@ -69,6 +71,7 @@ public class SkillRegistryService {
         this.idGenerator = idGenerator;
         this.runtimeGateway = runtimeGateway;
         this.runtimeResourceService = runtimeResourceService;
+        this.workspaceResolver = workspaceResolver;
     }
 
     public List<RuntimeSkillDetailDto> listSkills(String projectId) {
@@ -186,8 +189,8 @@ public class SkillRegistryService {
                 existing.setValidationMessage(null);
                 skillMapper.update(existing);
 
-                installViaGateway(existing.getName(), skillRoot);
-                runtimeResourceService.refreshSkills();
+                installViaGateway(projectId, existing.getName(), skillRoot);
+                runtimeResourceService.refreshSkills(projectId);
 
                 auditService.recordAudit(projectId, "SKILL", skillId, "UPDATE_ZIP",
                         "SUCCESS", "Updated skill ZIP", null, createdBy);
@@ -225,7 +228,8 @@ public class SkillRegistryService {
         }
 
         try {
-            runtimeGateway.deleteSkillFiles(RuntimeType.OPENCODE, existing.getRelativePath(), existing.getName());
+            runtimeGateway.deleteSkillFiles(RuntimeType.OPENCODE, workspaceResolver.resolve(projectId),
+                    existing.getRelativePath(), existing.getName());
         } catch (Exception e) {
             auditService.recordAudit(projectId, "SKILL", skillId, "DELETE",
                     "FAILED", "Failed to delete installed skill files: " + e.getMessage(), null, createdBy);
@@ -234,13 +238,13 @@ public class SkillRegistryService {
         }
 
         skillMapper.deleteById(skillId);
-        runtimeResourceService.refreshSkills();
+        runtimeResourceService.refreshSkills(projectId);
         auditService.recordAudit(projectId, "SKILL", skillId, "DELETE",
                 "SUCCESS", "Deleted skill", null, createdBy);
     }
 
     public RuntimeSkillRefreshResponse refreshSkills(String projectId) {
-        RuntimeSkillRefreshResponse response = runtimeResourceService.refreshSkills();
+        RuntimeSkillRefreshResponse response = runtimeResourceService.refreshSkills(projectId);
         scanAndSyncSkillsToDb(projectId, response.skills());
         return response;
     }
@@ -392,7 +396,8 @@ public class SkillRegistryService {
         String id = idGenerator.nextId();
         String now = LocalDateTime.now().format(SQLITE_DATETIME);
 
-        String relativePath = runtimeGateway.installSkill(RuntimeType.OPENCODE, skillName, tempDir);
+        String relativePath = runtimeGateway.installSkill(RuntimeType.OPENCODE,
+                workspaceResolver.resolve(projectId), skillName, tempDir);
 
         RuntimeSkillEntity entity = new RuntimeSkillEntity();
         entity.setId(id);
@@ -414,7 +419,7 @@ public class SkillRegistryService {
 
         skillMapper.insert(entity);
 
-        runtimeResourceService.refreshSkills();
+        runtimeResourceService.refreshSkills(projectId);
 
         auditService.recordAudit(projectId, "SKILL", id, "UPLOAD",
                 "SUCCESS", "Created new skill", null, createdBy);
@@ -433,7 +438,7 @@ public class SkillRegistryService {
         RuntimeSkillVersionEntity version = createVersion(existing.getId(), checksum, totalSize,
                 fileCount, existing.getRelativePath(), skillMdSummary, createdBy);
 
-        String newRelativePath = installViaGateway(existing.getName(), tempDir);
+        String newRelativePath = installViaGateway(projectId, existing.getName(), tempDir);
 
         existing.setChecksum(checksum);
         existing.setCurrentVersionId(version.getId());
@@ -444,7 +449,7 @@ public class SkillRegistryService {
         }
         skillMapper.update(existing);
 
-        runtimeResourceService.refreshSkills();
+        runtimeResourceService.refreshSkills(projectId);
 
         auditService.recordAudit(projectId, "SKILL", existing.getId(), "UPLOAD",
                 "SUCCESS", "Updated existing skill (new version)", null, createdBy);
@@ -474,8 +479,9 @@ public class SkillRegistryService {
         return version;
     }
 
-    private String installViaGateway(String skillName, Path sourceDir) {
-        return runtimeGateway.installSkill(RuntimeType.OPENCODE, skillName, sourceDir);
+    private String installViaGateway(String projectId, String skillName, Path sourceDir) {
+        return runtimeGateway.installSkill(RuntimeType.OPENCODE,
+                workspaceResolver.resolve(projectId), skillName, sourceDir);
     }
 
     private Path resolveSkillPackageRoot(Path extractedDir) throws IOException {
