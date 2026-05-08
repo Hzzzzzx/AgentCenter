@@ -3,7 +3,9 @@ package com.agentcenter.bridge.application;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.AbstractExecutorService;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -18,10 +20,40 @@ public class TestWorkflowExecutorConfig {
 
     public static final List<String> CAPTURED_SKILL_NAMES = new CopyOnWriteArrayList<>();
     public static final List<String> CAPTURED_INPUT_CONTEXTS = new CopyOnWriteArrayList<>();
+    private static final AtomicReference<String> CUSTOM_SKILL_OUTPUT = new AtomicReference<>();
+    private static final AtomicReference<SkillRunResult> CUSTOM_SKILL_RESULT = new AtomicReference<>();
+    private static final ConcurrentHashMap<String, String> SKILL_OUTPUT_OVERRIDES = new ConcurrentHashMap<>();
 
     public static void clearCapturedRuntimeInputs() {
         CAPTURED_SKILL_NAMES.clear();
         CAPTURED_INPUT_CONTEXTS.clear();
+        CUSTOM_SKILL_OUTPUT.set(null);
+        CUSTOM_SKILL_RESULT.set(null);
+        SKILL_OUTPUT_OVERRIDES.clear();
+    }
+
+    public static void setNextSkillOutput(String output) {
+        CUSTOM_SKILL_OUTPUT.set(output);
+    }
+
+    public static void clearCustomSkillOutput() {
+        CUSTOM_SKILL_OUTPUT.set(null);
+    }
+
+    public static void setNextSkillResult(SkillRunResult result) {
+        CUSTOM_SKILL_RESULT.set(result);
+    }
+
+    public static void clearCustomSkillResult() {
+        CUSTOM_SKILL_RESULT.set(null);
+    }
+
+    public static void setSkillOutputForName(String skillName, String output) {
+        SKILL_OUTPUT_OVERRIDES.put(skillName, output);
+    }
+
+    public static void clearSkillOutputOverrides() {
+        SKILL_OUTPUT_OVERRIDES.clear();
     }
 
     @Bean
@@ -77,6 +109,22 @@ public class TestWorkflowExecutorConfig {
             public SkillRunResult runSkill(RuntimeType rt, String sessionId, String skillName, String inputContext) {
                 CAPTURED_SKILL_NAMES.add(skillName);
                 CAPTURED_INPUT_CONTEXTS.add(inputContext);
+
+                SkillRunResult customResult = CUSTOM_SKILL_RESULT.getAndSet(null);
+                if (customResult != null) {
+                    return customResult;
+                }
+
+                String customOutput = CUSTOM_SKILL_OUTPUT.getAndSet(null);
+                if (customOutput != null) {
+                    return new SkillRunResult(true, customOutput, "MARKDOWN", null, true);
+                }
+
+                String namedOverride = SKILL_OUTPUT_OVERRIDES.get(skillName);
+                if (namedOverride != null) {
+                    return new SkillRunResult(true, namedOverride, "MARKDOWN", null, true);
+                }
+
                 String output = switch (skillName) {
                     case "fe.requirement.refine", "prd-desingn" -> """
                             # PRD
@@ -136,6 +184,10 @@ public class TestWorkflowExecutorConfig {
             public java.util.Map<String, Object> readMcpConfig(RuntimeType rt) { return java.util.Map.of(); }
             @Override
             public void writeMcpConfig(RuntimeType rt, java.util.Map<String, Object> config) {}
+
+            @Override
+            public void registerWorkflowNodeContext(RuntimeType rt, String agentSessionId, String workItemId,
+                                                      String workflowInstanceId, String workflowNodeInstanceId) {}
         };
     }
 }

@@ -67,7 +67,7 @@ class M1ConfirmationAdvanceIntegrationTest {
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.workflowInstance.status").value("RUNNING"))
+                .andExpect(jsonPath("$.workflowInstance.status").value("BLOCKED"))
                 .andExpect(jsonPath("$.confirmation").exists())
                 .andExpect(jsonPath("$.confirmation.id").isNotEmpty())
                 .andExpect(jsonPath("$.artifacts").isArray())

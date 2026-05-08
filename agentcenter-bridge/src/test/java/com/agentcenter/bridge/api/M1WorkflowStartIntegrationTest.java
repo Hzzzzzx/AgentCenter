@@ -72,7 +72,7 @@ class M1WorkflowStartIntegrationTest {
                                 .content(requestBody))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.workflowInstance").exists())
-                .andExpect(jsonPath("$.workflowInstance.status").value("RUNNING"))
+                .andExpect(jsonPath("$.workflowInstance.status").value("BLOCKED"))
                 .andExpect(jsonPath("$.workflowInstance.nodes").isArray())
                 .andExpect(jsonPath("$.workflowInstance.nodes.length()").value(3))
                 .andExpect(jsonPath("$.artifacts").isArray())
@@ -135,7 +135,7 @@ class M1WorkflowStartIntegrationTest {
         mockMvc.perform(get("/api/workflow-instances/" + instanceId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(instanceId))
-                .andExpect(jsonPath("$.status").value("RUNNING"));
+                .andExpect(jsonPath("$.status").value("BLOCKED"));
     }
 
     @Test
