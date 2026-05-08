@@ -17,6 +17,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
@@ -39,19 +40,22 @@ public class McpRegistryService {
     private final IdGenerator idGenerator;
     private final ObjectMapper objectMapper;
     private final RuntimeGateway runtimeGateway;
+    private final ProjectRuntimeWorkspaceResolver workspaceResolver;
 
     public McpRegistryService(ProjectMcpServerMapper mcpServerMapper,
                               ProjectMcpToolSnapshotMapper toolSnapshotMapper,
                               RuntimeResourceAuditService auditService,
                               IdGenerator idGenerator,
                               ObjectMapper objectMapper,
-                              RuntimeGateway runtimeGateway) {
+                              RuntimeGateway runtimeGateway,
+                              ProjectRuntimeWorkspaceResolver workspaceResolver) {
         this.mcpServerMapper = mcpServerMapper;
         this.toolSnapshotMapper = toolSnapshotMapper;
         this.auditService = auditService;
         this.idGenerator = idGenerator;
         this.objectMapper = objectMapper;
         this.runtimeGateway = runtimeGateway;
+        this.workspaceResolver = workspaceResolver;
     }
 
     public List<ProjectMcpServerDto> listMcps(String projectId) {
@@ -70,7 +74,7 @@ public class McpRegistryService {
     public List<ProjectMcpServerDto> importMcpConfig(String projectId) {
         Map<String, Object> config;
         try {
-            config = runtimeGateway.readMcpConfig(RuntimeType.OPENCODE);
+            config = runtimeGateway.readMcpConfig(RuntimeType.OPENCODE, workspaceResolver.resolve(projectId));
         } catch (Exception e) {
             log.error("Failed to read MCP config for project {}", projectId, e);
             auditService.recordAudit(projectId, "MCP", "", "REFRESH", "FAILED",
@@ -337,8 +341,9 @@ public class McpRegistryService {
 
             root.put("mcp", servers);
 
-            runtimeGateway.writeMcpConfig(RuntimeType.OPENCODE, root);
-            runtimeGateway.refreshMcps(RuntimeType.OPENCODE);
+            Path projectWorkdir = workspaceResolver.resolve(projectId);
+            runtimeGateway.writeMcpConfig(RuntimeType.OPENCODE, projectWorkdir, root);
+            runtimeGateway.refreshMcps(RuntimeType.OPENCODE, projectWorkdir);
 
             auditService.recordAudit(projectId, "MCP", "", "SYNC_OPENCODE_CONFIG", "SUCCESS",
                     "Wrote " + servers.size() + " enabled MCP server(s)", null, null);

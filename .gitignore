@@ -55,3 +55,4 @@ target/
 
 # Maven
 .mvn/wrapper/maven-wrapper.jar
+.gitnexus
