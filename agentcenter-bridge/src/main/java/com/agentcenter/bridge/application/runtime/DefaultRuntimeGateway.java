@@ -3,23 +3,32 @@ package com.agentcenter.bridge.application.runtime;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 import org.springframework.stereotype.Service;
 
 import com.agentcenter.bridge.api.dto.RuntimeSkillDto;
+import com.agentcenter.bridge.domain.runtime.RuntimeOperationStatus;
+import com.agentcenter.bridge.domain.runtime.RuntimeOperationType;
 import com.agentcenter.bridge.domain.runtime.RuntimeType;
+import com.agentcenter.bridge.infrastructure.persistence.entity.RuntimeOperationEntity;
 
 /**
  * Default gateway implementation. Selects provider by RuntimeType via registry.
+ * Tracks mutating operations through RuntimeOperationService.
  */
 @Service
 public class DefaultRuntimeGateway implements RuntimeGateway {
 
     private final RuntimeProviderRegistry registry;
+    private final RuntimeOperationService operationService;
 
-    public DefaultRuntimeGateway(RuntimeProviderRegistry registry) {
+    public DefaultRuntimeGateway(RuntimeProviderRegistry registry, RuntimeOperationService operationService) {
         this.registry = registry;
+        this.operationService = operationService;
     }
+
+    // --- Untracked methods (session/conversation/metadata) ---
 
     @Override
     public String createSession(RuntimeType runtimeType, String workItemId, String agentSessionId) {
@@ -47,16 +56,6 @@ public class DefaultRuntimeGateway implements RuntimeGateway {
     }
 
     @Override
-    public void refreshSkills(RuntimeType runtimeType, RuntimeSkillSnapshot snapshot) {
-        registry.getProvider(runtimeType).refreshSkills(snapshot);
-    }
-
-    @Override
-    public void refreshMcps(RuntimeType runtimeType) {
-        registry.getProvider(runtimeType).refreshMcps();
-    }
-
-    @Override
     public RuntimeDescriptor describe(RuntimeType runtimeType) {
         return registry.getProvider(runtimeType).descriptor();
     }
@@ -67,32 +66,94 @@ public class DefaultRuntimeGateway implements RuntimeGateway {
     }
 
     @Override
-    public List<RuntimeSkillDto> scanSkills(RuntimeType runtimeType) {
-        return registry.getProvider(runtimeType).scanSkills();
-    }
-
-    @Override
-    public String installSkill(RuntimeType runtimeType, String skillName, Path sourceDir) {
-        return registry.getProvider(runtimeType).installSkill(skillName, sourceDir);
-    }
-
-    @Override
-    public void deleteSkillFiles(RuntimeType runtimeType, String relativePath, String skillName) {
-        registry.getProvider(runtimeType).deleteSkillFiles(relativePath, skillName);
-    }
-
-    @Override
     public String getSkillsRootPath(RuntimeType runtimeType) {
         return registry.getProvider(runtimeType).getSkillsRootPath();
     }
 
+    // --- Tracked methods (operation lifecycle) ---
+
     @Override
-    public Map<String, Object> readMcpConfig(RuntimeType runtimeType) {
-        return registry.getProvider(runtimeType).readMcpConfig();
+    public String installSkill(RuntimeType runtimeType, String skillName, Path sourceDir) {
+        return trackOperation(
+                RuntimeOperationType.SKILL_INSTALL.value(), "skill", skillName,
+                runtimeType, () -> registry.getProvider(runtimeType).installSkill(skillName, sourceDir));
+    }
+
+    @Override
+    public void deleteSkillFiles(RuntimeType runtimeType, String relativePath, String skillName) {
+        trackVoidOperation(
+                RuntimeOperationType.SKILL_DELETE.value(), "skill", skillName,
+                runtimeType, () -> registry.getProvider(runtimeType).deleteSkillFiles(relativePath, skillName));
+    }
+
+    @Override
+    public void refreshSkills(RuntimeType runtimeType, RuntimeSkillSnapshot snapshot) {
+        trackVoidOperation(
+                RuntimeOperationType.SKILL_SCAN.value(), "skill", null,
+                runtimeType, () -> registry.getProvider(runtimeType).refreshSkills(snapshot));
+    }
+
+    @Override
+    public void refreshMcps(RuntimeType runtimeType) {
+        trackVoidOperation(
+                RuntimeOperationType.MCP_REFRESH.value(), "mcp", "mcp_config",
+                runtimeType, () -> registry.getProvider(runtimeType).refreshMcps());
     }
 
     @Override
     public void writeMcpConfig(RuntimeType runtimeType, Map<String, Object> config) {
-        registry.getProvider(runtimeType).writeMcpConfig(config);
+        trackVoidOperation(
+                RuntimeOperationType.MCP_WRITE_CONFIG.value(), "mcp", "mcp_config",
+                runtimeType, () -> registry.getProvider(runtimeType).writeMcpConfig(config));
+    }
+
+    @Override
+    public Map<String, Object> readMcpConfig(RuntimeType runtimeType) {
+        return trackOperation(
+                RuntimeOperationType.MCP_READ_CONFIG.value(), "mcp", "mcp_config",
+                runtimeType, () -> registry.getProvider(runtimeType).readMcpConfig());
+    }
+
+    @Override
+    public List<RuntimeSkillDto> scanSkills(RuntimeType runtimeType) {
+        return trackOperation(
+                RuntimeOperationType.SKILL_SCAN.value(), "skill", null,
+                runtimeType, () -> registry.getProvider(runtimeType).scanSkills());
+    }
+
+    // --- Operation tracking helpers ---
+
+    // TODO(P6): pass real projectId from callers via RuntimeGateway interface change
+    private static final String DEFAULT_PROJECT = "default";
+
+    private <T> T trackOperation(String operationType, String resourceType, String resourceId,
+                                  RuntimeType runtimeType, Supplier<T> action) {
+        RuntimeOperationEntity op = operationService.createOperation(
+                DEFAULT_PROJECT, runtimeType.name(), operationType, null, null, null, null, null,
+                null, null, null, resourceType, resourceId, null, null, "system");
+        operationService.transition(op.getId(), RuntimeOperationStatus.DISPATCHING);
+        try {
+            T result = action.get();
+            operationService.transition(op.getId(), RuntimeOperationStatus.SUCCEEDED);
+            return result;
+        } catch (Exception e) {
+            operationService.transitionToFailed(op.getId(), "PROVIDER_ERROR", e.getMessage());
+            throw e;
+        }
+    }
+
+    private void trackVoidOperation(String operationType, String resourceType, String resourceId,
+                                     RuntimeType runtimeType, Runnable action) {
+        RuntimeOperationEntity op = operationService.createOperation(
+                DEFAULT_PROJECT, runtimeType.name(), operationType, null, null, null, null, null,
+                null, null, null, resourceType, resourceId, null, null, "system");
+        operationService.transition(op.getId(), RuntimeOperationStatus.DISPATCHING);
+        try {
+            action.run();
+            operationService.transition(op.getId(), RuntimeOperationStatus.SUCCEEDED);
+        } catch (Exception e) {
+            operationService.transitionToFailed(op.getId(), "PROVIDER_ERROR", e.getMessage());
+            throw e;
+        }
     }
 }

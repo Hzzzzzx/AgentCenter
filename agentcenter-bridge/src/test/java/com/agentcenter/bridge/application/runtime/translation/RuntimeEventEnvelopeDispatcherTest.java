@@ -22,6 +22,7 @@ class RuntimeEventEnvelopeDispatcherTest {
     private AssistantMessageProjector projector;
     private LegacyRuntimeEventBridge legacyBridge;
     private RuntimeEventService eventService;
+    private RuntimeOperationEventHandler operationHandler;
     private RuntimeEventEnvelopeDispatcher dispatcher;
 
     @BeforeEach
@@ -29,7 +30,8 @@ class RuntimeEventEnvelopeDispatcherTest {
         projector = mock(AssistantMessageProjector.class);
         legacyBridge = mock(LegacyRuntimeEventBridge.class);
         eventService = mock(RuntimeEventService.class);
-        dispatcher = new RuntimeEventEnvelopeDispatcher(legacyBridge, projector, eventService);
+        operationHandler = mock(RuntimeOperationEventHandler.class);
+        dispatcher = new RuntimeEventEnvelopeDispatcher(legacyBridge, projector, eventService, operationHandler);
     }
 
     private RuntimeEventEnvelope envelope(String type) {
@@ -67,6 +69,7 @@ class RuntimeEventEnvelopeDispatcherTest {
         verify(projector, times(2)).onEnvelope(any(RuntimeEventEnvelope.class));
         verify(legacyBridge, times(2)).toLegacyEvent(any(RuntimeEventEnvelope.class));
         verify(eventService, times(2)).publishEvent(any(RuntimeEventDto.class));
+        verify(operationHandler, times(2)).onEnvelope(any(RuntimeEventEnvelope.class));
     }
 
     @Test
@@ -103,8 +106,24 @@ class RuntimeEventEnvelopeDispatcherTest {
     }
 
     @Test
+    void continuesOnOperationHandlerError() {
+        RuntimeEventEnvelope env1 = envelope(RuntimeEventTypes.CONVERSATION_DELTA);
+        RuntimeEventDto dto1 = legacyDto("agent_ses_1");
+
+        when(legacyBridge.toLegacyEvent(env1)).thenReturn(dto1);
+        doThrow(new RuntimeException("operation handler failed")).when(operationHandler).onEnvelope(env1);
+
+        dispatcher.dispatch(List.of(env1));
+
+        verify(operationHandler).onEnvelope(env1);
+        verify(projector).onEnvelope(env1);
+        verify(eventService).publishEvent(dto1);
+    }
+
+    @Test
     void emptyEnvelopeListDoesNothing() {
         dispatcher.dispatch(List.of());
         verifyNoInteractions(projector, legacyBridge, eventService);
+        verifyNoInteractions(operationHandler);
     }
 }

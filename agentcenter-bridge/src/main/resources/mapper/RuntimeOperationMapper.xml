@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.agentcenter.bridge.infrastructure.persistence.mapper.RuntimeOperationMapper">
+
+    <sql id="allColumns">
+        id, project_id, runtime_type, operation_type, status,
+        idempotency_key, message_id, correlation_id,
+        agent_session_id, runtime_session_id,
+        work_item_id, workflow_instance_id, workflow_node_instance_id,
+        resource_type, resource_id,
+        command_json, ack_json,
+        last_event_type, last_event_id,
+        external_status, external_operation_id,
+        error_code, error_message,
+        deadline_at, started_at, completed_at,
+        created_by, created_at, updated_at
+    </sql>
+
+    <insert id="insert">
+        INSERT INTO runtime_operation (
+            id, project_id, runtime_type, operation_type, status,
+            idempotency_key, message_id, correlation_id,
+            agent_session_id, runtime_session_id,
+            work_item_id, workflow_instance_id, workflow_node_instance_id,
+            resource_type, resource_id,
+            command_json, ack_json,
+            last_event_type, last_event_id,
+            external_status, external_operation_id,
+            error_code, error_message,
+            deadline_at, started_at, completed_at,
+            created_by, created_at, updated_at
+        ) VALUES (
+            #{id}, #{projectId}, #{runtimeType}, #{operationType}, #{status},
+            #{idempotencyKey}, #{messageId}, #{correlationId},
+            #{agentSessionId}, #{runtimeSessionId},
+            #{workItemId}, #{workflowInstanceId}, #{workflowNodeInstanceId},
+            #{resourceType}, #{resourceId},
+            #{commandJson}, #{ackJson},
+            #{lastEventType}, #{lastEventId},
+            #{externalStatus}, #{externalOperationId},
+            #{errorCode}, #{errorMessage},
+            #{deadlineAt}, #{startedAt}, #{completedAt},
+            #{createdBy}, #{createdAt}, #{updatedAt}
+        )
+    </insert>
+
+    <select id="findById" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.RuntimeOperationEntity">
+        SELECT <include refid="allColumns"/>
+        FROM runtime_operation WHERE id = #{id}
+    </select>
+
+    <select id="findByIdempotencyKey" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.RuntimeOperationEntity">
+        SELECT <include refid="allColumns"/>
+        FROM runtime_operation
+        WHERE project_id = #{projectId}
+          AND runtime_type = #{runtimeType}
+          AND operation_type = #{operationType}
+          AND idempotency_key = #{idempotencyKey}
+    </select>
+
+    <select id="findByStatus" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.RuntimeOperationEntity">
+        SELECT <include refid="allColumns"/>
+        FROM runtime_operation
+        WHERE status = #{status}
+        ORDER BY created_at DESC
+    </select>
+
+    <select id="findStaleNonTerminal" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.RuntimeOperationEntity">
+        SELECT <include refid="allColumns"/>
+        FROM runtime_operation
+        WHERE status IN ('CREATED', 'DISPATCHING', 'ACCEPTED', 'IN_PROGRESS')
+          AND deadline_at &lt; #{now}
+        ORDER BY deadline_at ASC
+    </select>
+
+    <update id="updateStatus">
+        UPDATE runtime_operation
+        SET status = #{status}, updated_at = #{updatedAt}
+        WHERE id = #{id}
+    </update>
+
+    <update id="update">
+        UPDATE runtime_operation
+        SET status = #{status},
+            idempotency_key = #{idempotencyKey},
+            message_id = #{messageId},
+            correlation_id = #{correlationId},
+            agent_session_id = #{agentSessionId},
+            runtime_session_id = #{runtimeSessionId},
+            work_item_id = #{workItemId},
+            workflow_instance_id = #{workflowInstanceId},
+            workflow_node_instance_id = #{workflowNodeInstanceId},
+            resource_type = #{resourceType},
+            resource_id = #{resourceId},
+            command_json = #{commandJson},
+            ack_json = #{ackJson},
+            last_event_type = #{lastEventType},
+            last_event_id = #{lastEventId},
+            external_status = #{externalStatus},
+            external_operation_id = #{externalOperationId},
+            error_code = #{errorCode},
+            error_message = #{errorMessage},
+            deadline_at = #{deadlineAt},
+            started_at = #{startedAt},
+            completed_at = #{completedAt},
+            updated_at = #{updatedAt}
+        WHERE id = #{id}
+    </update>
+
+</mapper>

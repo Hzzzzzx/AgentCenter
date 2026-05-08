@@ -16,7 +16,7 @@ class FlywayMigrationTest {
     private JdbcTemplate jdbcTemplate;
 
     @Test
-    void allFifteenTablesExist() {
+    void allSixteenTablesExist() {
         List<String> expectedTables = List.of(
                 "user_account", "project_member", "work_item",
                 "workflow_definition", "workflow_node_definition",
@@ -24,7 +24,8 @@ class FlywayMigrationTest {
                 "agent_session", "agent_message",
                 "runtime_event", "artifact",
                 "confirmation_request", "confirmation_action",
-                "skill_definition", "outbox_event"
+                "skill_definition", "outbox_event",
+                "runtime_operation"
         );
 
         for (String table : expectedTables) {

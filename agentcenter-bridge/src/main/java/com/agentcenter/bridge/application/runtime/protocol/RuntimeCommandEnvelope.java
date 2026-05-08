@@ -22,6 +22,10 @@ public record RuntimeCommandEnvelope(
     JsonNode payload,
     OffsetDateTime createdAt
 ) {
+    // TODO(P5-gap): operationId/idempotencyKey are null here. When WebSocket runtime is integrated,
+    // the gateway should create a RuntimeOperation first and pass the operationId through the
+    // provider → transport → command chain so ack/event can correlate back to the operation.
+    // Current sync providers (HTTP/SSE) complete synchronously, so gateway-level tracking suffices.
     public static RuntimeCommandEnvelope of(String type, RuntimeType runtimeType, String runtimeSessionId, JsonNode payload) {
         return new RuntimeCommandEnvelope(
             RuntimeEnvelopeKind.COMMAND, "agentcenter.runtime.v1", type,
