@@ -21,4 +21,5 @@ public final class RuntimeEventTypes {
     public static final String MCP_CONFIG_UPDATED = "mcp.config.updated";
     public static final String MCP_REFRESH_COMPLETED = "mcp.refresh.completed";
     public static final String MCP_REFRESH_FAILED = "mcp.refresh.failed";
+    public static final String PROCESS_TRACE = "process.trace";
 }

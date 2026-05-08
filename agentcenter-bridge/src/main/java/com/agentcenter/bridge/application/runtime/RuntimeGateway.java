@@ -52,6 +52,9 @@ public interface RuntimeGateway {
         writeMcpConfig(runtimeType, config);
     }
 
+    void registerWorkflowNodeContext(RuntimeType runtimeType, String agentSessionId, String workItemId,
+                                      String workflowInstanceId, String workflowNodeInstanceId);
+
     default void refreshMcps(RuntimeType runtimeType, Path projectWorkdir) {
         refreshMcps(runtimeType);
     }

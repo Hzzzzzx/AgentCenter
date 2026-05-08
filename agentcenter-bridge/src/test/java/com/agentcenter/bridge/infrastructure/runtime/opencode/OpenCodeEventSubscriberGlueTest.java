@@ -105,9 +105,12 @@ class OpenCodeEventSubscriberGlueTest {
         invokeNormalizeAndPublish(json);
 
         verify(dispatcher).dispatch(argThat(envelopes ->
-            envelopes != null && envelopes.size() == 2
+            envelopes != null && envelopes.size() == 3
             && RuntimeEventTypes.RUNTIME_STATUS_CHANGED.equals(envelopes.get(0).type())
-            && RuntimeEventTypes.CONVERSATION_COMPLETED.equals(envelopes.get(1).type())
+            && RuntimeEventTypes.PROCESS_TRACE.equals(envelopes.get(1).type())
+            && "node_status".equals(envelopes.get(1).payload().path("kind").asText())
+            && "completed".equals(envelopes.get(1).payload().path("status").asText())
+            && RuntimeEventTypes.CONVERSATION_COMPLETED.equals(envelopes.get(2).type())
         ));
     }
 

@@ -307,6 +307,12 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         mcpFileService.writeMcpConfig(projectWorkdir, config);
     }
 
+    @Override
+    public void registerWorkflowNodeContext(String agentSessionId, String workItemId,
+                                              String workflowInstanceId, String workflowNodeInstanceId) {
+        eventSubscriber.registerWorkflowContext(agentSessionId, workItemId, workflowInstanceId, workflowNodeInstanceId);
+    }
+
     @PreDestroy
     public void destroy() {
         eventSubscriber.shutdown();

@@ -36,6 +36,8 @@ class RuntimeResourceServiceTest {
         @Override public java.util.Map<String, Object> readMcpConfig(RuntimeType rt) { return java.util.Map.of(); }
         @Override public void writeMcpConfig(RuntimeType rt, java.util.Map<String, Object> config) {}
         @Override public String getSkillsRootPath(RuntimeType rt) { return "/tmp/test/.opencode/skills"; }
+        @Override public void registerWorkflowNodeContext(RuntimeType rt, String agentSessionId, String workItemId,
+                                                            String workflowInstanceId, String workflowNodeInstanceId) {}
     };
 
     @Test
@@ -79,6 +81,8 @@ class RuntimeResourceServiceTest {
             @Override public java.util.Map<String, Object> readMcpConfig(RuntimeType rt) { return java.util.Map.of(); }
             @Override public void writeMcpConfig(RuntimeType rt, java.util.Map<String, Object> config) {}
             @Override public String getSkillsRootPath(RuntimeType rt) { return "/tmp/test/.opencode/skills"; }
+            @Override public void registerWorkflowNodeContext(RuntimeType rt, String agentSessionId, String workItemId,
+                                                                String workflowInstanceId, String workflowNodeInstanceId) {}
         };
 
         RuntimeResourceService service = new RuntimeResourceService(

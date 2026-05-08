@@ -151,4 +151,10 @@ public class OpenCodeRuntimeProvider implements RuntimeProvider {
     public void writeMcpConfig(Path projectWorkdir, Map<String, Object> config) {
         adapter.writeMcpConfig(projectWorkdir, config);
     }
+
+    @Override
+    public void registerWorkflowNodeContext(String agentSessionId, String workItemId,
+                                              String workflowInstanceId, String workflowNodeInstanceId) {
+        adapter.registerWorkflowNodeContext(agentSessionId, workItemId, workflowInstanceId, workflowNodeInstanceId);
+    }
 }

@@ -9,4 +9,6 @@ public interface ConversationRuntimePort {
     SkillRunResult runSkill(String sessionId, String skillName, String inputContext);
     void sendMessage(String sessionId, String userMessage);
     void cancel(String sessionId);
+    default void registerWorkflowNodeContext(String agentSessionId, String workItemId,
+                                               String workflowInstanceId, String workflowNodeInstanceId) {}
 }

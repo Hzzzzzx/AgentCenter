@@ -145,6 +145,13 @@ public class DefaultRuntimeGateway implements RuntimeGateway {
     }
 
     @Override
+    public void registerWorkflowNodeContext(RuntimeType runtimeType, String agentSessionId, String workItemId,
+                                              String workflowInstanceId, String workflowNodeInstanceId) {
+        registry.getProvider(runtimeType).registerWorkflowNodeContext(
+                agentSessionId, workItemId, workflowInstanceId, workflowNodeInstanceId);
+    }
+
+    @Override
     public List<RuntimeSkillDto> scanSkills(RuntimeType runtimeType) {
         return scanSkills(runtimeType, null);
     }

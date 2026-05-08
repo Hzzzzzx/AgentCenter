@@ -40,6 +40,7 @@ public class LegacyRuntimeEventBridge {
             case RuntimeEventTypes.PERMISSION_REQUESTED -> RuntimeEventType.PERMISSION_REQUIRED;
             case RuntimeEventTypes.RUNTIME_STATUS_CHANGED -> RuntimeEventType.STATUS;
             case RuntimeEventTypes.RUNTIME_ERROR -> RuntimeEventType.ERROR;
+            case RuntimeEventTypes.PROCESS_TRACE -> RuntimeEventType.PROCESS_TRACE;
             default -> null;
         };
     }

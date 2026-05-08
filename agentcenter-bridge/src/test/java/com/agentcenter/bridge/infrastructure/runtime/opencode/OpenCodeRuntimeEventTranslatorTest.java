@@ -47,6 +47,15 @@ class OpenCodeRuntimeEventTranslatorTest {
             public void recordUserMessageId(String runtimeSessionId, String messageId) {
                 state.recordUserMessageId(runtimeSessionId, messageId);
             }
+
+            @Override
+            public String getWorkflowNodeInstanceId(String agentSessionId) { return null; }
+
+            @Override
+            public String getWorkflowInstanceId(String agentSessionId) { return null; }
+
+            @Override
+            public String getWorkItemId(String agentSessionId) { return null; }
         };
     }
 
@@ -64,6 +73,15 @@ class OpenCodeRuntimeEventTranslatorTest {
 
             @Override
             public void recordUserMessageId(String runtimeSessionId, String messageId) {}
+
+            @Override
+            public String getWorkflowNodeInstanceId(String agentSessionId) { return null; }
+
+            @Override
+            public String getWorkflowInstanceId(String agentSessionId) { return null; }
+
+            @Override
+            public String getWorkItemId(String agentSessionId) { return null; }
         };
     }
 
@@ -186,12 +204,18 @@ class OpenCodeRuntimeEventTranslatorTest {
         RuntimeRawEvent raw = rawEvent("message.part.updated", json);
         List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
 
-        assertEquals(1, result.size());
+        assertEquals(2, result.size());
         RuntimeEventEnvelope env = result.get(0);
         assertEquals(RuntimeEventTypes.TOOL_STARTED, env.type());
         assertRuntimeSessionId(env);
         assertEquals("Read", env.payload().path("label").asText());
         assertEquals("call_1", env.payload().path("toolCallId").asText());
+        RuntimeEventEnvelope trace = result.get(1);
+        assertEquals(RuntimeEventTypes.PROCESS_TRACE, trace.type());
+        assertEquals("tool_call", trace.payload().path("kind").asText());
+        assertEquals("running", trace.payload().path("status").asText());
+        assertEquals("Read", trace.payload().path("toolName").asText());
+        assertEquals("call_1", trace.payload().path("toolCallId").asText());
     }
 
     @Test
@@ -207,14 +231,19 @@ class OpenCodeRuntimeEventTranslatorTest {
         RuntimeRawEvent raw = rawEvent("message.part.updated", json);
         List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
 
-        // First time seeing callID: produces both started + completed
-        assertEquals(2, result.size());
+        // First time seeing callID: produces started + process_trace + completed + process_trace
+        assertEquals(4, result.size());
         assertEquals(RuntimeEventTypes.TOOL_STARTED, result.get(0).type());
         assertRuntimeSessionId(result.get(0));
-        assertEquals(RuntimeEventTypes.TOOL_COMPLETED, result.get(1).type());
-        assertEquals("Write", result.get(1).payload().path("label").asText());
-        assertEquals("call_2", result.get(1).payload().path("toolCallId").asText());
-        assertFalse(result.get(1).payload().path("isError").asBoolean());
+        assertEquals(RuntimeEventTypes.PROCESS_TRACE, result.get(1).type());
+        assertEquals("tool_call", result.get(1).payload().path("kind").asText());
+        assertEquals("running", result.get(1).payload().path("status").asText());
+        assertEquals(RuntimeEventTypes.TOOL_COMPLETED, result.get(2).type());
+        assertEquals("Write", result.get(2).payload().path("label").asText());
+        assertEquals("call_2", result.get(2).payload().path("toolCallId").asText());
+        assertFalse(result.get(2).payload().path("isError").asBoolean());
+        assertEquals(RuntimeEventTypes.PROCESS_TRACE, result.get(3).type());
+        assertEquals("completed", result.get(3).payload().path("status").asText());
     }
 
     @Test
@@ -230,11 +259,16 @@ class OpenCodeRuntimeEventTranslatorTest {
         RuntimeRawEvent raw = rawEvent("message.part.updated", json);
         List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
 
-        assertEquals(2, result.size());
+        assertEquals(4, result.size());
         assertEquals(RuntimeEventTypes.TOOL_STARTED, result.get(0).type());
-        assertEquals(RuntimeEventTypes.TOOL_COMPLETED, result.get(1).type());
-        assertTrue(result.get(1).payload().path("isError").asBoolean());
-        assertEquals("exit 1", result.get(1).payload().path("output").asText());
+        assertEquals(RuntimeEventTypes.PROCESS_TRACE, result.get(1).type());
+        assertEquals("running", result.get(1).payload().path("status").asText());
+        assertEquals(RuntimeEventTypes.TOOL_COMPLETED, result.get(2).type());
+        assertTrue(result.get(2).payload().path("isError").asBoolean());
+        assertEquals("exit 1", result.get(2).payload().path("output").asText());
+        assertEquals(RuntimeEventTypes.PROCESS_TRACE, result.get(3).type());
+        assertEquals("failed", result.get(3).payload().path("status").asText());
+        assertEquals("Bash 调用失败", result.get(3).payload().path("summary").asText());
     }
 
     @Test
@@ -250,9 +284,11 @@ class OpenCodeRuntimeEventTranslatorTest {
         RuntimeRawEvent raw = rawEvent("session.status", json);
         List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
 
-        assertEquals(1, result.size());
+        assertEquals(2, result.size());
         assertEquals(RuntimeEventTypes.RUNTIME_STATUS_CHANGED, result.get(0).type());
         assertEquals("running", result.get(0).payload().path("label").asText());
+        assertEquals(RuntimeEventTypes.PROCESS_TRACE, result.get(1).type());
+        assertEquals("node_status", result.get(1).payload().path("kind").asText());
     }
 
     @Test
@@ -268,10 +304,12 @@ class OpenCodeRuntimeEventTranslatorTest {
         RuntimeRawEvent raw = rawEvent("session.status", json);
         List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
 
-        assertEquals(2, result.size());
+        assertEquals(3, result.size());
         assertEquals(RuntimeEventTypes.RUNTIME_STATUS_CHANGED, result.get(0).type());
         assertEquals("idle", result.get(0).payload().path("label").asText());
-        assertEquals(RuntimeEventTypes.CONVERSATION_COMPLETED, result.get(1).type());
+        assertEquals(RuntimeEventTypes.PROCESS_TRACE, result.get(1).type());
+        assertEquals("completed", result.get(1).payload().path("status").asText());
+        assertEquals(RuntimeEventTypes.CONVERSATION_COMPLETED, result.get(2).type());
     }
 
     @Test
@@ -285,12 +323,13 @@ class OpenCodeRuntimeEventTranslatorTest {
         RuntimeRawEvent raw = rawEvent("session.idle", json);
         List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
 
-        assertEquals(2, result.size());
+        assertEquals(3, result.size());
         assertEquals(RuntimeEventTypes.RUNTIME_STATUS_CHANGED, result.get(0).type());
         assertRuntimeSessionId(result.get(0));
         assertEquals("waiting_user", result.get(0).payload().path("label").asText());
-        assertEquals(RuntimeEventTypes.CONVERSATION_COMPLETED, result.get(1).type());
-        assertRuntimeSessionId(result.get(1));
+        assertEquals(RuntimeEventTypes.PROCESS_TRACE, result.get(1).type());
+        assertEquals(RuntimeEventTypes.CONVERSATION_COMPLETED, result.get(2).type());
+        assertRuntimeSessionId(result.get(2));
     }
 
     @Test
@@ -309,10 +348,12 @@ class OpenCodeRuntimeEventTranslatorTest {
         RuntimeRawEvent raw = rawEvent("permission.asked", json);
         List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
 
-        assertEquals(1, result.size());
+        assertEquals(2, result.size());
         assertEquals(RuntimeEventTypes.PERMISSION_REQUESTED, result.get(0).type());
         assertEquals("perm_1", result.get(0).payload().path("permissionId").asText());
         assertEquals("Allow file write?", result.get(0).payload().path("title").asText());
+        assertEquals(RuntimeEventTypes.PROCESS_TRACE, result.get(1).type());
+        assertEquals("confirmation", result.get(1).payload().path("kind").asText());
     }
 
     @Test
@@ -330,11 +371,13 @@ class OpenCodeRuntimeEventTranslatorTest {
         RuntimeRawEvent raw = rawEvent("session.error", json);
         List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
 
-        assertEquals(1, result.size());
+        assertEquals(2, result.size());
         assertEquals(RuntimeEventTypes.RUNTIME_ERROR, result.get(0).type());
         assertRuntimeSessionId(result.get(0));
         assertEquals("failed", result.get(0).payload().path("label").asText());
         assertTrue(result.get(0).payload().path("reason").asText().contains("Something went wrong"));
+        assertEquals(RuntimeEventTypes.PROCESS_TRACE, result.get(1).type());
+        assertEquals("error", result.get(1).payload().path("kind").asText());
     }
 
     @Test
@@ -412,8 +455,9 @@ class OpenCodeRuntimeEventTranslatorTest {
         RuntimeRawEvent raw = rawEvent("session.error", json);
         List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
 
-        assertEquals(1, result.size());
+        assertEquals(2, result.size());
         assertEquals("TimeoutError", result.get(0).payload().path("reason").asText());
+        assertEquals("TimeoutError", result.get(1).payload().path("summary").asText());
     }
 
     @Test
@@ -432,8 +476,9 @@ class OpenCodeRuntimeEventTranslatorTest {
         RuntimeRawEvent raw = rawEvent("permission.updated", json);
         List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
 
-        assertEquals(1, result.size());
+        assertEquals(2, result.size());
         assertEquals(RuntimeEventTypes.PERMISSION_REQUESTED, result.get(0).type());
+        assertEquals(RuntimeEventTypes.PROCESS_TRACE, result.get(1).type());
     }
 
     @Test
@@ -465,8 +510,96 @@ class OpenCodeRuntimeEventTranslatorTest {
         RuntimeRawEvent raw = rawEvent("session.status", json);
         List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
 
-        assertEquals(1, result.size());
+        assertEquals(2, result.size());
         assertEquals(RuntimeEventTypes.RUNTIME_STATUS_CHANGED, result.get(0).type());
         assertEquals("thinking", result.get(0).payload().path("label").asText());
+        assertEquals(RuntimeEventTypes.PROCESS_TRACE, result.get(1).type());
+    }
+
+    @Test
+    void reasoningWithoutVisibilityReturnsGenericDescription() throws Exception {
+        String json = """
+        {
+          "type": "message.part.delta",
+          "properties": {
+            "delta": "Private chain of thought content here",
+            "part": {"type": "reasoning", "text": "Full private reasoning text that should not be exposed"}
+          }
+        }
+        """;
+        RuntimeRawEvent raw = rawEvent("message.part.delta", json);
+        List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
+
+        assertEquals(1, result.size());
+        assertEquals(RuntimeEventTypes.PROCESS_TRACE, result.get(0).type());
+        assertEquals("正在分析上下文并规划下一步", result.get(0).payload().path("summary").asText());
+    }
+
+    @Test
+    void reasoningWithPublicVisibilityExposesContent() throws Exception {
+        String json = """
+        {
+          "type": "message.part.delta",
+          "properties": {
+            "delta": "",
+            "part": {"type": "reasoning", "visibility": "public_summary", "summary": "Analyzing the user's request"}
+          }
+        }
+        """;
+        RuntimeRawEvent raw = rawEvent("message.part.delta", json);
+        List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
+
+        assertEquals(1, result.size());
+        assertEquals(RuntimeEventTypes.PROCESS_TRACE, result.get(0).type());
+        assertEquals("Analyzing the user's request", result.get(0).payload().path("summary").asText());
+    }
+
+    @Test
+    void reasoningWithExplicitSummaryFieldExposesShortSummary() throws Exception {
+        String json = """
+        {
+          "type": "message.part.delta",
+          "properties": {
+            "delta": "Long raw reasoning delta that should be ignored",
+            "part": {"type": "reasoning", "summary": "Short structured summary"}
+          }
+        }
+        """;
+        RuntimeRawEvent raw = rawEvent("message.part.delta", json);
+        List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
+
+        assertEquals(1, result.size());
+        assertEquals("Short structured summary", result.get(0).payload().path("summary").asText());
+    }
+
+    @Test
+    void processTraceCarriesWorkflowNodeInstanceId() throws Exception {
+        RuntimeTranslationContext contextWithWorkflow = new RuntimeTranslationContext() {
+            @Override public String getAgentSessionId(String runtimeSessionId) { return AGENT_SESSION_ID; }
+            @Override public boolean isUserMessage(String runtimeSessionId, String messageId) { return false; }
+            @Override public void recordUserMessageId(String runtimeSessionId, String messageId) {}
+            @Override public String getWorkflowNodeInstanceId(String agentSessionId) { return "node_123"; }
+            @Override public String getWorkflowInstanceId(String agentSessionId) { return "wf_456"; }
+            @Override public String getWorkItemId(String agentSessionId) { return "wi_789"; }
+        };
+
+        String json = """
+        {
+          "type": "message.part.updated",
+          "properties": {
+            "part": {"type": "tool", "callID": "call_wf", "tool": "Read", "state": {"status": "running"}}
+          }
+        }
+        """;
+        RuntimeRawEvent raw = rawEvent("message.part.updated", json);
+        List<RuntimeEventEnvelope> result = translator.translate(raw, contextWithWorkflow);
+
+        RuntimeEventEnvelope trace = result.stream()
+                .filter(e -> RuntimeEventTypes.PROCESS_TRACE.equals(e.type()))
+                .findFirst().orElse(null);
+        assertNotNull(trace);
+        assertEquals("node_123", trace.workflowNodeInstanceId());
+        assertEquals("wf_456", trace.workflowInstanceId());
+        assertEquals("wi_789", trace.workItemId());
     }
 }

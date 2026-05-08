@@ -27,4 +27,6 @@ public interface AgentRuntimeAdapter {
     default String getSkillsRootPath() { return ""; }
     default Map<String, Object> readMcpConfig() { return Map.of(); }
     default void writeMcpConfig(Map<String, Object> config) {}
+    default void registerWorkflowNodeContext(String agentSessionId, String workItemId,
+                                              String workflowInstanceId, String workflowNodeInstanceId) {}
 }

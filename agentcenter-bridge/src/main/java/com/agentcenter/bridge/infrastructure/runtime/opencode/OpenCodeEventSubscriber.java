@@ -44,6 +44,7 @@ public class OpenCodeEventSubscriber implements RuntimeTranslationContext, Runti
     private final OpenCodeSseEventStreamTransport transport;
 
     private final Map<String, String> opencodeToAgentSession = new ConcurrentHashMap<>();
+    private final Map<String, WorkflowContext> agentSessionToWorkflow = new ConcurrentHashMap<>();
 
     private SubscriptionHandle subscriptionHandle;
 
@@ -74,7 +75,33 @@ public class OpenCodeEventSubscriber implements RuntimeTranslationContext, Runti
         translationState.recordUserMessageId(runtimeSessionId, messageId);
     }
 
+    @Override
+    public String getWorkflowNodeInstanceId(String agentSessionId) {
+        WorkflowContext ctx = agentSessionToWorkflow.get(agentSessionId);
+        return ctx != null ? ctx.workflowNodeInstanceId() : null;
+    }
+
+    @Override
+    public String getWorkflowInstanceId(String agentSessionId) {
+        WorkflowContext ctx = agentSessionToWorkflow.get(agentSessionId);
+        return ctx != null ? ctx.workflowInstanceId() : null;
+    }
+
+    @Override
+    public String getWorkItemId(String agentSessionId) {
+        WorkflowContext ctx = agentSessionToWorkflow.get(agentSessionId);
+        return ctx != null ? ctx.workItemId() : null;
+    }
+
     // --- Session lifecycle ---
+
+    public void registerWorkflowContext(String agentSessionId, String workItemId,
+                                         String workflowInstanceId, String workflowNodeInstanceId) {
+        if (agentSessionId != null) {
+            agentSessionToWorkflow.put(agentSessionId,
+                new WorkflowContext(workItemId, workflowInstanceId, workflowNodeInstanceId));
+        }
+    }
 
     public void registerSession(String opencodeSessionId, String agentSessionId, String baseUrl, String workingDirectory) {
         opencodeToAgentSession.put(opencodeSessionId, agentSessionId);
@@ -90,6 +117,7 @@ public class OpenCodeEventSubscriber implements RuntimeTranslationContext, Runti
         translationState.cleanupSession(opencodeSessionId);
         if (agentSessionId != null) {
             projector.cleanupSession(agentSessionId);
+            agentSessionToWorkflow.remove(agentSessionId);
         }
     }
 
@@ -176,4 +204,6 @@ public class OpenCodeEventSubscriber implements RuntimeTranslationContext, Runti
         if (!sid.isEmpty()) return sid;
         return part.path("session_id").asText("");
     }
+
+    record WorkflowContext(String workItemId, String workflowInstanceId, String workflowNodeInstanceId) {}
 }
