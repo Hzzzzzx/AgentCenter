@@ -3,8 +3,6 @@ package com.agentcenter.bridge.infrastructure.runtime.opencode;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-import java.util.List;
-
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,16 +11,14 @@ import com.agentcenter.bridge.application.runtime.protocol.RuntimeEventEnvelope;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeEventTypes;
 import com.agentcenter.bridge.application.runtime.translation.AssistantMessageProjector;
 import com.agentcenter.bridge.application.runtime.translation.RuntimeEventEnvelopeDispatcher;
+import com.agentcenter.bridge.infrastructure.runtime.opencode.transport.OpenCodeSseEventStreamTransport;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-/**
- * Tests the glue path in OpenCodeEventSubscriber: raw SSE JSON →
- * extractSessionId → RuntimeRawEvent → translator → dispatcher.
- */
 class OpenCodeEventSubscriberGlueTest {
 
     private RuntimeEventEnvelopeDispatcher dispatcher;
     private AssistantMessageProjector projector;
+    private OpenCodeSseEventStreamTransport transport;
     private OpenCodeEventSubscriber subscriber;
     private ObjectMapper objectMapper;
 
@@ -35,7 +31,11 @@ class OpenCodeEventSubscriberGlueTest {
         projector = mock(AssistantMessageProjector.class);
         objectMapper = new ObjectMapper();
 
-        subscriber = new OpenCodeEventSubscriber(objectMapper, dispatcher, projector);
+        transport = new OpenCodeSseEventStreamTransport(
+            java.net.http.HttpClient.newBuilder().build(), objectMapper);
+        transport.configure("http://unused", "/unused");
+
+        subscriber = new OpenCodeEventSubscriber(dispatcher, projector, transport);
         subscriber.registerSession(OPENCODE_SES, AGENT_SES, "http://unused", "/unused");
     }
 
@@ -44,14 +44,8 @@ class OpenCodeEventSubscriberGlueTest {
         subscriber.shutdown();
     }
 
-    /**
-     * Directly invoke normalizeAndPublish via reflection to test the glue path.
-     */
     private void invokeNormalizeAndPublish(String json) throws Exception {
-        var method = OpenCodeEventSubscriber.class.getDeclaredMethod("normalizeAndPublish",
-            com.fasterxml.jackson.databind.JsonNode.class);
-        method.setAccessible(true);
-        method.invoke(subscriber, objectMapper.readTree(json));
+        subscriber.normalizeAndPublish(objectMapper.readTree(json));
     }
 
     @Test
@@ -69,7 +63,6 @@ class OpenCodeEventSubscriberGlueTest {
 
         invokeNormalizeAndPublish(json);
 
-        // Dispatcher should receive envelopes
         verify(dispatcher).dispatch(argThat(envelopes -> {
             if (envelopes == null || envelopes.isEmpty()) return false;
             RuntimeEventEnvelope env = envelopes.get(0);
@@ -111,7 +104,6 @@ class OpenCodeEventSubscriberGlueTest {
 
         invokeNormalizeAndPublish(json);
 
-        // session.idle → status changed + conversation completed
         verify(dispatcher).dispatch(argThat(envelopes ->
             envelopes != null && envelopes.size() == 2
             && RuntimeEventTypes.RUNTIME_STATUS_CHANGED.equals(envelopes.get(0).type())
@@ -121,7 +113,6 @@ class OpenCodeEventSubscriberGlueTest {
 
     @Test
     void sessionExtractedFromPartPath() throws Exception {
-        // Session ID nested under properties.part.sessionID
         String json = """
         {
           "type": "session.status",

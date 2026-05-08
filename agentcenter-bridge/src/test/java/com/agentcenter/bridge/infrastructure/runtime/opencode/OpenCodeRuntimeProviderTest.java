@@ -42,6 +42,10 @@ class OpenCodeRuntimeProviderTest {
         assertTrue(caps.skillLifecycle());
         assertTrue(caps.mcpLifecycle());
         assertTrue(caps.cancelSupported());
+        assertEquals(RuntimeCapabilities.HTTP, caps.commandTransport());
+        assertEquals(RuntimeCapabilities.SSE, caps.eventTransport());
+        assertEquals(RuntimeCapabilities.LOCAL_FILE, caps.resourceMutationMode());
+        assertFalse(caps.supportsAsyncOperations());
     }
 
     @Test

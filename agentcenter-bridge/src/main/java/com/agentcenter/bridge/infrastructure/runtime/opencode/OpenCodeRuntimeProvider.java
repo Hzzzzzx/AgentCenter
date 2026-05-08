@@ -10,18 +10,18 @@ import com.agentcenter.bridge.api.dto.RuntimeSkillDto;
 import com.agentcenter.bridge.application.runtime.*;
 import com.agentcenter.bridge.domain.runtime.RuntimeType;
 
-/**
- * OPENCODE runtime provider. Wraps the existing OpenCodeRuntimeAdapter
- * to implement the Provider/Port interfaces without changing adapter behavior.
- */
 @Component
 public class OpenCodeRuntimeProvider implements RuntimeProvider {
 
     private static final RuntimeCapabilities CAPABILITIES = new RuntimeCapabilities(
-        true,   // conversationStreaming — SSE-based assistant delta
-        true,   // skillLifecycle — P3: provider delegates to OpenCodeSkillFileService for scan/install/delete
-        true,   // mcpLifecycle — P3: provider delegates to OpenCodeMcpFileService for read/write
-        true    // cancelSupported
+        true,   // conversationStreaming
+        true,   // skillLifecycle
+        true,   // mcpLifecycle
+        true,   // cancelSupported
+        RuntimeCapabilities.HTTP,
+        RuntimeCapabilities.SSE,
+        RuntimeCapabilities.LOCAL_FILE,
+        false   // supportsAsyncOperations
     );
 
     private static final RuntimeDescriptor DESCRIPTOR = new RuntimeDescriptor(

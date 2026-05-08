@@ -62,7 +62,7 @@ class DefaultRuntimeGatewayTest {
     @Test
     void describeReturnsDescriptor() {
         RuntimeDescriptor desc = new RuntimeDescriptor("OpenCode", "HTTP+SSE", "desc",
-                new RuntimeCapabilities(true, true, true, true));
+                new RuntimeCapabilities(true, true, true, true, RuntimeCapabilities.HTTP, RuntimeCapabilities.SSE, RuntimeCapabilities.LOCAL_FILE, false));
         when(provider.descriptor()).thenReturn(desc);
         RuntimeDescriptor result = gateway.describe(RuntimeType.OPENCODE);
         assertEquals(desc, result);
@@ -70,7 +70,7 @@ class DefaultRuntimeGatewayTest {
 
     @Test
     void capabilitiesDelegates() {
-        RuntimeCapabilities caps = new RuntimeCapabilities(true, true, true, true);
+        RuntimeCapabilities caps = new RuntimeCapabilities(true, true, true, true, RuntimeCapabilities.HTTP, RuntimeCapabilities.SSE, RuntimeCapabilities.LOCAL_FILE, false);
         when(provider.capabilities()).thenReturn(caps);
         RuntimeCapabilities result = gateway.capabilities(RuntimeType.OPENCODE);
         assertEquals(caps, result);

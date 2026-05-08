@@ -15,7 +15,7 @@ class DefaultRuntimeProviderRegistryTest {
         StubProvider(RuntimeType type) { this.type = type; }
         @Override public RuntimeType runtimeType() { return type; }
         @Override public RuntimeDescriptor descriptor() { return new RuntimeDescriptor("Stub", "TEST", "test", capabilities()); }
-        @Override public RuntimeCapabilities capabilities() { return new RuntimeCapabilities(false, false, false, false); }
+        @Override public RuntimeCapabilities capabilities() { return new RuntimeCapabilities(false, false, false, false, null, null, null, false); }
         @Override public String createSession(String w, String a) { return "stub-session"; }
         @Override public String ensureSession(String w, String a, String r) { return r != null ? r : "stub-session"; }
         @Override public SkillRunResult runSkill(String s, String sk, String i) { return new SkillRunResult(true, "ok", "TEXT", null, false); }

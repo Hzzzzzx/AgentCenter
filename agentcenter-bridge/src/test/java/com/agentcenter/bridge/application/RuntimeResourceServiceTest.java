@@ -28,7 +28,7 @@ class RuntimeResourceServiceTest {
         @Override public void refreshSkills(RuntimeType rt, RuntimeSkillSnapshot snapshot) {}
         @Override public void refreshMcps(RuntimeType rt) {}
         @Override public RuntimeDescriptor describe(RuntimeType rt) { return new RuntimeDescriptor("Stub", "TEST", "test stub", capabilities(rt)); }
-        @Override public RuntimeCapabilities capabilities(RuntimeType rt) { return new RuntimeCapabilities(true, true, true, true); }
+        @Override public RuntimeCapabilities capabilities(RuntimeType rt) { return new RuntimeCapabilities(true, true, true, true, RuntimeCapabilities.HTTP, RuntimeCapabilities.SSE, RuntimeCapabilities.LOCAL_FILE, false); }
         @Override public List<RuntimeSkillDto> scanSkills(RuntimeType rt) { return List.of(); }
         @Override public String installSkill(RuntimeType rt, String name, java.nio.file.Path dir) { return ".opencode/skills/" + name; }
         @Override public void deleteSkillFiles(RuntimeType rt, String rel, String name) {}
@@ -70,7 +70,7 @@ class RuntimeResourceServiceTest {
             @Override public void refreshSkills(RuntimeType rt, RuntimeSkillSnapshot snapshot) {}
             @Override public void refreshMcps(RuntimeType rt) {}
             @Override public RuntimeDescriptor describe(RuntimeType rt) { return new RuntimeDescriptor("Stub", "TEST", "test stub", capabilities(rt)); }
-            @Override public RuntimeCapabilities capabilities(RuntimeType rt) { return new RuntimeCapabilities(true, true, true, true); }
+            @Override public RuntimeCapabilities capabilities(RuntimeType rt) { return new RuntimeCapabilities(true, true, true, true, RuntimeCapabilities.HTTP, RuntimeCapabilities.SSE, RuntimeCapabilities.LOCAL_FILE, false); }
             @Override public List<RuntimeSkillDto> scanSkills(RuntimeType rt) { return List.of(skill); }
             @Override public String installSkill(RuntimeType rt, String name, java.nio.file.Path dir) { return ".opencode/skills/" + name; }
             @Override public void deleteSkillFiles(RuntimeType rt, String rel, String name) {}

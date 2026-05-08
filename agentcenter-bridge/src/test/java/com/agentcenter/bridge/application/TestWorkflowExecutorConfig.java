@@ -94,7 +94,7 @@ public class TestWorkflowExecutorConfig {
 
             @Override
             public RuntimeCapabilities capabilities(RuntimeType rt) {
-                return new RuntimeCapabilities(true, true, true, true);
+                return new RuntimeCapabilities(true, true, true, true, RuntimeCapabilities.HTTP, RuntimeCapabilities.SSE, RuntimeCapabilities.LOCAL_FILE, false);
             }
 
             @Override

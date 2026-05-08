@@ -1,9 +1,5 @@
 package com.agentcenter.bridge.infrastructure.runtime.opencode;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.HashSet;
@@ -20,6 +16,11 @@ import org.springframework.stereotype.Component;
 import com.agentcenter.bridge.api.dto.RuntimeSkillDto;
 import com.agentcenter.bridge.application.runtime.AgentRuntimeAdapter;
 import com.agentcenter.bridge.application.runtime.SkillRunResult;
+import com.agentcenter.bridge.application.runtime.protocol.RuntimeAckEnvelope;
+import com.agentcenter.bridge.application.runtime.protocol.RuntimeCommandEnvelope;
+import com.agentcenter.bridge.application.runtime.protocol.RuntimeCommandTypes;
+import com.agentcenter.bridge.domain.runtime.RuntimeType;
+import com.agentcenter.bridge.infrastructure.runtime.opencode.transport.OpenCodeHttpCommandTransport;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -46,15 +47,12 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
     private final OpenCodeEventSubscriber eventSubscriber;
     private final ObjectMapper objectMapper;
     private final OpenCodeSkillFileService skillFileService;
+    private final OpenCodeMcpFileService mcpFileService;
+    private final OpenCodeHttpCommandTransport commandTransport;
     private final String agent;
     private final int responseTimeoutSeconds;
-    private final OpenCodeMcpFileService mcpFileService;
 
     private final Map<String, String> agentToOpencodeSession = new ConcurrentHashMap<>();
-
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(10))
-            .build();
 
     public OpenCodeRuntimeAdapter(
             OpenCodeProcessManager processManager,
@@ -62,6 +60,7 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
             ObjectMapper objectMapper,
             OpenCodeSkillFileService skillFileService,
             OpenCodeMcpFileService mcpFileService,
+            OpenCodeHttpCommandTransport commandTransport,
             @Value("${agentcenter.runtime.opencode.serve.agent:build}") String agent,
             @Value("${agentcenter.runtime.opencode.timeout-seconds:180}") int responseTimeoutSeconds) {
         this.processManager = processManager;
@@ -69,6 +68,7 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         this.objectMapper = objectMapper;
         this.skillFileService = skillFileService;
         this.mcpFileService = mcpFileService;
+        this.commandTransport = commandTransport;
         this.agent = agent;
         this.responseTimeoutSeconds = responseTimeoutSeconds;
     }
@@ -100,38 +100,33 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         }
 
         String baseUrl = processManager.ensureRunning();
-        Path cwd = processManager.resolveWorkingDirectory();
 
         String title = "AgentCenter Session";
         if (workItemId != null && !workItemId.isBlank()) {
             title = "AgentCenter · " + workItemId;
         }
 
-        ObjectNode body = objectMapper.createObjectNode();
-        body.put("title", title);
-        ArrayNode permissions = body.putArray("permission");
+        ObjectNode sessionPayload = objectMapper.createObjectNode();
+        sessionPayload.put("baseUrl", baseUrl);
+        sessionPayload.put("workingDirectory", processManager.resolveWorkingDirectory().toString());
+        sessionPayload.put("title", title);
+        ArrayNode permissions = sessionPayload.putArray("permission");
         ObjectNode perm = permissions.addObject();
         perm.put("permission", "edit");
         perm.put("pattern", "*");
         perm.put("action", "ask");
 
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/session"))
-                .header("Content-Type", "application/json")
-                .header("x-opencode-directory", cwd.toString())
-                .timeout(Duration.ofSeconds(30))
-                .POST(HttpRequest.BodyPublishers.ofString(writeValue(body)))
-                .build();
+        RuntimeCommandEnvelope command = RuntimeCommandEnvelope.of(
+                RuntimeCommandTypes.SESSION_ENSURE, RuntimeType.OPENCODE, null, sessionPayload);
 
-        HttpResponse<String> response = sendRequest(request);
-        if (response.statusCode() != 200) {
-            throw new RuntimeException("Failed to create opencode session: HTTP " + response.statusCode() + " " + response.body());
+        RuntimeAckEnvelope ack = commandTransport.send(command);
+        if (!ack.success()) {
+            throw new RuntimeException("Failed to create opencode session: " + ack.message());
         }
 
-        JsonNode result = parseJson(response.body());
-        String opencodeSessionId = result.path("id").asText("");
+        String opencodeSessionId = ack.payload().path("sessionId").asText("");
         if (opencodeSessionId.isEmpty()) {
-            throw new RuntimeException("opencode session response missing id: " + response.body());
+            throw new RuntimeException("opencode session ack missing sessionId: " + ack.payload());
         }
 
         String agentSid = (agentSessionId != null && !agentSessionId.isBlank())
@@ -140,7 +135,8 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         agentToOpencodeSession.put(agentSid, opencodeSessionId);
         agentToOpencodeSession.put(opencodeSessionId, opencodeSessionId);
 
-        eventSubscriber.registerSession(opencodeSessionId, agentSid, baseUrl, cwd.toString());
+        String cwd = processManager.resolveWorkingDirectory().toString();
+        eventSubscriber.registerSession(opencodeSessionId, agentSid, baseUrl, cwd);
 
         log.info("Created opencode session {} → agent session {}", opencodeSessionId, agentSid);
         return opencodeSessionId;
@@ -153,8 +149,8 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         }
 
         String baseUrl = processManager.ensureRunning();
-        Path cwd = processManager.resolveWorkingDirectory();
-        if (fetchMessages(baseUrl, cwd, runtimeSessionId) == null) {
+        String cwd = processManager.resolveWorkingDirectory().toString();
+        if (commandTransport.fetchMessages(baseUrl, cwd, runtimeSessionId) == null) {
             log.info("Persisted opencode session {} is not available; creating a replacement for agent session {}",
                     runtimeSessionId, agentSessionId);
             return createSession(workItemId, agentSessionId);
@@ -162,7 +158,7 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
         agentToOpencodeSession.put(agentSessionId, runtimeSessionId);
         agentToOpencodeSession.put(runtimeSessionId, runtimeSessionId);
-        eventSubscriber.registerSession(runtimeSessionId, agentSessionId, baseUrl, cwd.toString());
+        eventSubscriber.registerSession(runtimeSessionId, agentSessionId, baseUrl, cwd);
         return runtimeSessionId;
     }
 
@@ -197,7 +193,7 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
                 约束：
                 - 只返回本节点最终 Markdown 文档。
                 - 不修改文件，不生成补丁，不主动遍历仓库，除非输入上下文明确要求。
-                - 如果信息不足，请在 Markdown 中列出“缺口与待确认项”，不要长时间探索。
+                - 如果信息不足，请在 Markdown 中列出"缺口与待确认项"，不要长时间探索。
                 - 输出使用中文，结构清晰，适合直接作为本节点产物进入下一节点。
 
                 输入上下文：
@@ -230,30 +226,28 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
         String baseUrl = processManager.ensureRunning();
         Path cwd = processManager.resolveWorkingDirectory();
-        Set<String> knownMessageIds = fetchMessageIds(baseUrl, cwd, opencodeSessionId);
+        Set<String> knownMessageIds = fetchMessageIds(baseUrl, cwd.toString(), opencodeSessionId);
 
-        ObjectNode body = objectMapper.createObjectNode();
-        body.put("agent", agent);
-        ArrayNode parts = body.putArray("parts");
+        ObjectNode sendPayload = objectMapper.createObjectNode();
+        sendPayload.put("baseUrl", baseUrl);
+        sendPayload.put("workingDirectory", cwd.toString());
+        sendPayload.put("agent", agent);
+        ArrayNode parts = sendPayload.putArray("parts");
         ObjectNode textPart = parts.addObject();
         textPart.put("type", "text");
         textPart.put("text", userMessage);
 
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/session/" + opencodeSessionId + "/prompt_async"))
-                .header("Content-Type", "application/json")
-                .header("x-opencode-directory", cwd.toString())
-                .timeout(Duration.ofSeconds(30))
-                .POST(HttpRequest.BodyPublishers.ofString(writeValue(body)))
-                .build();
+        RuntimeCommandEnvelope command = RuntimeCommandEnvelope.of(
+                RuntimeCommandTypes.CONVERSATION_MESSAGE_SEND, RuntimeType.OPENCODE,
+                opencodeSessionId, sendPayload);
 
-        HttpResponse<String> response = sendRequest(request);
-        if (response.statusCode() >= 300) {
-            throw new RuntimeException("opencode prompt_async failed: HTTP " + response.statusCode() + " " + response.body());
+        RuntimeAckEnvelope ack = commandTransport.send(command);
+        if (!ack.success()) {
+            throw new RuntimeException("opencode prompt_async failed: " + ack.message());
         }
 
         log.debug("Sent message to opencode session {} (agent session {})", opencodeSessionId, sessionId);
-        return new DispatchContext(baseUrl, cwd, opencodeSessionId, knownMessageIds);
+        return new DispatchContext(baseUrl, cwd.toString(), opencodeSessionId, knownMessageIds);
     }
 
     @Override
@@ -291,9 +285,9 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         return agentToOpencodeSession.get(agentSessionId);
     }
 
-    private Set<String> fetchMessageIds(String baseUrl, Path cwd, String opencodeSessionId) {
+    private Set<String> fetchMessageIds(String baseUrl, String cwd, String opencodeSessionId) {
         Set<String> ids = new HashSet<>();
-        JsonNode messages = fetchMessages(baseUrl, cwd, opencodeSessionId);
+        JsonNode messages = commandTransport.fetchMessages(baseUrl, cwd, opencodeSessionId);
         if (messages != null && messages.isArray()) {
             for (JsonNode message : messages) {
                 String id = message.path("info").path("id").asText("");
@@ -305,14 +299,13 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         return ids;
     }
 
-    private String waitForAssistantText(String baseUrl,
-                                        Path cwd,
+    private String waitForAssistantText(String baseUrl, String cwd,
                                         String opencodeSessionId,
                                         Set<String> knownMessageIds,
                                         boolean allowToolOutputFallback) {
         long deadline = System.nanoTime() + Duration.ofSeconds(responseTimeoutSeconds).toNanos();
         while (System.nanoTime() < deadline) {
-            JsonNode messages = fetchMessages(baseUrl, cwd, opencodeSessionId);
+            JsonNode messages = commandTransport.fetchMessages(baseUrl, cwd, opencodeSessionId);
             String text = extractNewAssistantText(messages, knownMessageIds);
             if (text != null && !text.isBlank()) {
                 return text;
@@ -331,21 +324,6 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
             }
         }
         return null;
-    }
-
-    private JsonNode fetchMessages(String baseUrl, Path cwd, String opencodeSessionId) {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/session/" + opencodeSessionId + "/message"))
-                .header("x-opencode-directory", cwd.toString())
-                .timeout(Duration.ofSeconds(10))
-                .GET()
-                .build();
-        HttpResponse<String> response = sendRequest(request);
-        if (response.statusCode() >= 300) {
-            log.warn("Failed to fetch opencode messages for {}: HTTP {}", opencodeSessionId, response.statusCode());
-            return null;
-        }
-        return parseJson(response.body());
     }
 
     private String extractNewAssistantText(JsonNode messages, Set<String> knownMessageIds) {
@@ -435,32 +413,7 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         }
     }
 
-    private HttpResponse<String> sendRequest(HttpRequest request) {
-        try {
-            return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        } catch (Exception e) {
-            throw new RuntimeException("HTTP request to opencode serve failed: " + e.getMessage(), e);
-        }
-    }
-
-    private String writeValue(Object value) {
-        try {
-            return objectMapper.writeValueAsString(value);
-        } catch (Exception e) {
-            throw new RuntimeException("JSON serialization failed: " + e.getMessage(), e);
-        }
-    }
-
-    private JsonNode parseJson(String json) {
-        try {
-            return objectMapper.readTree(json);
-        } catch (Exception e) {
-            throw new RuntimeException("JSON parse failed: " + e.getMessage(), e);
-        }
-    }
-
-    private record DispatchContext(String baseUrl,
-                                   Path cwd,
+    private record DispatchContext(String baseUrl, String cwd,
                                    String opencodeSessionId,
                                    Set<String> knownMessageIds) {}
 }
