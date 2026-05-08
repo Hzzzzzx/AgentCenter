@@ -49,19 +49,19 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
                 result.addAll(translateMessagePart(opencodeSessionId, agentSessionId, props, eventType));
             }
             case "session.status" -> {
-                result.addAll(translateSessionStatus(agentSessionId, props));
+                result.addAll(translateSessionStatus(opencodeSessionId, agentSessionId, props));
             }
             case "session.idle" -> {
                 result.add(buildEnvelope(RuntimeEventTypes.RUNTIME_STATUS_CHANGED, agentSessionId,
-                    payloadNode("status", "waiting_user")));
+                    opencodeSessionId, payloadNode("status", "waiting_user")));
                 result.add(buildEnvelope(RuntimeEventTypes.CONVERSATION_COMPLETED, agentSessionId,
-                    JsonNodeFactory.instance.objectNode()));
+                    opencodeSessionId, JsonNodeFactory.instance.objectNode()));
             }
             case "permission.asked", "permission.updated" -> {
-                result.addAll(translatePermission(agentSessionId, props));
+                result.addAll(translatePermission(opencodeSessionId, agentSessionId, props));
             }
             case "session.error" -> {
-                result.addAll(translateSessionError(agentSessionId, props));
+                result.addAll(translateSessionError(opencodeSessionId, agentSessionId, props));
             }
             default -> {}
         }
@@ -85,7 +85,7 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
             String text = resolvePartText(opencodeSessionId, part, delta);
             if (!text.isEmpty()) {
                 result.add(buildEnvelope(RuntimeEventTypes.CONVERSATION_DELTA, agentSessionId,
-                    payloadNode("assistant_delta", text)));
+                    opencodeSessionId, payloadNode("assistant_delta", text)));
             }
         } else if ("tool".equals(partType)) {
             result.addAll(translateToolPart(opencodeSessionId, agentSessionId, part));
@@ -118,7 +118,7 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
         if (("running".equals(status) || "completed".equals(status) || "error".equals(status))
                 && state.addRunningTool(opencodeSessionId, callId)) {
             result.add(buildEnvelope(RuntimeEventTypes.TOOL_STARTED, agentSessionId,
-                payloadNode("skill_started", skillName, Map.of("toolCallId", callId))));
+                opencodeSessionId, payloadNode("skill_started", skillName, Map.of("toolCallId", callId))));
         }
 
         if ("completed".equals(status) || "error".equals(status)) {
@@ -129,7 +129,7 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
                     : stateNode.path("output"));
             boolean isError = "error".equals(status);
             result.add(buildEnvelope(RuntimeEventTypes.TOOL_COMPLETED, agentSessionId,
-                payloadNode("skill_completed", skillName, Map.of(
+                opencodeSessionId, payloadNode("skill_completed", skillName, Map.of(
                     "toolCallId", callId, "isError", isError, "output", output))));
             state.removeRunningTool(opencodeSessionId, callId);
         }
@@ -137,7 +137,7 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
         return result;
     }
 
-    private List<RuntimeEventEnvelope> translateSessionStatus(String agentSessionId, JsonNode properties) {
+    private List<RuntimeEventEnvelope> translateSessionStatus(String opencodeSessionId, String agentSessionId, JsonNode properties) {
         List<RuntimeEventEnvelope> result = new ArrayList<>();
         JsonNode statusNode = properties.path("status");
         String rawStatus = statusNode.isObject() ? statusNode.path("type").asText("") : statusNode.asText("");
@@ -145,17 +145,17 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
         String status = "busy".equals(rawStatus) ? "running" : rawStatus;
 
         result.add(buildEnvelope(RuntimeEventTypes.RUNTIME_STATUS_CHANGED, agentSessionId,
-            payloadNode("status", status)));
+            opencodeSessionId, payloadNode("status", status)));
 
         if ("idle".equals(status) || "waiting_user".equals(status)) {
             result.add(buildEnvelope(RuntimeEventTypes.CONVERSATION_COMPLETED, agentSessionId,
-                JsonNodeFactory.instance.objectNode()));
+                opencodeSessionId, JsonNodeFactory.instance.objectNode()));
         }
 
         return result;
     }
 
-    private List<RuntimeEventEnvelope> translatePermission(String agentSessionId, JsonNode properties) {
+    private List<RuntimeEventEnvelope> translatePermission(String opencodeSessionId, String agentSessionId, JsonNode properties) {
         List<RuntimeEventEnvelope> result = new ArrayList<>();
         String permissionId = properties.path("id").asText("");
         String permission = properties.path("permission").asText(properties.path("type").asText("opencode_permission"));
@@ -163,13 +163,13 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
                 properties.path("tool").path("name").asText(permission));
 
         result.add(buildEnvelope(RuntimeEventTypes.PERMISSION_REQUESTED, agentSessionId,
-            payloadNode("permission_required", skillName, Map.of(
+            opencodeSessionId, payloadNode("permission_required", skillName, Map.of(
                 "permissionId", permissionId,
                 "title", properties.path("title").asText("OpenCode permission: " + permission)))));
         return result;
     }
 
-    private List<RuntimeEventEnvelope> translateSessionError(String agentSessionId, JsonNode properties) {
+    private List<RuntimeEventEnvelope> translateSessionError(String opencodeSessionId, String agentSessionId, JsonNode properties) {
         List<RuntimeEventEnvelope> result = new ArrayList<>();
         JsonNode error = properties.path("error");
         String reason = error.path("data").path("message").asText("");
@@ -177,14 +177,15 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
         if (reason.isEmpty()) reason = properties.path("message").asText("unknown OpenCode session error");
 
         result.add(buildEnvelope(RuntimeEventTypes.RUNTIME_ERROR, agentSessionId,
-            payloadNode("status", "failed", Map.of("reason", reason))));
+            opencodeSessionId, payloadNode("status", "failed", Map.of("reason", reason))));
         return result;
     }
 
-    private RuntimeEventEnvelope buildEnvelope(String type, String agentSessionId, JsonNode payload) {
+    private RuntimeEventEnvelope buildEnvelope(String type, String agentSessionId,
+                                                String opencodeSessionId, JsonNode payload) {
         return new RuntimeEventEnvelope(
             "runtime-event", type, null, null, null,
-            RuntimeType.OPENCODE, agentSessionId, null, null, null, null,
+            RuntimeType.OPENCODE, agentSessionId, opencodeSessionId, null, null, null,
             payload, java.time.OffsetDateTime.now());
     }
 

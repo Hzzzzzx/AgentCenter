@@ -72,6 +72,11 @@ class OpenCodeRuntimeEventTranslatorTest {
         return new RuntimeRawEvent(RuntimeType.OPENCODE, eventType, rawJson, OPENCODE_SESSION_ID);
     }
 
+    private void assertRuntimeSessionId(RuntimeEventEnvelope env) {
+        assertEquals(OPENCODE_SESSION_ID, env.runtimeSessionId(),
+            "envelope must carry opencodeSessionId for downstream correlation");
+    }
+
     // --- Test Cases ---
 
     @Test
@@ -92,6 +97,7 @@ class OpenCodeRuntimeEventTranslatorTest {
         RuntimeEventEnvelope env = result.get(0);
         assertEquals(RuntimeEventTypes.CONVERSATION_DELTA, env.type());
         assertEquals(AGENT_SESSION_ID, env.agentSessionId());
+        assertRuntimeSessionId(env);
         assertEquals("Hello", env.payload().path("label").asText());
     }
 
@@ -181,6 +187,7 @@ class OpenCodeRuntimeEventTranslatorTest {
         assertEquals(1, result.size());
         RuntimeEventEnvelope env = result.get(0);
         assertEquals(RuntimeEventTypes.TOOL_STARTED, env.type());
+        assertRuntimeSessionId(env);
         assertEquals("Read", env.payload().path("label").asText());
         assertEquals("call_1", env.payload().path("toolCallId").asText());
     }
@@ -201,6 +208,7 @@ class OpenCodeRuntimeEventTranslatorTest {
         // First time seeing callID: produces both started + completed
         assertEquals(2, result.size());
         assertEquals(RuntimeEventTypes.TOOL_STARTED, result.get(0).type());
+        assertRuntimeSessionId(result.get(0));
         assertEquals(RuntimeEventTypes.TOOL_COMPLETED, result.get(1).type());
         assertEquals("Write", result.get(1).payload().path("label").asText());
         assertEquals("call_2", result.get(1).payload().path("toolCallId").asText());
@@ -277,8 +285,10 @@ class OpenCodeRuntimeEventTranslatorTest {
 
         assertEquals(2, result.size());
         assertEquals(RuntimeEventTypes.RUNTIME_STATUS_CHANGED, result.get(0).type());
+        assertRuntimeSessionId(result.get(0));
         assertEquals("waiting_user", result.get(0).payload().path("label").asText());
         assertEquals(RuntimeEventTypes.CONVERSATION_COMPLETED, result.get(1).type());
+        assertRuntimeSessionId(result.get(1));
     }
 
     @Test
@@ -320,6 +330,7 @@ class OpenCodeRuntimeEventTranslatorTest {
 
         assertEquals(1, result.size());
         assertEquals(RuntimeEventTypes.RUNTIME_ERROR, result.get(0).type());
+        assertRuntimeSessionId(result.get(0));
         assertEquals("failed", result.get(0).payload().path("label").asText());
         assertTrue(result.get(0).payload().path("reason").asText().contains("Something went wrong"));
     }
