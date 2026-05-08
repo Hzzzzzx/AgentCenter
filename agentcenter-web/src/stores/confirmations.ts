@@ -11,7 +11,11 @@ export const useConfirmationStore = defineStore('confirmations', () => {
   async function loadPending() {
     loading.value = true
     try {
-      pendingConfirmations.value = await confirmationApi.list('PENDING')
+      const [pending, inConversation] = await Promise.all([
+        confirmationApi.list('PENDING'),
+        confirmationApi.list('IN_CONVERSATION'),
+      ])
+      pendingConfirmations.value = [...pending, ...inConversation]
     } finally {
       loading.value = false
     }

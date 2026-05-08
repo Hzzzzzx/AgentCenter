@@ -246,15 +246,29 @@ function enterSession() {
 <template>
   <div class="confirmation-card">
     <div class="confirmation-card__header">
-      <span
-        class="confirmation-card__type"
-        :style="{
-          backgroundColor: typeColors[confirmation.requestType] + '18',
-          color: typeColors[confirmation.requestType]
-        }"
-      >
-        {{ typeLabels[confirmation.requestType] }}
-      </span>
+      <div class="confirmation-card__badges">
+        <span
+          class="confirmation-card__type"
+          :style="{
+            backgroundColor: typeColors[confirmation.requestType] + '18',
+            color: typeColors[confirmation.requestType]
+          }"
+        >
+          {{ typeLabels[confirmation.requestType] }}
+        </span>
+        <span
+          v-if="confirmation.status === 'IN_CONVERSATION'"
+          class="confirmation-card__status confirmation-card__status--in-conversation"
+        >
+          处理中
+        </span>
+        <span
+          v-else-if="confirmation.status === 'PENDING'"
+          class="confirmation-card__status confirmation-card__status--pending"
+        >
+          待处理
+        </span>
+      </div>
       <span class="confirmation-card__time">{{ formatTime(confirmation.createdAt) }}</span>
     </div>
     <div class="confirmation-card__work-item">
@@ -346,7 +360,7 @@ function enterSession() {
 
         <footer class="confirmation-dialog__actions">
           <button
-            v-if="confirmation.status === 'PENDING' && isDecision"
+            v-if="(confirmation.status === 'PENDING' || confirmation.status === 'IN_CONVERSATION') && isDecision"
             class="confirmation-card__action confirmation-card__action--approve"
             :disabled="!!busyAction || !canSubmitDecision"
             @click="handleDecision"
@@ -354,7 +368,7 @@ function enterSession() {
             {{ busyAction === 'submit' ? '提交中...' : '提交选择' }}
           </button>
           <button
-            v-else-if="confirmation.status === 'PENDING' && isInputRequired"
+            v-else-if="(confirmation.status === 'PENDING' || confirmation.status === 'IN_CONVERSATION') && isInputRequired"
             class="confirmation-card__action confirmation-card__action--approve"
             :disabled="!!busyAction || !canSubmitInput"
             @click="handleSupplement"
@@ -362,7 +376,7 @@ function enterSession() {
             {{ busyAction === 'submit' ? '提交中...' : '提交补充' }}
           </button>
           <button
-            v-else-if="confirmation.status === 'PENDING' && isException"
+            v-else-if="(confirmation.status === 'PENDING' || confirmation.status === 'IN_CONVERSATION') && isException"
             class="confirmation-card__action confirmation-card__action--approve"
             :disabled="!!busyAction"
             @click="handleRetry"
@@ -370,7 +384,7 @@ function enterSession() {
             {{ busyAction === 'retry' ? '重试中...' : '重试' }}
           </button>
           <button
-            v-else-if="confirmation.status === 'PENDING'"
+            v-else-if="confirmation.status === 'PENDING' || confirmation.status === 'IN_CONVERSATION'"
             class="confirmation-card__action confirmation-card__action--approve"
             :disabled="!!busyAction"
             @click="handleApprove"
@@ -378,7 +392,7 @@ function enterSession() {
             {{ busyAction === 'approve' ? '推进中...' : '通过' }}
           </button>
           <button
-            v-if="confirmation.status === 'PENDING' && isException"
+            v-if="(confirmation.status === 'PENDING' || confirmation.status === 'IN_CONVERSATION') && isException"
             class="confirmation-card__action confirmation-card__action--reject"
             :disabled="!!busyAction"
             @click="handleSkip"
@@ -386,7 +400,7 @@ function enterSession() {
             {{ busyAction === 'skip' ? '处理中...' : '跳过' }}
           </button>
           <button
-            v-else-if="confirmation.status === 'PENDING'"
+            v-else-if="confirmation.status === 'PENDING' || confirmation.status === 'IN_CONVERSATION'"
             class="confirmation-card__action confirmation-card__action--reject"
             :disabled="!!busyAction"
             @click="handleReject"
@@ -419,11 +433,34 @@ function enterSession() {
   justify-content: space-between;
 }
 
+.confirmation-card__badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .confirmation-card__type {
   font-size: 11px;
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 4px;
+}
+
+.confirmation-card__status {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.confirmation-card__status--pending {
+  background-color: #fef3c7;
+  color: #d97706;
+}
+
+.confirmation-card__status--in-conversation {
+  background-color: #dbeafe;
+  color: #2563eb;
 }
 
 .confirmation-card__time {

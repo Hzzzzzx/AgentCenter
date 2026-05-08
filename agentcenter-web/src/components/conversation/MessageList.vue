@@ -104,9 +104,11 @@ function roleGlyph(message: AgentMessageDto): string {
 }
 
 function statusLabel(message: AgentMessageDto): string {
-  if (message.status === 'STREAMING') return '流式中'
-  if (message.status === 'FAILED') return '失败'
-  return message.role === 'ASSISTANT' ? '已完成' : '已记录'
+  if (message.status === 'STREAMING') return '回复中'
+  if (message.status === 'FAILED') return '回复失败'
+  if (message.role === 'ASSISTANT') return '回复完成'
+  if (message.role === 'TOOL') return '工具输出'
+  return '已记录'
 }
 
 function shouldRenderMarkdown(message: AgentMessageDto): boolean {
@@ -136,48 +138,33 @@ function toActivityItem(event: RuntimeEventDto): ActivityItem | null {
   const label = textField(payload, ['skillName', 'label', 'title', 'type'])
   const detail = textField(payload, ['errorMessage', 'reason', 'output', 'summary', 'content', 'permissionId', 'toolCallId'])
 
+  // Filter out STATUS, SKILL_STARTED, and successful SKILL_COMPLETED
   if (event.eventType === 'STATUS') {
-    const status = textField(payload, ['status', 'label'])
-    if (status === 'running') {
-      return {
-        id: event.id,
-        key: 'runtime-status',
-        title: '智能体正在处理',
-        detail: '任务已下发，正在等待模型或工具输出。',
-        status: 'running',
-      }
-    }
-    if (status === 'waiting_user' || status === 'idle') {
-      return {
-        id: event.id,
-        key: 'runtime-status',
-        title: '智能体等待下一步',
-        detail: '本轮输出已结束，可以继续输入或处理待确认项。',
-        status: 'waiting',
-      }
-    }
     return null
   }
 
   if (event.eventType === 'SKILL_STARTED') {
-    return {
-      id: event.id,
-      key: `skill:${label || event.workflowNodeInstanceId || event.id}`,
-      title: `正在调用 ${label || '工具'}`,
-      detail: detail || '运行时工具已启动。',
-      status: 'running',
-    }
+    return null
   }
 
   if (event.eventType === 'SKILL_COMPLETED') {
     const isError = payload.isError === true || payload.success === false
+    // Only keep failed SKILL_COMPLETED
+    if (!isError) {
+      return null
+    }
     return {
       id: event.id,
       key: `skill:${label || event.workflowNodeInstanceId || event.id}`,
-      title: `${label || '工具'} ${isError ? '执行失败' : '执行完成'}`,
+      title: `${label || '工具'} 执行失败`,
       detail: detail ? trimDetail(detail) : '工具调用已返回结果。',
-      status: isError ? 'error' : 'done',
+      status: 'error',
     }
+  }
+
+  // Filter out MCP_CALL - not handled here
+  if (event.eventType === 'MCP_CALL') {
+    return null
   }
 
   if (event.eventType === 'PERMISSION_REQUIRED' || event.eventType === 'CONFIRMATION_CREATED') {
