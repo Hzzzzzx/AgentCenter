@@ -5,6 +5,7 @@ import static org.mockito.Mockito.*;
 
 import java.util.List;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -36,6 +37,11 @@ class OpenCodeEventSubscriberGlueTest {
 
         subscriber = new OpenCodeEventSubscriber(objectMapper, dispatcher, projector);
         subscriber.registerSession(OPENCODE_SES, AGENT_SES, "http://unused", "/unused");
+    }
+
+    @AfterEach
+    void tearDown() {
+        subscriber.shutdown();
     }
 
     /**
