@@ -5,7 +5,8 @@
 
     <select id="findBySessionId" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.AgentMessageEntity">
         SELECT id, session_id, role, content, content_format, status,
-               seq_no, runtime_message_id, created_by, created_at
+               seq_no, runtime_message_id, created_by, created_at,
+               workflow_node_instance_id
         FROM agent_message
         WHERE session_id = #{sessionId}
         ORDER BY seq_no ASC
@@ -13,9 +14,9 @@
 
     <insert id="insert">
         INSERT INTO agent_message (id, session_id, role, content, content_format, status,
-                                   seq_no, runtime_message_id, created_by)
+                                   seq_no, runtime_message_id, created_by, workflow_node_instance_id)
         VALUES (#{id}, #{sessionId}, #{role}, #{content}, #{contentFormat}, #{status},
-                #{seqNo}, #{runtimeMessageId}, #{createdBy})
+                #{seqNo}, #{runtimeMessageId}, #{createdBy}, #{workflowNodeInstanceId})
     </insert>
 
 </mapper>

@@ -326,7 +326,8 @@ public class AgentSessionService {
                 ContentFormat.valueOf(e.getContentFormat()),
                 MessageStatus.valueOf(e.getStatus()),
                 e.getSeqNo() != null ? e.getSeqNo() : 0,
-                parseDateTime(e.getCreatedAt())
+                parseDateTime(e.getCreatedAt()),
+                e.getWorkflowNodeInstanceId()
         );
     }
 

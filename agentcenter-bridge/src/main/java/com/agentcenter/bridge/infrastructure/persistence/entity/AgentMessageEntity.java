@@ -34,4 +34,9 @@ public class AgentMessageEntity {
     public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
     public String getCreatedAt() { return createdAt; }
     public void setCreatedAt(String createdAt) { this.createdAt = createdAt; }
+
+    private String workflowNodeInstanceId;
+
+    public String getWorkflowNodeInstanceId() { return workflowNodeInstanceId; }
+    public void setWorkflowNodeInstanceId(String workflowNodeInstanceId) { this.workflowNodeInstanceId = workflowNodeInstanceId; }
 }

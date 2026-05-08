@@ -14,5 +14,6 @@ public record AgentMessageDto(
         ContentFormat contentFormat,
         MessageStatus status,
         int seqNo,
-        OffsetDateTime createdAt
+        OffsetDateTime createdAt,
+        String workflowNodeInstanceId
 ) {}
