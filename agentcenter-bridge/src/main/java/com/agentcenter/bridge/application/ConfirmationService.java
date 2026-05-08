@@ -114,7 +114,15 @@ public class ConfirmationService {
 
         var nodeInstanceId = entity.getWorkflowNodeInstanceId();
         if (nodeInstanceId != null && !hasOtherBlockingForNode(entity)) {
-            workflowCommandService.completeNodeAndScheduleAdvance(nodeInstanceId);
+            if (ConfirmationRequestType.EXCEPTION.name().equals(entity.getRequestType())) {
+                if (ConfirmationActionType.SKIP.equals(request.actionType())) {
+                    workflowCommandService.skipNode(nodeInstanceId);
+                } else {
+                    workflowCommandService.retryNode(nodeInstanceId);
+                }
+            } else {
+                workflowCommandService.completeNodeAndScheduleAdvance(nodeInstanceId);
+            }
         }
 
         return toDto(entity);

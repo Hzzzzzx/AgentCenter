@@ -14,7 +14,8 @@ public record WorkflowSummaryDto(
             String id,
             String definitionName,
             String skillName,
-            String status
+            String status,
+            String errorMessage
     ) {}
 
     public record StageSummary(
@@ -26,6 +27,7 @@ public record WorkflowSummaryDto(
             int dynamicNodeCount,
             int recoveryCount,
             int pendingConfirmationCount,
-            String latestSummary
+            String latestSummary,
+            String errorMessage
     ) {}
 }

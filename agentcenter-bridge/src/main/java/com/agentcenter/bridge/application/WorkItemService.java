@@ -12,6 +12,7 @@ import com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowInstance
 import com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowNodeDefinitionEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowNodeInstanceEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.WorkItemEntity;
+import com.agentcenter.bridge.infrastructure.persistence.mapper.ConfirmationMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.WorkItemMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.WorkflowMapper;
 import org.springframework.http.HttpStatus;
@@ -36,11 +37,16 @@ public class WorkItemService {
 
     private final WorkItemMapper workItemMapper;
     private final WorkflowMapper workflowMapper;
+    private final ConfirmationMapper confirmationMapper;
     private final IdGenerator idGenerator;
 
-    public WorkItemService(WorkItemMapper workItemMapper, WorkflowMapper workflowMapper, IdGenerator idGenerator) {
+    public WorkItemService(WorkItemMapper workItemMapper,
+                           WorkflowMapper workflowMapper,
+                           ConfirmationMapper confirmationMapper,
+                           IdGenerator idGenerator) {
         this.workItemMapper = workItemMapper;
         this.workflowMapper = workflowMapper;
+        this.confirmationMapper = confirmationMapper;
         this.idGenerator = idGenerator;
     }
 
@@ -141,6 +147,13 @@ public class WorkItemService {
         var dynamicNodes = allNodeInstances.stream()
                 .filter(ni -> !isStageNode(ni))
                 .toList();
+        Map<String, Long> pendingConfirmationsByNode = confirmationMapper.findByWorkItemId(instance.getWorkItemId()).stream()
+                .filter(confirmation -> confirmation.getWorkflowNodeInstanceId() != null)
+                .filter(confirmation -> "PENDING".equals(confirmation.getStatus())
+                        || "IN_CONVERSATION".equals(confirmation.getStatus()))
+                .collect(Collectors.groupingBy(
+                        confirmation -> confirmation.getWorkflowNodeInstanceId(),
+                        Collectors.counting()));
 
         var stages = new ArrayList<WorkflowSummaryDto.StageSummary>();
         for (var stageNode : stageNodes) {
@@ -150,13 +163,14 @@ public class WorkItemService {
                     .filter(child -> belongsToStage(child, stageNode, stageKey))
                     .toList();
             String stageStatus = aggregateStageStatus(stageNode, children);
-            int pendingConfirmations = confirmationCount(stageNode) + children.stream()
-                    .mapToInt(this::confirmationCount)
+            int pendingConfirmations = confirmationCount(stageNode, pendingConfirmationsByNode) + children.stream()
+                    .mapToInt(child -> confirmationCount(child, pendingConfirmationsByNode))
                     .sum();
             String name = def != null ? def.getName() : null;
             String skillName = stageNode.getSkillName() != null ? stageNode.getSkillName()
                     : (def != null ? def.getSkillName() : null);
             String latestSummary = latestSummary(stageNode, children, name);
+            String errorMessage = latestErrorMessage(stageNode, children);
             stages.add(new WorkflowSummaryDto.StageSummary(
                     stageNode.getId(),
                     stageKey,
@@ -166,7 +180,8 @@ public class WorkItemService {
                     children.size(),
                     (int) children.stream().filter(this::isRecoveryNode).count(),
                     pendingConfirmations,
-                    latestSummary
+                    latestSummary,
+                    errorMessage
             ));
         }
 
@@ -175,7 +190,8 @@ public class WorkItemService {
                         stage.id(),
                         stage.name(),
                         stage.skillName(),
-                        stage.status()
+                        stage.status(),
+                        stage.errorMessage()
                 ))
                 .toList();
 
@@ -251,8 +267,8 @@ public class WorkItemService {
         return stage.getStatus();
     }
 
-    private int confirmationCount(WorkflowNodeInstanceEntity node) {
-        return "WAITING_CONFIRMATION".equals(node.getStatus()) ? 1 : 0;
+    private int confirmationCount(WorkflowNodeInstanceEntity node, Map<String, Long> pendingConfirmationsByNode) {
+        return pendingConfirmationsByNode.getOrDefault(node.getId(), 0L).intValue();
     }
 
     private String latestSummary(WorkflowNodeInstanceEntity stage,
@@ -265,6 +281,18 @@ public class WorkItemService {
                 .orElse(stage.getSummary() != null && !stage.getSummary().isBlank()
                         ? stage.getSummary()
                         : fallback);
+    }
+
+    private String latestErrorMessage(WorkflowNodeInstanceEntity stage,
+                                      List<WorkflowNodeInstanceEntity> children) {
+        if (stage.getErrorMessage() != null && !stage.getErrorMessage().isBlank()) {
+            return stage.getErrorMessage();
+        }
+        return children.stream()
+                .filter(child -> child.getErrorMessage() != null && !child.getErrorMessage().isBlank())
+                .reduce((first, second) -> second)
+                .map(WorkflowNodeInstanceEntity::getErrorMessage)
+                .orElse(null);
     }
 
     private OffsetDateTime parseDateTime(String value) {
