@@ -461,7 +461,7 @@ function handleSelectItem(id: string) {
 
 function handleLaunchClick(item: WorkItemDto) {
   const wf = workflowFor(item)
-  if (!wf || wf.status === 'FAILED' || wf.status === 'BLOCKED') {
+  if (!wf) {
     handleStartWorkflow(item.id)
   } else {
     emit('enter-conversation', item.id)

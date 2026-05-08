@@ -216,7 +216,7 @@ async function handleReject() {
   if (busyAction.value) return
   busyAction.value = 'reject'
   try {
-    await confirmationStore.rejectConfirmation(props.confirmation.id)
+    await confirmationStore.resolveConfirmation(props.confirmation.id, { actionType: 'REJECT' })
     notificationStore.push({
       anchor: 'right-panel',
       tone: 'warning',
@@ -408,7 +408,7 @@ function enterSession() {
             {{ busyAction === 'reject' ? '处理中...' : rejectLabel }}
           </button>
           <button class="confirmation-card__action" :disabled="!!busyAction" @click="enterSession">
-            进入会话
+            {{ confirmation.status === 'IN_CONVERSATION' ? '已在会话中' : '进入会话' }}
           </button>
         </footer>
       </section>

@@ -157,7 +157,7 @@ describe('ConfirmationCard.vue', () => {
     await document.body.querySelector<HTMLButtonElement>('.confirmation-card__action--reject')!.click()
     await vi.dynamicImportSettled()
 
-    expect(confirmationApi.reject).toHaveBeenCalledWith('conf-1', { comment: undefined })
+    expect(confirmationApi.resolve).toHaveBeenCalledWith('conf-1', { actionType: 'REJECT' })
     expect(wrapper.emitted('rejected')).toBeTruthy()
     expect(wrapper.emitted('rejected')![0]).toEqual(['conf-1'])
     expect(notificationStore.rightPanelNotifications[0].title).toBe('已拒绝确认')

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref, watch, nextTick } from 'vue'
 import { useConfirmationStore } from '../../stores/confirmations'
 import { useWorkItemStore } from '../../stores/workItems'
 import ConfirmationCard from './ConfirmationCard.vue'
@@ -13,6 +13,8 @@ const emit = defineEmits<{
   rejected: [id: string]
   changed: [workItemId?: string | null]
 }>()
+
+const selectedCardRef = ref<HTMLElement | null>(null)
 
 onMounted(() => {
   store.loadPending()
@@ -45,6 +47,13 @@ async function handleRejected(id: string) {
   emit('rejected', id)
   await refreshAfterDecision(workItemId)
 }
+
+watch(() => store.currentConfirmation, async (confirmation) => {
+  if (confirmation) {
+    await nextTick()
+    selectedCardRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }
+})
 </script>
 
 <template>
@@ -56,15 +65,21 @@ async function handleRejected(id: string) {
       无待确认事项
     </div>
     <div v-else class="confirmation-panel__list">
-      <ConfirmationCard
+      <div
         v-for="item in store.pendingConfirmations"
         :key="item.id"
-        :confirmation="item"
-        :work-item="workItemFor(item.workItemId)"
-        @handle="emit('handle', $event)"
-        @resolved="handleResolved"
-        @rejected="handleRejected"
-      />
+        :ref="el => { if (item.id === store.currentConfirmation?.id) selectedCardRef = el as HTMLElement }"
+        class="confirmation-panel__card-wrapper"
+        :class="{ 'confirmation-panel__card-wrapper--selected': item.id === store.currentConfirmation?.id }"
+      >
+        <ConfirmationCard
+          :confirmation="item"
+          :work-item="workItemFor(item.workItemId)"
+          @handle="emit('handle', $event)"
+          @resolved="handleResolved"
+          @rejected="handleRejected"
+        />
+      </div>
     </div>
   </div>
 </template>
@@ -91,5 +106,16 @@ async function handleRejected(id: string) {
   flex-direction: column;
   gap: 10px;
   padding: 4px 0;
+}
+
+.confirmation-panel__card-wrapper {
+  border-radius: 8px;
+  border: 2px solid transparent;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.confirmation-panel__card-wrapper--selected {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 2px var(--focus-ring);
 }
 </style>

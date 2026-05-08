@@ -25,6 +25,7 @@ const targetSessionId = ref<string | null>(null)
 const selectedArtifact = ref<ArtifactDto | null>(null)
 const conversationReturnView = ref('home')
 const settingsTab = ref<string>('skills')
+const appShellRef = ref<InstanceType<typeof AppShell> | null>(null)
 const projectContextOptions: ProjectContextOptions = {
   projects: ['AgentCenter', 'TianYuan', '平台接入'],
   spaces: ['研发中台', '平台工程', '安全治理'],
@@ -228,10 +229,20 @@ function rememberConversationReturnView() {
 function handleConversationBack() {
   activeView.value = conversationReturnView.value || 'home'
 }
+
+async function handleShowConfirmation(confirmationId: string) {
+  try {
+    await confirmationStore.selectConfirmation(confirmationId)
+    appShellRef.value?.expandRightPanel()
+  } catch (e) {
+    console.error('Failed to select confirmation:', e)
+  }
+}
 </script>
 
 <template>
   <AppShell
+    ref="appShellRef"
     v-model:activeView="activeView"
     :selected-work-item="selectedWorkItem"
     :selected-artifact="selectedArtifact"
@@ -271,6 +282,7 @@ function handleConversationBack() {
         :target-session-id="targetSessionId"
         @back="handleConversationBack"
         @open-artifact="selectedArtifact = $event"
+        @show-confirmation="handleShowConfirmation"
       />
     </template>
   </AppShell>

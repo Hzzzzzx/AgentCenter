@@ -73,6 +73,13 @@ watch(() => props.selectedWorkItem, (item) => {
   }
 })
 
+// Auto-switch to confirmations tab when a confirmation is selected from the node state area
+watch(() => confirmationStore.currentConfirmation, (confirmation) => {
+  if (confirmation) {
+    activeTab.value = 'confirmations'
+  }
+})
+
 watch(() => props.selectedArtifact, (artifact) => {
   if (artifact) {
     activeTab.value = 'artifact'

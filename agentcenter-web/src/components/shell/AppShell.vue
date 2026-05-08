@@ -56,6 +56,12 @@ function handleRightCollapsedChange(value: boolean) {
   }
 }
 
+function expandRightPanel() {
+  rightCollapsed.value = false
+}
+
+defineExpose({ expandRightPanel })
+
 function handleRightExpandedChange(value: boolean) {
   rightExpanded.value = value
   if (value) {
