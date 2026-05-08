@@ -114,6 +114,47 @@ class OpenCodeSkillFileServiceTest {
         assertThat(installedFile).hasContent("Version 3");
     }
 
+    @Test
+    void rejectsPathTraversalInSkillName() {
+        Path sourceDir = tempDir.resolve("source-skill");
+        assertThatThrownBy(() -> service.installSkill("../escape", sourceDir))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("unsafe characters");
+    }
+
+    @Test
+    void rejectsBlankSkillName() {
+        assertThatThrownBy(() -> service.installSkill("", tempDir))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("must not be blank");
+    }
+
+    @Test
+    void rejectsDotAsSkillName() throws IOException {
+        Path skillsRoot = tempDir.resolve(".opencode").resolve("skills");
+        Files.createDirectories(skillsRoot);
+        Files.writeString(skillsRoot.resolve("existing.txt"), "important");
+
+        assertThatThrownBy(() -> service.installSkill(".", tempDir))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("must not be blank, '.', or '..'");
+
+        assertThat(skillsRoot.resolve("existing.txt")).exists();
+    }
+
+    @Test
+    void rejectsDotDotAsSkillName() throws IOException {
+        Path opencodeDir = tempDir.resolve(".opencode");
+        Files.createDirectories(opencodeDir);
+        Files.writeString(opencodeDir.resolve("precious.json"), "do-not-delete");
+
+        assertThatThrownBy(() -> service.installSkill("..", tempDir))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("must not be blank, '.', or '..'");
+
+        assertThat(opencodeDir.resolve("precious.json")).exists();
+    }
+
     // --- deleteSkillFiles ---
 
     @Test

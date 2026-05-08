@@ -78,18 +78,19 @@ public class McpRegistryService {
             return listMcps(projectId);
         }
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> servers = (Map<String, Object>) config.get("mcpServers");
-        if (servers == null || servers.isEmpty()) {
+        Object serversRaw = config.get("mcpServers");
+        if (!(serversRaw instanceof Map<?, ?> serversMap)) {
             return listMcps(projectId);
         }
 
         try {
             int imported = 0;
-            for (Map.Entry<String, Object> entry : servers.entrySet()) {
-                String serverName = entry.getKey();
+            for (Map.Entry<?, ?> entry : serversMap.entrySet()) {
+                if (!(entry.getKey() instanceof String serverName) || !(entry.getValue() instanceof Map<?, ?> rawConfig)) {
+                    continue;
+                }
                 @SuppressWarnings("unchecked")
-                Map<String, Object> serverConfig = (Map<String, Object>) entry.getValue();
+                Map<String, Object> serverConfig = (Map<String, Object>) rawConfig;
 
                 ProjectMcpServerEntity existing = mcpServerMapper.findByProjectIdAndName(projectId, serverName);
                 String configJson = objectMapper.writeValueAsString(serverConfig);

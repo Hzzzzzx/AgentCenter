@@ -33,6 +33,7 @@ public class OpenCodeSkillFileService {
 
     private static final Logger log = LoggerFactory.getLogger(OpenCodeSkillFileService.class);
     private static final String FRONTMATTER_FIELD = "(?m)^%s\\s*:\\s*[\"']?([^\"'\\n]+)[\"']?\\s*$";
+    private static final Pattern SAFE_SKILL_NAME = Pattern.compile("[a-zA-Z0-9._-]+");
 
     private final Path workingDir;
 
@@ -58,16 +59,24 @@ public class OpenCodeSkillFileService {
     }
 
     public String installSkill(String skillName, Path sourceDir) {
-        Path targetDir = skillsRoot().resolve(skillName);
+        validateSkillName(skillName);
+        Path skillsRoot = skillsRoot();
+        Path targetDir = skillsRoot.resolve(skillName).normalize();
+        if (targetDir.equals(skillsRoot) || !targetDir.startsWith(skillsRoot)) {
+            throw new IllegalStateException("Refusing to install skill outside skills directory: " + targetDir);
+        }
         try {
             if (Files.exists(targetDir)) {
-                deleteRecursively(targetDir);
+                deleteRecursivelyOrThrow(targetDir);
             }
             Files.createDirectories(targetDir);
             try (Stream<Path> walk = Files.walk(sourceDir)) {
                 for (Path source : walk.filter(Files::isRegularFile).toList()) {
                     Path relative = sourceDir.relativize(source);
-                    Path target = targetDir.resolve(relative);
+                    Path target = targetDir.resolve(relative).normalize();
+                    if (!target.startsWith(targetDir)) {
+                        throw new IOException("Refusing to copy file outside target directory: " + relative);
+                    }
                     Files.createDirectories(target.getParent());
                     Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
                 }
@@ -89,13 +98,17 @@ public class OpenCodeSkillFileService {
         }
 
         Path skillsRoot = skillsRoot();
-        if (!targetDir.startsWith(skillsRoot)) {
+        if (targetDir.equals(skillsRoot) || !targetDir.startsWith(skillsRoot)) {
             throw new IllegalStateException("Refusing to delete path outside skills directory: " + targetDir);
         }
 
         if (Files.exists(targetDir)) {
-            deleteRecursively(targetDir);
-            log.info("Deleted skill files at {}", targetDir);
+            try {
+                deleteRecursivelyOrThrow(targetDir);
+                log.info("Deleted skill files at {}", targetDir);
+            } catch (IOException e) {
+                throw new IllegalStateException("Failed to delete skill files at " + targetDir, e);
+            }
         }
     }
 
@@ -160,13 +173,36 @@ public class OpenCodeSkillFileService {
         }
     }
 
+    private void validateSkillName(String skillName) {
+        if (skillName == null || skillName.isBlank() || ".".equals(skillName) || "..".equals(skillName)) {
+            throw new IllegalArgumentException("Skill name must not be blank, '.', or '..'");
+        }
+        if (!SAFE_SKILL_NAME.matcher(skillName).matches()) {
+            throw new IllegalArgumentException(
+                    "Skill name contains unsafe characters (allowed: alphanumeric, dot, hyphen, underscore): " + skillName);
+        }
+    }
+
+    private void deleteRecursivelyOrThrow(Path dir) throws IOException {
+        try (Stream<Path> walk = Files.walk(dir)) {
+            List<Path> paths = walk.sorted(Comparator.reverseOrder()).toList();
+            for (Path p : paths) {
+                Files.deleteIfExists(p);
+            }
+        }
+    }
+
     private void deleteRecursively(Path dir) {
         try (Stream<Path> walk = Files.walk(dir)) {
             walk.sorted(Comparator.reverseOrder())
                     .forEach(p -> {
                         try { Files.deleteIfExists(p); }
-                        catch (IOException ignored) {}
+                        catch (IOException e) {
+                            log.warn("Failed to delete {}: {}", p, e.getMessage());
+                        }
                     });
-        } catch (IOException ignored) {}
+        } catch (IOException e) {
+            log.warn("Failed to walk directory for deletion {}: {}", dir, e.getMessage());
+        }
     }
 }
