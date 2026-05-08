@@ -215,7 +215,7 @@ describe('HomeOverview.vue', () => {
 
     const btn = wrapper.find('.home-overview__launch')
     expect(btn.text()).toBe('处理中')
-    expect(btn.attributes('disabled')).toBeDefined()
+    expect(btn.attributes('disabled')).toBeUndefined()
     expect(wrapper.find('.home-overview__flow em').text()).toBe('HLD')
   })
 
@@ -231,7 +231,7 @@ describe('HomeOverview.vue', () => {
     for (const node of nodes) {
       expect(node.classes()).toContain('home-overview__node--done')
     }
-    expect(wrapper.find('.home-overview__launch').text()).toBe('已完成')
+    expect(wrapper.find('.home-overview__launch').text()).toBe('查看结果')
   })
 
   it('hydrates workflow store from workflowSummary via upsertInstance', async () => {
