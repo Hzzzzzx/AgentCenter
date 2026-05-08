@@ -41,6 +41,7 @@ const saving = ref(false)
 const error = ref<string | null>(null)
 const savedMessage = ref<string | null>(null)
 const orchestrationIntent = ref('选择可用 Skill 后，由 Agent 先生成可解释的大阶段路线；真正执行时根据工作项信息、上游产物和运行时事件动态决定是否提问、让用户选择方案或进入下一阶段。')
+const agentFlowMermaid = ref('')
 
 const inputPolicies = [
   { value: 'WORK_ITEM_ONLY', label: '工作项' },
@@ -86,6 +87,18 @@ const availableSkillNames = computed(() => {
 const isDraftDirty = computed(() => {
   if (!draft.value || initialDraftSnapshot.value === null) return false
   return serializeDraft(draft.value) !== initialDraftSnapshot.value
+})
+
+const agentFlowBranches = computed(() => {
+  if (!draft.value) return []
+  return draft.value.nodes.map((node, index) => ({
+    id: `${index + 1}`,
+    stage: node.name || `阶段 ${index + 1}`,
+    skillName: node.skillName || '未选择 Skill',
+    input: inputPolicyLabel(node.inputPolicy),
+    review: node.requiredConfirmation ? '可能触发产物审阅' : '默认自动推进',
+    dynamic: node.allowDynamicActions ? '允许澄清/选择/修复分支' : '仅保留失败处理',
+  }))
 })
 
 onMounted(() => {
@@ -166,6 +179,7 @@ function beginEdit(definition: WorkflowDefinitionDto) {
     })),
   }
   draft.value = nextDraft
+  agentFlowMermaid.value = buildAgentFlowMermaid(nextDraft)
   initialDraftSnapshot.value = serializeDraft(nextDraft)
 }
 
@@ -173,6 +187,7 @@ function cancelEdit() {
   editingDefinitionId.value = null
   draft.value = null
   initialDraftSnapshot.value = null
+  agentFlowMermaid.value = ''
   error.value = null
 }
 
@@ -190,6 +205,7 @@ function addNode() {
     allowDynamicActions: true,
     confirmationPolicy: 'EVENT_DRIVEN',
   })
+  agentFlowMermaid.value = buildAgentFlowMermaid(draft.value)
 }
 
 function appendSkillAsStage(skillName: string) {
@@ -206,11 +222,13 @@ function appendSkillAsStage(skillName: string) {
     allowDynamicActions: true,
     confirmationPolicy: 'EVENT_DRIVEN',
   })
+  agentFlowMermaid.value = buildAgentFlowMermaid(draft.value)
 }
 
 function removeNode(index: number) {
   if (!draft.value || draft.value.nodes.length <= 1) return
   draft.value.nodes.splice(index, 1)
+  agentFlowMermaid.value = buildAgentFlowMermaid(draft.value)
 }
 
 function moveNode(index: number, direction: -1 | 1) {
@@ -221,6 +239,7 @@ function moveNode(index: number, direction: -1 | 1) {
   const current = nodes[index]
   nodes[index] = nodes[nextIndex]
   nodes[nextIndex] = current
+  agentFlowMermaid.value = buildAgentFlowMermaid(draft.value)
 }
 
 function generateDraftPlan() {
@@ -236,6 +255,7 @@ function generateDraftPlan() {
       allowDynamicActions: true,
       confirmationPolicy: node.requiredConfirmation ? 'EVENT_DRIVEN_REVIEW' : 'EVENT_DRIVEN',
     }))
+  agentFlowMermaid.value = buildAgentFlowMermaid(draft.value)
   savedMessage.value = '已根据当前 Skill 和编排意图生成阶段草案，保存后会成为新版编排'
 }
 
@@ -285,6 +305,48 @@ function serializeDraft(value: DefinitionDraft): string {
       confirmationPolicy: node.confirmationPolicy,
     })),
   })
+}
+
+function buildAgentFlowMermaid(value: DefinitionDraft): string {
+  const lines = ['flowchart TD']
+  lines.push('  START["读取工作项与用户编排意图"]')
+  value.nodes.forEach((node, index) => {
+    const id = `S${index + 1}`
+    const nextId = index === value.nodes.length - 1 ? 'DONE' : `S${index + 2}`
+    const stageLabel = `${node.name || `阶段 ${index + 1}`}\\nSkill: ${node.skillName || '未选择'}`
+    if (index === 0) {
+      lines.push(`  START --> ${id}["${escapeMermaidLabel(stageLabel)}"]`)
+    } else {
+      lines.push(`  ${id}["${escapeMermaidLabel(stageLabel)}"]`)
+    }
+    if (node.allowDynamicActions) {
+      lines.push(`  ${id} --> Q${index + 1}{"信息是否足够？"}`)
+      lines.push(`  Q${index + 1} -->|不足 / ASK_USER| U${index + 1}["向用户澄清输入"]`)
+      lines.push(`  U${index + 1} --> ${id}`)
+      lines.push(`  Q${index + 1} -->|足够| D${index + 1}{"是否存在路线取舍？"}`)
+      lines.push(`  D${index + 1} -->|需要选择 / DECISION_REQUIRED| C${index + 1}["让用户选择方案"]`)
+      lines.push(`  C${index + 1} --> A${index + 1}["生成阶段产物"]`)
+      lines.push(`  D${index + 1} -->|无阻塞| A${index + 1}`)
+    } else {
+      lines.push(`  ${id} --> A${index + 1}["生成阶段产物"]`)
+    }
+    if (node.requiredConfirmation) {
+      lines.push(`  A${index + 1} --> R${index + 1}{"是否需要审阅？"}`)
+      lines.push(`  R${index + 1} -->|是 / ARTIFACT_REVIEW_REQUESTED| V${index + 1}["等待用户审阅"]`)
+      lines.push(`  V${index + 1} --> ${nextId}`)
+      lines.push(`  R${index + 1} -->|否| ${nextId}`)
+    } else {
+      lines.push(`  A${index + 1} --> ${nextId}`)
+    }
+    lines.push(`  A${index + 1} -. 异常/缺口 .-> F${index + 1}["临时修复或补充分析"]`)
+    lines.push(`  F${index + 1} -. 回到阶段 .-> ${id}`)
+  })
+  lines.push('  DONE["完成并归档产物"]')
+  return lines.join('\n')
+}
+
+function escapeMermaidLabel(value: string): string {
+  return value.replace(/"/g, "'")
 }
 
 async function saveDraft() {
@@ -442,6 +504,41 @@ async function saveDraft() {
               生成阶段草案
             </button>
           </div>
+
+          <section class="workflow-editor__agent-flow" aria-label="Agent 理解流程图">
+            <div class="workflow-editor__section-title">
+              <strong>Agent 理解流程图</strong>
+              <span>生成阶段草案时同步刷新，用户可据此调整阶段和 Skill</span>
+            </div>
+            <div class="workflow-editor__flow-grid">
+              <div class="workflow-editor__flow-preview">
+                <div
+                  v-for="branch in agentFlowBranches"
+                  :key="branch.id"
+                  class="workflow-editor__flow-stage"
+                >
+                  <span class="workflow-editor__stage-order">{{ branch.id }}</span>
+                  <div>
+                    <strong>{{ branch.stage }}</strong>
+                    <p>{{ branch.skillName }} · {{ branch.input }}</p>
+                    <div class="workflow-editor__flow-branches">
+                      <span>{{ branch.dynamic }}</span>
+                      <span>{{ branch.review }}</span>
+                      <span>异常时回到本阶段修复</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <label class="workflow-editor__flow-source">
+                <span>Mermaid 草图</span>
+                <textarea
+                  v-model="agentFlowMermaid"
+                  rows="12"
+                  aria-label="Agent 理解 Mermaid 草图"
+                />
+              </label>
+            </div>
+          </section>
 
           <div class="workflow-editor__workspace">
             <aside class="workflow-editor__skills" aria-label="可选 Skill">
@@ -1057,6 +1154,72 @@ async function saveDraft() {
   min-height: auto;
 }
 
+.workflow-editor__agent-flow {
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background-color: var(--bg-primary);
+}
+
+.workflow-editor__flow-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.9fr);
+  gap: 12px;
+}
+
+.workflow-editor__flow-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.workflow-editor__flow-stage {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background-color: var(--bg-secondary);
+}
+
+.workflow-editor__flow-stage strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.workflow-editor__flow-stage p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.workflow-editor__flow-branches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.workflow-editor__flow-branches span {
+  min-height: 22px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background-color: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.workflow-editor__flow-source textarea {
+  min-height: 260px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 .workflow-editor__workspace {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
@@ -1164,6 +1327,7 @@ async function saveDraft() {
 @media (max-width: 1180px) {
   .workflow-config__model,
   .workflow-definition__body,
+  .workflow-editor__flow-grid,
   .workflow-editor__workspace {
     grid-template-columns: 1fr;
   }

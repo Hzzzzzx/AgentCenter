@@ -91,6 +91,7 @@ type DetailWorkflowNode = {
   recoveryCount?: number
   pendingConfirmationCount?: number
   latestSummary?: string | null
+  errorMessage?: string | null
 }
 
 function buildWorkflowWithAnchors(skillNodes: DetailWorkflowNode[]): DetailWorkflowNode[] {
@@ -134,6 +135,7 @@ const workflowNodes = computed(() => {
       recoveryCount: stage.recoveryCount,
       pendingConfirmationCount: stage.pendingConfirmationCount,
       latestSummary: stage.latestSummary,
+      errorMessage: stage.errorMessage,
     }))
     return buildWorkflowWithAnchors(stages)
   }
@@ -143,6 +145,7 @@ const workflowNodes = computed(() => {
       label: n.definitionName ?? n.skillName ?? '阶段',
       status: n.status,
       kind: 'skill' as const,
+      errorMessage: n.errorMessage,
     }))
     return buildWorkflowWithAnchors(skills)
   }
@@ -190,11 +193,18 @@ function nodeClass(status: WorkflowNodeStatus): string {
 }
 
 function nodeMeta(node: DetailWorkflowNode): string {
+  if (node.status === 'FAILED' && node.errorMessage?.trim()) {
+    return `失败原因：${node.errorMessage.trim()}`
+  }
   const parts: string[] = []
   if (node.dynamicNodeCount) parts.push(`${node.dynamicNodeCount} 动态步骤`)
   if (node.recoveryCount) parts.push(`${node.recoveryCount} 修复`)
   if (node.pendingConfirmationCount) parts.push(`${node.pendingConfirmationCount} 待确认`)
   return parts.join(' · ')
+}
+
+function nodeMetaText(node: DetailWorkflowNode): string {
+  return nodeMeta(node) || node.latestSummary || ''
 }
 
 function handleStartWorkflow() {
@@ -355,8 +365,8 @@ function handleToggleExpanded() {
                   <span class="detail__node-dot"></span>
                   <span class="detail__node-content">
                     <span class="detail__node-label">{{ node.label }}</span>
-                    <span v-if="node.latestSummary || nodeMeta(node)" class="detail__node-meta">
-                      {{ node.latestSummary || nodeMeta(node) }}
+                    <span v-if="nodeMetaText(node)" class="detail__node-meta">
+                      {{ nodeMetaText(node) }}
                     </span>
                   </span>
                   <span class="detail__node-status">{{ statusLabels[node.status] }}</span>
@@ -751,6 +761,12 @@ function handleToggleExpanded() {
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.detail__node--failed .detail__node-meta {
+  color: var(--error);
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .detail__node-status {

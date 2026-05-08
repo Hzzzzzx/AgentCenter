@@ -85,6 +85,10 @@ describe('WorkflowConfig.vue', () => {
 
     expect(wrapper.text()).toContain('自然语言编排意图')
     expect(wrapper.text()).toContain('Skill 池')
+    expect(wrapper.text()).toContain('Agent 理解流程图')
+    expect(wrapper.find('textarea[aria-label="Agent 理解 Mermaid 草图"]').exists()).toBe(true)
+    const flowTextarea = wrapper.find('textarea[aria-label="Agent 理解 Mermaid 草图"]').element as HTMLTextAreaElement
+    expect(flowTextarea.value).toContain('DECISION_REQUIRED')
     expect(wrapper.text()).toContain('无改动')
     expect(wrapper.findAll('.workflow-editor__stage-card').length).toBe(2)
     expect(wrapper.find('select[aria-label="选择 Skill"]').exists()).toBe(true)
@@ -97,6 +101,7 @@ describe('WorkflowConfig.vue', () => {
 
     await wrapper.findAll('button').find((button) => button.text() === '生成阶段草案')?.trigger('click')
     expect(wrapper.text()).toContain('阶段草案')
+    expect(flowTextarea.value).toContain('ARTIFACT_REVIEW_REQUESTED')
 
     const nameInput = wrapper.find('input[type="text"]')
     await nameInput.setValue('FE 自定义编排')

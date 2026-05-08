@@ -7,7 +7,7 @@ import { useWorkItemStore } from '../stores/workItems'
 import MessageList from '../components/conversation/MessageList.vue'
 import { runtimeResourceApi } from '../api/runtimeResources'
 import { artifactApi } from '../api/artifacts'
-import type { AgentSessionDto, ArtifactDto } from '../api/types'
+import type { AgentSessionDto, ArtifactDto, WorkflowNodeInstanceDto, WorkflowSummaryNodeDto, WorkflowSummaryStageDto } from '../api/types'
 
 const props = defineProps<{
   workItemId?: string
@@ -47,6 +47,49 @@ const activeTitle = computed(() => {
 const isConversationRunning = computed(() =>
   runtimeStore.busy || Boolean(runtimeStore.streamingText.trim())
 )
+
+const currentWorkflowInstance = computed(() => {
+  const instance = workflowStore.activeWorkflowInstance
+  if (!instance) return null
+  if (props.workItemId && instance.workItemId !== props.workItemId) return null
+  if (sessionStore.activeSession?.workflowInstanceId && instance.id !== sessionStore.activeSession.workflowInstanceId) return null
+  return instance
+})
+
+const workflowFailureNotice = computed(() => {
+  const failedNode = currentWorkflowInstance.value?.nodes.find((node) =>
+    node.status === 'FAILED' && Boolean(node.errorMessage?.trim())
+  ) ?? currentWorkflowInstance.value?.nodes.find((node) => node.status === 'FAILED')
+  if (failedNode) {
+    return {
+      title: `${workflowNodeLabel(failedNode)} 执行失败`,
+      detail: failedNode.errorMessage?.trim() || '工作流节点执行失败，暂无详细错误原因。',
+    }
+  }
+
+  const summary = selectedWorkItem.value?.workflowSummary
+  const failedStage = summary?.stages?.find((stage) =>
+    stage.status === 'FAILED' && Boolean(stage.errorMessage?.trim())
+  ) ?? summary?.stages?.find((stage) => stage.status === 'FAILED')
+  if (failedStage) {
+    return {
+      title: `${summaryNodeLabel(failedStage)} 执行失败`,
+      detail: failedStage.errorMessage?.trim() || '工作流节点执行失败，暂无详细错误原因。',
+    }
+  }
+
+  const failedSummaryNode = summary?.nodes.find((node) =>
+    node.status === 'FAILED' && Boolean(node.errorMessage?.trim())
+  ) ?? summary?.nodes.find((node) => node.status === 'FAILED')
+  if (failedSummaryNode) {
+    return {
+      title: `${summaryNodeLabel(failedSummaryNode)} 执行失败`,
+      detail: failedSummaryNode.errorMessage?.trim() || '工作流节点执行失败，暂无详细错误原因。',
+    }
+  }
+
+  return null
+})
 
 onMounted(async () => {
   if (workflowStore.definitions.length === 0) {
@@ -174,6 +217,20 @@ async function handleOpenArtifact(title: string) {
     emit('open-artifact', artifact)
   }
 }
+
+function workflowNodeLabel(node: WorkflowNodeInstanceDto): string {
+  const definition = workflowStore.definitions
+    .flatMap((item) => item.nodes)
+    .find((item) => item.id === node.nodeDefinitionId)
+  return definition?.name ?? node.skillName ?? '工作流节点'
+}
+
+function summaryNodeLabel(node: WorkflowSummaryNodeDto | WorkflowSummaryStageDto): string {
+  if ('name' in node) {
+    return node.name ?? node.skillName ?? '工作流节点'
+  }
+  return node.definitionName ?? node.skillName ?? '工作流节点'
+}
 </script>
 
 <template>
@@ -209,6 +266,11 @@ async function handleOpenArtifact(title: string) {
 
       <div v-if="skillRefreshStatus" class="conversation-workbench__notice">
         {{ skillRefreshStatus }}
+      </div>
+
+      <div v-if="workflowFailureNotice" class="conversation-workbench__failure" role="alert">
+        <strong>{{ workflowFailureNotice.title }}</strong>
+        <span>{{ workflowFailureNotice.detail }}</span>
       </div>
 
       <div ref="messagesRef" class="conversation-workbench__messages">
@@ -411,6 +473,31 @@ async function handleOpenArtifact(title: string) {
   color: var(--accent-blue);
   font-size: 12px;
   font-weight: 800;
+}
+
+.conversation-workbench__failure {
+  margin: 10px 22px 0;
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--error) 34%, var(--border-color));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--error) 9%, var(--bg-card));
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.conversation-workbench__failure strong {
+  color: var(--error);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.conversation-workbench__failure span {
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-weight: 700;
 }
 
 .conversation-workbench__loading {

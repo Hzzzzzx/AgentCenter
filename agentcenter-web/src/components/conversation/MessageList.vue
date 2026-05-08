@@ -59,7 +59,7 @@ const activityItems = computed(() =>
 )
 
 const shouldShowActivity = computed(() =>
-  activityItems.value.some((item) => item.status === 'running')
+  activityItems.value.some((item) => item.status === 'running' || item.status === 'error')
 )
 
 const hasContent = computed(() =>
@@ -134,7 +134,7 @@ function systemLineParts(content: string): SystemLinePart[] {
 function toActivityItem(event: RuntimeEventDto): ActivityItem | null {
   const payload = parsePayload(event.payloadJson)
   const label = textField(payload, ['skillName', 'label', 'title', 'type'])
-  const detail = textField(payload, ['output', 'reason', 'summary', 'content', 'permissionId', 'toolCallId'])
+  const detail = textField(payload, ['errorMessage', 'reason', 'output', 'summary', 'content', 'permissionId', 'toolCallId'])
 
   if (event.eventType === 'STATUS') {
     const status = textField(payload, ['status', 'label'])
@@ -170,7 +170,7 @@ function toActivityItem(event: RuntimeEventDto): ActivityItem | null {
   }
 
   if (event.eventType === 'SKILL_COMPLETED') {
-    const isError = payload.isError === true
+    const isError = payload.isError === true || payload.success === false
     return {
       id: event.id,
       key: `skill:${label || event.workflowNodeInstanceId || event.id}`,

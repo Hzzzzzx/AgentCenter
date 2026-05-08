@@ -31,6 +31,7 @@ export interface WorkflowSummaryNodeDto {
   definitionName: string | null
   skillName: string | null
   status: WorkflowNodeStatus
+  errorMessage?: string | null
 }
 
 export interface WorkflowSummaryStageDto {
@@ -43,6 +44,7 @@ export interface WorkflowSummaryStageDto {
   recoveryCount: number
   pendingConfirmationCount: number
   latestSummary: string | null
+  errorMessage?: string | null
 }
 
 export interface WorkflowSummaryDto {
