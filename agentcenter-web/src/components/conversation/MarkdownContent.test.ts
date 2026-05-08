@@ -127,6 +127,38 @@ describe('MarkdownContent.vue — mermaid theme re-render', () => {
     expect(lastCall[1]).toContain('A-->B')
   })
 
+  it('keeps text labels from rendered Mermaid SVGs', async () => {
+    mockRender.mockResolvedValueOnce({
+      svg: [
+        '<svg viewBox="0 0 120 80" role="graphics-document">',
+        '<g class="node"><rect x="10" y="10" width="100" height="40"></rect>',
+        '<text x="20" y="35"><tspan>需求整理 (PRD)</tspan></text></g>',
+        '</svg>',
+      ].join(''),
+    })
+    vi.doMock('mermaid', () => ({
+      default: {
+        initialize: mockInitialize,
+        parse: mockParse,
+        render: mockRender,
+      },
+    }))
+
+    const { default: MarkdownContentWithMock } = await import('./MarkdownContent.vue')
+    setActivePinia(createPinia())
+    const wrapper = mount(MarkdownContentWithMock, {
+      props: {
+        content: '```mermaid\nflowchart TD\n  A["需求整理 (PRD)"]\n```',
+        renderMermaid: true,
+      },
+    })
+
+    await vi.waitFor(() => expect(mockRender).toHaveBeenCalled(), { timeout: 2000 })
+
+    expect(wrapper.find('.markdown-content__mermaid').attributes('data-mermaid-state')).toBe('rendered')
+    expect(wrapper.find('svg text').text()).toContain('需求整理 (PRD)')
+  })
+
   it('falls back to source when mermaid parse reports invalid syntax', async () => {
     mockParse.mockResolvedValueOnce(false)
     vi.doMock('mermaid', () => ({

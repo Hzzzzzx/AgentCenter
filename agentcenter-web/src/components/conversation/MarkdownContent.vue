@@ -109,7 +109,7 @@ async function renderMermaidBlocks(): Promise<void> {
         restoreMermaidSource(block, source)
         return
       }
-      block.innerHTML = DOMPurify.sanitize(result.svg)
+      block.innerHTML = sanitizeMermaidSvg(result.svg)
       block.dataset.mermaidState = 'rendered'
     } catch {
       restoreMermaidSource(block, source)
@@ -139,6 +139,49 @@ function isMermaidErrorSvg(svg: string): boolean {
   return /Syntax error in text|mermaid version|id=["']?mermaid-error/i.test(svg)
 }
 
+function sanitizeMermaidSvg(svg: string): string {
+  return DOMPurify.sanitize(svg, {
+    USE_PROFILES: { svg: true, svgFilters: true },
+    ADD_TAGS: ['foreignObject'],
+    ADD_ATTR: [
+      'alignment-baseline',
+      'aria-hidden',
+      'aria-roledescription',
+      'class',
+      'clip-path',
+      'd',
+      'dominant-baseline',
+      'fill',
+      'font-family',
+      'font-size',
+      'height',
+      'id',
+      'marker-end',
+      'marker-start',
+      'points',
+      'role',
+      'rx',
+      'ry',
+      'stroke',
+      'stroke-dasharray',
+      'stroke-linecap',
+      'stroke-width',
+      'style',
+      'text-anchor',
+      'transform',
+      'viewBox',
+      'width',
+      'x',
+      'x1',
+      'x2',
+      'xmlns',
+      'y',
+      'y1',
+      'y2',
+    ],
+  })
+}
+
 function restoreMermaidSource(block: HTMLElement, source: string): void {
   const existingCode = block.querySelector('code')
   if (existingCode && existingCode.textContent?.trim() === source) {
@@ -162,6 +205,10 @@ async function getMermaid(): Promise<MermaidApi> {
         startOnLoad: false,
         suppressErrorRendering: true,
         securityLevel: 'strict',
+        htmlLabels: false,
+        flowchart: {
+          htmlLabels: false,
+        },
         theme: 'base',
         themeVariables: {
           primaryColor: getComputedStyle(document.documentElement).getPropertyValue('--brand-soft').trim() || '#eef6ff',
@@ -449,6 +496,19 @@ function hashText(value: string): string {
   max-width: 100%;
   height: auto;
   margin: 0 auto;
+}
+
+.markdown-content :deep(.markdown-content__mermaid svg text),
+.markdown-content :deep(.markdown-content__mermaid svg tspan),
+.markdown-content :deep(.markdown-content__mermaid .nodeLabel),
+.markdown-content :deep(.markdown-content__mermaid .edgeLabel),
+.markdown-content :deep(.markdown-content__mermaid .label),
+.markdown-content :deep(.markdown-content__mermaid foreignObject),
+.markdown-content :deep(.markdown-content__mermaid foreignObject *) {
+  fill: var(--text-primary) !important;
+  color: var(--text-primary) !important;
+  opacity: 1 !important;
+  visibility: visible !important;
 }
 
 .markdown-content :deep(.markdown-content__mermaid[data-mermaid-state='rendered'] pre) {
