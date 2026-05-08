@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { skillApi } from '../api/runtimeResources'
 import { useWorkflowStore } from '../stores/workflows'
+import MarkdownContent from '../components/conversation/MarkdownContent.vue'
 import type {
   ArtifactType,
   RuntimeSkillDetailDto,
@@ -100,6 +101,12 @@ const agentFlowBranches = computed(() => {
     dynamic: node.allowDynamicActions ? '允许澄清/选择/修复分支' : '仅保留失败处理',
   }))
 })
+
+const agentFlowMermaidMarkdown = computed(() =>
+  agentFlowMermaid.value.trim()
+    ? `\`\`\`mermaid\n${agentFlowMermaid.value}\n\`\`\``
+    : ''
+)
 
 onMounted(() => {
   workflowStore.loadDefinitions()
@@ -529,14 +536,21 @@ async function saveDraft() {
                   </div>
                 </div>
               </div>
-              <label class="workflow-editor__flow-source">
-                <span>Mermaid 草图</span>
-                <textarea
-                  v-model="agentFlowMermaid"
-                  rows="12"
-                  aria-label="Agent 理解 Mermaid 草图"
+              <div class="workflow-editor__flow-diagram">
+                <div class="workflow-editor__flow-diagram-title">Agent 预估执行路线</div>
+                <MarkdownContent
+                  class="workflow-editor__flow-mermaid"
+                  :content="agentFlowMermaidMarkdown"
                 />
-              </label>
+                <details class="workflow-editor__flow-source">
+                  <summary>查看 Mermaid 源码</summary>
+                  <textarea
+                    v-model="agentFlowMermaid"
+                    rows="10"
+                    aria-label="Agent 理解 Mermaid 草图"
+                  />
+                </details>
+              </div>
             </div>
           </section>
 
@@ -1213,7 +1227,53 @@ async function saveDraft() {
   font-weight: 800;
 }
 
+.workflow-editor__flow-diagram {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background-color: var(--bg-secondary);
+}
+
+.workflow-editor__flow-diagram-title {
+  margin-bottom: 8px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.workflow-editor__flow-mermaid {
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--bg-primary);
+  overflow: auto;
+}
+
+.workflow-editor__flow-mermaid :deep(.markdown-content__mermaid) {
+  min-height: 240px;
+}
+
+.workflow-editor__flow-mermaid :deep(.markdown-content__mermaid svg) {
+  max-width: none;
+  min-width: 520px;
+}
+
+.workflow-editor__flow-source {
+  display: block !important;
+  margin-top: 8px;
+}
+
+.workflow-editor__flow-source summary {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
 .workflow-editor__flow-source textarea {
+  width: 100%;
+  margin-top: 6px;
   min-height: 260px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 11px;
