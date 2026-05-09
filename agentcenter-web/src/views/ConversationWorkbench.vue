@@ -4,7 +4,9 @@ import { useSessionStore } from '../stores/sessions'
 import { useWorkflowStore } from '../stores/workflows'
 import { useRuntimeStore } from '../stores/runtime'
 import { useWorkItemStore } from '../stores/workItems'
+import { useConfirmationStore } from '../stores/confirmations'
 import MessageList from '../components/conversation/MessageList.vue'
+import ConversationInteractionBar from '../components/conversation/ConversationInteractionBar.vue'
 import { runtimeResourceApi } from '../api/runtimeResources'
 import { artifactApi } from '../api/artifacts'
 import type { AgentSessionDto, ArtifactDto, WorkflowNodeInstanceDto, WorkflowNodeStatus } from '../api/types'
@@ -35,6 +37,7 @@ const sessionStore = useSessionStore()
 const workflowStore = useWorkflowStore()
 const runtimeStore = useRuntimeStore()
 const workItemStore = useWorkItemStore()
+const confirmationStore = useConfirmationStore()
 
 const inputText = ref('')
 const inputRef = ref<HTMLInputElement | null>(null)
@@ -43,6 +46,7 @@ const skillRefreshStatus = ref('')
 const refreshingSkills = ref(false)
 const loadingSession = ref(false)
 const cancellingReply = ref(false)
+const pausedRunningNodeId = ref<string | null>(null)
 
 const selectedWorkItem = computed(() => {
   if (!props.workItemId) return null
@@ -55,12 +59,6 @@ const activeTitle = computed(() => {
   }
   return sessionStore.activeSession?.title || '对话工作台 · AI 智能中枢'
 })
-
-const isConversationRunning = computed(() =>
-  runtimeStore.busy
-  || Boolean(runtimeStore.streamingText.trim())
-  || nodeStateInfo.value.type === 'RUNNING'
-)
 
 const currentWorkflowInstance = computed(() => {
   const instance = workflowStore.activeWorkflowInstance
@@ -130,16 +128,53 @@ const nodeStateInfo = computed<NodeStateInfo>(() => {
   }
 })
 
+const isConversationRunning = computed(() =>
+  runtimeStore.busy
+  || Boolean(runtimeStore.streamingText.trim())
+  || (
+    nodeStateInfo.value.type === 'RUNNING'
+    && nodeStateInfo.value.nodeId !== pausedRunningNodeId.value
+  )
+)
+
+const currentInteractions = computed(() => {
+  const session = sessionStore.activeSession
+  const workItemId = props.workItemId ?? session?.workItemId ?? null
+  const workflowInstanceId = session?.workflowInstanceId ?? currentWorkflowInstance.value?.id ?? null
+  const nodeId = nodeStateInfo.value.nodeId ?? null
+
+  return confirmationStore.pendingConfirmations.filter((item) => {
+    if (item.status !== 'PENDING' && item.status !== 'IN_CONVERSATION') return false
+    return Boolean(
+      (session?.id && item.agentSessionId === session.id)
+      || (workItemId && item.workItemId === workItemId)
+      || (workflowInstanceId && item.workflowInstanceId === workflowInstanceId)
+      || (nodeId && item.workflowNodeInstanceId === nodeId)
+    )
+  })
+})
+
 onMounted(async () => {
   if (workflowStore.definitions.length === 0) {
     await workflowStore.loadDefinitions()
   }
   await ensureActiveSession()
+  await confirmationStore.loadPending()
 })
 
 watch([() => props.workItemId, () => props.targetSessionId], async () => {
   await ensureActiveSession()
+  await confirmationStore.loadPending()
 })
+
+watch(
+  () => [sessionStore.activeSession?.id ?? null, nodeStateInfo.value.nodeId ?? null, nodeStateInfo.value.type] as const,
+  ([sessionId, nodeId, nodeType]) => {
+    if (!sessionId || nodeType !== 'RUNNING' || nodeId !== pausedRunningNodeId.value) {
+      pausedRunningNodeId.value = null
+    }
+  }
+)
 
 async function ensureActiveSession(): Promise<AgentSessionDto | null> {
   loadingSession.value = true
@@ -224,13 +259,36 @@ async function handleSend() {
 
 async function handleCancelReply() {
   if (!sessionStore.activeSession || cancellingReply.value) return
+  const sessionId = sessionStore.activeSession.id
+  const runningNodeId = nodeStateInfo.value.type === 'RUNNING'
+    ? nodeStateInfo.value.nodeId ?? null
+    : null
   cancellingReply.value = true
   try {
     await sessionStore.cancelActiveSession()
+    pausedRunningNodeId.value = runningNodeId
+    runtimeStore.resetStreamingOutput()
     runtimeStore.markIdle()
-    await sessionStore.selectSession(sessionStore.activeSession.id)
+    await sessionStore.selectSession(sessionId)
+    if (sessionStore.activeSession.workflowInstanceId) {
+      await workflowStore.refreshInstance(sessionStore.activeSession.workflowInstanceId)
+    }
+    if (sessionStore.activeSession.workItemId) {
+      await workItemStore.refreshItem(sessionStore.activeSession.workItemId)
+    }
   } finally {
     cancellingReply.value = false
+  }
+}
+
+async function handleInteractionChanged() {
+  await confirmationStore.loadPending()
+  if (sessionStore.activeSession?.workflowInstanceId) {
+    await workflowStore.refreshInstance(sessionStore.activeSession.workflowInstanceId)
+  }
+  const workItemId = props.workItemId ?? sessionStore.activeSession?.workItemId
+  if (workItemId) {
+    await workItemStore.refreshItem(workItemId)
   }
 }
 
@@ -318,34 +376,43 @@ function workflowNodeLabel(node: WorkflowNodeInstanceDto): string {
         </template>
       </div>
 
-      <form class="conversation-workbench__input-area" @submit.prevent="handleSend">
-        <input
-          ref="inputRef"
-          v-model="inputText"
-          class="conversation-workbench__input"
-          type="text"
-          :placeholder="isConversationRunning ? '对话运行中，可点击右侧按钮暂停...' : '输入指令或问题...'"
-          :disabled="isConversationRunning || loadingSession"
+      <div class="conversation-workbench__composer">
+        <ConversationInteractionBar
+          :interactions="currentInteractions"
+          @resolved="handleInteractionChanged"
+          @rejected="handleInteractionChanged"
+          @open="emit('show-confirmation', $event)"
         />
-        <button
-          class="conversation-workbench__send"
-          :class="{ 'conversation-workbench__send--pause': isConversationRunning }"
-          :disabled="isConversationRunning ? cancellingReply : (!inputText.trim() || loadingSession)"
-          :type="isConversationRunning ? 'button' : 'submit'"
-          :aria-label="isConversationRunning ? '暂停当前回复' : '发送消息'"
-          :title="isConversationRunning ? '暂停当前回复' : '发送消息'"
-          @click="isConversationRunning ? handleCancelReply() : undefined"
-        >
-          <svg v-if="isConversationRunning" width="22" height="22" viewBox="0 0 24 24" fill="none">
-            <rect x="7" y="5" width="3.5" height="14" rx="1.2" fill="currentColor"/>
-            <rect x="13.5" y="5" width="3.5" height="14" rx="1.2" fill="currentColor"/>
-          </svg>
-          <svg v-else width="22" height="22" viewBox="0 0 24 24" fill="none">
-            <path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </button>
-      </form>
+
+        <form class="conversation-workbench__input-area" @submit.prevent="handleSend">
+          <input
+            ref="inputRef"
+            v-model="inputText"
+            class="conversation-workbench__input"
+            type="text"
+            :placeholder="isConversationRunning ? '对话运行中，可点击右侧按钮暂停...' : '输入指令或问题...'"
+            :disabled="isConversationRunning || loadingSession"
+          />
+          <button
+            class="conversation-workbench__send"
+            :class="{ 'conversation-workbench__send--pause': isConversationRunning }"
+            :disabled="isConversationRunning ? cancellingReply : (!inputText.trim() || loadingSession)"
+            :type="isConversationRunning ? 'button' : 'submit'"
+            :aria-label="isConversationRunning ? '暂停当前回复' : '发送消息'"
+            :title="isConversationRunning ? '暂停当前回复' : '发送消息'"
+            @click="isConversationRunning ? handleCancelReply() : undefined"
+          >
+            <svg v-if="isConversationRunning" width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <rect x="7" y="5" width="3.5" height="14" rx="1.2" fill="currentColor"/>
+              <rect x="13.5" y="5" width="3.5" height="14" rx="1.2" fill="currentColor"/>
+            </svg>
+            <svg v-else width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </form>
+      </div>
     </section>
   </div>
 </template>
@@ -516,14 +583,19 @@ function workflowNodeLabel(node: WorkflowNodeInstanceDto): string {
   font-weight: 750;
 }
 
-.conversation-workbench__input-area {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 48px;
-  gap: 10px;
+.conversation-workbench__composer {
   flex-shrink: 0;
   padding: 14px 22px;
   border-top: 1px solid var(--border-color);
   background: var(--bg-card);
+}
+
+.conversation-workbench__input-area {
+  width: min(920px, 100%);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px;
+  gap: 10px;
 }
 
 .conversation-workbench__input {

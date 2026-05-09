@@ -1,7 +1,9 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import ConversationWorkbench from './ConversationWorkbench.vue'
+import { sessionApi } from '../api/sessions'
+import { useRuntimeStore } from '../stores/runtime'
 
 const mocks = vi.hoisted(() => {
   const runningWorkItem = {
@@ -104,7 +106,28 @@ const mocks = vi.hoisted(() => {
     ],
   }
 
-  return { runningWorkItem, runningSession, runningWorkflow, workflowDefinition }
+  const pendingConfirmation = {
+    id: 'confirm-1',
+    requestType: 'APPROVAL',
+    status: 'PENDING',
+    workItemId: 'work-1',
+    workItemCode: 'FE0003',
+    workItemType: 'FE',
+    workItemTitle: '社区共享工具柜借还流程',
+    workflowInstanceId: 'wf-1',
+    workflowNodeInstanceId: 'node-1',
+    workflowNodeName: '详细设计 (LLD)',
+    agentSessionId: 'session-1',
+    skillName: 'lld-design',
+    title: '确认继续下一步',
+    content: '请确认详细设计产物。',
+    contextSummary: '详细设计产物已生成，等待确认。',
+    optionsJson: null,
+    priority: 'MEDIUM',
+    createdAt: '2026-05-08T10:01:00Z',
+  }
+
+  return { runningWorkItem, runningSession, runningWorkflow, workflowDefinition, pendingConfirmation }
 })
 
 vi.mock('../api/workItems', () => ({
@@ -127,6 +150,7 @@ vi.mock('../api/sessions', () => ({
     getById: vi.fn().mockResolvedValue(mocks.runningSession),
     getMessages: vi.fn().mockResolvedValue([]),
     create: vi.fn(),
+    cancel: vi.fn().mockResolvedValue(undefined),
   },
 }))
 
@@ -148,7 +172,21 @@ vi.mock('../api/artifacts', () => ({
   },
 }))
 
+vi.mock('../api/confirmations', () => ({
+  confirmationApi: {
+    list: vi.fn((status?: string) => Promise.resolve(status === 'PENDING' ? [mocks.pendingConfirmation] : [])),
+    getById: vi.fn(),
+    enterSession: vi.fn(),
+    resolve: vi.fn().mockResolvedValue({}),
+    reject: vi.fn(),
+  },
+}))
+
 describe('ConversationWorkbench.vue', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it('shows pause action while the workflow node is running', async () => {
     const pinia = createPinia()
     setActivePinia(pinia)
@@ -168,5 +206,60 @@ describe('ConversationWorkbench.vue', () => {
     expect(sendButton.classes()).toContain('conversation-workbench__send--pause')
     expect(sendButton.attributes('aria-label')).toBe('暂停当前回复')
     expect(wrapper.find('.node-state-area--running').exists()).toBe(false)
+  })
+
+  it('cancels the active session and releases the input when pause is clicked', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(ConversationWorkbench, {
+      props: {
+        workItemId: 'work-1',
+        targetSessionId: 'session-1',
+      },
+      global: {
+        plugins: [pinia],
+      },
+    })
+
+    await flushPromises()
+
+    const runtimeStore = useRuntimeStore()
+    runtimeStore.streamingText = '正在回复'
+
+    await wrapper.find('.conversation-workbench__send').trigger('click')
+    await flushPromises()
+
+    expect(sessionApi.cancel).toHaveBeenCalledWith('session-1')
+    expect(runtimeStore.streamingText).toBe('')
+
+    const sendButton = wrapper.find('.conversation-workbench__send')
+    expect(sendButton.classes()).not.toContain('conversation-workbench__send--pause')
+    expect(sendButton.attributes('aria-label')).toBe('发送消息')
+    expect(wrapper.find('.conversation-workbench__input').attributes('disabled')).toBeUndefined()
+  })
+
+  it('shows current interactions above the input composer', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(ConversationWorkbench, {
+      props: {
+        workItemId: 'work-1',
+        targetSessionId: 'session-1',
+      },
+      global: {
+        plugins: [pinia],
+      },
+    })
+
+    await flushPromises()
+
+    const interactionBar = wrapper.find('.interaction-bar')
+    expect(interactionBar.exists()).toBe(true)
+    expect(interactionBar.text()).toContain('当前需要交互')
+    expect(interactionBar.text()).toContain('确认继续下一步')
+
+    const composer = wrapper.find('.conversation-workbench__composer')
+    expect(composer.find('.interaction-bar').exists()).toBe(true)
+    expect(composer.find('.conversation-workbench__input-area').exists()).toBe(true)
   })
 })

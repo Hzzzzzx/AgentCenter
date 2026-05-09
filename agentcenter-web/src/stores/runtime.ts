@@ -325,5 +325,6 @@ export const useRuntimeStore = defineStore('runtime', () => {
     clearEvents,
     markBusy,
     markIdle,
+    resetStreamingOutput,
   }
 })
