@@ -956,15 +956,26 @@ public class WorkflowCommandService {
         AgentMessageEntity contextMsg = new AgentMessageEntity();
         contextMsg.setId(idGenerator.nextId());
         contextMsg.setSessionId(sessionId);
-        contextMsg.setRole(MessageRole.SYSTEM.name());
+        contextMsg.setRole(MessageRole.USER.name());
         contextMsg.setContent("""
-                工作流正在执行节点：%s
+                请执行工作流节点：%s
 
-                - 工作项：%s %s
-                - 类型：%s
-                - Skill：%s
+                ## 用户输入
 
-                以下是发送给 Runtime 的节点输入上下文。
+                - 工作项编号：%s
+                - 工作项标题：%s
+                - 工作项类型：%s
+                - 工作项状态：%s
+                - 优先级：%s
+                - 使用 Skill：%s
+
+                ## 任务信息
+
+                ```text
+                %s
+                ```
+
+                ## 节点上下文
 
                 ```text
                 %s
@@ -974,7 +985,10 @@ public class WorkflowCommandService {
                 workItem.getCode(),
                 workItem.getTitle(),
                 workItem.getType(),
+                workItem.getStatus(),
+                workItem.getPriority(),
                 nodeDef.getSkillName(),
+                nonBlank(workItem.getDescription(), "暂无描述"),
                 inputContext
         ).trim());
         contextMsg.setContentFormat(ContentFormat.MARKDOWN.name());

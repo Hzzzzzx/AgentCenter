@@ -101,6 +101,20 @@ class M1WorkflowStartIntegrationTest {
                 .contains("Skill")
                 .contains("prd-desingn");
 
+        String firstNodeSessionId = firstNode.get("agentSessionId").asText();
+        var userInputs = jdbcTemplate.queryForList(
+                "SELECT role, content FROM agent_message WHERE session_id = ? AND role = 'USER' ORDER BY seq_no",
+                firstNodeSessionId);
+        assertThat(userInputs).hasSizeGreaterThanOrEqualTo(1);
+        String workflowUserInput = userInputs.get(0).get("content").toString();
+        assertThat(workflowUserInput)
+                .contains("请执行工作流节点")
+                .contains("工作项编号：FE1234")
+                .contains("工作项标题：用户登录优化")
+                .contains("使用 Skill：prd-desingn")
+                .contains("## 任务信息")
+                .contains("## 节点上下文");
+
         var secondNode = json.at("/workflowInstance/nodes/1");
         assertThat(secondNode.get("status").asText()).isEqualTo("WAITING_CONFIRMATION");
         assertThat(secondNode.get("agentSessionId").asText()).isNotEmpty();

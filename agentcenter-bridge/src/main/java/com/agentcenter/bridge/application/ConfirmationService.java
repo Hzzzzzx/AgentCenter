@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -159,14 +160,14 @@ public class ConfirmationService {
         confirmationMapper.update(entity);
 
         String actionDescription = buildActionDescription(actionType, request);
-        writeResolutionLedgerMessage(entity.getAgentSessionId(), actionDescription);
+        writeResolutionLedgerMessage(entity, actionDescription);
 
         var nodeInstanceId = entity.getWorkflowNodeInstanceId();
         boolean shouldDispatchWorkflow = nodeInstanceId != null && !hasOtherBlockingForNode(entity);
         boolean isException = ConfirmationRequestType.EXCEPTION.name().equals(entity.getRequestType());
         boolean isSkip = ConfirmationActionType.SKIP.equals(actionType);
 
-        publishResolutionEventAfterCommit(entity, actionType, () -> {
+        publishResolutionEventAfterCommit(entity, actionType, actionDescription, () -> {
             if (shouldDispatchWorkflow) {
                 if (isException) {
                     if (isSkip) {
@@ -193,11 +194,12 @@ public class ConfirmationService {
         entity.setUpdatedAt(now);
         confirmationMapper.update(entity);
 
-        writeResolutionLedgerMessage(entity.getAgentSessionId(),
+        writeResolutionLedgerMessage(entity,
                 "用户拒绝" + (request.comment() != null ? "：" + request.comment() : "")
                         + "，工作流保持阻塞");
 
-        publishResolutionEventAfterCommit(entity, ConfirmationActionType.REJECT, null);
+        publishResolutionEventAfterCommit(entity, ConfirmationActionType.REJECT,
+                buildActionDescription(ConfirmationActionType.REJECT, request), null);
 
         return toDto(entity);
     }
@@ -225,6 +227,7 @@ public class ConfirmationService {
             }
             case RETRY -> "用户重试" + (request.comment() != null ? "：" + request.comment() : "");
             case SKIP -> "用户跳过" + (request.comment() != null ? "：" + request.comment() : "");
+            case REJECT -> "用户拒绝" + (request.comment() != null ? "：" + request.comment() : "");
             default -> "用户操作：" + actionType.name();
         };
     }
@@ -236,7 +239,8 @@ public class ConfirmationService {
         return value != null ? value.toString() : null;
     }
 
-    private void writeResolutionLedgerMessage(String sessionId, String actionDescription) {
+    private void writeResolutionLedgerMessage(ConfirmationRequestEntity confirmation, String actionDescription) {
+        String sessionId = confirmation.getAgentSessionId();
         if (sessionId == null || sessionId.isBlank()) return;
 
         int nextSeqNo = agentMessageMapper.findBySessionId(sessionId).stream()
@@ -247,8 +251,8 @@ public class ConfirmationService {
         AgentMessageEntity message = new AgentMessageEntity();
         message.setId(java.util.UUID.randomUUID().toString());
         message.setSessionId(sessionId);
-        message.setRole(MessageRole.SYSTEM.name());
-        message.setContent(actionDescription);
+        message.setRole(MessageRole.USER.name());
+        message.setContent(buildResolutionUserInputMessage(confirmation, actionDescription));
         message.setContentFormat(ContentFormat.TEXT.name());
         message.setStatus(MessageStatus.COMPLETED.name());
         message.setSeqNo(nextSeqNo);
@@ -257,8 +261,32 @@ public class ConfirmationService {
         agentMessageMapper.insert(message);
     }
 
+    private String buildResolutionUserInputMessage(ConfirmationRequestEntity confirmation,
+                                                   String actionDescription) {
+        String title = confirmation.getTitle() != null && !confirmation.getTitle().isBlank()
+                ? confirmation.getTitle()
+                : "未命名确认项";
+        String requestType = confirmation.getRequestType() != null
+                ? confirmation.getRequestType()
+                : "UNKNOWN";
+        return """
+                用户输入：%s
+                确认项：%s
+                类型：%s
+                节点：%s
+                """.formatted(
+                actionDescription,
+                title,
+                requestType,
+                confirmation.getWorkflowNodeInstanceId() != null
+                        ? confirmation.getWorkflowNodeInstanceId()
+                        : "未关联节点"
+        ).trim();
+    }
+
     private void publishResolutionEventAfterCommit(ConfirmationRequestEntity entity,
                                                     ConfirmationActionType actionType,
+                                                    String actionDescription,
                                                     Runnable afterCommitAction) {
         String sessionId = entity.getAgentSessionId();
         if (sessionId == null) {
@@ -279,15 +307,38 @@ public class ConfirmationService {
         String capturedWorkflowInstanceId = entity.getWorkflowInstanceId();
         String capturedNodeInstanceId = entity.getWorkflowNodeInstanceId();
         String capturedActionName = actionType.name();
+        String capturedTitle = entity.getTitle();
+        String capturedContent = entity.getContent();
+        String capturedContextSummary = entity.getContextSummary();
+        String capturedOptionsJson = entity.getOptionsJson();
+        String capturedComment = entity.getResolutionComment();
+        String capturedResolutionPayloadJson = entity.getResolutionPayloadJson();
 
         String payloadJson;
         try {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("confirmationId", capturedId);
+            payload.put("actionType", capturedActionName);
+            payload.put("requestType", capturedRequestType);
+            payload.put("title", capturedTitle);
+            if (capturedContent != null && !capturedContent.isBlank()) {
+                payload.put("question", capturedContent);
+            }
+            if (capturedContextSummary != null && !capturedContextSummary.isBlank()) {
+                payload.put("contextSummary", capturedContextSummary);
+            }
+            if (capturedOptionsJson != null && !capturedOptionsJson.isBlank()) {
+                payload.put("options", capturedOptionsJson);
+            }
+            payload.put("actionDescription", actionDescription);
+            if (capturedComment != null && !capturedComment.isBlank()) {
+                payload.put("comment", capturedComment);
+            }
+            if (capturedResolutionPayloadJson != null && !capturedResolutionPayloadJson.isBlank()) {
+                payload.put("resolutionPayload", capturedResolutionPayloadJson);
+            }
             payloadJson = new com.fasterxml.jackson.databind.ObjectMapper()
-                    .writeValueAsString(Map.of(
-                            "confirmationId", capturedId,
-                            "actionType", capturedActionName,
-                            "requestType", capturedRequestType
-                    ));
+                    .writeValueAsString(payload);
         } catch (Exception e) {
             payloadJson = "{\"confirmationId\":\"" + capturedId + "\"}";
         }
