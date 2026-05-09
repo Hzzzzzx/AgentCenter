@@ -32,6 +32,7 @@ type SystemLinePart = {
 type RuntimePayload = {
   kind?: string
   status?: string
+  type?: string
   title?: string
   summary?: string
   toolName?: string | null
@@ -45,55 +46,38 @@ type RuntimePayload = {
   skillName?: string
   toolCallId?: string
   confirmationId?: string
+  requestType?: string
+  actionDescription?: string
+  question?: string
+  contextSummary?: string
+  options?: string
+  comment?: string
+  resolutionPayload?: string
+  command?: string
+  input?: string
+  args?: unknown
+  arguments?: unknown
+  result?: string
+  detail?: string
+  nodeName?: string
+  visibility?: string
 }
 
-type ReasoningBlock = {
-  id: string
-  summary: string
-  createdAt: string | null
-}
-
-type ToolBlock = {
-  callId: string
-  rawName: string
-  displayName: string
-  summary: string
-  status: 'running' | 'completed' | 'failed'
-  output?: string
-  outputKind: 'skill_context' | 'agent_result' | 'raw_tool_output'
-  startedAt: string | null
-  completedAt?: string | null
-}
-
-type ConfirmationGate = {
-  id: string
-  status: 'waiting' | 'completed'
-  text: string
-  createdAt: string | null
-}
-
-type AssistantTurn = {
-  id: string
-  sessionId: string | null
-  workflowNodeInstanceId: string | null
-  status: 'running' | 'waiting_confirmation' | 'failed' | 'completed'
-  createdAt: string | null
-  reasoning: ReasoningBlock[]
-  tools: ToolBlock[]
-  assistantMessage: AgentMessageDto | null
-  streamingText: string
-  confirmations: ConfirmationGate[]
-  errors: string[]
-  systemNotes: AgentMessageDto[]
+type WorkflowInputSummary = {
+  node: string
+  code: string
+  title: string
+  description: string
+  status: string
+  priority: string
+  skill: string
 }
 
 type TimelineItem =
   | { type: 'message'; id: string; createdAt: string | null; order: number; message: AgentMessageDto }
-  | { type: 'assistant-turn'; id: string; createdAt: string | null; order: number; turn: AssistantTurn }
-
-type RawTimelineInput =
-  | { type: 'message'; message: AgentMessageDto; createdAt: string | null; order: number }
-  | { type: 'event'; event: RuntimeEventDto; createdAt: string | null; order: number }
+  | { type: 'runtime-event'; id: string; createdAt: string | null; order: number; event: RuntimeEventDto; payload: RuntimePayload }
+  | { type: 'tool-call'; id: string; createdAt: string | null; order: number; events: RuntimeEventDto[]; payload: RuntimePayload }
+  | { type: 'streaming'; id: string; createdAt: string | null; order: number; content: string }
 
 const persistedMessages = computed(() =>
   props.messages
@@ -110,308 +94,180 @@ const activeSessionId = computed(() =>
 )
 
 const timelineItems = computed<TimelineItem[]>(() => {
-  const rawItems: RawTimelineInput[] = [
+  const visibleRuntimeEvents = dedupeRuntimeEvents(
+    props.runtimeEvents
+      .filter((event) => belongsToActiveSession(event))
+      .filter((event) => isVisibleRuntimeEvent(event))
+  )
+  const runtimeItems = buildRuntimeTimelineItems(visibleRuntimeEvents)
+
+  const items: TimelineItem[] = [
     ...persistedMessages.value.map((message, index) => ({
       type: 'message' as const,
+      id: message.id,
       message,
       createdAt: message.createdAt,
       order: index * 10 + messagePriority(message),
     })),
-    ...props.runtimeEvents
-      .map((event, index) => ({
-        type: 'event' as const,
-        event,
-        createdAt: event.createdAt,
-        order: 100000 + ((event.seqNo ?? index) * 10) + eventPriority(event),
-      }))
-      .filter(({ event }) => belongsToActiveSession(event)),
-  ].sort((a, b) => {
+    ...runtimeItems,
+  ]
+
+  const streamingText = props.streamingText.trim()
+  if (streamingText) {
+    items.push({
+      type: 'streaming',
+      id: `streaming-${activeSessionId.value || 'session'}`,
+      createdAt: new Date().toISOString(),
+      order: 200000,
+      content: streamingText,
+    })
+  }
+
+  return items.sort((a, b) => {
     const timeDiff = timestamp(a.createdAt) - timestamp(b.createdAt)
     if (timeDiff !== 0) return timeDiff
     return a.order - b.order
   })
-
-  const items: TimelineItem[] = []
-  let currentTurn: AssistantTurn | null = null
-
-  const ensureTurn = (seed: { sessionId?: string | null; workflowNodeInstanceId?: string | null; createdAt?: string | null }): AssistantTurn => {
-    if (!currentTurn || shouldStartNewTurn(currentTurn, seed)) {
-      currentTurn = createTurn({ ...seed, idSuffix: items.length })
-      items.push({
-        type: 'assistant-turn',
-        id: currentTurn.id,
-        createdAt: currentTurn.createdAt,
-        order: items.length,
-        turn: currentTurn,
-      })
-    }
-    return currentTurn
-  }
-
-  rawItems.forEach((item) => {
-    if (item.type === 'message') {
-      const message = item.message
-      if (message.role === 'ASSISTANT' || message.role === 'TOOL') {
-        const turn = ensureTurn({
-          sessionId: message.sessionId,
-          workflowNodeInstanceId: message.workflowNodeInstanceId,
-          createdAt: message.createdAt,
-        })
-        if (!turn.assistantMessage || message.role === 'ASSISTANT') {
-          turn.assistantMessage = message
-          turn.status = message.status === 'FAILED' ? 'failed' : inferCompletedStatus(turn)
-        }
-        return
-      }
-
-      if (message.role === 'SYSTEM' && isGeneratedArtifactNote(message.content)) {
-        const turn = ensureTurn({
-          sessionId: message.sessionId,
-          workflowNodeInstanceId: message.workflowNodeInstanceId,
-          createdAt: message.createdAt,
-        })
-        turn.systemNotes.push(message)
-        return
-      }
-
-      items.push({
-        type: 'message',
-        id: message.id,
-        createdAt: message.createdAt,
-        order: items.length,
-        message,
-      })
-      return
-    }
-
-    if (!isTurnEvent(item.event)) return
-    const event = item.event
-    const turn = ensureTurn({
-      sessionId: event.sessionId,
-      workflowNodeInstanceId: event.workflowNodeInstanceId,
-      createdAt: event.createdAt,
-    })
-    applyEventToTurn(turn, event)
-  })
-
-  const streamingText = props.streamingText.trim()
-  if (streamingText) {
-    const turn = ensureTurn({
-      sessionId: activeSessionId.value,
-      workflowNodeInstanceId: props.activeNodeId,
-      createdAt: new Date().toISOString(),
-    })
-    turn.streamingText = streamingText
-    turn.status = 'running'
-  }
-
-  return items.filter((item) =>
-    item.type === 'message' || hasVisibleAssistantTurn(item.turn)
-  )
 })
 
 const hasContent = computed(() =>
   timelineItems.value.length > 0
 )
 
-function createTurn(seed: { sessionId?: string | null; workflowNodeInstanceId?: string | null; createdAt?: string | null; idSuffix?: number }): AssistantTurn {
-  const suffix = `${seed.workflowNodeInstanceId || seed.sessionId || 'general'}-${timestamp(seed.createdAt)}-${seed.idSuffix ?? 0}`
-  return {
-    id: `assistant-turn-${suffix}`,
-    sessionId: seed.sessionId ?? activeSessionId.value ?? null,
-    workflowNodeInstanceId: seed.workflowNodeInstanceId ?? null,
-    status: 'running',
-    createdAt: seed.createdAt ?? null,
-    reasoning: [],
-    tools: [],
-    assistantMessage: null,
-    streamingText: '',
-    confirmations: [],
-    errors: [],
-    systemNotes: [],
-  }
-}
+function buildRuntimeTimelineItems(events: RuntimeEventDto[]): TimelineItem[] {
+  const items: TimelineItem[] = []
+  const toolGroups = new Map<string, { key: string; events: RuntimeEventDto[]; firstIndex: number }>()
 
-function shouldStartNewTurn(turn: AssistantTurn, seed: { sessionId?: string | null; workflowNodeInstanceId?: string | null }): boolean {
-  if (seed.workflowNodeInstanceId && turn.workflowNodeInstanceId && seed.workflowNodeInstanceId !== turn.workflowNodeInstanceId) {
-    return true
-  }
-  return Boolean(turn.assistantMessage && turn.confirmations.length > 0 && seed.workflowNodeInstanceId !== turn.workflowNodeInstanceId)
-}
-
-function applyEventToTurn(turn: AssistantTurn, event: RuntimeEventDto): void {
-  const payload = parsePayload(event.payloadJson)
-  switch (event.eventType) {
-    case 'PROCESS_TRACE':
-      applyProcessTrace(turn, event, payload)
-      return
-    case 'SKILL_STARTED':
-      upsertTool(turn, event, payload, 'running')
-      turn.status = 'running'
-      return
-    case 'SKILL_COMPLETED':
-      upsertTool(turn, event, payload, completedStatus(payload))
-      turn.status = inferCompletedStatus(turn)
-      return
-    case 'PERMISSION_REQUIRED':
-      turn.confirmations.push({
-        id: event.id,
-        status: 'waiting',
-        text: payload.title || payload.label || '需要用户授权后继续',
-        createdAt: event.createdAt,
-      })
-      turn.status = 'waiting_confirmation'
-      return
-    case 'CONFIRMATION_CREATED':
-      turn.confirmations.push({
-        id: payload.confirmationId || event.id,
-        status: 'waiting',
-        text: '确认后继续下一步',
-        createdAt: event.createdAt,
-      })
-      turn.status = 'waiting_confirmation'
-      return
-    case 'CONFIRMATION_RESOLVED':
-      resolveConfirmationGate(turn, payload)
-      turn.status = inferCompletedStatus(turn)
-      return
-    case 'ERROR':
-      turn.errors.push(payload.reason || payload.errorMessage || payload.label || 'Agent 运行过程中出现异常')
-      turn.status = 'failed'
-      return
-    default:
-      return
-  }
-}
-
-function resolveConfirmationGate(turn: AssistantTurn, payload: RuntimePayload): void {
-  const confirmationId = payload.confirmationId
-  if (!confirmationId) {
-    turn.confirmations.forEach((gate) => {
-      gate.status = 'completed'
-    })
-    return
-  }
-
-  const gate = turn.confirmations.find((item) => item.id === confirmationId)
-  if (gate) {
-    gate.status = 'completed'
-  }
-}
-
-function applyProcessTrace(turn: AssistantTurn, event: RuntimeEventDto, payload: RuntimePayload): void {
-  switch (payload.kind) {
-    case 'reasoning_summary': {
-      const summary = payload.summary || payload.title || ''
-      if (summary.trim()) {
-        turn.reasoning.push({ id: event.id, summary, createdAt: event.createdAt })
+  events.forEach((event, index) => {
+    const payload = parsePayload(event.payloadJson)
+    const toolKey = toolLifecycleKey(event, payload)
+    if (toolKey) {
+      const group = toolGroups.get(toolKey)
+      if (group) {
+        group.events.push(event)
+      } else {
+        toolGroups.set(toolKey, { key: toolKey, events: [event], firstIndex: index })
       }
       return
     }
-    case 'confirmation':
-      turn.confirmations.push({
-        id: payload.confirmationId || event.id,
-        status: 'waiting',
-        text: payload.summary || payload.title || '确认后继续下一步',
-        createdAt: event.createdAt,
-      })
-      turn.status = 'waiting_confirmation'
-      return
-    case 'error':
-      turn.errors.push(payload.summary || payload.reason || 'Agent 运行过程中出现异常')
-      turn.status = 'failed'
-      return
-    default:
-      return
-  }
+
+    items.push({
+      type: 'runtime-event',
+      id: event.id,
+      event,
+      payload,
+      createdAt: event.createdAt,
+      order: 100000 + ((event.seqNo ?? index) * 10) + eventPriority(event),
+    })
+  })
+
+  toolGroups.forEach((group) => {
+    const sortedEvents = [...group.events].sort(compareRuntimeEvents)
+    const event = sortedEvents[0]
+    items.push({
+      type: 'tool-call',
+      id: `tool-call-${group.key}`,
+      events: sortedEvents,
+      payload: mergeToolPayload(sortedEvents),
+      createdAt: event.createdAt,
+      order: 100000 + ((event.seqNo ?? group.firstIndex) * 10) + 3,
+    })
+  })
+
+  return items
 }
 
-function upsertTool(turn: AssistantTurn, event: RuntimeEventDto, payload: RuntimePayload, status: ToolBlock['status']): void {
-  const parsedSkill = parseSkillNameFromOutput(payload.output || '')
-  const rawName = payload.skillName || payload.label || payload.toolName || 'tool'
-  const callId = payload.toolCallId || `${event.eventSource}:${event.workflowNodeInstanceId || event.sessionId || 'session'}:${rawName}`
-  const outputKind = parsedSkill ? 'skill_context' : inferToolOutputKind(rawName, payload.output || '')
-  const displayName = displayToolName(rawName, parsedSkill, outputKind)
-  const existing = turn.tools.find((tool) => tool.callId === callId)
-  const output = normalizeToolOutput(payload.output || '')
-  const summary = toolSummary(displayName, status, outputKind)
+function toolLifecycleKey(event: RuntimeEventDto, payload: RuntimePayload): string | null {
+  if (!isToolLifecycleEvent(event, payload)) return null
+  const name = payload.toolName || payload.skillName || payload.label || payload.command || 'tool'
+  const callKey = shouldGroupToolByName(event, payload, name)
+    ? name
+    : payload.toolCallId || name
+  return [
+    event.sessionId || '',
+    event.workflowNodeInstanceId || '',
+    callKey,
+    name,
+  ].join('|')
+}
 
-  if (existing) {
-    existing.rawName = rawName
-    existing.displayName = displayName
-    existing.status = status
-    existing.summary = summary
-    existing.outputKind = outputKind
-    if (output) existing.output = output
-    if (status !== 'running') existing.completedAt = event.createdAt
-    return
+function shouldGroupToolByName(event: RuntimeEventDto, payload: RuntimePayload, name: string): boolean {
+  return event.eventType === 'SKILL_STARTED'
+    || event.eventType === 'SKILL_COMPLETED'
+    || name === 'skill'
+    || payload.label === 'skill'
+}
+
+function isToolLifecycleEvent(event: RuntimeEventDto, payload: RuntimePayload): boolean {
+  return event.eventType === 'SKILL_STARTED'
+    || event.eventType === 'SKILL_COMPLETED'
+    || event.eventType === 'MCP_CALL'
+    || payload.kind === 'tool_call'
+}
+
+function mergeToolPayload(events: RuntimeEventDto[]): RuntimePayload {
+  return events.reduce<RuntimePayload>((merged, event) => {
+    const payload = parsePayload(event.payloadJson)
+    return {
+      ...merged,
+      ...payload,
+      output: payload.output || merged.output,
+      result: payload.result || merged.result,
+      status: toolStatusFromEvent(event, payload) || merged.status,
+    }
+  }, {})
+}
+
+function toolStatusFromEvent(event: RuntimeEventDto, payload: RuntimePayload): string {
+  if (event.eventType === 'SKILL_COMPLETED') {
+    return payload.isError === true || payload.success === false ? 'failed' : 'completed'
   }
+  if (event.eventType === 'SKILL_STARTED') return 'running'
+  return payload.status || ''
+}
 
-  turn.tools.push({
-    callId,
-    rawName,
-    displayName,
-    summary,
-    status,
-    output: output || undefined,
-    outputKind,
-    startedAt: event.createdAt,
-    completedAt: status === 'running' ? null : event.createdAt,
+function compareRuntimeEvents(a: RuntimeEventDto, b: RuntimeEventDto): number {
+  const timeDiff = timestamp(a.createdAt) - timestamp(b.createdAt)
+  if (timeDiff !== 0) return timeDiff
+  return (a.seqNo ?? 0) - (b.seqNo ?? 0)
+}
+
+function dedupeRuntimeEvents(events: RuntimeEventDto[]): RuntimeEventDto[] {
+  const seenStatusKeys = new Set<string>()
+  return events.filter((event) => {
+    const payload = parsePayload(event.payloadJson)
+    if (!isRepeatableNodeStatus(event, payload)) return true
+
+    const key = [
+      event.sessionId || '',
+      event.workflowNodeInstanceId || '',
+      payload.kind || '',
+      payload.status || '',
+      payload.title || '',
+      payload.summary || '',
+    ].join('|')
+    if (seenStatusKeys.has(key)) return false
+    seenStatusKeys.add(key)
+    return true
   })
 }
 
-function displayToolName(rawName: string, parsedSkill: string | null, outputKind: ToolBlock['outputKind']): string {
-  if (parsedSkill) return `加载 Skill: ${parsedSkill}`
-  if (rawName === 'skill') return '加载 Skill'
-  if (outputKind === 'agent_result') return `执行 ${rawName}`
-  return rawName
+function isRepeatableNodeStatus(event: RuntimeEventDto, payload: RuntimePayload): boolean {
+  return event.eventType === 'PROCESS_TRACE'
+    && payload.kind === 'node_status'
+    && payload.status === 'running'
 }
 
-function toolSummary(displayName: string, status: ToolBlock['status'], outputKind: ToolBlock['outputKind']): string {
-  if (outputKind === 'skill_context') return `${displayName} 的执行说明`
-  if (status === 'running') return `${displayName} 运行中`
-  if (status === 'failed') return `${displayName} 失败`
-  return `${displayName} 完成`
-}
-
-function inferToolOutputKind(rawName: string, output: string): ToolBlock['outputKind'] {
-  if (/^#\s|^##\s|```|^\|.+\|/m.test(output.trim())) return 'agent_result'
-  if (rawName !== 'skill') return 'agent_result'
-  return 'raw_tool_output'
-}
-
-function completedStatus(payload: RuntimePayload): ToolBlock['status'] {
-  return payload.isError === true || payload.success === false ? 'failed' : 'completed'
-}
-
-function inferCompletedStatus(turn: AssistantTurn): AssistantTurn['status'] {
-  if (turn.errors.length > 0 || turn.tools.some((tool) => tool.status === 'failed')) return 'failed'
-  if (turn.confirmations.some((gate) => gate.status === 'waiting')) return 'waiting_confirmation'
-  if (turn.tools.some((tool) => tool.status === 'running') || turn.streamingText.trim()) return 'running'
-  return turn.assistantMessage ? 'completed' : turn.status
-}
-
-function hasVisibleAssistantTurn(turn: AssistantTurn): boolean {
-  return Boolean(
-    turn.reasoning.length
-    || turn.tools.length
-    || turn.assistantMessage?.content?.trim()
-    || turn.streamingText.trim()
-    || turn.confirmations.length
-    || turn.errors.length
-    || turn.systemNotes.length
-  )
-}
-
-function isTurnEvent(event: RuntimeEventDto): boolean {
-  if (!['PROCESS_TRACE', 'SKILL_STARTED', 'SKILL_COMPLETED', 'PERMISSION_REQUIRED', 'ERROR', 'CONFIRMATION_CREATED', 'CONFIRMATION_RESOLVED'].includes(event.eventType)) {
-    return false
-  }
-  const payload = parsePayload(event.payloadJson)
-  if (event.eventType === 'PROCESS_TRACE' && (payload.kind === 'node_status' || payload.kind === 'tool_call')) {
-    return false
-  }
-  return true
+function isVisibleRuntimeEvent(event: RuntimeEventDto): boolean {
+  return [
+    'PROCESS_TRACE',
+    'SKILL_STARTED',
+    'SKILL_COMPLETED',
+    'MCP_CALL',
+    'PERMISSION_REQUIRED',
+    'ERROR',
+    'CONFIRMATION_RESOLVED',
+  ].includes(event.eventType)
 }
 
 function belongsToActiveSession(event: RuntimeEventDto): boolean {
@@ -423,11 +279,6 @@ function belongsToActiveSession(event: RuntimeEventDto): boolean {
 
 function isGeneratedArtifactNote(content: string | null | undefined): boolean {
   return Boolean(content?.startsWith('已生成 '))
-}
-
-function parseSkillNameFromOutput(output: string): string | null {
-  const match = output.match(/^##\s+Skill:\s*([^\n]+)$/m)
-  return match?.[1]?.trim() || null
 }
 
 function normalizeToolOutput(output: string): string {
@@ -458,9 +309,9 @@ function eventPriority(event: RuntimeEventDto): number {
   switch (event.eventType) {
     case 'SKILL_STARTED': return 2
     case 'SKILL_COMPLETED': return 3
+    case 'MCP_CALL': return 4
     case 'PROCESS_TRACE': return 4
     case 'ASSISTANT_DELTA': return 5
-    case 'CONFIRMATION_CREATED':
     case 'PERMISSION_REQUIRED': return 8
     case 'CONFIRMATION_RESOLVED': return 9
     case 'ERROR': return 10
@@ -507,36 +358,191 @@ function statusLabel(message: AgentMessageDto): string {
   return '已记录'
 }
 
-function turnTitle(turn: AssistantTurn): string {
-  if (turn.status === 'running') return '助手正在处理'
-  if (turn.status === 'waiting_confirmation') return '助手等待确认'
-  if (turn.status === 'failed') return '助手执行失败'
-  return '助手'
+function timelineRuntimeEvent(item: Extract<TimelineItem, { type: 'runtime-event' | 'tool-call' }>): RuntimeEventDto {
+  return item.type === 'tool-call' ? item.events.at(-1) ?? item.events[0] : item.event
 }
 
-function turnPill(turn: AssistantTurn): string {
-  switch (turn.status) {
-    case 'running': return '运行中'
-    case 'waiting_confirmation': return '待确认'
-    case 'failed': return '失败'
-    default: return '完成'
+function isUserInteractionInputEvent(event: RuntimeEventDto): boolean {
+  return event.eventType === 'CONFIRMATION_RESOLVED'
+}
+
+function interactionInputTitle(payload: RuntimePayload): string {
+  if (payload.title?.trim()) return `处理交互：${payload.title.trim()}`
+  if (payload.confirmationId?.trim()) return `处理交互：${payload.confirmationId.trim()}`
+  return '处理交互'
+}
+
+function interactionInputContent(payload: RuntimePayload): string {
+  const lines = [
+    payload.question ? `原始问题：${payload.question}` : '',
+    payload.contextSummary ? `上下文：${payload.contextSummary}` : '',
+    payload.options ? `可选项：${formatInteractionOptions(payload.options)}` : '',
+    payload.actionDescription || actionTypeLabel(payload.actionType),
+    payload.resolutionPayload ? `提交内容：${formatResolutionPayload(payload.resolutionPayload)}` : '',
+    payload.comment ? `备注：${payload.comment}` : '',
+    payload.requestType ? `交互类型：${payload.requestType}` : '',
+  ].filter(Boolean)
+  return lines.join('\n')
+}
+
+function formatInteractionOptions(value: string): string {
+  try {
+    const parsed: unknown = JSON.parse(value)
+    if (Array.isArray(parsed)) {
+      return parsed.map((item) => formatOptionItem(item)).join('；')
+    }
+  } catch {
+    // use original options text below
+  }
+  return value
+}
+
+function formatOptionItem(item: unknown): string {
+  if (typeof item === 'string') return item
+  if (typeof item === 'object' && item !== null && !Array.isArray(item)) {
+    const record = item as Record<string, unknown>
+    const value = record.value ?? record.key ?? record.id
+    const label = record.label ?? record.name ?? record.title
+    if (value && label) return `${String(value)}: ${String(label)}`
+    if (label) return String(label)
+    if (value) return String(value)
+  }
+  return formatPayloadValue(item)
+}
+
+function actionTypeLabel(actionType: string | undefined): string {
+  switch (actionType) {
+    case 'APPROVE': return '用户确认通过'
+    case 'REJECT': return '用户拒绝'
+    case 'CHOOSE': return '用户选择'
+    case 'SUPPLEMENT': return '用户补充'
+    case 'RETRY': return '用户重试'
+    case 'SKIP': return '用户跳过'
+    default: return actionType ? `用户操作：${actionType}` : '用户已处理交互'
   }
 }
 
-function turnPillClass(turn: AssistantTurn): string {
-  return `assistant-card__pill--${turn.status}`
+function formatResolutionPayload(value: string): string {
+  try {
+    const parsed: unknown = JSON.parse(value)
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      return Object.entries(parsed)
+        .map(([key, item]) => `${key}=${String(item)}`)
+        .join('，')
+    }
+  } catch {
+    // keep the original submitted value below
+  }
+  return value
 }
 
-function toolStatusLabel(status: ToolBlock['status']): string {
-  switch (status) {
-    case 'running': return '进行中'
-    case 'failed': return '失败'
-    default: return '完成'
+function runtimeEventTitle(event: RuntimeEventDto, payload: RuntimePayload): string {
+  if (event.eventType === 'PROCESS_TRACE') {
+    if (payload.kind === 'reasoning_summary') return 'Agent 思考'
+    if (payload.kind === 'tool_call') return `工具调用：${payload.toolName || payload.title || payload.label || '未命名工具'}`
+    if (payload.kind === 'node_status') return `节点状态：${payload.title || payload.nodeName || '工作流节点'}`
+    if (payload.kind === 'confirmation') return '触发用户交互'
+    if (payload.kind === 'error') return '运行错误'
+    return payload.title || '运行事件'
+  }
+  if (event.eventType === 'SKILL_STARTED') return `开始执行 Skill：${payload.skillName || payload.label || '未命名'}`
+  if (event.eventType === 'SKILL_COMPLETED') return `Skill 执行完成：${payload.skillName || payload.label || '未命名'}`
+  if (event.eventType === 'MCP_CALL') return `工具调用：${payload.toolName || payload.command || payload.label || payload.title || 'MCP'}`
+  if (event.eventType === 'PERMISSION_REQUIRED') return '需要授权'
+  if (event.eventType === 'CONFIRMATION_CREATED') return '触发用户交互'
+  if (event.eventType === 'CONFIRMATION_RESOLVED') return '用户交互已处理'
+  if (event.eventType === 'ERROR') return '运行错误'
+  return event.eventType
+}
+
+function runtimeEventSummary(event: RuntimeEventDto, payload: RuntimePayload): string {
+  return toolInvocationSummary(event, payload)
+    || payload.summary
+    || payload.reason
+    || payload.errorMessage
+    || payload.detail
+    || payload.title
+    || payload.label
+    || event.eventType
+}
+
+function runtimeEventOutput(payload: RuntimePayload): string {
+  return normalizeToolOutput(payload.output || payload.result || '')
+}
+
+function runtimeEventGlyph(event: RuntimeEventDto, payload: RuntimePayload): string {
+  if (event.eventType === 'MCP_CALL' || event.eventType === 'SKILL_STARTED' || event.eventType === 'SKILL_COMPLETED' || payload.kind === 'tool_call') return 'T'
+  if (event.eventType === 'CONFIRMATION_CREATED' || event.eventType === 'CONFIRMATION_RESOLVED' || event.eventType === 'PERMISSION_REQUIRED') return '!'
+  if (event.eventType === 'ERROR' || payload.kind === 'error') return 'E'
+  return 'A'
+}
+
+function runtimeEventPill(event: RuntimeEventDto, payload: RuntimePayload): string {
+  if (payload.status === 'running' || event.eventType === 'SKILL_STARTED') return '进行中'
+  if (payload.status === 'failed' || payload.isError === true || payload.success === false || event.eventType === 'ERROR') return '失败'
+  if (event.eventType === 'CONFIRMATION_CREATED' || event.eventType === 'PERMISSION_REQUIRED') return '待处理'
+  if (event.eventType === 'CONFIRMATION_RESOLVED') return '已处理'
+  if (event.eventType === 'SKILL_COMPLETED') return '完成'
+  return payload.status || '事件'
+}
+
+function runtimeEventClass(event: RuntimeEventDto, payload: RuntimePayload): string {
+  if (event.eventType === 'ERROR' || payload.kind === 'error' || payload.isError === true || payload.success === false) return 'runtime-event--error'
+  if (event.eventType === 'CONFIRMATION_CREATED' || event.eventType === 'PERMISSION_REQUIRED') return 'runtime-event--interaction'
+  if (event.eventType === 'MCP_CALL' || event.eventType === 'SKILL_STARTED' || event.eventType === 'SKILL_COMPLETED' || payload.kind === 'tool_call') return 'runtime-event--tool'
+  return 'runtime-event--trace'
+}
+
+function toolInvocationSummary(event: RuntimeEventDto, payload: RuntimePayload): string {
+  if (event.eventType !== 'MCP_CALL' && payload.kind !== 'tool_call') return ''
+  const parts = [
+    payload.command ? `命令：${payload.command}` : '',
+    payload.input ? `输入：${payload.input}` : '',
+    payload.args !== undefined ? `参数：${formatPayloadValue(payload.args)}` : '',
+    payload.arguments !== undefined ? `参数：${formatPayloadValue(payload.arguments)}` : '',
+  ].filter(Boolean)
+  return parts.join('\n')
+}
+
+function formatPayloadValue(value: unknown): string {
+  if (typeof value === 'string') return value
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
   }
 }
 
 function shouldRenderMarkdown(message: AgentMessageDto): boolean {
   return message.role === 'ASSISTANT' || message.contentFormat === 'MARKDOWN'
+}
+
+function isWorkflowInputMessage(message: AgentMessageDto): boolean {
+  return message.role === 'USER'
+    && message.contentFormat === 'MARKDOWN'
+    && Boolean(message.content?.startsWith('请执行工作流节点：'))
+}
+
+function workflowInputSummary(message: AgentMessageDto): WorkflowInputSummary {
+  const content = message.content ?? ''
+  return {
+    node: findWorkflowInputValue(content, /^请执行工作流节点：(.+)$/m),
+    code: findWorkflowInputValue(content, /^- 工作项编号：(.+)$/m),
+    title: findWorkflowInputValue(content, /^- 工作项标题：(.+)$/m),
+    description: findWorkflowTaskInfo(content),
+    status: findWorkflowInputValue(content, /^- 工作项状态：(.+)$/m),
+    priority: findWorkflowInputValue(content, /^- 优先级：(.+)$/m),
+    skill: findWorkflowInputValue(content, /^- 使用 Skill：(.+)$/m),
+  }
+}
+
+function findWorkflowInputValue(content: string, pattern: RegExp): string {
+  return content.match(pattern)?.[1]?.trim() || '未提供'
+}
+
+function findWorkflowTaskInfo(content: string): string {
+  const match = content.match(/## 任务信息\s+```text\s+([\s\S]*?)\s+```/m)
+  return match?.[1]?.trim() || '未提供'
 }
 
 function systemLineParts(content: string): SystemLinePart[] {
@@ -574,7 +580,57 @@ function systemLineParts(content: string): SystemLinePart[] {
           v-if="item.type === 'message' && item.message.role === 'USER'"
           class="user-turn"
         >
-          <div class="user-bubble">{{ item.message.content }}</div>
+          <div
+            class="user-bubble"
+            :class="{ 'user-bubble--workflow': isWorkflowInputMessage(item.message) }"
+          >
+            <template v-if="isWorkflowInputMessage(item.message)">
+              <div class="workflow-input-card">
+                <div class="workflow-input-card__eyebrow">用户输入</div>
+                <div class="workflow-input-card__title">
+                  请基于 {{ workflowInputSummary(item.message).code }} · {{ workflowInputSummary(item.message).title }}，
+                  使用 Skill {{ workflowInputSummary(item.message).skill }} 执行 {{ workflowInputSummary(item.message).node }}
+                </div>
+                <p class="workflow-input-card__desc">
+                  任务信息：{{ workflowInputSummary(item.message).description }}
+                </p>
+                <dl class="workflow-input-card__meta">
+                  <div>
+                    <dt>编号</dt>
+                    <dd>{{ workflowInputSummary(item.message).code }}</dd>
+                  </div>
+                  <div>
+                    <dt>标题</dt>
+                    <dd>{{ workflowInputSummary(item.message).title }}</dd>
+                  </div>
+                  <div>
+                    <dt>Skill</dt>
+                    <dd>{{ workflowInputSummary(item.message).skill }}</dd>
+                  </div>
+                  <div>
+                    <dt>状态</dt>
+                    <dd>{{ workflowInputSummary(item.message).status }}</dd>
+                  </div>
+                  <div>
+                    <dt>优先级</dt>
+                    <dd>{{ workflowInputSummary(item.message).priority }}</dd>
+                  </div>
+                </dl>
+                <details class="workflow-input-card__details">
+                  <summary>查看完整输入上下文</summary>
+                  <MarkdownContent
+                    :content="item.message.content"
+                    :render-mermaid="false"
+                  />
+                </details>
+              </div>
+            </template>
+            <MarkdownContent
+              v-else-if="shouldRenderMarkdown(item.message)"
+              :content="item.message.content"
+            />
+            <template v-else>{{ item.message.content }}</template>
+          </div>
           <div class="message-time">{{ formatTime(item.message.createdAt) }}</div>
         </article>
 
@@ -633,8 +689,54 @@ function systemLineParts(content: string): SystemLinePart[] {
         </article>
 
         <article
-          v-else
+          v-else-if="item.type === 'runtime-event' && isUserInteractionInputEvent(item.event)"
+          class="user-turn"
+        >
+          <div class="user-bubble user-bubble--interaction">
+            <div class="interaction-input-card">
+              <div class="interaction-input-card__eyebrow">用户输入</div>
+              <div class="interaction-input-card__title">
+                {{ interactionInputTitle(item.payload) }}
+              </div>
+              <p class="interaction-input-card__desc">
+                {{ interactionInputContent(item.payload) }}
+              </p>
+            </div>
+          </div>
+          <div class="message-time">{{ formatTime(item.event.createdAt) }}</div>
+        </article>
+
+        <article
+          v-else-if="item.type === 'runtime-event' || item.type === 'tool-call'"
           class="assistant-turn"
+          :class="runtimeEventClass(timelineRuntimeEvent(item), item.payload)"
+        >
+          <div class="assistant-rail">
+            <div class="assistant-avatar">{{ runtimeEventGlyph(timelineRuntimeEvent(item), item.payload) }}</div>
+          </div>
+          <section class="assistant-card">
+            <header class="assistant-card__head">
+              <div class="assistant-card__title">
+                <span class="assistant-card__glyph">{{ runtimeEventGlyph(timelineRuntimeEvent(item), item.payload) }}</span>
+                <span>{{ runtimeEventTitle(timelineRuntimeEvent(item), item.payload) }}</span>
+              </div>
+              <span class="assistant-card__pill">
+                {{ runtimeEventPill(timelineRuntimeEvent(item), item.payload) }}
+              </span>
+            </header>
+
+            <pre class="assistant-card__content">{{ runtimeEventSummary(timelineRuntimeEvent(item), item.payload) }}</pre>
+            <pre
+              v-if="runtimeEventOutput(item.payload)"
+              class="runtime-event__output"
+            >{{ runtimeEventOutput(item.payload) }}</pre>
+            <div class="assistant-card__time">{{ formatTime(item.createdAt) }}</div>
+          </section>
+        </article>
+
+        <article
+          v-else-if="item.type === 'streaming'"
+          class="assistant-turn assistant-turn--live"
         >
           <div class="assistant-rail">
             <div class="assistant-avatar">A</div>
@@ -643,122 +745,18 @@ function systemLineParts(content: string): SystemLinePart[] {
             <header class="assistant-card__head">
               <div class="assistant-card__title">
                 <span class="assistant-card__glyph">A</span>
-                <span>{{ turnTitle(item.turn) }}</span>
+                <span>助手</span>
               </div>
-              <span class="assistant-card__pill" :class="turnPillClass(item.turn)">
-                {{ turnPill(item.turn) }}
-              </span>
+              <span class="assistant-card__pill assistant-card__pill--running">回复中</span>
             </header>
-
-            <details
-              v-if="item.turn.reasoning.length"
-              class="turn-section"
-            >
-              <summary>思考 · {{ item.turn.reasoning.length }} 条</summary>
-              <div
-                v-for="reasoning in item.turn.reasoning"
-                :key="reasoning.id"
-                class="reasoning-line"
-              >
-                {{ reasoning.summary }}
-              </div>
-            </details>
-
-            <details
-              v-if="item.turn.tools.length"
-              class="turn-section"
-              :open="item.turn.status === 'running'"
-            >
-              <summary>工具 · {{ item.turn.tools.length }} 个</summary>
-              <div class="tool-list">
-                <details
-                  v-for="tool in item.turn.tools"
-                  :key="tool.callId"
-                  class="tool-block"
-                  :open="tool.status === 'running' && tool.outputKind !== 'skill_context'"
-                >
-                  <summary>
-                    <span>{{ tool.displayName }}</span>
-                    <span class="tool-block__summary">{{ tool.summary }}</span>
-                    <span class="tool-block__status" :class="`tool-block__status--${tool.status}`">
-                      {{ toolStatusLabel(tool.status) }}
-                    </span>
-                  </summary>
-                  <pre v-if="tool.output" class="tool-block__output">{{ tool.output }}</pre>
-                  <div v-else class="tool-block__empty">暂无工具输出</div>
-                </details>
-              </div>
-            </details>
-
-            <div
-              v-if="item.turn.errors.length"
-              class="turn-error"
-            >
-              <strong>执行异常</strong>
-              <p
-                v-for="error in item.turn.errors"
-                :key="error"
-              >
-                {{ error }}
-              </p>
-            </div>
-
-            <MarkdownContent
-              v-if="item.turn.assistantMessage && shouldRenderMarkdown(item.turn.assistantMessage)"
-              class="assistant-card__markdown"
-              :content="item.turn.assistantMessage.content"
-            />
-            <pre
-              v-else-if="item.turn.assistantMessage"
-              class="assistant-card__content"
-            >{{ item.turn.assistantMessage.content }}</pre>
-
-            <div
-              v-if="item.turn.streamingText"
-              class="assistant-card__live-content"
-            >
+            <div class="assistant-card__live-content">
               <MarkdownContent
                 class="assistant-card__markdown"
-                :content="item.turn.streamingText"
+                :content="item.content"
               />
               <span class="stream-cursor">▍</span>
             </div>
-
-            <div
-              v-for="note in item.turn.systemNotes"
-              :key="note.id"
-              class="turn-note"
-            >
-              <span class="system-dot">i</span>
-              <span class="turn-note__content">
-                <template
-                  v-for="(part, index) in systemLineParts(note.content ?? '')"
-                  :key="`${note.id}-${index}`"
-                >
-                  <button
-                    v-if="part.kind === 'artifact'"
-                    type="button"
-                    class="system-line__artifact"
-                    @click="emit('open-artifact', part.text)"
-                  >
-                    {{ part.text }}
-                  </button>
-                  <span v-else>{{ part.text }}</span>
-                </template>
-              </span>
-            </div>
-
-            <div
-              v-if="item.turn.confirmations.some((gate) => gate.status === 'waiting')"
-              class="confirmation-gate"
-            >
-              <strong>需要确认</strong>
-              <span>{{ item.turn.confirmations.filter((gate) => gate.status === 'waiting').length }} 个确认项等待处理，确认后继续下一步。</span>
-            </div>
-
-            <div class="assistant-card__time">
-              {{ formatTime(item.turn.assistantMessage?.createdAt ?? item.turn.createdAt) }}
-            </div>
+            <div class="assistant-card__time">{{ formatTime(item.createdAt) }}</div>
           </section>
         </article>
       </template>
@@ -810,6 +808,128 @@ function systemLineParts(content: string): SystemLinePart[] {
   line-height: 1.58;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+
+.user-bubble--workflow {
+  width: min(620px, 72%);
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 72%, var(--border-color));
+  border-radius: 16px 16px 4px 16px;
+  background: var(--accent-blue);
+  color: var(--on-brand);
+  font-weight: 650;
+  white-space: normal;
+}
+
+.user-bubble--interaction {
+  width: min(520px, 72%);
+  padding: 12px 14px;
+  white-space: pre-wrap;
+}
+
+.workflow-input-card {
+  display: grid;
+  gap: 8px;
+}
+
+.interaction-input-card {
+  display: grid;
+  gap: 6px;
+}
+
+.interaction-input-card__eyebrow {
+  color: color-mix(in srgb, var(--on-brand) 78%, transparent);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.interaction-input-card__title {
+  color: var(--on-brand);
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.interaction-input-card__desc {
+  margin: 0;
+  color: color-mix(in srgb, var(--on-brand) 90%, transparent);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.workflow-input-card__eyebrow {
+  color: color-mix(in srgb, var(--on-brand) 78%, transparent);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.workflow-input-card__title {
+  color: var(--on-brand);
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.workflow-input-card__desc {
+  display: -webkit-box;
+  margin: 0;
+  color: color-mix(in srgb, var(--on-brand) 86%, transparent);
+  font-size: 12px;
+  line-height: 1.55;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.workflow-input-card__meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.workflow-input-card__meta div {
+  min-width: 0;
+  display: flex;
+  gap: 6px;
+}
+
+.workflow-input-card__meta dt {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--on-brand) 70%, transparent);
+  font-weight: 750;
+}
+
+.workflow-input-card__meta dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--on-brand);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-input-card__details {
+  border-top: 1px solid color-mix(in srgb, var(--on-brand) 24%, transparent);
+  padding-top: 8px;
+}
+
+.workflow-input-card__details summary {
+  cursor: pointer;
+  color: var(--on-brand);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.workflow-input-card__details .markdown-content {
+  max-height: 260px;
+  margin-top: 8px;
+  overflow: auto;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 .message-time,
@@ -1021,6 +1141,40 @@ function systemLineParts(content: string): SystemLinePart[] {
   font-size: 12px;
 }
 
+.runtime-event--tool .assistant-avatar,
+.runtime-event--tool .assistant-card__glyph {
+  background: var(--brand-soft);
+  color: var(--accent-blue);
+}
+
+.runtime-event--interaction .assistant-avatar,
+.runtime-event--interaction .assistant-card__glyph {
+  background: color-mix(in srgb, var(--warning) 16%, var(--bg-card));
+  color: var(--warning);
+}
+
+.runtime-event--error .assistant-avatar,
+.runtime-event--error .assistant-card__glyph {
+  background: var(--error-soft);
+  color: var(--error);
+}
+
+.runtime-event__output {
+  max-height: 320px;
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .assistant-card__time {
   margin-top: 6px;
 }
@@ -1137,8 +1291,7 @@ function systemLineParts(content: string): SystemLinePart[] {
   font-size: 12px;
 }
 
-.turn-error,
-.confirmation-gate {
+.turn-error {
   margin-top: 12px;
   padding: 10px 12px;
   border-radius: 8px;
@@ -1156,17 +1309,10 @@ function systemLineParts(content: string): SystemLinePart[] {
   margin: 4px 0 0;
 }
 
-.confirmation-gate {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.turn-note--interaction {
+  margin-top: 12px;
   border: 1px solid color-mix(in srgb, var(--warning) 42%, var(--border-color));
   background: color-mix(in srgb, var(--warning) 10%, var(--bg-card));
-  color: var(--text-secondary);
-}
-
-.confirmation-gate strong {
-  color: var(--warning);
 }
 
 .stream-cursor {

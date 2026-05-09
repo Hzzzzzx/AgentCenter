@@ -70,7 +70,8 @@ describe('MessageList.vue', () => {
     expect(wrapper.find('.activity-group').exists()).toBe(false)
     expect(wrapper.find('.activity-card').exists()).toBe(false)
     expect(wrapper.find('[data-testid="activity-group"]').exists()).toBe(false)
-    expect(wrapper.text()).not.toContain('skill_started')
+    expect(wrapper.text()).toContain('开始执行 Skill')
+    expect(wrapper.text()).toContain('test-skill')
   })
 
   it('renders user messages correctly', () => {
@@ -81,6 +82,28 @@ describe('MessageList.vue', () => {
     })
     expect(wrapper.text()).toContain('Hello world')
     expect(wrapper.find('.user-turn').exists()).toBe(true)
+  })
+
+  it('renders markdown user messages as structured workflow input', () => {
+    const wrapper = mount(MessageList, {
+      props: {
+        messages: [makeMessage({
+          role: 'USER',
+          contentFormat: 'MARKDOWN',
+          content: '请执行工作流节点：需求整理 (PRD)\n\n## 用户输入\n\n- 工作项编号：FE1234\n- 工作项标题：用户登录优化\n- 工作项状态：BACKLOG\n- 优先级：HIGH\n- 使用 Skill：prd-desingn\n\n## 任务信息\n\n```text\n用户输入：作为产品负责人，我要验证工作流上下文。\n```',
+        })],
+      },
+    })
+
+    expect(wrapper.find('.user-turn').exists()).toBe(true)
+    expect(wrapper.find('.user-bubble--workflow').exists()).toBe(true)
+    expect(wrapper.find('.workflow-input-card__eyebrow').text()).toBe('用户输入')
+    expect(wrapper.find('.workflow-input-card__title').text()).toContain('请基于 FE1234')
+    expect(wrapper.find('.workflow-input-card__desc').text()).toContain('用户输入：作为产品负责人')
+    expect(wrapper.find('.workflow-input-card__details').attributes('open')).toBeUndefined()
+    expect(wrapper.find('.workflow-input-card__details summary').text()).toContain('查看完整输入上下文')
+    expect(wrapper.text()).toContain('工作项编号：FE1234')
+    expect(wrapper.text()).toContain('使用 Skill：prd-desingn')
   })
 
   it('renders assistant (ASSISTANT) messages correctly', () => {
@@ -130,7 +153,7 @@ describe('MessageList.vue', () => {
     expect(wrapper.find('.system-line').exists()).toBe(true)
   })
 
-  it('groups runtime process events inside an assistant turn', () => {
+  it('renders runtime process events as standalone timeline messages', () => {
     const wrapper = mount(MessageList, {
       props: {
         messages: [makeMessage({ role: 'ASSISTANT', content: 'reply' })],
@@ -150,13 +173,53 @@ describe('MessageList.vue', () => {
     })
     expect(wrapper.find('.message-list').exists()).toBe(true)
     expect(wrapper.find('.assistant-turn').exists()).toBe(true)
-    expect(wrapper.find('.turn-section').exists()).toBe(true)
+    expect(wrapper.find('.turn-section').exists()).toBe(false)
+    expect(wrapper.findAll('.runtime-event--trace')).toHaveLength(1)
+    expect(wrapper.findAll('.runtime-event--tool')).toHaveLength(1)
     expect(wrapper.text()).toContain('thinking')
     expect(wrapper.text()).toContain('build-skill')
-    expect(wrapper.text()).not.toContain('skill_started')
   })
 
-  it('renders real tool completed output inside a collapsible tool block', () => {
+  it('aggregates one skill lifecycle into a single tool message', () => {
+    const wrapper = mount(MessageList, {
+      props: {
+        messages: [makeMessage({ role: 'USER', content: '开始工作流' })],
+        runtimeEvents: [
+          makeRuntimeEvent({
+            id: 'evt-skill-started',
+            eventType: 'SKILL_STARTED',
+            payloadJson: '{"type":"skill_started","label":"skill","toolCallId":"call_1"}',
+            seqNo: 1,
+          }),
+          makeRuntimeEvent({
+            id: 'evt-skill-running',
+            eventType: 'PROCESS_TRACE',
+            payloadJson: '{"kind":"tool_call","status":"running","summary":"正在调用 skill","toolName":"skill","toolCallId":"call_1"}',
+            seqNo: 2,
+          }),
+          makeRuntimeEvent({
+            id: 'evt-skill-completed',
+            eventType: 'SKILL_COMPLETED',
+            payloadJson: '{"type":"skill_completed","label":"skill","toolCallId":"call_1","output":"skill 输出"}',
+            seqNo: 3,
+          }),
+          makeRuntimeEvent({
+            id: 'evt-skill-trace-completed',
+            eventType: 'PROCESS_TRACE',
+            payloadJson: '{"kind":"tool_call","status":"completed","summary":"skill 调用完成","toolName":"skill","toolCallId":"trace_call_1"}',
+            seqNo: 4,
+          }),
+        ],
+      },
+    })
+
+    expect(wrapper.findAll('.runtime-event--tool')).toHaveLength(1)
+    expect(wrapper.find('.runtime-event--tool').text()).toContain('工具调用：skill')
+    expect(wrapper.find('.runtime-event--tool').text()).toContain('skill 调用完成')
+    expect(wrapper.find('.runtime-event--tool').text()).toContain('skill 输出')
+  })
+
+  it('renders real tool completed output as its own tool message', () => {
     const wrapper = mount(MessageList, {
       props: {
         messages: [makeMessage({ role: 'USER', content: '开始工作流' })],
@@ -170,12 +233,13 @@ describe('MessageList.vue', () => {
       },
     })
 
-    expect(wrapper.find('.tool-block').exists()).toBe(true)
-    expect(wrapper.text()).toContain('工具')
+    expect(wrapper.find('.tool-block').exists()).toBe(false)
+    expect(wrapper.find('.runtime-event--tool').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Skill 执行完成')
     expect(wrapper.text()).toContain('真实工具返回内容')
   })
 
-  it('does not render generic node status runtime events as assistant output', () => {
+  it('renders node status runtime events without filtering them out', () => {
     const wrapper = mount(MessageList, {
       props: {
         messages: [makeMessage({ role: 'ASSISTANT', content: 'reply' })],
@@ -190,10 +254,36 @@ describe('MessageList.vue', () => {
     })
 
     expect(wrapper.find('.turn-section').exists()).toBe(false)
-    expect(wrapper.text()).not.toContain('Agent 正在处理当前请求')
+    expect(wrapper.text()).toContain('节点状态')
+    expect(wrapper.text()).toContain('Agent 正在处理当前请求')
   })
 
-  it('renders confirmations as a gate inside the assistant turn', () => {
+  it('deduplicates repeated running node status heartbeat events', () => {
+    const wrapper = mount(MessageList, {
+      props: {
+        messages: [makeMessage({ role: 'ASSISTANT', content: 'reply' })],
+        runtimeEvents: [
+          makeRuntimeEvent({
+            id: 'evt-status-1',
+            eventType: 'PROCESS_TRACE',
+            payloadJson: '{"kind":"node_status","status":"running","title":"状态","summary":"Agent 正在处理当前请求"}',
+            seqNo: 1,
+          }),
+          makeRuntimeEvent({
+            id: 'evt-status-2',
+            eventType: 'PROCESS_TRACE',
+            payloadJson: '{"kind":"node_status","status":"running","title":"状态","summary":"Agent 正在处理当前请求"}',
+            seqNo: 2,
+          }),
+        ],
+      },
+    })
+
+    expect(wrapper.findAll('.runtime-event--trace')).toHaveLength(1)
+    expect(wrapper.text().match(/Agent 正在处理当前请求/g)).toHaveLength(1)
+  })
+
+  it('keeps pending confirmation prompts out of the chat timeline', () => {
     const wrapper = mount(MessageList, {
       props: {
         messages: [
@@ -222,12 +312,14 @@ describe('MessageList.vue', () => {
       },
     })
 
-    expect(wrapper.find('.confirmation-gate').exists()).toBe(true)
-    expect(wrapper.find('.confirmation-gate').text()).toContain('2 个确认项等待处理')
+    expect(wrapper.find('.confirmation-gate').exists()).toBe(false)
+    expect(wrapper.find('.turn-note--interaction').exists()).toBe(false)
+    expect(wrapper.findAll('.runtime-event--interaction')).toHaveLength(0)
+    expect(wrapper.text()).not.toContain('触发用户交互')
     expect(wrapper.findAll('.assistant-turn')).toHaveLength(1)
   })
 
-  it('keeps unresolved confirmations waiting after one confirmation is resolved', () => {
+  it('renders confirmation resolution as user input with submitted interaction details', () => {
     const wrapper = mount(MessageList, {
       props: {
         messages: [
@@ -257,7 +349,7 @@ describe('MessageList.vue', () => {
           makeRuntimeEvent({
             id: 'evt-confirm-resolved',
             eventType: 'CONFIRMATION_RESOLVED',
-            payloadJson: '{"confirmationId":"confirm-1","actionType":"APPROVE"}',
+            payloadJson: '{"confirmationId":"confirm-1","actionType":"CHOOSE","requestType":"DECISION","title":"选择方案","question":"请选择 HLD 推进方案","contextSummary":"方案 A 更安全，方案 B 成本更低","options":"[{\\"value\\":\\"A\\",\\"label\\":\\"双写（更安全）\\"},{\\"value\\":\\"B\\",\\"label\\":\\"直接切换\\"}]","actionDescription":"用户选择：A: 双写（更安全）","resolutionPayload":"{\\"choice\\":\\"A: 双写（更安全）\\"}"}',
             seqNo: 3,
             createdAt: '2026-05-09T00:00:04Z',
           }),
@@ -265,8 +357,16 @@ describe('MessageList.vue', () => {
       },
     })
 
-    expect(wrapper.find('.assistant-card__pill').text()).toContain('待确认')
-    expect(wrapper.find('.confirmation-gate').text()).toContain('1 个确认项等待处理')
+    expect(wrapper.find('.confirmation-gate').exists()).toBe(false)
+    expect(wrapper.findAll('.runtime-event--interaction')).toHaveLength(0)
+    expect(wrapper.find('.user-bubble--interaction').exists()).toBe(true)
+    expect(wrapper.find('.user-bubble--interaction').text()).toContain('用户输入')
+    expect(wrapper.find('.user-bubble--interaction').text()).toContain('处理交互：选择方案')
+    expect(wrapper.find('.user-bubble--interaction').text()).toContain('原始问题：请选择 HLD 推进方案')
+    expect(wrapper.find('.user-bubble--interaction').text()).toContain('上下文：方案 A 更安全，方案 B 成本更低')
+    expect(wrapper.find('.user-bubble--interaction').text()).toContain('可选项：A: 双写（更安全）；B: 直接切换')
+    expect(wrapper.find('.user-bubble--interaction').text()).toContain('用户选择：A: 双写（更安全）')
+    expect(wrapper.find('.user-bubble--interaction').text()).toContain('提交内容：choice=A: 双写（更安全）')
   })
 
   it('shows empty state when no messages are provided', () => {
@@ -277,7 +377,7 @@ describe('MessageList.vue', () => {
     expect(wrapper.text()).toContain('会话已就绪')
   })
 
-  it('does not render generic tool_call process trace when tool lifecycle events provide the real output', () => {
+  it('renders tool_call process trace as a real timeline message', () => {
     const events: RuntimeEventDto[] = [
       makeRuntimeEvent({
         id: 'evt-trace',
@@ -300,12 +400,32 @@ describe('MessageList.vue', () => {
       },
     })
     expect(wrapper.find('.process-turn').exists()).toBe(false)
-    expect(wrapper.text()).not.toContain('read_file')
-    const card = wrapper.find('.assistant-card')
-    expect(card.text()).toContain('# Output')
+    expect(wrapper.text()).toContain('read_file')
+    expect(wrapper.find('.runtime-event--tool').exists()).toBe(true)
   })
 
-  it('does not render a standalone live process turn before real assistant text is available', () => {
+  it('renders MCP call details and output as tool timeline messages', () => {
+    const wrapper = mount(MessageList, {
+      props: {
+        messages: [makeMessage({ role: 'USER', content: '查一下文件' })],
+        runtimeEvents: [
+          makeRuntimeEvent({
+            id: 'evt-mcp',
+            eventType: 'MCP_CALL',
+            payloadJson: '{"toolName":"bash","command":"ls","args":{"cwd":"/tmp"},"output":"a.txt\\nb.txt"}',
+          }),
+        ],
+      },
+    })
+
+    expect(wrapper.find('.runtime-event--tool').exists()).toBe(true)
+    expect(wrapper.text()).toContain('工具调用：bash')
+    expect(wrapper.text()).toContain('命令：ls')
+    expect(wrapper.text()).toContain('参数：{"cwd":"/tmp"}')
+    expect(wrapper.text()).toContain('a.txt')
+  })
+
+  it('renders running tool calls as standalone timeline messages', () => {
     const wrapper = mount(MessageList, {
       props: {
         messages: [makeMessage({ role: 'USER', content: '开始工作流' })],
@@ -327,6 +447,7 @@ describe('MessageList.vue', () => {
     const traces = wrapper.findAll('.mocked-process-trace')
     expect(traces).toHaveLength(0)
     expect(wrapper.find('.assistant-turn--live').exists()).toBe(false)
-    expect(wrapper.text()).not.toContain('助手正在处理')
+    expect(wrapper.find('.runtime-event--tool').exists()).toBe(true)
+    expect(wrapper.text()).toContain('真实工具调用')
   })
 })
