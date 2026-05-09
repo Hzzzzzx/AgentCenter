@@ -88,7 +88,7 @@ describe('App.vue', () => {
     expect(wrapper.find('.app-shell').exists()).toBe(true)
   })
 
-  it('updates the read-only title context from project settings', async () => {
+  it('does not expose project management from settings', async () => {
     const wrapper = mount(App, {
       global: {
         plugins: [createPinia()],
@@ -97,19 +97,13 @@ describe('App.vue', () => {
     await flushPromises()
 
     await wrapper.find('.left-sidebar__settings').trigger('click')
-    const projectMenuItem = wrapper
+    const menuLabels = wrapper
       .findAll('.left-sidebar__settings-menu-item')
-      .find(item => item.text().includes('项目管理'))
-    expect(projectMenuItem).toBeTruthy()
+      .map(item => item.text().trim())
 
-    await projectMenuItem!.trigger('click')
-    await flushPromises()
-
-    const projectSelect = wrapper.find('.project-context select[aria-label="选择项目"]')
-    ;(projectSelect.element as HTMLSelectElement).value = 'TianYuan'
-    await projectSelect.trigger('change')
-
-    expect(wrapper.find('.title-bar__context-project').text()).toBe('TianYuan')
+    expect(menuLabels).toEqual(['Skill 管理', 'MCP 管理'])
+    expect(wrapper.find('.project-context').exists()).toBe(false)
+    expect(wrapper.find('.title-bar__context').exists()).toBe(false)
   })
 
   it('refreshes only the affected work item after workflow actions', async () => {

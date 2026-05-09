@@ -6,7 +6,6 @@ import BoardView from './views/BoardView.vue'
 import WorkflowConfig from './views/WorkflowConfig.vue'
 import ConversationWorkbench from './views/ConversationWorkbench.vue'
 import RuntimeResources from './views/RuntimeResources.vue'
-import ProjectContextSettings from './views/ProjectContextSettings.vue'
 import SkillManagement from './views/SkillManagement.vue'
 import McpManagement from './views/McpManagement.vue'
 import { confirmationApi } from './api/confirmations'
@@ -17,7 +16,6 @@ import { useNotificationStore } from './stores/notifications'
 import { useWorkflowStore } from './stores/workflows'
 import { useWorkItemStore } from './stores/workItems'
 import type { AgentSessionDto, ArtifactDto, StartWorkflowResponse } from './api/types'
-import type { ProjectContextOptions, ProjectContextSelection } from './types/projectContext'
 
 const activeView = ref('home')
 const selectedWorkItemId = ref<string | undefined>(undefined)
@@ -26,16 +24,6 @@ const selectedArtifact = ref<ArtifactDto | null>(null)
 const conversationReturnView = ref('home')
 const settingsTab = ref<string>('skills')
 const appShellRef = ref<InstanceType<typeof AppShell> | null>(null)
-const projectContextOptions: ProjectContextOptions = {
-  projects: ['AgentCenter', 'TianYuan', '平台接入'],
-  spaces: ['研发中台', '平台工程', '安全治理'],
-  iterations: ['Sprint 14', 'Sprint 15', '长期演进'],
-}
-const projectContext = ref<ProjectContextSelection>({
-  project: 'AgentCenter',
-  space: '研发中台',
-  iteration: 'Sprint 14',
-})
 const sessionStore = useSessionStore()
 const workflowStore = useWorkflowStore()
 const confirmationStore = useConfirmationStore()
@@ -246,7 +234,6 @@ async function handleShowConfirmation(confirmationId: string) {
     v-model:activeView="activeView"
     :selected-work-item="selectedWorkItem"
     :selected-artifact="selectedArtifact"
-    :project-context="projectContext"
     @handle-confirmation="handleConfirmation"
     @select-session="handleSelectSession"
     @create-general-session="handleCreateGeneralSession"
@@ -269,11 +256,6 @@ async function handleShowConfirmation(confirmationId: string) {
       />
       <WorkflowConfig v-else-if="activeView === 'workflow'" />
       <RuntimeResources v-else-if="activeView === 'resources'" />
-      <ProjectContextSettings
-        v-else-if="activeView === 'settings' && settingsTab === 'project'"
-        v-model="projectContext"
-        :options="projectContextOptions"
-      />
       <SkillManagement v-else-if="activeView === 'settings' && settingsTab === 'skills'" />
       <McpManagement v-else-if="activeView === 'settings' && settingsTab === 'mcps'" />
       <ConversationWorkbench

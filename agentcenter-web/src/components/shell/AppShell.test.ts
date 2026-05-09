@@ -81,7 +81,7 @@ describe('AppShell.vue', () => {
 
     expect(wrapper.find('.title-bar').exists()).toBe(true)
     expect(wrapper.find('.title-bar__name').text()).toContain('AI DevOps')
-    expect(wrapper.find('.title-bar__context').text()).toContain('AgentCenter')
+    expect(wrapper.find('.title-bar__context').exists()).toBe(false)
     expect(wrapper.find('.left-sidebar').exists()).toBe(true)
     expect(wrapper.find('.center-workbench').exists()).toBe(true)
     expect(wrapper.find('.slot-content').exists()).toBe(true)
@@ -90,11 +90,11 @@ describe('AppShell.vue', () => {
     expect(wrapper.find('.status-bar__indicator--normal').exists()).toBe(true)
   })
 
-  it('shows project context as a read-only title bar hint', () => {
+  it('does not render project context in the title bar', () => {
     const wrapper = mountShell()
 
-    expect(wrapper.find('.title-bar__context-project').text()).toBe('AgentCenter')
-    expect(wrapper.find('.title-bar__context select').exists()).toBe(false)
+    expect(wrapper.find('.title-bar__context-project').exists()).toBe(false)
+    expect(wrapper.find('[aria-label="当前项目空间迭代"]').exists()).toBe(false)
   })
 
   it('does not render title bar notification or settings shortcuts', () => {
@@ -163,19 +163,15 @@ describe('AppShell.vue', () => {
     expect(labels).toEqual(['首页', '任务看板', '任务编排'])
   })
 
-  it('navigates to project management from the settings menu', async () => {
+  it('does not show project management in the settings menu', async () => {
     const wrapper = mountShell()
 
     await wrapper.find('.left-sidebar__settings').trigger('click')
-    const projectMenuItem = wrapper
+    const labels = wrapper
       .findAll('.left-sidebar__settings-menu-item')
-      .find(item => item.text().includes('项目管理'))
+      .map(item => item.text().trim())
 
-    expect(projectMenuItem).toBeTruthy()
-    await projectMenuItem!.trigger('click')
-
-    expect(wrapper.emitted('navigate-settings')).toBeTruthy()
-    expect(wrapper.emitted('navigate-settings')![0]).toEqual(['project'])
+    expect(labels).toEqual(['Skill 管理', 'MCP 管理'])
   })
 
   it('has correct grid layout structure', () => {
