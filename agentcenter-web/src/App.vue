@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, reactive, onMounted, onUnmounted } from 'vue'
 import AppShell from './components/shell/AppShell.vue'
 import HomeOverview from './views/HomeOverview.vue'
 import BoardView from './views/BoardView.vue'
 import WorkflowConfig from './views/WorkflowConfig.vue'
 import ConversationWorkbench from './views/ConversationWorkbench.vue'
 import RuntimeResources from './views/RuntimeResources.vue'
+import ProjectContextSettings from './views/ProjectContextSettings.vue'
 import SkillManagement from './views/SkillManagement.vue'
 import McpManagement from './views/McpManagement.vue'
 import { confirmationApi } from './api/confirmations'
@@ -16,6 +17,7 @@ import { useNotificationStore } from './stores/notifications'
 import { useWorkflowStore } from './stores/workflows'
 import { useWorkItemStore } from './stores/workItems'
 import type { AgentSessionDto, ArtifactDto, StartWorkflowResponse } from './api/types'
+import type { ProjectContextOptions, ProjectContextSelection } from './types/projectContext'
 
 const activeView = ref('home')
 const selectedWorkItemId = ref<string | undefined>(undefined)
@@ -24,6 +26,43 @@ const selectedArtifact = ref<ArtifactDto | null>(null)
 const conversationReturnView = ref('home')
 const settingsTab = ref<string>('skills')
 const appShellRef = ref<InstanceType<typeof AppShell> | null>(null)
+const projectContextOptions = reactive<ProjectContextOptions>({
+  cloudeReqProjects: ['CloudeReq 需求平台', 'CloudeReq 研发项目', 'CloudeReq 交付空间'],
+  spaces: ['研发中台', '平台工程', '安全治理'],
+  iterations: ['Sprint 14', 'Sprint 15', '长期演进'],
+})
+const projectContexts = ref<ProjectContextSelection[]>([
+  {
+    id: 'ctx-agentcenter',
+    project: 'AgentCenter',
+    cloudeReqProject: 'CloudeReq 研发项目',
+    space: '研发中台',
+    iteration: 'Sprint 14',
+  },
+  {
+    id: 'ctx-platform',
+    project: '平台接入',
+    cloudeReqProject: 'CloudeReq 交付空间',
+    space: '平台工程',
+    iteration: 'Sprint 15',
+  },
+])
+const activeProjectContextId = ref(projectContexts.value[0]?.id ?? '')
+const projectContext = computed<ProjectContextSelection>({
+  get: () => (
+    projectContexts.value.find((item) => item.id === activeProjectContextId.value)
+    ?? projectContexts.value[0]
+  ),
+  set: (value) => {
+    const existingIndex = projectContexts.value.findIndex((item) => item.id === value.id)
+    if (existingIndex >= 0) {
+      projectContexts.value.splice(existingIndex, 1, value)
+    } else {
+      projectContexts.value.push(value)
+    }
+    activeProjectContextId.value = value.id
+  },
+})
 const sessionStore = useSessionStore()
 const workflowStore = useWorkflowStore()
 const confirmationStore = useConfirmationStore()
@@ -208,6 +247,21 @@ function handleNavigateSettings(tab: string) {
   activeView.value = 'settings'
 }
 
+function handleProjectContextsUpdate(nextContexts: ProjectContextSelection[]) {
+  projectContexts.value = nextContexts
+  if (!nextContexts.some((item) => item.id === activeProjectContextId.value)) {
+    activeProjectContextId.value = nextContexts[0]?.id ?? ''
+  }
+}
+
+function handleSyncProjectContextData() {
+  // Frontend placeholder for the future enterprise data sync API.
+  projectContextOptions.cloudeReqProjects = Array.from(new Set([
+    ...projectContextOptions.cloudeReqProjects,
+    'CloudeReq 项目同步样例',
+  ]))
+}
+
 function rememberConversationReturnView() {
   if (activeView.value !== 'conversation') {
     conversationReturnView.value = activeView.value
@@ -234,6 +288,8 @@ async function handleShowConfirmation(confirmationId: string) {
     v-model:activeView="activeView"
     :selected-work-item="selectedWorkItem"
     :selected-artifact="selectedArtifact"
+    :project-context="projectContext"
+    :project-context-options="projectContextOptions"
     @handle-confirmation="handleConfirmation"
     @select-session="handleSelectSession"
     @create-general-session="handleCreateGeneralSession"
@@ -241,6 +297,7 @@ async function handleShowConfirmation(confirmationId: string) {
     @start-workflow="handleStartWorkflow"
     @enter-work-item-conversation="handleEnterWorkItemConversation"
     @confirmations-changed="handleConfirmationsChanged"
+    @update-project-context="projectContext = $event"
     @close-artifact="selectedArtifact = null"
   >
     <template #center>
@@ -256,6 +313,16 @@ async function handleShowConfirmation(confirmationId: string) {
       />
       <WorkflowConfig v-else-if="activeView === 'workflow'" />
       <RuntimeResources v-else-if="activeView === 'resources'" />
+      <ProjectContextSettings
+        v-else-if="activeView === 'settings' && settingsTab === 'project'"
+        v-model="projectContext"
+        :contexts="projectContexts"
+        :active-context-id="activeProjectContextId"
+        :options="projectContextOptions"
+        @update:contexts="handleProjectContextsUpdate"
+        @update:active-context-id="activeProjectContextId = $event"
+        @sync-data="handleSyncProjectContextData"
+      />
       <SkillManagement v-else-if="activeView === 'settings' && settingsTab === 'skills'" />
       <McpManagement v-else-if="activeView === 'settings' && settingsTab === 'mcps'" />
       <ConversationWorkbench

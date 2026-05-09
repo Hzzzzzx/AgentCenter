@@ -1,17 +1,36 @@
 <script setup lang="ts">
+import type { ProjectContextSelection } from '../../types/projectContext'
 import ThemeSwitcher from '../theme/ThemeSwitcher.vue'
 
 interface Props {
   searchValue?: string
+  projectContext?: ProjectContextSelection
+  iterationOptions?: string[]
 }
 
 const props = withDefaults(defineProps<Props>(), {
   searchValue: '',
+  projectContext: () => ({
+    id: 'default',
+    project: 'AgentCenter',
+    cloudeReqProject: '研发中台',
+    space: '研发中台',
+    iteration: 'Sprint 14',
+  }),
+  iterationOptions: () => ['Sprint 14', 'Sprint 15', '长期演进'],
 })
 
 const emit = defineEmits<{
   'update:searchValue': [value: string]
+  'update-project-context': [value: ProjectContextSelection]
 }>()
+
+function updateIteration(event: Event) {
+  emit('update-project-context', {
+    ...props.projectContext,
+    iteration: (event.target as HTMLSelectElement).value,
+  })
+}
 </script>
 
 <template>
@@ -27,6 +46,21 @@ const emit = defineEmits<{
         <span>AI DevOps</span>
         <strong>v2.0</strong>
       </div>
+    </div>
+
+    <div class="title-bar__context" aria-label="当前项目空间迭代">
+      <span class="title-bar__context-label">当前项目</span>
+      <strong class="title-bar__context-project">{{ props.projectContext.project }}</strong>
+      <select
+        class="title-bar__iteration"
+        aria-label="选择当前迭代"
+        :value="props.projectContext.iteration"
+        @change="updateIteration"
+      >
+        <option v-for="iteration in props.iterationOptions" :key="iteration" :value="iteration">
+          {{ iteration }}
+        </option>
+      </select>
     </div>
 
     <div class="title-bar__search">
@@ -58,7 +92,7 @@ const emit = defineEmits<{
 <style scoped>
 .title-bar {
   display: grid;
-  grid-template-columns: max-content minmax(260px, 1fr) max-content;
+  grid-template-columns: max-content max-content minmax(260px, 1fr) max-content;
   align-items: center;
   gap: 16px;
   height: var(--titlebar-height);
@@ -68,6 +102,7 @@ const emit = defineEmits<{
 }
 
 .title-bar__brand,
+.title-bar__context,
 .title-bar__actions,
 .title-bar__user {
   display: flex;
@@ -106,11 +141,62 @@ const emit = defineEmits<{
   background: var(--bg-tertiary);
 }
 
+.title-bar__context {
+  gap: 6px;
+  min-width: 0;
+  max-width: 360px;
+  height: 30px;
+  padding: 0 6px 0 9px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-card);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.title-bar__context-label {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.title-bar__context-project {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
 .title-bar__search {
   position: relative;
   max-width: 480px;
   width: 100%;
   justify-self: center;
+}
+
+.title-bar__iteration {
+  appearance: none;
+  flex-shrink: 0;
+  max-width: 128px;
+  height: 22px;
+  padding: 0 22px 0 8px;
+  border: 0;
+  border-radius: 5px;
+  color: var(--accent-blue);
+  background:
+    linear-gradient(45deg, transparent 50%, var(--accent-blue) 50%) right 10px center / 5px 5px no-repeat,
+    linear-gradient(135deg, var(--accent-blue) 50%, transparent 50%) right 6px center / 5px 5px no-repeat,
+    var(--brand-soft);
+  font-size: 11px;
+  font-weight: 700;
+  outline: 0;
+}
+
+.title-bar__iteration:hover,
+.title-bar__iteration:focus {
+  box-shadow: inset 0 0 0 1px var(--brand-border);
 }
 
 .title-bar__search-icon {
@@ -181,7 +267,11 @@ const emit = defineEmits<{
 
 @media (max-width: 1180px) {
   .title-bar {
-    grid-template-columns: max-content minmax(220px, 1fr) max-content;
+    grid-template-columns: max-content max-content minmax(220px, 1fr) max-content;
+  }
+
+  .title-bar__iteration {
+    display: none;
   }
 }
 </style>

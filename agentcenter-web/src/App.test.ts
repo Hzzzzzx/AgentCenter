@@ -88,7 +88,7 @@ describe('App.vue', () => {
     expect(wrapper.find('.app-shell').exists()).toBe(true)
   })
 
-  it('does not expose project management from settings', async () => {
+  it('updates the title context from project settings', async () => {
     const wrapper = mount(App, {
       global: {
         plugins: [createPinia()],
@@ -97,13 +97,25 @@ describe('App.vue', () => {
     await flushPromises()
 
     await wrapper.find('.left-sidebar__settings').trigger('click')
-    const menuLabels = wrapper
+    const projectMenuItem = wrapper
       .findAll('.left-sidebar__settings-menu-item')
-      .map(item => item.text().trim())
+      .find(item => item.text().includes('项目管理'))
+    expect(projectMenuItem).toBeTruthy()
 
-    expect(menuLabels).toEqual(['Skill 管理', 'MCP 管理'])
-    expect(wrapper.find('.project-context').exists()).toBe(false)
-    expect(wrapper.find('.title-bar__context').exists()).toBe(false)
+    await projectMenuItem!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.project-context').exists()).toBe(true)
+    const projectInput = wrapper.find('.project-context input[aria-label="填写项目名称"]')
+    await projectInput.setValue('TianYuan')
+
+    expect(wrapper.find('.title-bar__context-project').text()).toBe('TianYuan')
+
+    const iterationSelect = wrapper.find('.title-bar__iteration')
+    ;(iterationSelect.element as HTMLSelectElement).value = 'Sprint 15'
+    await iterationSelect.trigger('change')
+
+    expect((wrapper.find('.title-bar__iteration').element as HTMLSelectElement).value).toBe('Sprint 15')
   })
 
   it('refreshes only the affected work item after workflow actions', async () => {

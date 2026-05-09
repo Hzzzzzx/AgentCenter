@@ -6,15 +6,30 @@ import CenterWorkbench from './CenterWorkbench.vue'
 import RightPanel from './RightPanel.vue'
 import StatusBar from './StatusBar.vue'
 import type { AgentSessionDto, ArtifactDto, WorkItemDto } from '../../api/types'
+import type { ProjectContextOptions, ProjectContextSelection } from '../../types/projectContext'
 
 interface Props {
   activeView?: string
   selectedWorkItem?: WorkItemDto | null
   selectedArtifact?: ArtifactDto | null
+  projectContext?: ProjectContextSelection
+  projectContextOptions?: ProjectContextOptions
 }
 
 const props = withDefaults(defineProps<Props>(), {
   activeView: 'home',
+  projectContext: () => ({
+    id: 'default',
+    project: 'AgentCenter',
+    cloudeReqProject: '研发中台',
+    space: '研发中台',
+    iteration: 'Sprint 14',
+  }),
+  projectContextOptions: () => ({
+    cloudeReqProjects: ['研发中台', '平台工程', '安全治理'],
+    spaces: ['研发中台', '平台工程', '安全治理'],
+    iterations: ['Sprint 14', 'Sprint 15', '长期演进'],
+  }),
 })
 
 const emit = defineEmits<{
@@ -27,6 +42,7 @@ const emit = defineEmits<{
   'enter-work-item-conversation': [id: string]
   'confirmations-changed': [workItemId?: string | null]
   'close-artifact': []
+  'update-project-context': [value: ProjectContextSelection]
 }>()
 
 const leftCollapsed = ref(false)
@@ -79,7 +95,11 @@ watch(() => props.selectedArtifact, (artifact) => {
     }"
   >
     <div class="app-shell__titlebar">
-      <TitleBar />
+      <TitleBar
+        :project-context="props.projectContext"
+        :iteration-options="props.projectContextOptions.iterations"
+        @update-project-context="(value) => emit('update-project-context', value)"
+      />
     </div>
 
     <div class="app-shell__sidebar-left">
