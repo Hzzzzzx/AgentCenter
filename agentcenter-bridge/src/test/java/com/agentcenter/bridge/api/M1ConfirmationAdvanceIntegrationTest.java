@@ -59,7 +59,7 @@ class M1ConfirmationAdvanceIntegrationTest {
     }
 
     @Test
-    void fullM1Flow_startWorkflow_resolveConfirmation_advancesToNextNode() throws Exception {
+    void fullM1Flow_startWorkflow_resolveConfirmation_resumesCurrentSkill() throws Exception {
         String fe1234Id = findWorkItemIdByCode("FE1234");
 
         MvcResult startResult = mockMvc.perform(
@@ -97,16 +97,16 @@ class M1ConfirmationAdvanceIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn();
         var wfJson = objectMapper.readTree(wfResult.getResponse().getContentAsString());
-        assertThat(wfJson.get("status").asText()).isIn("RUNNING", "COMPLETED");
+        assertThat(wfJson.get("status").asText()).isEqualTo("BLOCKED");
 
         var nodes = wfJson.at("/nodes");
         var completedStatuses = java.util.stream.StreamSupport.stream(nodes.spliterator(), false)
                 .map(n -> n.get("status").asText())
                 .filter("COMPLETED"::equals)
                 .count();
-        assertThat(completedStatuses).isGreaterThanOrEqualTo(2);
+        assertThat(completedStatuses).isEqualTo(1);
         assertThat(TestWorkflowExecutorConfig.CAPTURED_SKILL_NAMES).contains("hld-design");
-        int hldInputIndex = TestWorkflowExecutorConfig.CAPTURED_SKILL_NAMES.indexOf("hld-design");
+        int hldInputIndex = TestWorkflowExecutorConfig.CAPTURED_SKILL_NAMES.lastIndexOf("hld-design");
         String hldInputContext = TestWorkflowExecutorConfig.CAPTURED_INPUT_CONTEXTS.get(hldInputIndex);
         assertThat(hldInputContext)
                 .contains("## 工作项")
@@ -116,7 +116,9 @@ class M1ConfirmationAdvanceIntegrationTest {
                 .contains("artifactId")
                 .contains("测试 PRD 输出")
                 .contains("## 当前节点")
-                .contains("hld-design");
+                .contains("hld-design")
+                .contains("用户交互回答历史")
+                .contains("低风险方案");
     }
 
     @Test
@@ -197,7 +199,7 @@ class M1ConfirmationAdvanceIntegrationTest {
     }
 
     @Test
-    void resolvingLastBlockingConfirmation_promotesNextNodeAsCurrent() throws Exception {
+    void resolvingLastBlockingConfirmation_resumesCurrentNode() throws Exception {
         String fe1234Id = findWorkItemIdByCode("FE1234");
 
         MvcResult startResult = mockMvc.perform(
@@ -236,13 +238,17 @@ class M1ConfirmationAdvanceIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn();
         var wfJson = objectMapper.readTree(wfResult.getResponse().getContentAsString());
-        assertThat(wfJson.at("/currentNodeInstanceId").asText()).isNotEqualTo(nodeInstanceId);
+        assertThat(wfJson.at("/currentNodeInstanceId").asText()).isEqualTo(nodeInstanceId);
 
         var nodes = wfJson.at("/nodes");
         assertThat(java.util.stream.StreamSupport.stream(nodes.spliterator(), false)
                 .anyMatch(n -> nodeInstanceId.equals(n.get("id").asText())
-                        && "COMPLETED".equals(n.get("status").asText()))).isTrue();
+                        && "WAITING_CONFIRMATION".equals(n.get("status").asText()))).isTrue();
         assertThat(TestWorkflowExecutorConfig.CAPTURED_SKILL_NAMES).contains("hld-design");
+        assertThat(TestWorkflowExecutorConfig.CAPTURED_INPUT_CONTEXTS.get(
+                TestWorkflowExecutorConfig.CAPTURED_INPUT_CONTEXTS.size() - 1))
+                .contains("用户交互回答历史")
+                .contains("补充完成");
     }
 
     @Test

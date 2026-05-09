@@ -330,6 +330,26 @@ public class WorkflowCommandService {
         return buildResponse(instance);
     }
 
+    public StartWorkflowResponse resumeNodeAfterInteraction(String nodeInstanceId) {
+        WorkflowNodeInstanceEntity node = findNodeInstanceOrThrow(nodeInstanceId);
+        WorkflowInstanceEntity instance = workflowMapper.findInstanceById(node.getWorkflowInstanceId());
+
+        String now = LocalDateTime.now().format(SQLITE_DATETIME);
+        instance.setStatus(WorkflowStatus.RUNNING.name());
+        instance.setUpdatedAt(now);
+        workflowMapper.updateInstance(instance);
+
+        node.setStatus(WorkflowNodeStatus.RUNNING.name());
+        node.setErrorMessage(null);
+        workflowMapper.updateNodeInstance(node);
+        touchWorkItem(instance.getWorkItemId(), now);
+
+        scheduleRunNode(instance.getId(), node.getId());
+
+        instance = workflowMapper.findInstanceById(instance.getId());
+        return buildResponse(instance);
+    }
+
     public WorkflowInstanceDto getWorkflowInstance(String instanceId) {
         WorkflowInstanceEntity instance = workflowMapper.findInstanceById(instanceId);
         if (instance == null) {
@@ -424,8 +444,16 @@ public class WorkflowCommandService {
                     workflowRuntimeType, node.getRuntimeSessionId(), skillName, inputContext);
         }
 
+        List<InteractionPoint> triggeredInteractions = result.success()
+                ? parseTriggeredInteractionPoints(result.outputContent())
+                : List.of();
+        boolean needsConfirmation = !triggeredInteractions.isEmpty();
+        boolean shouldPersistFinalArtifact = result.success()
+                && result.outputContent() != null
+                && !needsConfirmation;
+
         ArtifactEntity artifact = null;
-        if (result.success() && result.outputContent() != null) {
+        if (shouldPersistFinalArtifact) {
             artifact = new ArtifactEntity();
             artifact.setId(idGenerator.nextId());
             artifact.setWorkItemId(workItem.getId());
@@ -447,10 +475,6 @@ public class WorkflowCommandService {
                     result.outputContent(), artifact.getTitle(), node.getId());
         }
 
-        List<InteractionPoint> triggeredInteractions = result.success()
-                ? parseTriggeredInteractionPoints(result.outputContent())
-                : List.of();
-        boolean needsConfirmation = !triggeredInteractions.isEmpty();
         boolean needsConfirmationForMessage = needsConfirmation
                 || Boolean.TRUE.equals(nodeDef.getRequiredConfirmation());
 
@@ -1286,8 +1310,8 @@ public class WorkflowCommandService {
         if (result.success()) {
             String artifactText = artifact != null ? "，产物：" + artifact.getTitle() : "";
             if (pendingInteractionCount > 0) {
-                return "已生成 %s（Skill：%s）的节点产物%s，触发 %d 个用户交互点，等待处理。"
-                        .formatted(nodeDef.getName(), skillName, artifactText, pendingInteractionCount);
+                return "%s（Skill：%s）需要用户补充/确认，已触发 %d 个交互点；处理后会回到当前 Skill 继续执行。"
+                        .formatted(nodeDef.getName(), skillName, pendingInteractionCount);
             }
             if (needsConfirmation) {
                 return "已生成 %s（Skill：%s）的节点产物%s，等待确认。"
@@ -1354,16 +1378,34 @@ public class WorkflowCommandService {
             sb.append("无。该节点应基于工作项本身生成结果。\n\n");
         }
 
-        sb.append("## 输出要求\n");
-        sb.append("- 输出必须是一份完整 Markdown 文档。\n");
-        sb.append("- 必须基于上述工作项信息和上游产物，不要只复述 Skill 名称。\n");
-        sb.append("- 如果 Skill 模板包含 Agent 执行路线、Mermaid 流程图、分支建议或用户交互点，请完整输出并结合当前工作项填写。\n");
-        sb.append("- Mermaid 必须使用 Mermaid 11 兼容语法：节点 ID 使用英文，中文放在引号标签里；连线使用 A --> B 或 A -->|label| B，不要使用 A -- \"label\" --> B。\n");
-        sb.append("- 用户交互点类型请使用 ASK_USER、DECISION_REQUIRED、ARTIFACT_REVIEW_REQUESTED、PERMISSION_REQUIRED。\n");
-        sb.append("- 用户交互点表必须包含“是否触发”和“选项”；只有本轮确实需要用户参与时才把“是否触发”填为“是”。\n");
-        sb.append("- 除非工作项明确要求代码审计、源码分析或实现改造，不要读取当前工作目录源码。\n");
-        sb.append("- 如果信息不足，请列出缺口与需要用户确认的问题。\n");
+        appendResolvedInteractionHistory(sb, workItem.getId(), node.getId());
+
+        sb.append("## 执行方式\n");
+        sb.append("- 请按 Skill 自身说明处理上述输入。\n");
+        sb.append("- 工作流只提供调用顺序、当前输入和上游输出，不替代 Skill 的判断。\n");
+        sb.append("- 如果还需要用户澄清，请直接提出问题或给出可选方案。\n");
+        sb.append("- 如果信息已经足够，请输出当前 Skill 的最终 Markdown 结果。\n");
         return sb.toString();
+    }
+
+    private void appendResolvedInteractionHistory(StringBuilder sb, String workItemId, String nodeInstanceId) {
+        List<ConfirmationRequestEntity> resolvedInteractions = confirmationMapper.findByWorkItemId(workItemId).stream()
+                .filter(confirmation -> nodeInstanceId.equals(confirmation.getWorkflowNodeInstanceId()))
+                .filter(confirmation -> ConfirmationStatus.RESOLVED.name().equals(confirmation.getStatus()))
+                .toList();
+        if (resolvedInteractions.isEmpty()) {
+            return;
+        }
+
+        sb.append("## 用户交互回答历史\n");
+        for (ConfirmationRequestEntity confirmation : resolvedInteractions) {
+            appendField(sb, "确认项", nonBlank(confirmation.getTitle(), confirmation.getId()));
+            appendField(sb, "原始问题", confirmation.getContent());
+            appendField(sb, "交互类型", confirmation.getRequestType());
+            appendField(sb, "用户处理", confirmation.getResolutionPayloadJson());
+            appendField(sb, "用户备注", confirmation.getResolutionComment());
+            sb.append("\n");
+        }
     }
 
     private void appendField(StringBuilder sb, String label, String value) {

@@ -9,6 +9,7 @@ import type { WorkItemDto } from '../api/types'
 vi.mock('../api/workItems', () => ({
   workItemApi: {
     list: vi.fn().mockResolvedValue([]),
+    overview: vi.fn().mockResolvedValue({ source: 'DATABASE', refreshedAt: '2026-01-01T00:00:00Z', stats: [] }),
     startWorkflow: vi.fn().mockResolvedValue({}),
   },
 }))
@@ -91,6 +92,21 @@ const mockItems: WorkItemDto[] = [
   },
 ]
 
+function makePaginationItems(total: number): WorkItemDto[] {
+  return Array.from({ length: total }, (_, index) => {
+    const day = index + 1
+    const timestamp = `2026-01-${String(day).padStart(2, '0')}T00:00:00Z`
+    return {
+      ...mockItems[0],
+      id: `page-${day}`,
+      code: `FE-${String(day).padStart(3, '0')}`,
+      title: `Paged Item ${day}`,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }
+  })
+}
+
 function mountHomeOverview() {
   const pinia = createPinia()
   setActivePinia(pinia)
@@ -141,6 +157,30 @@ describe('HomeOverview.vue', () => {
     expect(wrapper.text()).toContain('高')
     expect(wrapper.text()).toContain('紧急')
     expect(wrapper.text()).toContain('中')
+  })
+
+  it('paginates work items to avoid rendering the full list at once', async () => {
+    const wrapper = mountHomeOverview()
+    await flushPromises()
+    const store = useWorkItemStore()
+    store.items = makePaginationItems(12)
+    store.loading = false
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.findAll('.work-item-card').length).toBe(5)
+    expect(wrapper.text()).toContain('第 1 / 3 页')
+    expect(wrapper.text()).toContain('1-5 / 12')
+    expect(wrapper.text()).toContain('Paged Item 12')
+    expect(wrapper.text()).not.toContain('Paged Item 7')
+
+    await wrapper.find('button[aria-label="下一页工作项"]').trigger('click')
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.findAll('.work-item-card').length).toBe(5)
+    expect(wrapper.text()).toContain('第 2 / 3 页')
+    expect(wrapper.text()).toContain('6-10 / 12')
+    expect(wrapper.text()).toContain('Paged Item 7')
+    expect(wrapper.text()).not.toContain('Paged Item 12')
   })
 
   it('filters work items by status', async () => {

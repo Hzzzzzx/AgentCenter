@@ -48,6 +48,7 @@ const projectContexts = ref<ProjectContextSelection[]>([
   },
 ])
 const activeProjectContextId = ref(projectContexts.value[0]?.id ?? '')
+const projectContextSyncing = ref(false)
 const projectContext = computed<ProjectContextSelection>({
   get: () => (
     projectContexts.value.find((item) => item.id === activeProjectContextId.value)
@@ -83,6 +84,7 @@ onUnmounted(() => {
 
 async function refreshWorkItemState() {
   await workItemStore.loadItems()
+  await workItemStore.loadOverview()
   for (const item of workItemStore.items) {
     if (item.workflowSummary) {
       workflowStore.upsertInstance({
@@ -112,6 +114,7 @@ async function refreshWorkItemState() {
 
 async function refreshOneWorkItemState(workItemId: string) {
   const item = await workItemStore.refreshItem(workItemId)
+  await workItemStore.loadOverview()
   if (item.workflowSummary) {
     workflowStore.upsertInstance({
       id: item.workflowSummary.instanceId,
@@ -255,11 +258,30 @@ function handleProjectContextsUpdate(nextContexts: ProjectContextSelection[]) {
 }
 
 function handleSyncProjectContextData() {
-  // Frontend placeholder for the future enterprise data sync API.
-  projectContextOptions.cloudeReqProjects = Array.from(new Set([
-    ...projectContextOptions.cloudeReqProjects,
-    'CloudeReq 项目同步样例',
-  ]))
+  if (projectContextSyncing.value) return
+  projectContextSyncing.value = true
+  refreshWorkItemState()
+    .then(() => {
+      notificationStore.push({
+        anchor: 'right-panel',
+        tone: 'success',
+        title: '同步完成',
+        message: '已从数据库刷新工作项、待确认与首页节点统计。',
+        durationMs: 3600,
+      })
+    })
+    .catch((e) => {
+      notificationStore.push({
+        anchor: 'right-panel',
+        tone: 'error',
+        title: '同步失败',
+        message: e instanceof Error ? e.message : '请稍后重试',
+        durationMs: 5200,
+      })
+    })
+    .finally(() => {
+      projectContextSyncing.value = false
+    })
 }
 
 function rememberConversationReturnView() {
@@ -319,6 +341,7 @@ async function handleShowConfirmation(confirmationId: string) {
         :contexts="projectContexts"
         :active-context-id="activeProjectContextId"
         :options="projectContextOptions"
+        :syncing="projectContextSyncing"
         @update:contexts="handleProjectContextsUpdate"
         @update:active-context-id="activeProjectContextId = $event"
         @sync-data="handleSyncProjectContextData"

@@ -1,14 +1,25 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useWorkItemStore } from '../stores/workItems'
 import { workItemApi } from '../api/workItems'
 import { useWorkflowStore } from '../stores/workflows'
-import type { Priority, StartWorkflowResponse, WorkItemDto, WorkflowInstanceDto, WorkflowNodeStatus, WorkflowStatus, WorkItemStatus, WorkItemType } from '../api/types'
+import type {
+  Priority,
+  StartWorkflowResponse,
+  WorkItemDto,
+  WorkItemOverviewTypeStatDto,
+  WorkflowInstanceDto,
+  WorkflowNodeStatus,
+  WorkflowStatus,
+  WorkItemStatus,
+  WorkItemType,
+} from '../api/types'
 
 const store = useWorkItemStore()
 const workflowStore = useWorkflowStore()
 const selectedType = ref<WorkItemType | 'ALL'>('ALL')
 const selectedStatus = ref<WorkItemStatus | 'ALL'>('ALL')
+const currentPage = ref(1)
 const startingIds = ref<Set<string>>(new Set())
 const startErrors = ref<Record<string, string>>({})
 
@@ -19,6 +30,7 @@ const emit = defineEmits<{
 }>()
 
 const typeOrder: WorkItemType[] = ['FE', 'US', 'TASK', 'WORK', 'BUG', 'VULN']
+const pageSize = 5
 
 const typeConfig: Record<WorkItemType, { label: string; title: string; color: string }> = {
   FE: { label: 'FE', title: 'FE', color: '#6366f1' },
@@ -116,11 +128,22 @@ const defaultStageLabels: Record<WorkItemType, string[]> = {
 
 onMounted(() => {
   store.loadItems()
+  store.loadOverview()
   workflowStore.loadDefinitions()
 })
 
+const overviewStatsByType = computed(() => {
+  const stats = store.overview?.stats ?? []
+  return new Map(stats.map((stat) => [stat.type, stat]))
+})
+
 const typeStatCards = computed<TypeStatCard[]>(() =>
-  typeOrder.map((type) => buildTypeStatCard(type, store.items.filter((item) => item.type === type)))
+  typeOrder.map((type) => {
+    const overviewStat = overviewStatsByType.value.get(type)
+    return overviewStat
+      ? buildTypeStatCardFromOverview(type, overviewStat)
+      : buildTypeStatCard(type, store.items.filter((item) => item.type === type))
+  })
 )
 
 const filteredItems = computed(() => {
@@ -133,8 +156,35 @@ const filteredItems = computed(() => {
   return [...items].sort((a, b) => itemUpdatedAtValue(b) - itemUpdatedAtValue(a))
 })
 
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredItems.value.length / pageSize)))
+const pageStartIndex = computed(() => (currentPage.value - 1) * pageSize)
+const pageEndIndex = computed(() => Math.min(pageStartIndex.value + pageSize, filteredItems.value.length))
+const paginatedItems = computed(() => filteredItems.value.slice(pageStartIndex.value, pageEndIndex.value))
+const paginationRangeLabel = computed(() => {
+  if (filteredItems.value.length === 0) return '0 / 0'
+  return `${pageStartIndex.value + 1}-${pageEndIndex.value} / ${filteredItems.value.length}`
+})
+
+watch([selectedType, selectedStatus], () => {
+  currentPage.value = 1
+})
+
+watch(totalPages, (nextTotalPages) => {
+  if (currentPage.value > nextTotalPages) {
+    currentPage.value = nextTotalPages
+  }
+})
+
 function itemUpdatedAtValue(item: WorkItemDto) {
   return Date.parse(item.updatedAt ?? item.createdAt ?? '') || 0
+}
+
+function goToPreviousPage() {
+  currentPage.value = Math.max(1, currentPage.value - 1)
+}
+
+function goToNextPage() {
+  currentPage.value = Math.min(totalPages.value, currentPage.value + 1)
 }
 
 function workflowFor(item: WorkItemDto): WorkflowInstanceDto | null {
@@ -224,6 +274,27 @@ function buildTypeStatCard(type: WorkItemType, items: WorkItemDto[]): TypeStatCa
     progressLabel: `${completionRate}% 节点完成`,
     completionRate,
     chips,
+  }
+}
+
+function buildTypeStatCardFromOverview(type: WorkItemType, stat: WorkItemOverviewTypeStatDto): TypeStatCard {
+  const config = typeConfig[type]
+  return {
+    type,
+    label: config.label,
+    color: config.color,
+    total: stat.total,
+    nodeSummary: nodeDistributionSummaryFromBuckets(stat.nodeDistribution, stat.total),
+    progressLabel: `${stat.completionRate}% 节点完成`,
+    completionRate: stat.completionRate,
+    chips: buildStatChips({
+      total: stat.total,
+      runningCount: stat.runningCount,
+      waitingCount: stat.waitingCount,
+      blockedCount: stat.blockedCount,
+      unstartedCount: stat.unstartedCount,
+      completedCount: stat.completedCount,
+    }),
   }
 }
 
@@ -337,6 +408,19 @@ function nodeDistributionSummary(
     .sort((a, b) => a[1].priority - b[1].priority || b[1].count - a[1].count || a[0].localeCompare(b[0], 'zh-CN'))
     .slice(0, 3)
     .map(([label, item]) => `${label} ${item.count}`)
+    .join(' · ')
+}
+
+function nodeDistributionSummaryFromBuckets(
+  buckets: WorkItemOverviewTypeStatDto['nodeDistribution'],
+  total: number
+): string {
+  if (total === 0) return '等待创建事项'
+  if (buckets.length === 0) return '暂无节点数据'
+  return [...buckets]
+    .sort((a, b) => a.priority - b.priority || b.count - a.count || a.label.localeCompare(b.label, 'zh-CN'))
+    .slice(0, 3)
+    .map((bucket) => `${bucket.label} ${bucket.count}`)
     .join(' · ')
 }
 
@@ -480,6 +564,7 @@ async function handleStartWorkflow(workItemId: string) {
     }
     emit('start-workflow', workItemId, response)
     await store.loadItems()
+    await store.loadOverview()
   } catch (error) {
     const message = error instanceof Error ? error.message : '启动工作流失败'
     startErrors.value = { ...startErrors.value, [workItemId]: message }
@@ -550,7 +635,7 @@ async function handleStartWorkflow(workItemId: string) {
       <div v-else class="home-overview__content">
         <div v-if="filteredItems.length === 0" class="home-overview__empty">暂无工作项</div>
         <div
-          v-for="item in filteredItems"
+          v-for="item in paginatedItems"
           v-else
           :key="item.id"
           class="work-item-card home-overview__row"
@@ -604,6 +689,36 @@ async function handleStartWorkflow(workItemId: string) {
           <div v-if="startErrors[item.id]" class="home-overview__error">
             {{ startErrors[item.id] }}
           </div>
+        </div>
+      </div>
+      <div
+        v-if="!store.loading && filteredItems.length > 0"
+        class="home-overview__pagination"
+        aria-label="工作项分页"
+      >
+        <span class="home-overview__pagination-total">共 {{ filteredItems.length }} 项</span>
+        <div class="home-overview__pagination-controls">
+          <button
+            type="button"
+            class="home-overview__page-button"
+            :disabled="currentPage === 1"
+            aria-label="上一页工作项"
+            @click="goToPreviousPage"
+          >
+            上一页
+          </button>
+          <span class="home-overview__page-state" aria-live="polite">
+            第 {{ currentPage }} / {{ totalPages }} 页 · {{ paginationRangeLabel }}
+          </span>
+          <button
+            type="button"
+            class="home-overview__page-button"
+            :disabled="currentPage === totalPages"
+            aria-label="下一页工作项"
+            @click="goToNextPage"
+          >
+            下一页
+          </button>
         </div>
       </div>
     </div>
@@ -961,6 +1076,59 @@ async function handleStartWorkflow(workItemId: string) {
   border: 3px solid var(--bg-card);
   border-radius: 999px;
   background: color-mix(in srgb, var(--brand-primary) 46%, var(--border-color));
+}
+
+.home-overview__pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  padding: 8px 18px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-card);
+}
+
+.home-overview__pagination-total,
+.home-overview__page-state {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 760;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-overview__pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.home-overview__page-button {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.home-overview__page-button:not(:disabled):hover {
+  border-color: var(--brand-border);
+  background: var(--brand-soft);
+  color: var(--brand-primary);
+}
+
+.home-overview__page-button:disabled {
+  cursor: default;
+  opacity: 0.48;
 }
 
 .home-overview__row {

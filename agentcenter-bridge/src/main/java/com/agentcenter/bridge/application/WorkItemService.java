@@ -4,6 +4,7 @@ import com.agentcenter.bridge.api.dto.CreateWorkItemRequest;
 import com.agentcenter.bridge.api.dto.UpdateWorkItemRequest;
 import com.agentcenter.bridge.api.dto.WorkflowSummaryDto;
 import com.agentcenter.bridge.api.dto.WorkItemDto;
+import com.agentcenter.bridge.api.dto.WorkItemOverviewDto;
 import com.agentcenter.bridge.domain.workitem.Priority;
 import com.agentcenter.bridge.domain.workitem.WorkItemStatus;
 import com.agentcenter.bridge.domain.workitem.WorkItemType;
@@ -24,6 +25,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +36,14 @@ public class WorkItemService {
 
     private static final DateTimeFormatter SQLITE_DATETIME =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final Map<WorkItemType, List<String>> DEFAULT_STAGE_LABELS = Map.of(
+            WorkItemType.FE, List.of("需求", "方案", "实施", "验证", "归档"),
+            WorkItemType.US, List.of("故事", "验收", "拆分", "评审", "归档"),
+            WorkItemType.TASK, List.of("理解", "计划", "执行", "验证", "总结"),
+            WorkItemType.WORK, List.of("分析", "Runbook", "执行", "校验", "报告"),
+            WorkItemType.BUG, List.of("复现", "根因", "修复", "回归", "关闭"),
+            WorkItemType.VULN, List.of("分级", "影响", "修复", "验证", "归档")
+    );
 
     private final WorkItemMapper workItemMapper;
     private final WorkflowMapper workflowMapper;
@@ -54,6 +64,14 @@ public class WorkItemService {
         return workItemMapper.findAll().stream()
                 .map(this::toDto)
                 .toList();
+    }
+
+    public WorkItemOverviewDto getOverview() {
+        var workItems = listWorkItems();
+        var stats = Arrays.stream(WorkItemType.values())
+                .map(type -> buildOverviewTypeStat(type, workItems))
+                .toList();
+        return new WorkItemOverviewDto("DATABASE", OffsetDateTime.now(ZoneOffset.UTC), stats);
     }
 
     public WorkItemDto getWorkItem(String id) {
@@ -118,6 +136,190 @@ public class WorkItemService {
                 parseDateTime(e.getCreatedAt()),
                 parseDateTime(e.getUpdatedAt())
         );
+    }
+
+    private WorkItemOverviewDto.TypeStat buildOverviewTypeStat(WorkItemType type, List<WorkItemDto> allWorkItems) {
+        var items = allWorkItems.stream()
+                .filter(item -> item.type() == type)
+                .toList();
+        int runningCount = 0;
+        int waitingCount = 0;
+        int blockedCount = 0;
+        int unstartedCount = 0;
+        int completedCount = 0;
+        int completedNodeCount = 0;
+        int totalNodeCount = 0;
+        Map<String, WorkItemOverviewDto.NodeDistribution> nodeDistribution = new java.util.HashMap<>();
+
+        for (var item : items) {
+            var stages = overviewStagesFor(item);
+            boolean hasRunning = stages.stream().anyMatch(stage -> "RUNNING".equals(stage.status()));
+            boolean hasWaiting = stages.stream().anyMatch(stage ->
+                    "WAITING_CONFIRMATION".equals(stage.status()) || stage.pendingConfirmationCount() > 0);
+            boolean hasFailed = stages.stream().anyMatch(stage -> "FAILED".equals(stage.status()))
+                    || hasWorkflowStatus(item, "FAILED")
+                    || hasWorkflowStatus(item, "BLOCKED");
+            boolean isCompleted = hasWorkflowStatus(item, "COMPLETED") || item.status() == WorkItemStatus.DONE;
+            boolean isUnstarted = item.workflowSummary() == null && item.currentWorkflowInstanceId() == null;
+
+            if (hasRunning) runningCount += 1;
+            if (hasWaiting) waitingCount += 1;
+            if (hasFailed) blockedCount += 1;
+            if (isUnstarted) unstartedCount += 1;
+            if (isCompleted) completedCount += 1;
+
+            for (var stage : stages) {
+                if (isNodeComplete(stage.status())) {
+                    completedNodeCount += 1;
+                }
+                totalNodeCount += 1;
+            }
+
+            addOverviewDistribution(nodeDistribution, currentNodeBucketFor(item, stages));
+        }
+
+        int completionRate = totalNodeCount > 0
+                ? Math.round((completedNodeCount * 100f) / totalNodeCount)
+                : 0;
+        var distribution = nodeDistribution.values().stream()
+                .sorted(Comparator
+                        .comparingInt(WorkItemOverviewDto.NodeDistribution::priority)
+                        .thenComparing(Comparator.comparingInt(WorkItemOverviewDto.NodeDistribution::count).reversed())
+                        .thenComparing(WorkItemOverviewDto.NodeDistribution::label))
+                .toList();
+
+        return new WorkItemOverviewDto.TypeStat(
+                type.name(),
+                items.size(),
+                runningCount,
+                waitingCount,
+                blockedCount,
+                unstartedCount,
+                completedCount,
+                completedNodeCount,
+                totalNodeCount,
+                completionRate,
+                distribution
+        );
+    }
+
+    private record OverviewStage(String label, String status, int pendingConfirmationCount) {}
+
+    private record OverviewNodeBucket(String label, int priority) {}
+
+    private List<OverviewStage> overviewStagesFor(WorkItemDto item) {
+        var summary = item.workflowSummary();
+        if (summary != null && summary.stages() != null && !summary.stages().isEmpty()) {
+            return summary.stages().stream()
+                    .map(stage -> new OverviewStage(
+                            firstNonBlank(stage.name(), stage.skillName(), "阶段"),
+                            stage.status(),
+                            stage.pendingConfirmationCount()))
+                    .toList();
+        }
+        if (summary != null && summary.nodes() != null && !summary.nodes().isEmpty()) {
+            return summary.nodes().stream()
+                    .map(node -> new OverviewStage(
+                            firstNonBlank(node.definitionName(), node.skillName(), "阶段"),
+                            node.status(),
+                            0))
+                    .toList();
+        }
+        return defaultStageNamesFor(item.type()).stream()
+                .map(label -> new OverviewStage(label, "PENDING", 0))
+                .toList();
+    }
+
+    private List<String> defaultStageNamesFor(WorkItemType type) {
+        var definitions = workflowMapper.findDefinitionsByWorkItemType(type.name());
+        var definition = definitions.stream()
+                .filter(candidate -> "ENABLED".equals(candidate.getStatus()))
+                .filter(candidate -> Boolean.TRUE.equals(candidate.getIsDefault()))
+                .findFirst()
+                .orElseGet(() -> definitions.stream()
+                        .filter(candidate -> "ENABLED".equals(candidate.getStatus()))
+                        .findFirst()
+                        .orElse(null));
+        if (definition != null) {
+            var names = workflowMapper.findNodeDefinitionsByWorkflowDefinitionId(definition.getId()).stream()
+                    .map(node -> firstNonBlank(node.getName(), node.getSkillName(), "阶段"))
+                    .toList();
+            if (!names.isEmpty()) {
+                return names;
+            }
+        }
+        return DEFAULT_STAGE_LABELS.getOrDefault(type, List.of("待处理"));
+    }
+
+    private OverviewNodeBucket currentNodeBucketFor(WorkItemDto item, List<OverviewStage> stages) {
+        var waitingStage = stages.stream()
+                .filter(stage -> "WAITING_CONFIRMATION".equals(stage.status()) || stage.pendingConfirmationCount() > 0)
+                .findFirst();
+        if (waitingStage.isPresent()) {
+            return new OverviewNodeBucket(waitingStage.get().label(), 0);
+        }
+
+        var runningStage = stages.stream()
+                .filter(stage -> "RUNNING".equals(stage.status()))
+                .findFirst();
+        if (runningStage.isPresent()) {
+            return new OverviewNodeBucket(runningStage.get().label(), 1);
+        }
+
+        var failedStage = stages.stream()
+                .filter(stage -> "FAILED".equals(stage.status()))
+                .findFirst();
+        if (failedStage.isPresent()) {
+            return new OverviewNodeBucket(failedStage.get().label(), 2);
+        }
+
+        if (hasWorkflowStatus(item, "COMPLETED") || item.status() == WorkItemStatus.DONE) {
+            return new OverviewNodeBucket("已完成", 5);
+        }
+
+        if (item.workflowSummary() == null && item.currentWorkflowInstanceId() == null) {
+            return new OverviewNodeBucket("未开始", 4);
+        }
+
+        var nextStage = stages.stream()
+                .filter(stage -> !isNodeComplete(stage.status()))
+                .findFirst();
+        if (nextStage.isPresent()) {
+            return new OverviewNodeBucket(nextStage.get().label(), 3);
+        }
+
+        if (hasWorkflowStatus(item, "FAILED") || hasWorkflowStatus(item, "BLOCKED")) {
+            return new OverviewNodeBucket("异常", 2);
+        }
+
+        return new OverviewNodeBucket("待处理", 3);
+    }
+
+    private void addOverviewDistribution(
+            Map<String, WorkItemOverviewDto.NodeDistribution> distribution,
+            OverviewNodeBucket bucket) {
+        var current = distribution.get(bucket.label());
+        int count = current != null ? current.count() + 1 : 1;
+        int priority = current != null ? Math.min(current.priority(), bucket.priority()) : bucket.priority();
+        distribution.put(bucket.label(), new WorkItemOverviewDto.NodeDistribution(bucket.label(), count, priority));
+    }
+
+    private boolean hasWorkflowStatus(WorkItemDto item, String status) {
+        return item.workflowSummary() != null && status.equals(item.workflowSummary().status());
+    }
+
+    private boolean isNodeComplete(String status) {
+        return "COMPLETED".equals(status) || "SKIPPED".equals(status);
+    }
+
+    private String firstNonBlank(String primary, String fallback, String defaultValue) {
+        if (primary != null && !primary.isBlank()) {
+            return primary;
+        }
+        if (fallback != null && !fallback.isBlank()) {
+            return fallback;
+        }
+        return defaultValue;
     }
 
     private WorkflowSummaryDto buildWorkflowSummary(String instanceId) {

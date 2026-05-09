@@ -6,6 +6,7 @@ const props = defineProps<{
   contexts: ProjectContextSelection[]
   activeContextId: string
   options: ProjectContextOptions
+  syncing?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -69,8 +70,8 @@ function deleteContext(context: ProjectContextSelection) {
         <h1 class="project-context__title">项目管理</h1>
         <p class="project-context__subtitle">维护当前工作台的项目、企业数据源和生效上下文。</p>
       </div>
-      <button class="project-context__sync" type="button" @click="emit('sync-data')">
-        同步数据
+      <button class="project-context__sync" type="button" :disabled="props.syncing" @click="emit('sync-data')">
+        {{ props.syncing ? '同步中' : '同步数据' }}
       </button>
     </header>
 
@@ -222,6 +223,12 @@ function deleteContext(context: ProjectContextSelection) {
 .project-context__sync:hover,
 .project-context__add:hover {
   filter: brightness(0.96);
+}
+
+.project-context__sync:disabled {
+  cursor: default;
+  opacity: 0.58;
+  filter: grayscale(0.2);
 }
 
 .project-context__layout {

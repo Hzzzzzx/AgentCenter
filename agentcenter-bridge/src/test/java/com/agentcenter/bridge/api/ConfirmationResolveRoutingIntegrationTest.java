@@ -24,9 +24,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Integration tests for ConfirmationService.resolve() routing of all action types.
  *
  * Covers:
- * - APPROVE: Record result, write USER message, complete node, advance
- * - CHOOSE: Save choice payload, write USER message, complete node, advance
- * - SUPPLEMENT: Save input payload, write USER message, complete node, advance
+ * - APPROVE: Record result, write USER message, resume current Skill unless it is a fallback node approval
+ * - CHOOSE: Save choice payload, write USER message, resume current Skill
+ * - SUPPLEMENT: Save input payload, write USER message, resume current Skill
  * - RETRY: Resolve exception confirmation, retryNode
  * - SKIP: Resolve exception confirmation, skipNode
  * - REJECT: Keep workflow BLOCKED, write USER message
@@ -99,10 +99,10 @@ class ConfirmationResolveRoutingIntegrationTest {
      * APPROVE: resolving with APPROVE action should:
      * - Set confirmation status to RESOLVED
      * - Write a USER message to session
-     * - Complete node and advance workflow
+     * - Resume current Skill instead of treating the interaction as node completion
      */
     @Test
-    void approveAction_resolvesConfirmation_writesUserMessage_advancesWorkflow() throws Exception {
+    void approveAction_resolvesConfirmation_writesUserMessage_keepsCurrentSkillWaiting() throws Exception {
         StartedWorkflow wf = startWorkflowAndConfirm("FE1234");
 
         jdbcTemplate.update("""
@@ -142,17 +142,18 @@ class ConfirmationResolveRoutingIntegrationTest {
                 .andReturn();
         var wfJson = objectMapper.readTree(wfResult.getResponse().getContentAsString());
         long completedCount = countCompletedNodes(wfJson);
-        assertThat(completedCount).isGreaterThanOrEqualTo(2);
+        assertThat(completedCount).isEqualTo(1);
+        assertThat(currentNodeStatus(wfJson)).isEqualTo("WAITING_CONFIRMATION");
     }
 
     /**
      * CHOOSE: resolving with CHOOSE action should:
      * - Save choice payload
      * - Write USER message with user's choice
-     * - Complete node and advance workflow
+     * - Resume current Skill with the choice in its input context
      */
     @Test
-    void chooseAction_savesChoicePayload_writesUserMessage_advancesWorkflow() throws Exception {
+    void chooseAction_savesChoicePayload_writesUserMessage_resumesCurrentSkill() throws Exception {
         StartedWorkflow wf = startWorkflowAndConfirm("FE1234");
 
         mockMvc.perform(post("/api/confirmations/" + wf.confirmationId() + "/resolve")
@@ -176,23 +177,28 @@ class ConfirmationResolveRoutingIntegrationTest {
                 .contains("用户输入：用户选择：低风险方案")
                 .contains("类型：DECISION");
 
-        // Verify workflow advanced
         MvcResult wfResult = mockMvc.perform(get("/api/workflow-instances/" + wf.instanceId()))
                 .andExpect(status().isOk())
                 .andReturn();
         var wfJson = objectMapper.readTree(wfResult.getResponse().getContentAsString());
         long completedCount = countCompletedNodes(wfJson);
-        assertThat(completedCount).isGreaterThanOrEqualTo(2);
+        assertThat(completedCount).isEqualTo(1);
+        assertThat(currentNodeStatus(wfJson)).isEqualTo("WAITING_CONFIRMATION");
+        assertThat(TestWorkflowExecutorConfig.CAPTURED_SKILL_NAMES).containsSubsequence("hld-design", "hld-design");
+        assertThat(TestWorkflowExecutorConfig.CAPTURED_INPUT_CONTEXTS.get(
+                TestWorkflowExecutorConfig.CAPTURED_INPUT_CONTEXTS.size() - 1))
+                .contains("用户交互回答历史")
+                .contains("低风险方案");
     }
 
     /**
      * SUPPLEMENT: resolving with SUPPLEMENT action should:
      * - Save input payload
      * - Write USER message with user's input
-     * - Complete node and advance workflow
+     * - Resume current Skill with the supplement in its input context
      */
     @Test
-    void supplementAction_savesInputPayload_writesUserMessage_advancesWorkflow() throws Exception {
+    void supplementAction_savesInputPayload_writesUserMessage_resumesCurrentSkill() throws Exception {
         StartedWorkflow wf = startWorkflowAndConfirm("FE1234");
 
         jdbcTemplate.update("""
@@ -233,7 +239,12 @@ class ConfirmationResolveRoutingIntegrationTest {
                 .andReturn();
         var wfJson = objectMapper.readTree(wfResult.getResponse().getContentAsString());
         long completedCount = countCompletedNodes(wfJson);
-        assertThat(completedCount).isGreaterThanOrEqualTo(2);
+        assertThat(completedCount).isEqualTo(1);
+        assertThat(currentNodeStatus(wfJson)).isEqualTo("WAITING_CONFIRMATION");
+        assertThat(TestWorkflowExecutorConfig.CAPTURED_INPUT_CONTEXTS.get(
+                TestWorkflowExecutorConfig.CAPTURED_INPUT_CONTEXTS.size() - 1))
+                .contains("用户交互回答历史")
+                .contains("需要支持移动端");
     }
 
     /**
@@ -414,6 +425,16 @@ class ConfirmationResolveRoutingIntegrationTest {
                 .map(n -> n.get("status").asText())
                 .filter("COMPLETED"::equals)
                 .count();
+    }
+
+    private String currentNodeStatus(com.fasterxml.jackson.databind.JsonNode wfJson) {
+        String currentNodeId = wfJson.path("currentNodeInstanceId").asText("");
+        var nodes = wfJson.at("/nodes");
+        return java.util.stream.StreamSupport.stream(nodes.spliterator(), false)
+                .filter(n -> currentNodeId.equals(n.get("id").asText()))
+                .map(n -> n.get("status").asText())
+                .findFirst()
+                .orElse("");
     }
 
     record StartedWorkflow(String workItemId, String instanceId, String confirmationId,

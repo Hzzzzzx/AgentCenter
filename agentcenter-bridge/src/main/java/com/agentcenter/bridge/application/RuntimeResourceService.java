@@ -1,12 +1,10 @@
 package com.agentcenter.bridge.application;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.agentcenter.bridge.api.dto.RuntimeSkillDto;
@@ -19,16 +17,13 @@ import com.agentcenter.bridge.domain.runtime.RuntimeType;
 public class RuntimeResourceService {
 
     private final RuntimeGateway runtimeGateway;
-    private final String configuredProjectRoot;
     private final ProjectRuntimeWorkspaceResolver workspaceResolver;
     private final AtomicReference<RuntimeSkillSnapshot> skillSnapshot =
             new AtomicReference<>(new RuntimeSkillSnapshot(null, null, List.of()));
 
     public RuntimeResourceService(RuntimeGateway runtimeGateway,
-                                  @Value("${agentcenter.runtime.project-root:}") String configuredProjectRoot,
                                   ProjectRuntimeWorkspaceResolver workspaceResolver) {
         this.runtimeGateway = runtimeGateway;
-        this.configuredProjectRoot = configuredProjectRoot;
         this.workspaceResolver = workspaceResolver;
     }
 
@@ -37,8 +32,8 @@ public class RuntimeResourceService {
         if (snapshot.refreshedAt() == null) {
             return refreshSkills();
         }
-        String projectRootStr = resolveProjectRoot().toString();
-        String skillsPath = runtimeGateway.getSkillsRootPath(RuntimeType.OPENCODE);
+        String projectRootStr = snapshot.projectRoot();
+        String skillsPath = runtimeGateway.getSkillsRootPath(RuntimeType.OPENCODE, Path.of(projectRootStr));
         return toResponse(snapshot.refreshedAt(), projectRootStr, skillsPath, snapshot.skills());
     }
 
@@ -79,24 +74,7 @@ public class RuntimeResourceService {
         );
     }
 
-    private Path resolveProjectRoot() {
-        if (configuredProjectRoot != null && !configuredProjectRoot.isBlank()) {
-            return Path.of(configuredProjectRoot).toAbsolutePath().normalize();
-        }
-        Path userDir = Path.of(System.getProperty("user.dir")).toAbsolutePath().normalize();
-        if (userDir.getFileName() != null && "agentcenter-bridge".equals(userDir.getFileName().toString())) {
-            return userDir.getParent();
-        }
-        if (Files.isDirectory(userDir.resolve("agentcenter-bridge"))) {
-            return userDir;
-        }
-        return userDir;
-    }
-
     private Path resolveProjectWorkdir(String projectId) {
-        if (projectId != null && !projectId.isBlank()) {
-            return workspaceResolver.resolve(projectId);
-        }
-        return resolveProjectRoot();
+        return workspaceResolver.resolve(projectId);
     }
 }

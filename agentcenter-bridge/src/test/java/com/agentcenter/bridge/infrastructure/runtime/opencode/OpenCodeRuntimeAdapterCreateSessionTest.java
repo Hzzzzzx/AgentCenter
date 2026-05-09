@@ -11,9 +11,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import com.agentcenter.bridge.api.dto.RuntimeEventDto;
+import com.agentcenter.bridge.application.RuntimeEventService;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeAckEnvelope;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeCommandEnvelope;
 import com.agentcenter.bridge.application.runtime.SkillRunResult;
+import com.agentcenter.bridge.domain.runtime.RuntimeEventType;
 import com.agentcenter.bridge.domain.runtime.RuntimeType;
 import com.agentcenter.bridge.infrastructure.runtime.opencode.transport.OpenCodeHttpCommandTransport;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -28,6 +31,7 @@ class OpenCodeRuntimeAdapterCreateSessionTest {
     private OpenCodeSkillFileService skillFileService;
     private OpenCodeMcpFileService mcpFileService;
     private OpenCodeHttpCommandTransport commandTransport;
+    private RuntimeEventService runtimeEventService;
     private OpenCodeRuntimeAdapter adapter;
 
     @BeforeEach
@@ -38,6 +42,7 @@ class OpenCodeRuntimeAdapterCreateSessionTest {
         skillFileService = mock(OpenCodeSkillFileService.class);
         mcpFileService = mock(OpenCodeMcpFileService.class);
         commandTransport = mock(OpenCodeHttpCommandTransport.class);
+        runtimeEventService = mock(RuntimeEventService.class);
 
         when(processManager.isEnabled()).thenReturn(true);
         when(processManager.ensureRunning()).thenReturn("http://127.0.0.1:4097");
@@ -45,7 +50,7 @@ class OpenCodeRuntimeAdapterCreateSessionTest {
 
         adapter = new OpenCodeRuntimeAdapter(
                 processManager, eventSubscriber, objectMapper,
-                skillFileService, mcpFileService, commandTransport,
+                skillFileService, mcpFileService, commandTransport, runtimeEventService,
                 "build", 180);
     }
 
@@ -103,7 +108,7 @@ class OpenCodeRuntimeAdapterCreateSessionTest {
     void runSkillDoesNotTreatToolOutputAsFinalArtifact() {
         adapter = new OpenCodeRuntimeAdapter(
                 processManager, eventSubscriber, objectMapper,
-                skillFileService, mcpFileService, commandTransport,
+                skillFileService, mcpFileService, commandTransport, runtimeEventService,
                 "build", 1);
 
         ObjectNode ackPayload = objectMapper.createObjectNode();
@@ -140,5 +145,40 @@ class OpenCodeRuntimeAdapterCreateSessionTest {
         assertFalse(result.success());
         assertNull(result.outputContent());
         assertTrue(result.errorMessage().contains("没有返回可用输出"));
+    }
+
+    @Test
+    void sendMessagePublishesPromptDebugEvent() {
+        ObjectNode createAckPayload = objectMapper.createObjectNode();
+        createAckPayload.put("sessionId", "ses_debug");
+        RuntimeAckEnvelope createAck = new RuntimeAckEnvelope(
+                null, "agentcenter.runtime.v1", null,
+                "ack-create-id", "corr-id", null,
+                RuntimeType.OPENCODE, null, "ses_debug",
+                true, null, createAckPayload, null);
+
+        RuntimeAckEnvelope sendAck = new RuntimeAckEnvelope(
+                null, "agentcenter.runtime.v1", null,
+                "ack-send-id", "corr-id", null,
+                RuntimeType.OPENCODE, null, "ses_debug",
+                true, null, objectMapper.createObjectNode(), null);
+
+        when(commandTransport.send(any())).thenReturn(createAck, sendAck);
+        when(eventSubscriber.getAgentSessionId("ses_debug")).thenReturn("agent-ses-debug");
+        when(commandTransport.fetchMessages(anyString(), anyString(), eq("ses_debug")))
+                .thenReturn(objectMapper.createArrayNode());
+
+        adapter.createSession("work-debug", "agent-ses-debug");
+        adapter.sendMessage("agent-ses-debug", "请检查当前 prompt 组装");
+
+        ArgumentCaptor<RuntimeEventDto> eventCaptor = ArgumentCaptor.forClass(RuntimeEventDto.class);
+        verify(runtimeEventService).publishEvent(eventCaptor.capture());
+        RuntimeEventDto event = eventCaptor.getValue();
+        assertEquals("agent-ses-debug", event.sessionId());
+        assertEquals(RuntimeEventType.PROCESS_TRACE, event.eventType());
+        assertTrue(event.payloadJson().contains("\"kind\":\"prompt_debug\""));
+        assertTrue(event.payloadJson().contains("请检查当前 prompt 组装"));
+        assertTrue(event.payloadJson().contains("AgentCenter 当前没有向 OpenCode prompt_async 发送显式 system prompt"));
+        assertTrue(event.payloadJson().contains("\"opencodePromptAsyncBody\""));
     }
 }

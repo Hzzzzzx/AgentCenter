@@ -17,6 +17,10 @@
 # Agent/Sisyphus
 .sisyphus/
 
+# Local runtime sandboxes
+.opencode/
+runtime-test-workspace/
+
 # Logs
 *.log
 npm-debug.log*

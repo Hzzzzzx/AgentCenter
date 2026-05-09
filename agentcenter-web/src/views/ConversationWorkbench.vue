@@ -9,7 +9,13 @@ import MessageList from '../components/conversation/MessageList.vue'
 import ConversationInteractionBar from '../components/conversation/ConversationInteractionBar.vue'
 import { runtimeResourceApi } from '../api/runtimeResources'
 import { artifactApi } from '../api/artifacts'
-import type { AgentSessionDto, ArtifactDto, WorkflowNodeInstanceDto, WorkflowNodeStatus } from '../api/types'
+import type {
+  AgentSessionDto,
+  ArtifactDto,
+  RuntimeEventDto,
+  WorkflowNodeInstanceDto,
+  WorkflowNodeStatus,
+} from '../api/types'
 
 interface NodeStateInfo {
   type: 'RUNNING' | 'WAITING_CONFIRMATION' | 'FAILED' | 'COMPLETED' | 'WORKFLOW_COMPLETED' | null
@@ -21,6 +27,28 @@ interface NodeStateInfo {
   artifactId?: string
   artifactTitle?: string
 }
+
+interface PromptDebugPayload {
+  kind?: string
+  title?: string
+  summary?: string
+  agent?: string
+  runtimeSessionId?: string
+  baseUrl?: string
+  workingDirectory?: string
+  systemPrompt?: string
+  userPrompt?: string
+  requestPayload?: unknown
+  opencodePromptAsyncBody?: unknown
+}
+
+interface PromptDebugItem {
+  event: RuntimeEventDto
+  payload: PromptDebugPayload
+}
+
+const PROMPT_DEBUG_ENABLED = true
+const PROMPT_DEBUG_EDGE_GAP = 16
 
 const props = defineProps<{
   workItemId?: string
@@ -47,6 +75,12 @@ const refreshingSkills = ref(false)
 const loadingSession = ref(false)
 const cancellingReply = ref(false)
 const pausedRunningNodeId = ref<string | null>(null)
+const promptDebugOpen = ref(false)
+const promptDebugPosition = ref({ x: 0, y: 0 })
+const promptDebugHasCustomPosition = ref(false)
+const promptDebugDragging = ref(false)
+const promptDebugDragOffset = ref({ x: 0, y: 0 })
+const promptDebugSize = ref({ width: 0, height: 0 })
 
 const selectedWorkItem = computed(() => {
   if (!props.workItemId) return null
@@ -154,6 +188,34 @@ const currentInteractions = computed(() => {
   })
 })
 
+const promptDebugItems = computed<PromptDebugItem[]>(() =>
+  runtimeStore.events
+    .filter((event) => event.eventType === 'PROCESS_TRACE')
+    .map((event) => ({ event, payload: parsePromptDebugPayload(event.payloadJson) }))
+    .filter((item) => item.payload.kind === 'prompt_debug')
+    .sort((a, b) => timestamp(b.event.createdAt) - timestamp(a.event.createdAt))
+)
+
+const latestPromptDebug = computed(() => promptDebugItems.value[0] ?? null)
+const promptDebugAvailable = computed(() => PROMPT_DEBUG_ENABLED && latestPromptDebug.value !== null)
+const promptDebugFloatingStyle = computed(() =>
+  promptDebugHasCustomPosition.value
+    ? { transform: `translate(${promptDebugPosition.value.x}px, ${promptDebugPosition.value.y}px)` }
+    : {}
+)
+
+const promptDebugRequestJson = computed(() =>
+  latestPromptDebug.value?.payload.requestPayload !== undefined
+    ? formatDebugValue(latestPromptDebug.value.payload.requestPayload)
+    : ''
+)
+
+const promptDebugHttpBodyJson = computed(() =>
+  latestPromptDebug.value?.payload.opencodePromptAsyncBody !== undefined
+    ? formatDebugValue(latestPromptDebug.value.payload.opencodePromptAsyncBody)
+    : ''
+)
+
 onMounted(async () => {
   if (workflowStore.definitions.length === 0) {
     await workflowStore.loadDefinitions()
@@ -229,6 +291,7 @@ async function ensureActiveSession(): Promise<AgentSessionDto | null> {
 }
 
 onUnmounted(() => {
+  stopPromptDebugDrag()
   runtimeStore.disconnectSSE()
 })
 
@@ -321,6 +384,77 @@ function workflowNodeLabel(node: WorkflowNodeInstanceDto): string {
     .find((item) => item.id === node.nodeDefinitionId)
   return definition?.name ?? node.skillName ?? '工作流节点'
 }
+
+function parsePromptDebugPayload(payloadJson: string | null): PromptDebugPayload {
+  if (!payloadJson) return {}
+  try {
+    const parsed: unknown = JSON.parse(payloadJson)
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+      ? parsed as PromptDebugPayload
+      : {}
+  } catch {
+    return {}
+  }
+}
+
+function formatDebugValue(value: unknown): string {
+  if (typeof value === 'string') return value
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
+}
+
+function startPromptDebugDrag(event: PointerEvent) {
+  if (event.button !== 0) return
+  const floatElement = (event.currentTarget as HTMLElement).closest('.prompt-debug-float') as HTMLElement | null
+  const rect = floatElement?.getBoundingClientRect()
+  if (!rect) return
+
+  event.preventDefault()
+  promptDebugHasCustomPosition.value = true
+  promptDebugDragging.value = true
+  promptDebugPosition.value = { x: rect.left, y: rect.top }
+  promptDebugSize.value = { width: rect.width, height: rect.height }
+  promptDebugDragOffset.value = {
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top,
+  }
+  window.addEventListener('pointermove', handlePromptDebugDrag)
+  window.addEventListener('pointerup', stopPromptDebugDrag)
+}
+
+function handlePromptDebugDrag(event: PointerEvent) {
+  if (!promptDebugDragging.value) return
+  const maxX = Math.max(
+    PROMPT_DEBUG_EDGE_GAP,
+    window.innerWidth - promptDebugSize.value.width - PROMPT_DEBUG_EDGE_GAP
+  )
+  const maxY = Math.max(
+    PROMPT_DEBUG_EDGE_GAP,
+    window.innerHeight - promptDebugSize.value.height - PROMPT_DEBUG_EDGE_GAP
+  )
+  const nextX = event.clientX - promptDebugDragOffset.value.x
+  const nextY = event.clientY - promptDebugDragOffset.value.y
+  promptDebugPosition.value = {
+    x: Math.min(Math.max(PROMPT_DEBUG_EDGE_GAP, nextX), maxX),
+    y: Math.min(Math.max(PROMPT_DEBUG_EDGE_GAP, nextY), maxY),
+  }
+}
+
+function stopPromptDebugDrag() {
+  if (!promptDebugDragging.value) return
+  promptDebugDragging.value = false
+  window.removeEventListener('pointermove', handlePromptDebugDrag)
+  window.removeEventListener('pointerup', stopPromptDebugDrag)
+}
+
+function timestamp(value: string | null | undefined): number {
+  if (!value) return 0
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
 </script>
 
 <template>
@@ -357,6 +491,83 @@ function workflowNodeLabel(node: WorkflowNodeInstanceDto): string {
       <div v-if="skillRefreshStatus" class="conversation-workbench__notice">
         {{ skillRefreshStatus }}
       </div>
+
+      <Teleport to="body">
+        <aside
+          v-if="promptDebugAvailable && latestPromptDebug"
+          class="prompt-debug-float"
+          :class="{
+            'prompt-debug-float--open': promptDebugOpen,
+            'prompt-debug-float--dragging': promptDebugDragging,
+            'prompt-debug-float--custom-position': promptDebugHasCustomPosition,
+          }"
+          :style="promptDebugFloatingStyle"
+          aria-label="Prompt Debug 可拖拽浮窗"
+        >
+          <div
+            class="prompt-debug-float__header"
+            @pointerdown="startPromptDebugDrag"
+          >
+            <span class="prompt-debug-float__summary">
+              <strong>Prompt Debug</strong>
+              <em>{{ latestPromptDebug.payload.summary || '本轮发送给 OpenCode Runtime 的 prompt_async 请求' }}</em>
+            </span>
+            <button
+              type="button"
+              class="prompt-debug-float__toggle"
+              :aria-label="promptDebugOpen ? '收起 Prompt Debug' : '展开 Prompt Debug'"
+              @pointerdown.stop
+              @click="promptDebugOpen = !promptDebugOpen"
+            >
+              {{ promptDebugOpen ? '收起' : '展开' }}
+            </button>
+          </div>
+
+          <div v-if="promptDebugOpen" class="prompt-debug-panel">
+            <dl class="prompt-debug-panel__meta">
+              <div>
+                <dt>Agent</dt>
+                <dd>{{ latestPromptDebug.payload.agent || '未提供' }}</dd>
+              </div>
+              <div>
+                <dt>Runtime Session</dt>
+                <dd>{{ latestPromptDebug.payload.runtimeSessionId || '未提供' }}</dd>
+              </div>
+              <div>
+                <dt>工作目录</dt>
+                <dd>{{ latestPromptDebug.payload.workingDirectory || '未提供' }}</dd>
+              </div>
+            </dl>
+
+            <section class="prompt-debug-panel__section">
+              <h3>System Prompt</h3>
+              <pre>{{ latestPromptDebug.payload.systemPrompt || '无显式 system prompt' }}</pre>
+            </section>
+
+            <section class="prompt-debug-panel__section">
+              <h3>User Prompt / Parts Text</h3>
+              <pre>{{ latestPromptDebug.payload.userPrompt || '无' }}</pre>
+            </section>
+
+            <details
+              v-if="promptDebugHttpBodyJson"
+              class="prompt-debug-panel__details"
+              open
+            >
+              <summary>OpenCode prompt_async body</summary>
+              <pre>{{ promptDebugHttpBodyJson }}</pre>
+            </details>
+
+            <details
+              v-if="promptDebugRequestJson"
+              class="prompt-debug-panel__details"
+            >
+              <summary>AgentCenter transport payload</summary>
+              <pre>{{ promptDebugRequestJson }}</pre>
+            </details>
+          </div>
+        </aside>
+      </Teleport>
 
       <div ref="messagesRef" class="conversation-workbench__messages">
         <div v-if="loadingSession && sessionStore.messages.length === 0" class="conversation-workbench__loading">
@@ -588,6 +799,162 @@ function workflowNodeLabel(node: WorkflowNodeInstanceDto): string {
   padding: 14px 22px;
   border-top: 1px solid var(--border-color);
   background: var(--bg-card);
+}
+
+.prompt-debug-float {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 9999;
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(64vh, 680px);
+  overflow: hidden;
+  border: 1px solid var(--brand-border);
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  box-shadow: 0 22px 55px rgba(15, 23, 42, 0.18);
+  will-change: transform;
+}
+
+.prompt-debug-float--custom-position {
+  top: 0;
+  right: auto;
+  left: 0;
+}
+
+.prompt-debug-float:not(.prompt-debug-float--open) {
+  width: min(420px, calc(100vw - 32px));
+}
+
+.prompt-debug-float--dragging {
+  user-select: none;
+}
+
+.prompt-debug-float__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-card);
+  cursor: grab;
+  touch-action: none;
+}
+
+.prompt-debug-float--dragging .prompt-debug-float__header {
+  cursor: grabbing;
+}
+
+.prompt-debug-float__summary {
+  appearance: none;
+  display: block;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+}
+
+.prompt-debug-float__summary strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.prompt-debug-float__summary em {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  font-style: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prompt-debug-float__toggle {
+  appearance: none;
+  flex-shrink: 0;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  background: var(--bg-primary);
+  color: var(--accent-blue);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.prompt-debug-panel {
+  max-height: calc(min(64vh, 680px) - 50px);
+  overflow: auto;
+}
+
+.prompt-debug-panel__meta {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.prompt-debug-panel__meta dt {
+  margin-bottom: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.prompt-debug-panel__meta dd {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prompt-debug-panel__section,
+.prompt-debug-panel__details {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.prompt-debug-panel__section h3 {
+  margin: 0 0 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.prompt-debug-panel__details summary {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.prompt-debug-panel pre {
+  max-height: 260px;
+  overflow: auto;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .conversation-workbench__input-area {

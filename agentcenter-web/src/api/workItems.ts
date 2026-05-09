@@ -1,8 +1,15 @@
 import { get, post, put } from './client'
-import type { WorkItemDto, CreateWorkItemRequest, StartWorkflowRequest, StartWorkflowResponse } from './types'
+import type {
+  WorkItemDto,
+  CreateWorkItemRequest,
+  StartWorkflowRequest,
+  StartWorkflowResponse,
+  WorkItemOverviewDto,
+} from './types'
 
 export const workItemApi = {
   list: () => get<WorkItemDto[]>('/work-items'),
+  overview: () => get<WorkItemOverviewDto>('/work-items/overview'),
   getById: (id: string) => get<WorkItemDto>(`/work-items/${id}`),
   create: (data: CreateWorkItemRequest) => post<WorkItemDto>('/work-items', data),
   update: (id: string, data: Partial<CreateWorkItemRequest>) => put<WorkItemDto>(`/work-items/${id}`, data),

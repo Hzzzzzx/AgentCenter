@@ -404,6 +404,30 @@ describe('MessageList.vue', () => {
     expect(wrapper.find('.runtime-event--tool').exists()).toBe(true)
   })
 
+  it('does not render prompt debug process trace in the conversation timeline', () => {
+    const wrapper = mount(MessageList, {
+      props: {
+        messages: [makeMessage({ role: 'USER', content: '检查 prompt' })],
+        runtimeEvents: [
+          makeRuntimeEvent({
+            id: 'evt-prompt-debug',
+            eventType: 'PROCESS_TRACE',
+            payloadJson: JSON.stringify({
+              kind: 'prompt_debug',
+              systemPrompt: 'debug system prompt',
+              userPrompt: 'debug user prompt',
+            }),
+          }),
+        ],
+      },
+    })
+
+    expect(wrapper.text()).toContain('检查 prompt')
+    expect(wrapper.text()).not.toContain('debug system prompt')
+    expect(wrapper.text()).not.toContain('debug user prompt')
+    expect(wrapper.find('.runtime-event--trace').exists()).toBe(false)
+  })
+
   it('renders MCP call details and output as tool timeline messages', () => {
     const wrapper = mount(MessageList, {
       props: {

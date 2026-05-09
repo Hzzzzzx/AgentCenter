@@ -7,7 +7,7 @@ export type WorkflowNodeStatus = 'PENDING' | 'RUNNING' | 'WAITING_CONFIRMATION' 
 export type ConfirmationStatus = 'PENDING' | 'IN_CONVERSATION' | 'RESOLVED' | 'REJECTED' | 'CANCELLED' | 'EXPIRED'
 export type SessionType = 'GENERAL' | 'WORK_ITEM'
 export type SessionStatus = 'ACTIVE' | 'ARCHIVED' | 'FAILED'
-export type RuntimeEventType = 'STATUS' | 'ASSISTANT_DELTA' | 'PROCESS_TRACE' | 'SKILL_STARTED' | 'SKILL_COMPLETED' | 'MCP_CALL' | 'PERMISSION_REQUIRED' | 'ERROR' | 'CONFIRMATION_CREATED' | 'CONFIRMATION_RESOLVED' | 'RESOURCE_REFRESH_STARTED' | 'RESOURCE_REFRESH_COMPLETED' | 'RESOURCE_REFRESH_FAILED' | 'SKILL_INSTALLED' | 'SKILL_UPDATED' | 'SKILL_DELETED' | 'SKILL_ENABLED' | 'SKILL_DISABLED' | 'MCP_ENABLED' | 'MCP_DISABLED' | 'MCP_HEALTH_CHECKED' | 'MCP_TOOLS_REFRESHED'
+export type RuntimeEventType = 'STATUS' | 'ASSISTANT_DELTA' | 'ASSISTANT_COMPLETED' | 'PROCESS_TRACE' | 'SKILL_STARTED' | 'SKILL_COMPLETED' | 'MCP_CALL' | 'PERMISSION_REQUIRED' | 'ERROR' | 'CONFIRMATION_CREATED' | 'CONFIRMATION_RESOLVED' | 'RESOURCE_REFRESH_STARTED' | 'RESOURCE_REFRESH_COMPLETED' | 'RESOURCE_REFRESH_FAILED' | 'SKILL_INSTALLED' | 'SKILL_UPDATED' | 'SKILL_DELETED' | 'SKILL_ENABLED' | 'SKILL_DISABLED' | 'MCP_ENABLED' | 'MCP_DISABLED' | 'MCP_HEALTH_CHECKED' | 'MCP_TOOLS_REFRESHED'
 export type ArtifactType = 'MARKDOWN' | 'JSON' | 'PATCH' | 'LOG' | 'REPORT'
 export type ConfirmationRequestType = 'CONFIRM' | 'APPROVAL' | 'INPUT_REQUIRED' | 'DECISION' | 'EXCEPTION' | 'PERMISSION'
 export type ConfirmationActionType = 'ENTER_SESSION' | 'APPROVE' | 'REJECT' | 'SUPPLEMENT' | 'CHOOSE' | 'RETRY' | 'SKIP'
@@ -72,6 +72,34 @@ export interface WorkItemDto {
   workflowSummary: WorkflowSummaryDto | null
   createdAt: string
   updatedAt: string
+}
+
+export type WorkItemOverviewChipKind = 'running' | 'waiting' | 'blocked' | 'pending' | 'done'
+
+export interface WorkItemOverviewNodeBucketDto {
+  label: string
+  count: number
+  priority: number
+}
+
+export interface WorkItemOverviewTypeStatDto {
+  type: WorkItemType
+  total: number
+  runningCount: number
+  waitingCount: number
+  blockedCount: number
+  unstartedCount: number
+  completedCount: number
+  completedNodeCount: number
+  totalNodeCount: number
+  completionRate: number
+  nodeDistribution: WorkItemOverviewNodeBucketDto[]
+}
+
+export interface WorkItemOverviewDto {
+  source: 'DATABASE'
+  refreshedAt: string
+  stats: WorkItemOverviewTypeStatDto[]
 }
 
 export interface CreateWorkItemRequest {

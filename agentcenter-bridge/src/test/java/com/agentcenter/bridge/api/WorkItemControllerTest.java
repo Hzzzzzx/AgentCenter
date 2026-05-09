@@ -9,6 +9,7 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -52,6 +53,28 @@ class WorkItemControllerTest {
                 assert summary.has("stages");
             }
         }
+    }
+
+    @Test
+    void overviewReturnsDatabaseBackedTypeStats() throws Exception {
+        var result = mockMvc.perform(get("/api/work-items/overview"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.source").value("DATABASE"))
+                .andExpect(jsonPath("$.stats").isArray())
+                .andReturn();
+
+        var body = objectMapper.readTree(result.getResponse().getContentAsString());
+        var stats = body.get("stats");
+        boolean hasFeStats = false;
+        for (var stat : stats) {
+            if ("FE".equals(stat.get("type").asText())) {
+                hasFeStats = stat.get("total").asInt() > 0
+                        && stat.has("completionRate")
+                        && stat.get("nodeDistribution").isArray();
+                break;
+            }
+        }
+        assertTrue(hasFeStats, "FE overview stats should be aggregated from persisted work items");
     }
 
     @Test

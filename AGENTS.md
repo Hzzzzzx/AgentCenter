@@ -158,6 +158,15 @@ L0/L1 可简化为 summary + changes + verification。
 
 > 详细经验见 `.sisyphus/notepads/opencode-bridge-sse-rest/learnings.md`。以下是踩过且容易再犯的坑。
 
+### 0. OpenCode Runtime 工作目录必须隔离
+本地 `opencode serve` 和测试用 Skill 必须运行在独立沙箱目录，默认：
+
+```text
+${user.home}/.agentcenter/runtime-workspace
+```
+
+不要把 `agentcenter.runtime.opencode.serve.working-directory` 指向 `/Users/hzz/workspace/AgentCenter` 或任何源码仓库目录，避免 Runtime 读取、修改或污染当前代码库。需要覆盖时使用 `AGENTCENTER_RUNTIME_WORKSPACE`，也必须指向仓库外的空白/专用目录。测试 Skill 放在该目录的 `.opencode/skills/` 下。
+
 ### 1. SSE 事件的 session ID 必须贯穿始终
 事件的发布者（EventSubscriber）和消费者（SseEmitterRegistry）必须用同一个 session ID。适配器内部的 mapping key（如 `acs_xxx`）不能泄漏到事件回调链路——必须用 DB session ID（ULID）。
 

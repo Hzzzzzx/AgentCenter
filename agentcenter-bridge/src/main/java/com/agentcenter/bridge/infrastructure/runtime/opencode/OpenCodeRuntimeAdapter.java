@@ -13,12 +13,16 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import com.agentcenter.bridge.api.dto.RuntimeEventDto;
+import com.agentcenter.bridge.application.RuntimeEventService;
 import com.agentcenter.bridge.api.dto.RuntimeSkillDto;
 import com.agentcenter.bridge.application.runtime.AgentRuntimeAdapter;
 import com.agentcenter.bridge.application.runtime.SkillRunResult;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeAckEnvelope;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeCommandEnvelope;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeCommandTypes;
+import com.agentcenter.bridge.domain.runtime.RuntimeEventSource;
+import com.agentcenter.bridge.domain.runtime.RuntimeEventType;
 import com.agentcenter.bridge.domain.runtime.RuntimeType;
 import com.agentcenter.bridge.infrastructure.runtime.opencode.transport.OpenCodeHttpCommandTransport;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -49,6 +53,7 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
     private final OpenCodeSkillFileService skillFileService;
     private final OpenCodeMcpFileService mcpFileService;
     private final OpenCodeHttpCommandTransport commandTransport;
+    private final RuntimeEventService runtimeEventService;
     private final String agent;
     private final int responseTimeoutSeconds;
 
@@ -61,6 +66,7 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
             OpenCodeSkillFileService skillFileService,
             OpenCodeMcpFileService mcpFileService,
             OpenCodeHttpCommandTransport commandTransport,
+            RuntimeEventService runtimeEventService,
             @Value("${agentcenter.runtime.opencode.serve.agent:build}") String agent,
             @Value("${agentcenter.runtime.opencode.timeout-seconds:180}") int responseTimeoutSeconds) {
         this.processManager = processManager;
@@ -69,6 +75,7 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         this.skillFileService = skillFileService;
         this.mcpFileService = mcpFileService;
         this.commandTransport = commandTransport;
+        this.runtimeEventService = runtimeEventService;
         this.agent = agent;
         this.responseTimeoutSeconds = responseTimeoutSeconds;
     }
@@ -204,17 +211,13 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
     private String buildSkillPrompt(String skillName, String inputContext) {
         return """
-                你是 AgentCenter 后台工作流节点执行器。请使用当前 Agent Runtime 中 skill `%s` 的规范处理下面的输入。
+                请使用当前 Agent Runtime 中的 Skill `%s` 处理下面的用户输入。
 
-                约束：
-                - 只返回本节点最终 Markdown 文档。
-                - 不修改文件，不生成补丁，不主动遍历仓库，除非输入上下文明确要求。
-                - 如果信息不足，请在 Markdown 中列出"缺口与待确认项"，不要长时间探索。
-                - 如果 Skill 模板包含 Mermaid 流程图、分支建议、用户交互点或 Agent 执行路线，请完整保留并结合当前任务填写。
-                - Mermaid 必须使用 Mermaid 11 兼容语法：节点 ID 使用英文，中文放在引号标签里；连线使用 A --> B 或 A -->|label| B，不要使用 A -- "label" --> B。
-                - 用户交互点请使用 ASK_USER、DECISION_REQUIRED、ARTIFACT_REVIEW_REQUESTED、PERMISSION_REQUIRED 这些类型表达，作为运行时后续生成待确认事件的依据。
-                - 用户交互点表必须包含"是否触发"和"选项"；只有本轮确实需要用户参与时才把"是否触发"填为"是"。
-                - 输出使用中文，结构清晰，适合直接作为本节点产物进入下一节点。
+                工作方式：
+                - 优先遵循 Skill 自身说明和当前会话上下文。
+                - AgentCenter 工作流只提供调用顺序、工作项信息、上游产物和用户交互回答，不替代 Skill 的判断。
+                - 如果需要用户继续澄清，请直接提出问题或给出选项。
+                - 如果信息已经足够，请输出当前 Skill 的最终结果。
 
                 输入上下文：
 
@@ -260,6 +263,8 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         RuntimeCommandEnvelope command = RuntimeCommandEnvelope.of(
                 RuntimeCommandTypes.CONVERSATION_MESSAGE_SEND, RuntimeType.OPENCODE,
                 opencodeSessionId, sendPayload);
+
+        publishPromptDebugEvent(sessionId, opencodeSessionId, baseUrl, cwd.toString(), sendPayload, userMessage);
 
         RuntimeAckEnvelope ack = commandTransport.send(command);
         if (!ack.success()) {
@@ -335,6 +340,58 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
             }
         }
         return ids;
+    }
+
+    private void publishPromptDebugEvent(String dispatchSessionId,
+                                         String opencodeSessionId,
+                                         String baseUrl,
+                                         String cwd,
+                                         ObjectNode requestPayload,
+                                         String userPrompt) {
+        try {
+            String agentSessionId = eventSubscriber.getAgentSessionId(opencodeSessionId);
+            if ((agentSessionId == null || agentSessionId.isBlank())
+                    && dispatchSessionId != null
+                    && !dispatchSessionId.startsWith("ses_")) {
+                agentSessionId = dispatchSessionId;
+            }
+            if (agentSessionId == null || agentSessionId.isBlank()) {
+                return;
+            }
+
+            ObjectNode opencodePromptAsyncBody = objectMapper.createObjectNode();
+            opencodePromptAsyncBody.put("agent", agent);
+            opencodePromptAsyncBody.set("parts", requestPayload.path("parts").deepCopy());
+
+            ObjectNode payload = objectMapper.createObjectNode();
+            payload.put("kind", "prompt_debug");
+            payload.put("status", "debug");
+            payload.put("title", "Prompt Debug");
+            payload.put("summary", "本轮发送给 OpenCode Runtime 的 prompt_async 请求");
+            payload.put("agent", agent);
+            payload.put("runtimeSessionId", opencodeSessionId);
+            payload.put("baseUrl", baseUrl);
+            payload.put("workingDirectory", cwd);
+            payload.put("systemPrompt", "AgentCenter 当前没有向 OpenCode prompt_async 发送显式 system prompt；系统/agent 指令由 OpenCode agent=`"
+                    + agent + "`、OpenCode 配置与 Skill 文件加载。");
+            payload.put("userPrompt", userPrompt);
+            payload.set("requestPayload", requestPayload.deepCopy());
+            payload.set("opencodePromptAsyncBody", opencodePromptAsyncBody);
+
+            runtimeEventService.publishEvent(new RuntimeEventDto(
+                    null,
+                    agentSessionId,
+                    eventSubscriber.getWorkItemId(agentSessionId),
+                    eventSubscriber.getWorkflowInstanceId(agentSessionId),
+                    eventSubscriber.getWorkflowNodeInstanceId(agentSessionId),
+                    RuntimeEventType.PROCESS_TRACE,
+                    RuntimeEventSource.OPENCODE,
+                    payload.toString(),
+                    null
+            ));
+        } catch (Exception e) {
+            log.debug("Failed to publish prompt debug event for opencode session {}", opencodeSessionId, e);
+        }
     }
 
     private String waitForAssistantText(String baseUrl, String cwd,

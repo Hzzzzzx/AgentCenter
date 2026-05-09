@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => {
     selectedItem: null,
     loading: false,
     loadItems: vi.fn().mockResolvedValue(undefined),
+    loadOverview: vi.fn().mockResolvedValue(undefined),
     refreshItem: vi.fn().mockResolvedValue({ workflowSummary: null }),
     selectItem: vi.fn(),
     createItem: vi.fn(),
@@ -71,6 +72,7 @@ describe('App.vue', () => {
     vi.clearAllMocks()
     mocks.workItemStore.items = []
     mocks.workItemStore.loadItems.mockResolvedValue(undefined)
+    mocks.workItemStore.loadOverview.mockResolvedValue(undefined)
     mocks.workItemStore.refreshItem.mockResolvedValue({ workflowSummary: null })
     mocks.confirmationStore.loadPending.mockResolvedValue(undefined)
   })

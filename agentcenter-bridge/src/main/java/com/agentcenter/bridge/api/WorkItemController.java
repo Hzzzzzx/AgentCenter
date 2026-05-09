@@ -3,6 +3,7 @@ package com.agentcenter.bridge.api;
 import com.agentcenter.bridge.api.dto.CreateWorkItemRequest;
 import com.agentcenter.bridge.api.dto.UpdateWorkItemRequest;
 import com.agentcenter.bridge.api.dto.WorkItemDto;
+import com.agentcenter.bridge.api.dto.WorkItemOverviewDto;
 import com.agentcenter.bridge.application.WorkItemService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -23,6 +24,11 @@ public class WorkItemController {
     @GetMapping
     public List<WorkItemDto> list() {
         return workItemService.listWorkItems();
+    }
+
+    @GetMapping("/overview")
+    public WorkItemOverviewDto overview() {
+        return workItemService.getOverview();
     }
 
     @GetMapping("/{id}")

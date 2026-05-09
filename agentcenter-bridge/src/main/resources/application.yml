@@ -24,7 +24,7 @@ agentcenter:
         enabled: true
         hostname: 127.0.0.1
         port: 4097
-        working-directory: ${user.dir}/..
+        working-directory: ${AGENTCENTER_RUNTIME_WORKSPACE:${user.home}/.agentcenter/runtime-workspace}
         command: opencode
         agent: build
       command: opencode

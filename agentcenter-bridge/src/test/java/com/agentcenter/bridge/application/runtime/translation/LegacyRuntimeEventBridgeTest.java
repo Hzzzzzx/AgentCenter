@@ -90,11 +90,12 @@ class LegacyRuntimeEventBridgeTest {
     }
 
     @Test
-    void conversationCompletedReturnsNull() throws Exception {
+    void conversationCompletedMapsToAssistantCompleted() throws Exception {
         RuntimeEventEnvelope env = envelope(RuntimeEventTypes.CONVERSATION_COMPLETED);
         RuntimeEventDto dto = bridge.toLegacyEvent(env);
 
-        assertNull(dto);
+        assertNotNull(dto);
+        assertEquals(RuntimeEventType.ASSISTANT_COMPLETED, dto.eventType());
     }
 
     @Test

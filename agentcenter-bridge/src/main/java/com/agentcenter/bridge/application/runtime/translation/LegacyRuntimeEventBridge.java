@@ -35,6 +35,7 @@ public class LegacyRuntimeEventBridge {
     private RuntimeEventType mapType(String unifiedType) {
         return switch (unifiedType) {
             case RuntimeEventTypes.CONVERSATION_DELTA -> RuntimeEventType.ASSISTANT_DELTA;
+            case RuntimeEventTypes.CONVERSATION_COMPLETED -> RuntimeEventType.ASSISTANT_COMPLETED;
             case RuntimeEventTypes.TOOL_STARTED -> RuntimeEventType.SKILL_STARTED;
             case RuntimeEventTypes.TOOL_COMPLETED -> RuntimeEventType.SKILL_COMPLETED;
             case RuntimeEventTypes.PERMISSION_REQUESTED -> RuntimeEventType.PERMISSION_REQUIRED;

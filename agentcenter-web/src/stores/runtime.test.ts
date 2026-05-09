@@ -289,6 +289,57 @@ describe('useRuntimeStore — SSE event handlers', () => {
     expect(runtimeStore.streamingText).toBe('你好，AgentCenter')
   })
 
+  it('syncs persisted assistant message when assistant completed event arrives', async () => {
+    vi.useFakeTimers()
+    const { sessionApi } = await import('../api/sessions')
+    const sessionStore = useSessionStore()
+    const runtimeStore = useRuntimeStore()
+    const finalAssistant: AgentMessageDto = {
+      id: 'msg-assistant-final',
+      sessionId: 'sess-1',
+      role: 'ASSISTANT',
+      content: '最终回复内容',
+      contentFormat: 'MARKDOWN',
+      status: 'COMPLETED',
+      seqNo: 2,
+      createdAt: '2026-01-01T00:00:02Z',
+      workflowNodeInstanceId: null,
+    }
+    await sessionStore.selectSession('sess-1')
+    vi.mocked(sessionApi.getMessages).mockResolvedValueOnce([
+      {
+        id: 'msg-user',
+        sessionId: 'sess-1',
+        role: 'USER',
+        content: '开始',
+        contentFormat: 'TEXT',
+        status: 'COMPLETED',
+        seqNo: 1,
+        createdAt: '2026-01-01T00:00:01Z',
+        workflowNodeInstanceId: null,
+      },
+      finalAssistant,
+    ])
+
+    runtimeStore.connectSSE('sess-1')
+    capturedOnEvent!(makeEvent({
+      eventType: 'ASSISTANT_DELTA',
+      id: 'evt-delta-final',
+      payloadJson: JSON.stringify({ delta: '最终回复内容' }),
+    }))
+    capturedOnEvent!(makeEvent({
+      eventType: 'ASSISTANT_COMPLETED',
+      id: 'evt-assistant-completed',
+      payloadJson: '{}',
+    }))
+
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.dynamicImportSettled()
+
+    expect(sessionStore.messages.at(-1)?.content).toBe('最终回复内容')
+    expect(runtimeStore.streamingText).toBe('')
+  })
+
   it('does not replay historical assistant deltas when a final assistant message exists', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-05-07T00:00:00Z'))

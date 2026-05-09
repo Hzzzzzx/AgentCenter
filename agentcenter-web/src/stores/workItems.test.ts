@@ -7,6 +7,7 @@ import type { WorkItemDto } from '../api/types'
 vi.mock('../api/workItems', () => ({
   workItemApi: {
     list: vi.fn(),
+    overview: vi.fn(),
     getById: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
@@ -47,6 +48,35 @@ describe('useWorkItemStore', () => {
     expect(store.items).toHaveLength(1)
     expect(store.items[0]).toEqual(mockWorkItem)
     expect(store.loading).toBe(false)
+  })
+
+  it('loadOverview populates database-backed overview stats', async () => {
+    const overview = {
+      source: 'DATABASE' as const,
+      refreshedAt: '2026-01-01T00:00:00Z',
+      stats: [
+        {
+          type: 'TASK' as const,
+          total: 1,
+          runningCount: 0,
+          waitingCount: 0,
+          blockedCount: 0,
+          unstartedCount: 1,
+          completedCount: 0,
+          completedNodeCount: 0,
+          totalNodeCount: 5,
+          completionRate: 0,
+          nodeDistribution: [{ label: '未开始', count: 1, priority: 4 }],
+        },
+      ],
+    }
+    vi.mocked(workItemApi.overview).mockResolvedValueOnce(overview)
+
+    const store = useWorkItemStore()
+    await store.loadOverview()
+
+    expect(store.overview).toEqual(overview)
+    expect(store.overviewLoading).toBe(false)
   })
 
   it('selectItem sets selectedItem', async () => {

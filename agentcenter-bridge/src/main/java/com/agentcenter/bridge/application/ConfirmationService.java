@@ -166,6 +166,7 @@ public class ConfirmationService {
         boolean shouldDispatchWorkflow = nodeInstanceId != null && !hasOtherBlockingForNode(entity);
         boolean isException = ConfirmationRequestType.EXCEPTION.name().equals(entity.getRequestType());
         boolean isSkip = ConfirmationActionType.SKIP.equals(actionType);
+        boolean shouldResumeCurrentSkill = shouldResumeCurrentSkill(entity);
 
         publishResolutionEventAfterCommit(entity, actionType, actionDescription, () -> {
             if (shouldDispatchWorkflow) {
@@ -175,6 +176,8 @@ public class ConfirmationService {
                     } else {
                         workflowCommandService.retryNode(nodeInstanceId);
                     }
+                } else if (shouldResumeCurrentSkill) {
+                    workflowCommandService.resumeNodeAfterInteraction(nodeInstanceId);
                 } else {
                     workflowCommandService.completeNodeAndScheduleAdvance(nodeInstanceId);
                 }
@@ -182,6 +185,20 @@ public class ConfirmationService {
         });
 
         return toDto(entity);
+    }
+
+    private boolean shouldResumeCurrentSkill(ConfirmationRequestEntity entity) {
+        return !isFallbackNodeApproval(entity);
+    }
+
+    private boolean isFallbackNodeApproval(ConfirmationRequestEntity entity) {
+        if (!ConfirmationRequestType.APPROVAL.name().equals(entity.getRequestType())) {
+            return false;
+        }
+        String content = entity.getContent() != null ? entity.getContent() : "";
+        String summary = entity.getContextSummary() != null ? entity.getContextSummary() : "";
+        return content.contains("执行完成，需要确认后继续")
+                || summary.contains("标记为需要确认，自动创建审批");
     }
 
     private ConfirmationRequestDto handleReject(ConfirmationRequestEntity entity,

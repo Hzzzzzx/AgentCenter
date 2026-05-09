@@ -1,12 +1,14 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { workItemApi } from '../api/workItems'
-import type { WorkItemDto, CreateWorkItemRequest } from '../api/types'
+import type { WorkItemDto, CreateWorkItemRequest, WorkItemOverviewDto } from '../api/types'
 
 export const useWorkItemStore = defineStore('workItems', () => {
   const items = ref<WorkItemDto[]>([])
   const selectedItem = ref<WorkItemDto | null>(null)
+  const overview = ref<WorkItemOverviewDto | null>(null)
   const loading = ref(false)
+  const overviewLoading = ref(false)
 
   async function loadItems() {
     loading.value = true
@@ -14,6 +16,15 @@ export const useWorkItemStore = defineStore('workItems', () => {
       items.value = await workItemApi.list()
     } finally {
       loading.value = false
+    }
+  }
+
+  async function loadOverview() {
+    overviewLoading.value = true
+    try {
+      overview.value = await workItemApi.overview()
+    } finally {
+      overviewLoading.value = false
     }
   }
 
@@ -41,5 +52,16 @@ export const useWorkItemStore = defineStore('workItems', () => {
     return item
   }
 
-  return { items, selectedItem, loading, loadItems, selectItem, refreshItem, createItem }
+  return {
+    items,
+    selectedItem,
+    overview,
+    loading,
+    overviewLoading,
+    loadItems,
+    loadOverview,
+    selectItem,
+    refreshItem,
+    createItem,
+  }
 })

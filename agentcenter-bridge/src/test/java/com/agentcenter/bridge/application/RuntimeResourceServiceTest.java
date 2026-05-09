@@ -44,7 +44,6 @@ class RuntimeResourceServiceTest {
     void refreshSkillsDelegatesScanToGateway() {
         RuntimeResourceService service = new RuntimeResourceService(
                 STUB_GATEWAY,
-                "/tmp/test-project",
                 resolver("/tmp/test-project")
         );
 
@@ -87,7 +86,6 @@ class RuntimeResourceServiceTest {
 
         RuntimeResourceService service = new RuntimeResourceService(
                 gatewayWithSkill,
-                "/tmp/test-project",
                 resolver("/tmp/test-project")
         );
 

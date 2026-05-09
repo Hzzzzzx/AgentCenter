@@ -80,6 +80,12 @@ export const useRuntimeStore = defineStore('runtime', () => {
       }
     }
 
+    if (event.eventType === 'ASSISTANT_COMPLETED') {
+      flushPendingStreamingText()
+      markIdle()
+      scheduleFinalMessageSync(0)
+    }
+
     if (event.eventType === 'STATUS') {
       const payload = parsePayload(event.payloadJson)
       const status = textField(payload, ['status', 'label'])
@@ -116,6 +122,8 @@ export const useRuntimeStore = defineStore('runtime', () => {
     }
 
     if (event.eventType === 'SKILL_COMPLETED') {
+      flushPendingStreamingText()
+      scheduleFinalMessageSync(200)
       if (event.workflowInstanceId) {
         void syncWorkflowAndWorkItem(event)
       }
@@ -124,6 +132,8 @@ export const useRuntimeStore = defineStore('runtime', () => {
     if (event.eventType === 'CONFIRMATION_CREATED') {
       const confirmationStore = useConfirmationStore()
       confirmationStore.addFromEvent(event)
+      flushPendingStreamingText()
+      scheduleFinalMessageSync(0)
     }
 
     if (event.eventType === 'CONFIRMATION_RESOLVED') {
@@ -157,10 +167,10 @@ export const useRuntimeStore = defineStore('runtime', () => {
     }
   }
 
-  function scheduleFinalMessageSync() {
+  function scheduleFinalMessageSync(delayMs = 900) {
     clearFinalSyncTimer()
     finalSyncAttempts = 0
-    runFinalMessageSync(900)
+    runFinalMessageSync(delayMs)
   }
 
   function runFinalMessageSync(delayMs: number) {
@@ -252,6 +262,16 @@ export const useRuntimeStore = defineStore('runtime', () => {
     }
     if (streamQueue.length > 0) {
       scheduleStreamingFlush()
+    }
+  }
+
+  function flushPendingStreamingText() {
+    if (streamFlushTimer) {
+      clearTimeout(streamFlushTimer)
+      streamFlushTimer = null
+    }
+    if (streamQueue.length > 0) {
+      streamingText.value += streamQueue.splice(0).join('')
     }
   }
 

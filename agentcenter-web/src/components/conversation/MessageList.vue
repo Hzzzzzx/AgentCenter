@@ -259,6 +259,8 @@ function isRepeatableNodeStatus(event: RuntimeEventDto, payload: RuntimePayload)
 }
 
 function isVisibleRuntimeEvent(event: RuntimeEventDto): boolean {
+  const payload = parsePayload(event.payloadJson)
+  if (payload.kind === 'prompt_debug') return false
   return [
     'PROCESS_TRACE',
     'SKILL_STARTED',

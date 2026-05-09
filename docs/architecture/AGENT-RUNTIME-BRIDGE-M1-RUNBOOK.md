@@ -19,15 +19,15 @@
 
 ## Configuration
 
-### Working Directory (the project root)
+### Working Directory (isolated runtime sandbox)
 
-The Bridge needs to know where your project lives on disk. This is the directory that opencode will operate in (read files, run commands, etc).
+The Bridge needs to know where OpenCode may operate on disk. This directory must be an isolated runtime sandbox, not the AgentCenter source repository, because OpenCode can read files and run commands.
 
-**Default**: `application.yml` sets `working-directory: ${user.dir}/..`
+**Default**: `application.yml` sets `working-directory: ${AGENTCENTER_RUNTIME_WORKSPACE:${user.home}/.agentcenter/runtime-workspace}`
 
-This resolves to the parent of `agentcenter-bridge/` — i.e. the project root. If you run `./mvnw spring-boot:run` from `agentcenter-bridge/`, the working directory will be `/path/to/AgentCenter`.
+On a local Mac this resolves to a directory such as `/Users/hzz/.agentcenter/runtime-workspace`. Keep test Skills under `${AGENTCENTER_RUNTIME_WORKSPACE}/.opencode/skills/`.
 
-**Override** (if your layout differs):
+**Override** (must still point outside the source repo):
 
 ```yaml
 # agentcenter-bridge/src/main/resources/application.yml
@@ -35,13 +35,13 @@ agentcenter:
   runtime:
     opencode:
       serve:
-        working-directory: /absolute/path/to/your/project   # ← change this
+        working-directory: /absolute/path/to/runtime-sandbox
 ```
 
 Or via environment variable:
 
 ```bash
-export AGENTCENTER_RUNTIME_OPENCODE_SERVE_WORKING_DIRECTORY=/my/project
+export AGENTCENTER_RUNTIME_WORKSPACE=/absolute/path/to/runtime-sandbox
 ./mvnw spring-boot:run
 ```
 
