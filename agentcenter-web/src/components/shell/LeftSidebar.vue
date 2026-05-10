@@ -252,6 +252,14 @@ function sessionMeta(session: AgentSessionDto) {
             </svg>
             MCP 管理
           </button>
+          <button class="left-sidebar__settings-menu-item" @click="emit('navigate-settings', 'runtime'); settingsOpen = false">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M4 7h10M4 17h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <circle cx="17" cy="7" r="3" stroke="currentColor" stroke-width="2"/>
+              <circle cx="7" cy="17" r="3" stroke="currentColor" stroke-width="2"/>
+            </svg>
+            运行设置
+          </button>
         </div>
       </div>
     </div>

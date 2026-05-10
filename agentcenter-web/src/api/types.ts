@@ -3,14 +3,15 @@ export type WorkItemType = 'FE' | 'US' | 'TASK' | 'WORK' | 'BUG' | 'VULN'
 export type WorkItemStatus = 'BACKLOG' | 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'DONE'
 export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'
 export type WorkflowStatus = 'PENDING' | 'RUNNING' | 'BLOCKED' | 'FAILED' | 'COMPLETED' | 'CANCELLED'
-export type WorkflowNodeStatus = 'PENDING' | 'RUNNING' | 'WAITING_CONFIRMATION' | 'FAILED' | 'COMPLETED' | 'SKIPPED'
+export type WorkflowNodeStatus = 'PENDING' | 'RUNNING' | 'READY' | 'WAITING_CONFIRMATION' | 'FAILED' | 'COMPLETED' | 'SKIPPED'
 export type ConfirmationStatus = 'PENDING' | 'IN_CONVERSATION' | 'RESOLVED' | 'REJECTED' | 'CANCELLED' | 'EXPIRED'
 export type SessionType = 'GENERAL' | 'WORK_ITEM'
 export type SessionStatus = 'ACTIVE' | 'ARCHIVED' | 'FAILED'
 export type RuntimeEventType = 'STATUS' | 'ASSISTANT_DELTA' | 'ASSISTANT_COMPLETED' | 'PROCESS_TRACE' | 'SKILL_STARTED' | 'SKILL_COMPLETED' | 'MCP_CALL' | 'PERMISSION_REQUIRED' | 'ERROR' | 'CONFIRMATION_CREATED' | 'CONFIRMATION_RESOLVED' | 'RESOURCE_REFRESH_STARTED' | 'RESOURCE_REFRESH_COMPLETED' | 'RESOURCE_REFRESH_FAILED' | 'SKILL_INSTALLED' | 'SKILL_UPDATED' | 'SKILL_DELETED' | 'SKILL_ENABLED' | 'SKILL_DISABLED' | 'MCP_ENABLED' | 'MCP_DISABLED' | 'MCP_HEALTH_CHECKED' | 'MCP_TOOLS_REFRESHED'
 export type ArtifactType = 'MARKDOWN' | 'JSON' | 'PATCH' | 'LOG' | 'REPORT'
+export type AgentStateStatus = 'IN_PROGRESS' | 'NEEDS_USER_INPUT' | 'READY_TO_ADVANCE' | 'BLOCKED'
 export type ConfirmationRequestType = 'CONFIRM' | 'APPROVAL' | 'INPUT_REQUIRED' | 'DECISION' | 'EXCEPTION' | 'PERMISSION'
-export type ConfirmationActionType = 'ENTER_SESSION' | 'APPROVE' | 'REJECT' | 'SUPPLEMENT' | 'CHOOSE' | 'RETRY' | 'SKIP'
+export type ConfirmationActionType = 'ENTER_SESSION' | 'APPROVE' | 'REJECT' | 'SUPPLEMENT' | 'CHOOSE' | 'RETRY' | 'SKIP' | 'ADVANCE'
 
 // Skill/MCP Management Enums
 export type SkillStatus = 'ENABLED' | 'DISABLED' | 'INVALID' | 'UPDATING'
@@ -184,6 +185,8 @@ export interface WorkflowNodeInstanceDto {
   summary?: string | null
   reason?: string | null
   sequenceNo?: number | null
+  agentState?: string | null
+  agentStateReason?: string | null
 }
 
 export interface AgentSessionDto {
@@ -238,6 +241,19 @@ export interface RuntimeSkillRefreshResponse {
   skills: RuntimeSkillDto[]
 }
 
+export interface RuntimeEnvironmentStatusDto {
+  runtimeType: string
+  enabled: boolean
+  serverUrl: string
+  configuredWorkingDirectory: string
+  resolvedWorkingDirectory: string
+  serverReachable: boolean
+  serverDirectory: string | null
+  serverWorktree: string | null
+  isolated: boolean
+  message: string
+}
+
 export interface ArtifactDto {
   id: string
   workItemId: string | null
@@ -268,6 +284,12 @@ export interface ConfirmationRequestDto {
   optionsJson: string | null
   priority: Priority
   createdAt: string
+  interactionId?: string | null
+  interactionType?: string | null
+  interactionSchemaJson?: string | null
+  interactionContextJson?: string | null
+  interactionRequired?: boolean | null
+  interactionOrderNo?: number | null
 }
 
 export interface ResolveConfirmationRequest {
@@ -278,7 +300,7 @@ export interface ResolveConfirmationRequest {
 
 export interface StartWorkflowRequest {
   workflowDefinitionId?: string
-  mode?: string
+  mode?: 'AUTO' | 'MANUAL_CONFIRM' | 'START_OR_CONTINUE'
 }
 
 export interface StartWorkflowResponse {
@@ -292,6 +314,8 @@ export interface StartWorkflowResponse {
 export interface SendMessageRequest {
   content: string
   contentFormat?: string
+  workflowUserAction?: string | null
+  workflowNodeInstanceId?: string | null
 }
 
 // ===== Skill/MCP Management DTOs =====

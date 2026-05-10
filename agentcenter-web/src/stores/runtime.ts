@@ -5,7 +5,7 @@ import type { RuntimeEventDto } from '../api/types'
 import { useSessionStore } from './sessions'
 import { useWorkflowStore } from './workflows'
 import { useConfirmationStore } from './confirmations'
-import { useWorkItemStore } from './workItems'
+import { useWorkItemWorkflowProjectionStore } from './workItemWorkflowProjection'
 
 const STREAM_FRAME_DELAY_MS = 16
 const STREAM_FRAME_BATCH_SIZE = 8
@@ -19,6 +19,8 @@ export const useRuntimeStore = defineStore('runtime', () => {
   const activeSse = ref<EventSource | null>(null)
   const streamingText = ref('')
   const busy = ref(false)
+  const lastNodeState = ref<string | null>(null)
+  const lastNodeStateReason = ref<string | null>(null)
   const seenEventIds = new Set<string>()
   const streamQueue: string[] = []
   let finalSyncTimer: ReturnType<typeof setTimeout> | null = null
@@ -40,6 +42,8 @@ export const useRuntimeStore = defineStore('runtime', () => {
     seenEventIds.clear()
     resetStreamingOutput()
     markIdle()
+    lastNodeState.value = null
+    lastNodeStateReason.value = null
     finalSyncAttempts = 0
     lastUserSeqNo = latestUserSeqNo()
 
@@ -123,6 +127,10 @@ export const useRuntimeStore = defineStore('runtime', () => {
 
     if (event.eventType === 'SKILL_COMPLETED') {
       flushPendingStreamingText()
+      const payload = parsePayload(event.payloadJson)
+      const ns = textField(payload, ['nodeState'])
+      lastNodeState.value = ns || null
+      lastNodeStateReason.value = textField(payload, ['nodeStateReason']) || null
       scheduleFinalMessageSync(200)
       if (event.workflowInstanceId) {
         void syncWorkflowAndWorkItem(event)
@@ -154,13 +162,13 @@ export const useRuntimeStore = defineStore('runtime', () => {
   async function syncWorkflowAndWorkItem(event: RuntimeEventDto) {
     try {
       const workflowStore = useWorkflowStore()
-      const workItemStore = useWorkItemStore()
+      const workflowProjectionStore = useWorkItemWorkflowProjectionStore()
       const instance = event.workflowInstanceId
         ? await workflowStore.refreshInstance(event.workflowInstanceId)
         : null
       const workItemId = event.workItemId ?? instance?.workItemId
       if (workItemId) {
-        await workItemStore.refreshItem(workItemId)
+        await workflowProjectionStore.syncWorkItem(workItemId)
       }
     } catch (error) {
       console.error('Failed to sync workflow work item state:', error)
@@ -340,6 +348,8 @@ export const useRuntimeStore = defineStore('runtime', () => {
     activeSse,
     streamingText,
     busy,
+    lastNodeState,
+    lastNodeStateReason,
     connectSSE,
     disconnectSSE,
     clearEvents,

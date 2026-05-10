@@ -5,20 +5,25 @@ import { useWorkflowStore } from '../stores/workflows'
 import { useRuntimeStore } from '../stores/runtime'
 import { useWorkItemStore } from '../stores/workItems'
 import { useConfirmationStore } from '../stores/confirmations'
+import { useWorkItemWorkflowProjectionStore } from '../stores/workItemWorkflowProjection'
 import MessageList from '../components/conversation/MessageList.vue'
 import ConversationInteractionBar from '../components/conversation/ConversationInteractionBar.vue'
+import WorkflowNodeControlBar from '../components/conversation/WorkflowNodeControlBar.vue'
 import { runtimeResourceApi } from '../api/runtimeResources'
 import { artifactApi } from '../api/artifacts'
 import type {
+  AgentMessageDto,
   AgentSessionDto,
+  AgentStateStatus,
   ArtifactDto,
+  ConfirmationActionType,
   RuntimeEventDto,
   WorkflowNodeInstanceDto,
   WorkflowNodeStatus,
 } from '../api/types'
 
 interface NodeStateInfo {
-  type: 'RUNNING' | 'WAITING_CONFIRMATION' | 'FAILED' | 'COMPLETED' | 'WORKFLOW_COMPLETED' | null
+  type: 'RUNNING' | 'READY' | 'WAITING_CONFIRMATION' | 'FAILED' | 'COMPLETED' | 'WORKFLOW_COMPLETED' | null
   nodeId?: string
   nodeName?: string
   skillName?: string
@@ -47,6 +52,18 @@ interface PromptDebugItem {
   payload: PromptDebugPayload
 }
 
+interface PromptDebugTimelineItem {
+  id: string
+  createdAt: string
+  kind: 'assistant-message' | 'runtime-event' | 'streaming'
+  title: string
+  badge: string
+  note: string
+  uiDisplay: string
+  content: string
+  copyText: string
+}
+
 const PROMPT_DEBUG_ENABLED = true
 const PROMPT_DEBUG_EDGE_GAP = 16
 
@@ -66,6 +83,7 @@ const workflowStore = useWorkflowStore()
 const runtimeStore = useRuntimeStore()
 const workItemStore = useWorkItemStore()
 const confirmationStore = useConfirmationStore()
+const workflowProjectionStore = useWorkItemWorkflowProjectionStore()
 
 const inputText = ref('')
 const inputRef = ref<HTMLInputElement | null>(null)
@@ -76,11 +94,54 @@ const loadingSession = ref(false)
 const cancellingReply = ref(false)
 const pausedRunningNodeId = ref<string | null>(null)
 const promptDebugOpen = ref(false)
+const promptDebugFullscreen = ref(false)
 const promptDebugPosition = ref({ x: 0, y: 0 })
 const promptDebugHasCustomPosition = ref(false)
 const promptDebugDragging = ref(false)
 const promptDebugDragOffset = ref({ x: 0, y: 0 })
 const promptDebugSize = ref({ width: 0, height: 0 })
+const promptDebugCopiedId = ref<string | null>(null)
+
+const currentWorkflowNodeInstanceId = computed(() => {
+  return nodeStateInfo.value.nodeId ?? null
+})
+
+const activeWorkflowNode = computed<WorkflowNodeInstanceDto | null>(() => {
+  const instance = currentWorkflowInstance.value
+  if (!instance) return null
+  const activeStatuses: WorkflowNodeStatus[] = ['RUNNING', 'READY', 'WAITING_CONFIRMATION', 'FAILED']
+  const activeNode =
+    activeStatuses
+      .flatMap((status) => instance.nodes.filter((n) => n.status === status))
+      .sort((a, b) => (a.sequenceNo ?? 0) - (b.sequenceNo ?? 0))[0] ??
+    [...instance.nodes]
+      .filter((n) => n.status === 'COMPLETED')
+      .sort((a, b) => (b.sequenceNo ?? 0) - (a.sequenceNo ?? 0))[0]
+  return activeNode ?? null
+})
+
+const workflowNodeState = computed<AgentStateStatus | null>(() => {
+  return (runtimeStore.lastNodeState as AgentStateStatus)
+    ?? (activeWorkflowNode.value?.agentState as AgentStateStatus)
+    ?? null
+})
+
+const workflowNodeStateReason = computed<string | null>(() => {
+  return runtimeStore.lastNodeStateReason
+    ?? activeWorkflowNode.value?.agentStateReason
+    ?? null
+})
+
+const inputPlaceholder = computed(() => {
+  if (isConversationRunning.value) return '对话运行中，可点击右侧按钮暂停...'
+  if (isWorkflowCompleted.value) return '流程已完成，可查看产物或输入新的补充指令...'
+  const state = workflowNodeState.value
+  if (state === 'NEEDS_USER_INPUT') return '补充输入后返回给 Agent...'
+  if (state === 'IN_PROGRESS') return '输入补充信息或指令...'
+  if (state === 'READY_TO_ADVANCE') return '节点已完成，点击"进入下一步"继续...'
+  if (state === 'BLOCKED') return '节点已阻塞，处理异常或跳过...'
+  return '输入指令或问题...'
+})
 
 const selectedWorkItem = computed(() => {
   if (!props.workItemId) return null
@@ -95,12 +156,18 @@ const activeTitle = computed(() => {
 })
 
 const currentWorkflowInstance = computed(() => {
-  const instance = workflowStore.activeWorkflowInstance
+  const instance = props.workItemId
+    ? workflowStore.instancesByWorkItemId[props.workItemId] ?? workflowStore.activeWorkflowInstance
+    : workflowStore.activeWorkflowInstance
   if (!instance) return null
   if (props.workItemId && instance.workItemId !== props.workItemId) return null
   if (sessionStore.activeSession?.workflowInstanceId && instance.id !== sessionStore.activeSession.workflowInstanceId) return null
   return instance
 })
+
+const isWorkflowCompleted = computed(() =>
+  currentWorkflowInstance.value?.status === 'COMPLETED'
+)
 
 const nodeStateInfo = computed<NodeStateInfo>(() => {
   const instance = currentWorkflowInstance.value
@@ -111,8 +178,8 @@ const nodeStateInfo = computed<NodeStateInfo>(() => {
     return { type: 'WORKFLOW_COMPLETED' }
   }
 
-  // Find the active node: prefer RUNNING > WAITING_CONFIRMATION > FAILED > latest COMPLETED
-  const activeStatuses: WorkflowNodeStatus[] = ['RUNNING', 'WAITING_CONFIRMATION', 'FAILED']
+  // Find the active node: prefer RUNNING > READY > WAITING_CONFIRMATION > FAILED > latest COMPLETED
+  const activeStatuses: WorkflowNodeStatus[] = ['RUNNING', 'READY', 'WAITING_CONFIRMATION', 'FAILED']
   const activeNode =
     activeStatuses
       .flatMap((status) => instance.nodes.filter((n) => n.status === status))
@@ -129,6 +196,13 @@ const nodeStateInfo = computed<NodeStateInfo>(() => {
     case 'RUNNING':
       return {
         type: 'RUNNING',
+        nodeId: activeNode.id,
+        nodeName: label,
+        skillName: activeNode.skillName ?? undefined,
+      }
+    case 'READY':
+      return {
+        type: 'READY',
         nodeId: activeNode.id,
         nodeName: label,
         skillName: activeNode.skillName ?? undefined,
@@ -171,6 +245,40 @@ const isConversationRunning = computed(() =>
   )
 )
 
+function userFacingAgentReason(reason: string | null): string {
+  if (!reason) return ''
+  if (reason.includes('multiple interactions')) return '已完成多轮交互并生成详细设计'
+  if (reason.includes('one decision')) return '已根据用户选择生成方案设计'
+  if (reason.includes('without user interaction')) return '已根据工作项信息生成需求产物'
+  if (reason.includes('implementation constraint')) return '等待补充实现约束'
+  if (reason.includes('implementation route')) return '等待选择实现路线'
+  if (reason.includes('draft review')) return '等待审阅设计草稿'
+  if (reason.includes('HLD path decision')) return '等待选择 HLD 方案'
+  return reason
+}
+
+const agentStateLabel = computed<{ dot: string; text: string; reason: string } | null>(() => {
+  if (isWorkflowCompleted.value) {
+    const completedNodes = currentWorkflowInstance.value?.nodes.filter(node => node.status === 'COMPLETED').length ?? 0
+    return {
+      dot: '✓',
+      text: '流程已完成',
+      reason: completedNodes > 0 ? `已完成 ${completedNodes} 个节点并生成产物` : '',
+    }
+  }
+  const state = workflowNodeState.value
+  if (!state) return null
+  const map: Record<AgentStateStatus, { dot: string; text: string }> = {
+    IN_PROGRESS: { dot: '🟡', text: '执行中' },
+    NEEDS_USER_INPUT: { dot: '🟠', text: '等待用户输入' },
+    READY_TO_ADVANCE: { dot: '🟢', text: '就绪推进' },
+    BLOCKED: { dot: '🔴', text: '已阻塞' },
+  }
+  const entry = map[state]
+  if (!entry) return null
+  return { ...entry, reason: userFacingAgentReason(workflowNodeStateReason.value) }
+})
+
 const currentInteractions = computed(() => {
   const session = sessionStore.activeSession
   const workItemId = props.workItemId ?? session?.workItemId ?? null
@@ -188,6 +296,14 @@ const currentInteractions = computed(() => {
   })
 })
 
+const shouldShowWorkflowNodeControl = computed(() =>
+  !isWorkflowCompleted.value
+  && nodeStateInfo.value.type !== 'WAITING_CONFIRMATION'
+  && workflowNodeState.value !== 'READY_TO_ADVANCE'
+  && !isConversationRunning.value
+  && currentInteractions.value.length === 0
+)
+
 const promptDebugItems = computed<PromptDebugItem[]>(() =>
   runtimeStore.events
     .filter((event) => event.eventType === 'PROCESS_TRACE')
@@ -198,11 +314,13 @@ const promptDebugItems = computed<PromptDebugItem[]>(() =>
 
 const latestPromptDebug = computed(() => promptDebugItems.value[0] ?? null)
 const promptDebugAvailable = computed(() => PROMPT_DEBUG_ENABLED && latestPromptDebug.value !== null)
-const promptDebugFloatingStyle = computed(() =>
-  promptDebugHasCustomPosition.value
-    ? { transform: `translate(${promptDebugPosition.value.x}px, ${promptDebugPosition.value.y}px)` }
-    : {}
-)
+const promptDebugFloatingStyle = computed(() => {
+  if (promptDebugFullscreen.value) return {}
+  if (promptDebugHasCustomPosition.value) {
+    return { transform: `translate(${promptDebugPosition.value.x}px, ${promptDebugPosition.value.y}px)` }
+  }
+  return {}
+})
 
 const promptDebugRequestJson = computed(() =>
   latestPromptDebug.value?.payload.requestPayload !== undefined
@@ -215,6 +333,42 @@ const promptDebugHttpBodyJson = computed(() =>
     ? formatDebugValue(latestPromptDebug.value.payload.opencodePromptAsyncBody)
     : ''
 )
+
+const promptDebugTimelineItems = computed<PromptDebugTimelineItem[]>(() => {
+  const assistantMessages = sessionStore.messages
+    .filter((message) => message.role.toUpperCase() === 'ASSISTANT')
+    .map(messageToPromptDebugItem)
+
+  const runtimeEvents = runtimeStore.events
+    .map(eventToPromptDebugItem)
+
+  const streamingItem: PromptDebugTimelineItem[] = runtimeStore.streamingText.trim()
+    ? [{
+        id: 'streaming-assistant',
+        createdAt: new Date().toISOString(),
+        kind: 'streaming',
+        title: '正在流式回复',
+        badge: 'ASSISTANT_DELTA',
+        note: 'Agent 正在增量输出，还没有落成完整消息。',
+        uiDisplay: '显示为对话区最底部的实时流式回复。',
+        content: runtimeStore.streamingText.trim(),
+        copyText: buildPromptDebugCopyText({
+          title: '正在流式回复',
+          badge: 'ASSISTANT_DELTA',
+          note: 'Agent 正在增量输出，还没有落成完整消息。',
+          uiDisplay: '显示为对话区最底部的实时流式回复。',
+          content: runtimeStore.streamingText.trim(),
+        }),
+      }]
+    : []
+
+  return [...assistantMessages, ...runtimeEvents, ...streamingItem]
+    .sort((a, b) => {
+      const timeDiff = timestamp(a.createdAt) - timestamp(b.createdAt)
+      if (timeDiff !== 0) return timeDiff
+      return a.id.localeCompare(b.id)
+    })
+})
 
 onMounted(async () => {
   if (workflowStore.definitions.length === 0) {
@@ -244,6 +398,13 @@ async function ensureActiveSession(): Promise<AgentSessionDto | null> {
     if (workItemStore.items.length === 0) {
       await workItemStore.loadItems()
     }
+    if (props.workItemId) {
+      await workflowProjectionStore.syncWorkItem(props.workItemId)
+      const workflowInstanceId = selectedWorkItem.value?.currentWorkflowInstanceId
+      if (workflowInstanceId) {
+        await workflowStore.loadInstance(workflowInstanceId)
+      }
+    }
     await sessionStore.loadSessions()
 
     let session: AgentSessionDto | undefined
@@ -252,13 +413,33 @@ async function ensureActiveSession(): Promise<AgentSessionDto | null> {
       session = sessionStore.sessions.find((item) => item.id === props.targetSessionId)
     }
 
+    if (!session) {
+      const workflowSessionId = activeWorkflowNode.value?.agentSessionId
+      if (workflowSessionId) {
+        session = sessionStore.sessions.find((item) => item.id === workflowSessionId)
+        if (!session) {
+          await sessionStore.selectSession(workflowSessionId)
+          session = sessionStore.activeSession ?? undefined
+        }
+      }
+    }
+
     if (!session && props.workItemId) {
+      const workflowInstanceId = currentWorkflowInstance.value?.id ?? selectedWorkItem.value?.currentWorkflowInstanceId
+      if (workflowInstanceId) {
+        session = sessionStore.sessions.find(
+          (item) => item.workflowInstanceId === workflowInstanceId && item.status === 'ACTIVE'
+        )
+      }
+    }
+
+    if (!session && props.workItemId && !currentWorkflowInstance.value && !selectedWorkItem.value?.currentWorkflowInstanceId) {
       session = sessionStore.sessions.find(
         (item) => item.workItemId === props.workItemId && item.status === 'ACTIVE'
       )
     }
 
-    if (!session && props.workItemId) {
+    if (!session && props.workItemId && !currentWorkflowInstance.value && !selectedWorkItem.value?.currentWorkflowInstanceId) {
       const item = selectedWorkItem.value
       session = await sessionStore.createSession({
         sessionType: 'WORK_ITEM',
@@ -279,7 +460,7 @@ async function ensureActiveSession(): Promise<AgentSessionDto | null> {
       await workflowStore.loadInstance(session.workflowInstanceId)
     }
     if (props.workItemId) {
-      await workItemStore.refreshItem(props.workItemId)
+      await workflowProjectionStore.syncWorkItem(props.workItemId)
     }
 
     await nextTick()
@@ -337,11 +518,21 @@ async function handleCancelReply() {
       await workflowStore.refreshInstance(sessionStore.activeSession.workflowInstanceId)
     }
     if (sessionStore.activeSession.workItemId) {
-      await workItemStore.refreshItem(sessionStore.activeSession.workItemId)
+      await workflowProjectionStore.syncWorkItem(sessionStore.activeSession.workItemId)
     }
   } finally {
     cancellingReply.value = false
   }
+}
+
+async function handleWorkflowAction(action: string, nodeInstanceId: string) {
+  if (!sessionStore.activeSession) return
+  runtimeStore.markBusy()
+  await sessionStore.sendMessage({
+    content: `[${action}]`,
+    workflowUserAction: action,
+    workflowNodeInstanceId: nodeInstanceId,
+  })
 }
 
 async function handleInteractionChanged() {
@@ -351,7 +542,25 @@ async function handleInteractionChanged() {
   }
   const workItemId = props.workItemId ?? sessionStore.activeSession?.workItemId
   if (workItemId) {
-    await workItemStore.refreshItem(workItemId)
+    await workflowProjectionStore.syncWorkItem(workItemId)
+  }
+}
+
+async function handleResolveConfirmation(confirmationId: string, value: string, meta?: { requestType?: string; interactionType?: string }) {
+  const VALID_ACTION_TYPES: ConfirmationActionType[] = ['ENTER_SESSION', 'APPROVE', 'REJECT', 'SUPPLEMENT', 'CHOOSE', 'RETRY', 'SKIP', 'ADVANCE']
+  const isWorkflowAdvance = meta?.interactionType === 'WORKFLOW_ADVANCE'
+  const actionType: ConfirmationActionType = (isWorkflowAdvance && VALID_ACTION_TYPES.includes(value as ConfirmationActionType))
+    ? value as ConfirmationActionType
+    : 'CHOOSE'
+  try {
+    await confirmationStore.resolveConfirmation(confirmationId, {
+      actionType,
+      payload: { choice: value },
+      comment: value,
+    })
+    await handleInteractionChanged()
+  } catch {
+    // resolveConfirmation already shows notification on error
   }
 }
 
@@ -406,7 +615,181 @@ function formatDebugValue(value: unknown): string {
   }
 }
 
+function parseRuntimePayload(payloadJson: string | null): Record<string, unknown> {
+  if (!payloadJson) return {}
+  try {
+    const parsed: unknown = JSON.parse(payloadJson)
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : {}
+  } catch {
+    return { raw: payloadJson }
+  }
+}
+
+function promptPayloadText(payload: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = payload[key]
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return ''
+}
+
+function promptEventTitle(event: RuntimeEventDto, payload: Record<string, unknown>): string {
+  const title = promptPayloadText(payload, ['title', 'label', 'summary'])
+  if (event.eventType === 'PROCESS_TRACE' && payload.kind === 'prompt_debug') return '发送给 Runtime 的 prompt_async 请求'
+  if (event.eventType === 'SKILL_STARTED') return `开始执行 Skill：${promptPayloadText(payload, ['skillName', 'label']) || '未命名'}`
+  if (event.eventType === 'SKILL_COMPLETED') return `Skill 执行完成：${promptPayloadText(payload, ['skillName', 'label']) || '未命名'}`
+  if (event.eventType === 'MCP_CALL') return `工具调用：${promptPayloadText(payload, ['toolName', 'command', 'label']) || 'MCP'}`
+  if (event.eventType === 'CONFIRMATION_CREATED') return '触发用户交互'
+  if (event.eventType === 'CONFIRMATION_RESOLVED') return '用户交互已处理'
+  if (event.eventType === 'PERMISSION_REQUIRED') return '需要授权'
+  if (event.eventType === 'ASSISTANT_DELTA') return 'Agent 增量回复'
+  if (event.eventType === 'ASSISTANT_COMPLETED') return 'Agent 回复完成'
+  if (event.eventType === 'ERROR') return '运行错误'
+  return title || event.eventType
+}
+
+function promptEventNote(event: RuntimeEventDto, payload: Record<string, unknown>): string {
+  if (event.eventType === 'PROCESS_TRACE' && payload.kind === 'prompt_debug') return '本轮输入给 Agent 的 prompt_async 请求，用来核对 Agent 收到了什么上下文。'
+  if (event.eventType === 'ASSISTANT_DELTA') return 'Agent 的增量文本片段，通常会拼接进当前流式回复。'
+  if (event.eventType === 'ASSISTANT_COMPLETED') return 'Agent 本轮回复结束信号，表示流式输出收束。'
+  if (event.eventType === 'SKILL_STARTED') return '运行时开始调用 Skill。投影为 tool 类型 ExecutionStep，按 toolCallId 跟踪生命周期。'
+  if (event.eventType === 'SKILL_COMPLETED') return 'Skill 调用结束。与 SKILL_STARTED 合并为同一个 ToolInvocationPart，payload 包含输出摘要。'
+  if (event.eventType === 'MCP_CALL') return 'MCP 工具调用。投影为 ToolInvocationPart，挂在当前执行步骤下。'
+  if (event.eventType === 'CONFIRMATION_CREATED') return 'Agent 触发用户交互。投影为 DecisionGatePart，挂在触发步骤下，同时出现在交互栏。'
+  if (event.eventType === 'CONFIRMATION_RESOLVED') return '用户已处理交互项。投影为 decision StepPart 标记已解决，Agent 继续后续流程。'
+  if (event.eventType === 'PROCESS_TRACE') {
+    const kind = typeof payload.kind === 'string' ? payload.kind : 'trace'
+    return `运行过程追踪事件，kind=${kind}，用于解释 Agent 内部状态或调试信息。`
+  }
+  if (event.eventType === 'ERROR') return '运行时错误事件，需要优先排查。'
+  return '运行时事件，用来补充 Agent 回复之外的过程状态。'
+}
+
+function promptEventUiDisplay(event: RuntimeEventDto, payload: Record<string, unknown>): string {
+  if (event.eventType === 'PROCESS_TRACE' && payload.kind === 'prompt_debug') return '显示在 Prompt Debug 的输入区，不进入对话正文。'
+  if (event.eventType === 'ASSISTANT_DELTA') return '显示为对话区实时流式回复的一部分。'
+  if (event.eventType === 'ASSISTANT_COMPLETED') return '通常不单独显示正文，只影响回复完成状态。'
+  if (event.eventType === 'SKILL_STARTED' || event.eventType === 'SKILL_COMPLETED' || event.eventType === 'MCP_CALL' || payload.kind === 'tool_call') {
+    return '投影为执行步骤中的 ToolInvocationPart，按 toolCallId 合并生命周期，挂在触发它的步骤下。'
+  }
+  if (event.eventType === 'CONFIRMATION_CREATED' || event.eventType === 'PERMISSION_REQUIRED') return '投影为 DecisionGatePart，挂在触发步骤下；同时出现在交互栏。'
+  if (event.eventType === 'CONFIRMATION_RESOLVED') return '投影为 decision 类型 StepPart，标记交互已处理。'
+  if (event.eventType === 'ERROR') return '投影为 ErrorPart，默认展开显示。'
+  if (event.eventType === 'PROCESS_TRACE') return '投影为 StatusPart / ReasoningSummaryPart / 上下文步骤，根据 kind 决定折叠状态。'
+  return '显示为普通运行事件。'
+}
+
+function promptEventContent(event: RuntimeEventDto, payload: Record<string, unknown>): string {
+  if (event.eventType === 'PROCESS_TRACE' && payload.kind === 'prompt_debug') {
+    return formatDebugValue({
+      systemPrompt: payload.systemPrompt ?? null,
+      userPrompt: payload.userPrompt ?? null,
+      opencodePromptAsyncBody: payload.opencodePromptAsyncBody ?? null,
+      requestPayload: payload.requestPayload ?? null,
+    })
+  }
+  const summary = promptPayloadText(payload, ['summary', 'message', 'content', 'text', 'output', 'delta'])
+  if (summary) return summary
+  return formatDebugValue({
+    eventType: event.eventType,
+    eventSource: event.eventSource,
+    payload,
+  })
+}
+
+function buildPromptDebugCopyText(item: Pick<PromptDebugTimelineItem, 'title' | 'badge' | 'note' | 'uiDisplay' | 'content'>): string {
+  return [
+    `标题：${item.title}`,
+    `类型：${item.badge}`,
+    `作用：${item.note}`,
+    `界面展示：${item.uiDisplay}`,
+    '',
+    item.content,
+  ].join('\n')
+}
+
+function messageToPromptDebugItem(message: AgentMessageDto): PromptDebugTimelineItem {
+  const content = message.content?.trim() || '（空回复）'
+  const title = message.status === 'FAILED' ? 'Agent 回复失败' : 'Agent 完整回复'
+  const note = 'Agent 已写入会话消息表的完整回复，是用户在对话区主要阅读的内容。'
+  const uiDisplay = message.contentFormat === 'MARKDOWN'
+    ? '显示为对话区助手消息卡片，并按 Markdown 渲染。'
+    : '显示为对话区助手消息卡片。'
+  return {
+    id: `message:${message.id}`,
+    createdAt: message.createdAt,
+    kind: 'assistant-message',
+    title,
+    badge: `MESSAGE:${message.status}`,
+    note,
+    uiDisplay,
+    content,
+    copyText: buildPromptDebugCopyText({ title, badge: `MESSAGE:${message.status}`, note, uiDisplay, content }),
+  }
+}
+
+function eventToPromptDebugItem(event: RuntimeEventDto): PromptDebugTimelineItem {
+  const payload = parseRuntimePayload(event.payloadJson)
+  const title = promptEventTitle(event, payload)
+  const note = promptEventNote(event, payload)
+  const uiDisplay = promptEventUiDisplay(event, payload)
+  const content = promptEventContent(event, payload)
+  return {
+    id: `event:${event.id}`,
+    createdAt: event.createdAt,
+    kind: 'runtime-event',
+    title,
+    badge: event.eventType,
+    note,
+    uiDisplay,
+    content,
+    copyText: buildPromptDebugCopyText({ title, badge: event.eventType, note, uiDisplay, content }),
+  }
+}
+
+async function copyPromptDebugText(id: string, text: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text)
+  } else {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.setAttribute('readonly', 'true')
+    textarea.style.position = 'fixed'
+    textarea.style.opacity = '0'
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textarea)
+  }
+  promptDebugCopiedId.value = id
+  window.setTimeout(() => {
+    if (promptDebugCopiedId.value === id) {
+      promptDebugCopiedId.value = null
+    }
+  }, 1200)
+}
+
+function togglePromptDebugOpen() {
+  if (promptDebugOpen.value) {
+    promptDebugOpen.value = false
+    promptDebugFullscreen.value = false
+    return
+  }
+  promptDebugOpen.value = true
+}
+
+function togglePromptDebugFullscreen() {
+  promptDebugOpen.value = true
+  promptDebugFullscreen.value = !promptDebugFullscreen.value
+  if (promptDebugFullscreen.value) {
+    promptDebugDragging.value = false
+  }
+}
+
 function startPromptDebugDrag(event: PointerEvent) {
+  if (promptDebugFullscreen.value) return
   if (event.button !== 0) return
   const floatElement = (event.currentTarget as HTMLElement).closest('.prompt-debug-float') as HTMLElement | null
   const rect = floatElement?.getBoundingClientRect()
@@ -473,6 +856,13 @@ function timestamp(value: string | null | undefined): number {
         </div>
         <div class="conversation-workbench__header-actions">
           <span
+            v-if="agentStateLabel"
+            class="conversation-workbench__agent-state"
+          >
+            {{ agentStateLabel.dot }} {{ agentStateLabel.text }}
+            <small v-if="agentStateLabel.reason">{{ agentStateLabel.reason }}</small>
+          </span>
+          <span
             class="conversation-workbench__socket"
             :class="{ 'conversation-workbench__socket--online': runtimeStore.connected }"
           >
@@ -498,6 +888,7 @@ function timestamp(value: string | null | undefined): number {
           class="prompt-debug-float"
           :class="{
             'prompt-debug-float--open': promptDebugOpen,
+            'prompt-debug-float--fullscreen': promptDebugFullscreen,
             'prompt-debug-float--dragging': promptDebugDragging,
             'prompt-debug-float--custom-position': promptDebugHasCustomPosition,
           }"
@@ -512,15 +903,26 @@ function timestamp(value: string | null | undefined): number {
               <strong>Prompt Debug</strong>
               <em>{{ latestPromptDebug.payload.summary || '本轮发送给 OpenCode Runtime 的 prompt_async 请求' }}</em>
             </span>
-            <button
-              type="button"
-              class="prompt-debug-float__toggle"
-              :aria-label="promptDebugOpen ? '收起 Prompt Debug' : '展开 Prompt Debug'"
-              @pointerdown.stop
-              @click="promptDebugOpen = !promptDebugOpen"
-            >
-              {{ promptDebugOpen ? '收起' : '展开' }}
-            </button>
+            <div class="prompt-debug-float__actions">
+              <button
+                type="button"
+                class="prompt-debug-float__toggle"
+                :aria-label="promptDebugFullscreen ? '还原 Prompt Debug' : '全屏 Prompt Debug'"
+                @pointerdown.stop
+                @click="togglePromptDebugFullscreen"
+              >
+                {{ promptDebugFullscreen ? '还原' : '全屏' }}
+              </button>
+              <button
+                type="button"
+                class="prompt-debug-float__toggle"
+                :aria-label="promptDebugOpen ? '收起 Prompt Debug' : '展开 Prompt Debug'"
+                @pointerdown.stop
+                @click="togglePromptDebugOpen"
+              >
+                {{ promptDebugOpen ? '收起' : '展开' }}
+              </button>
+            </div>
           </div>
 
           <div v-if="promptDebugOpen" class="prompt-debug-panel">
@@ -540,31 +942,106 @@ function timestamp(value: string | null | undefined): number {
             </dl>
 
             <section class="prompt-debug-panel__section">
-              <h3>System Prompt</h3>
+              <div class="prompt-debug-panel__section-head">
+                <h3>System Prompt</h3>
+                <button
+                  type="button"
+                  class="prompt-debug-panel__copy"
+                  @click="copyPromptDebugText('system-prompt', latestPromptDebug.payload.systemPrompt || '无显式 system prompt')"
+                >
+                  {{ promptDebugCopiedId === 'system-prompt' ? '已复制' : '复制' }}
+                </button>
+              </div>
               <pre>{{ latestPromptDebug.payload.systemPrompt || '无显式 system prompt' }}</pre>
             </section>
 
             <section class="prompt-debug-panel__section">
-              <h3>User Prompt / Parts Text</h3>
+              <div class="prompt-debug-panel__section-head">
+                <h3>User Prompt / Parts Text</h3>
+                <button
+                  type="button"
+                  class="prompt-debug-panel__copy"
+                  @click="copyPromptDebugText('user-prompt', latestPromptDebug.payload.userPrompt || '无')"
+                >
+                  {{ promptDebugCopiedId === 'user-prompt' ? '已复制' : '复制' }}
+                </button>
+              </div>
               <pre>{{ latestPromptDebug.payload.userPrompt || '无' }}</pre>
             </section>
 
-            <details
+            <section
               v-if="promptDebugHttpBodyJson"
-              class="prompt-debug-panel__details"
-              open
+              class="prompt-debug-panel__section"
             >
-              <summary>OpenCode prompt_async body</summary>
+              <div class="prompt-debug-panel__section-head">
+                <h3>OpenCode prompt_async body</h3>
+                <button
+                  type="button"
+                  class="prompt-debug-panel__copy"
+                  @click="copyPromptDebugText('http-body', promptDebugHttpBodyJson)"
+                >
+                  {{ promptDebugCopiedId === 'http-body' ? '已复制' : '复制' }}
+                </button>
+              </div>
               <pre>{{ promptDebugHttpBodyJson }}</pre>
-            </details>
+            </section>
 
-            <details
+            <section
               v-if="promptDebugRequestJson"
-              class="prompt-debug-panel__details"
+              class="prompt-debug-panel__section"
             >
-              <summary>AgentCenter transport payload</summary>
+              <div class="prompt-debug-panel__section-head">
+                <h3>AgentCenter transport payload</h3>
+                <button
+                  type="button"
+                  class="prompt-debug-panel__copy"
+                  @click="copyPromptDebugText('transport-payload', promptDebugRequestJson)"
+                >
+                  {{ promptDebugCopiedId === 'transport-payload' ? '已复制' : '复制' }}
+                </button>
+              </div>
               <pre>{{ promptDebugRequestJson }}</pre>
-            </details>
+            </section>
+
+            <section class="prompt-debug-panel__section prompt-debug-panel__timeline">
+              <div class="prompt-debug-panel__section-head">
+                <h3>Prompt、回复与事件</h3>
+                <span>{{ promptDebugTimelineItems.length }} 段</span>
+              </div>
+              <div v-if="promptDebugTimelineItems.length" class="prompt-debug-timeline">
+                <article
+                  v-for="item in promptDebugTimelineItems"
+                  :key="item.id"
+                  class="prompt-debug-timeline__item"
+                >
+                  <div class="prompt-debug-timeline__head">
+                    <div>
+                      <span class="prompt-debug-timeline__badge">{{ item.badge }}</span>
+                      <strong>{{ item.title }}</strong>
+                    </div>
+                    <button
+                      type="button"
+                      class="prompt-debug-panel__copy"
+                      @click="copyPromptDebugText(item.id, item.copyText)"
+                    >
+                      {{ promptDebugCopiedId === item.id ? '已复制' : '复制此段' }}
+                    </button>
+                  </div>
+                  <dl class="prompt-debug-timeline__meta">
+                    <div>
+                      <dt>作用</dt>
+                      <dd>{{ item.note }}</dd>
+                    </div>
+                    <div>
+                      <dt>界面展示</dt>
+                      <dd>{{ item.uiDisplay }}</dd>
+                    </div>
+                  </dl>
+                  <pre>{{ item.content }}</pre>
+                </article>
+              </div>
+              <div v-else class="prompt-debug-panel__empty">暂无 Agent 回复或运行事件。</div>
+            </section>
           </div>
         </aside>
       </Teleport>
@@ -581,8 +1058,10 @@ function timestamp(value: string | null | undefined): number {
             :active-node-id="nodeStateInfo.nodeId ?? null"
             :active-node-state="nodeStateInfo.type"
             :active-session-id="sessionStore.activeSession?.id ?? null"
+            :confirmations="currentInteractions"
             :running="isConversationRunning"
             @open-artifact="handleOpenArtifact"
+            @resolve-confirmation="handleResolveConfirmation"
           />
         </template>
       </div>
@@ -595,13 +1074,20 @@ function timestamp(value: string | null | undefined): number {
           @open="emit('show-confirmation', $event)"
         />
 
+        <WorkflowNodeControlBar
+          v-if="shouldShowWorkflowNodeControl"
+          :node-state="workflowNodeState"
+          :node-instance-id="currentWorkflowNodeInstanceId"
+          @action="handleWorkflowAction"
+        />
+
         <form class="conversation-workbench__input-area" @submit.prevent="handleSend">
           <input
             ref="inputRef"
             v-model="inputText"
             class="conversation-workbench__input"
             type="text"
-            :placeholder="isConversationRunning ? '对话运行中，可点击右侧按钮暂停...' : '输入指令或问题...'"
+            :placeholder="inputPlaceholder"
             :disabled="isConversationRunning || loadingSession"
           />
           <button
@@ -665,12 +1151,14 @@ function timestamp(value: string | null | undefined): number {
 
 .conversation-workbench__heading {
   display: flex;
+  flex: 1 1 auto;
   align-items: flex-start;
   gap: 12px;
   min-width: 0;
 }
 
 .conversation-workbench__heading > div {
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -695,24 +1183,60 @@ function timestamp(value: string | null | undefined): number {
 
 .conversation-workbench__header h2 {
   margin: 0;
+  overflow: hidden;
   color: var(--text-primary);
   font-size: 20px;
   font-weight: 900;
   line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .conversation-workbench__header p {
   margin-top: 6px;
+  overflow: hidden;
   color: var(--text-muted);
   font-size: 14px;
   font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .conversation-workbench__header-actions {
   display: flex;
+  flex: 0 1 auto;
   align-items: center;
   gap: 10px;
-  flex-shrink: 0;
+  min-width: 0;
+}
+
+.conversation-workbench__agent-state {
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 520px;
+  min-height: 32px;
+  padding: 0 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.conversation-workbench__agent-state small {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  margin-left: 4px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .conversation-workbench__socket {
@@ -765,6 +1289,7 @@ function timestamp(value: string | null | undefined): number {
 .conversation-workbench__messages {
   flex: 1;
   min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: 0 22px;
   display: flex;
@@ -806,8 +1331,8 @@ function timestamp(value: string | null | undefined): number {
   top: 16px;
   right: 16px;
   z-index: 9999;
-  width: min(560px, calc(100vw - 32px));
-  max-height: min(64vh, 680px);
+  width: min(720px, calc(100vw - 32px));
+  max-height: min(78vh, 760px);
   overflow: hidden;
   border: 1px solid var(--brand-border);
   border-radius: 10px;
@@ -821,6 +1346,18 @@ function timestamp(value: string | null | undefined): number {
   top: 0;
   right: auto;
   left: 0;
+}
+
+.prompt-debug-float--fullscreen {
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  max-height: 100vh;
+  border-radius: 0;
+}
+
+.prompt-debug-float--fullscreen.prompt-debug-float--custom-position {
+  transform: none;
 }
 
 .prompt-debug-float:not(.prompt-debug-float--open) {
@@ -845,6 +1382,10 @@ function timestamp(value: string | null | undefined): number {
 
 .prompt-debug-float--dragging .prompt-debug-float__header {
   cursor: grabbing;
+}
+
+.prompt-debug-float--fullscreen .prompt-debug-float__header {
+  cursor: default;
 }
 
 .prompt-debug-float__summary {
@@ -877,6 +1418,13 @@ function timestamp(value: string | null | undefined): number {
   white-space: nowrap;
 }
 
+.prompt-debug-float__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
 .prompt-debug-float__toggle {
   appearance: none;
   flex-shrink: 0;
@@ -892,8 +1440,13 @@ function timestamp(value: string | null | undefined): number {
 }
 
 .prompt-debug-panel {
-  max-height: calc(min(64vh, 680px) - 50px);
+  max-height: calc(min(78vh, 760px) - 50px);
   overflow: auto;
+}
+
+.prompt-debug-float--fullscreen .prompt-debug-panel {
+  height: calc(100vh - 50px);
+  max-height: calc(100vh - 50px);
 }
 
 .prompt-debug-panel__meta {
@@ -922,24 +1475,48 @@ function timestamp(value: string | null | undefined): number {
   white-space: nowrap;
 }
 
-.prompt-debug-panel__section,
-.prompt-debug-panel__details {
+.prompt-debug-panel__section {
   padding: 12px 14px;
   border-bottom: 1px solid var(--border-color);
 }
 
-.prompt-debug-panel__section h3 {
-  margin: 0 0 8px;
+.prompt-debug-panel__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.prompt-debug-panel__section-head h3 {
+  margin: 0;
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 900;
 }
 
-.prompt-debug-panel__details summary {
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 900;
+.prompt-debug-panel__section-head > span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.prompt-debug-panel__copy {
+  flex: 0 0 auto;
+  min-height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  background: var(--bg-primary);
+  color: var(--accent-blue);
+  font-size: 11px;
+  font-weight: 850;
   cursor: pointer;
+}
+
+.prompt-debug-panel__copy:hover {
+  border-color: var(--brand-border);
+  background: var(--brand-soft);
 }
 
 .prompt-debug-panel pre {
@@ -955,6 +1532,102 @@ function timestamp(value: string | null | undefined): number {
   line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.prompt-debug-panel__timeline {
+  padding-bottom: 14px;
+}
+
+.prompt-debug-timeline {
+  display: grid;
+  gap: 10px;
+}
+
+.prompt-debug-timeline__item {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 9px;
+  background: var(--surface-overlay);
+}
+
+.prompt-debug-timeline__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.prompt-debug-timeline__head > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.prompt-debug-timeline__head strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prompt-debug-timeline__badge {
+  flex: 0 0 auto;
+  max-width: 160px;
+  padding: 2px 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--accent-blue);
+  font-size: 10px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prompt-debug-timeline__meta {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.prompt-debug-timeline__meta div {
+  min-width: 0;
+}
+
+.prompt-debug-timeline__meta dt {
+  margin-bottom: 2px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.prompt-debug-timeline__meta dd {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.prompt-debug-timeline__item pre {
+  max-height: 180px;
+}
+
+.prompt-debug-panel__empty {
+  padding: 14px;
+  border: 1px dashed var(--border-color);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 750;
+  text-align: center;
 }
 
 .conversation-workbench__input-area {

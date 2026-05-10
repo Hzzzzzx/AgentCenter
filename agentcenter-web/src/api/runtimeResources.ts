@@ -7,6 +7,7 @@ import type {
   RuntimeResourceAuditDto,
   SessionRuntimeResourceDto,
   RuntimeSkillRefreshResponse,
+  RuntimeEnvironmentStatusDto,
 } from './types'
 
 // ===== Skill APIs =====
@@ -42,6 +43,7 @@ export const sessionResourceApi = {
 
 // Keep backward compatibility
 export const runtimeResourceApi = {
+  status: () => get<RuntimeEnvironmentStatusDto>('/runtime/status'),
   listSkills: () => get<RuntimeSkillRefreshResponse>('/runtime/skills'),
   refreshSkills: () => post<RuntimeSkillRefreshResponse>('/runtime/skills/refresh'),
 }

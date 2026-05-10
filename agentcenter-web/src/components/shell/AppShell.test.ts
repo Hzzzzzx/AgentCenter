@@ -2,7 +2,9 @@ import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import AppShell from './AppShell.vue'
-import type { ArtifactDto } from '../../api/types'
+import type { ArtifactDto, WorkItemDto } from '../../api/types'
+import { useWorkflowStore } from '../../stores/workflows'
+import { useWorkItemWorkflowProjectionStore } from '../../stores/workItemWorkflowProjection'
 
 vi.mock('../../stores/confirmations', () => ({
   useConfirmationStore: vi.fn(() => ({
@@ -59,6 +61,23 @@ describe('AppShell.vue', () => {
     title: 'FE0001-HLD.md',
     content: '# HLD',
     createdAt: '2026-01-01T10:00:00Z',
+  }
+  const selectedWorkItem: WorkItemDto = {
+    id: 'wi-1',
+    code: 'FE0001',
+    type: 'FE',
+    title: '登录页重构',
+    description: '使用新的设计规范重构登录页面',
+    status: 'TODO',
+    priority: 'HIGH',
+    projectId: null,
+    spaceId: null,
+    iterationId: null,
+    assigneeUserId: null,
+    currentWorkflowInstanceId: null,
+    workflowSummary: null,
+    createdAt: '2026-01-01T10:00:00Z',
+    updatedAt: '2026-01-01T10:00:00Z',
   }
 
   function mountShell(props = {}) {
@@ -153,6 +172,53 @@ describe('AppShell.vue', () => {
 
     expect(wrapper.find('.right-panel--collapsed').exists()).toBe(false)
     expect(wrapper.find('.right-panel__tab--active').text()).toContain('待确认')
+  })
+
+  it('shows starting state in the right panel details action', async () => {
+    const wrapper = mountShell()
+    const workflowProjectionStore = useWorkItemWorkflowProjectionStore()
+
+    workflowProjectionStore.startingIds = new Set(['wi-1'])
+    await wrapper.setProps({ selectedWorkItem })
+
+    const btn = wrapper.find('.detail__btn--primary')
+    expect(btn.text()).toBe('启动中')
+    expect(btn.attributes('disabled')).toBeDefined()
+    expect(wrapper.find('.detail__node--active').text()).toContain('开始')
+  })
+
+  it('uses cached workflow instance to switch right panel action after launch', async () => {
+    const wrapper = mountShell()
+    const workflowStore = useWorkflowStore()
+
+    await wrapper.setProps({ selectedWorkItem })
+    workflowStore.upsertInstance({
+      id: 'wf-1',
+      workItemId: 'wi-1',
+      workflowDefinitionId: 'definition-1',
+      status: 'RUNNING',
+      currentNodeInstanceId: 'node-1',
+      nodes: [{
+        id: 'node-1',
+        nodeDefinitionId: 'node-def-1',
+        status: 'RUNNING',
+        inputArtifactId: null,
+        outputArtifactId: null,
+        agentSessionId: null,
+        startedAt: null,
+        completedAt: null,
+        errorMessage: null,
+        skillName: 'prd-design',
+      }],
+      startedAt: null,
+      completedAt: null,
+    })
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('.detail__btn--primary').exists()).toBe(false)
+    const btn = wrapper.find('.detail__btn--secondary')
+    expect(btn.text()).toBe('进入会话')
+    expect(wrapper.find('.detail__node--active').text()).toContain('prd-design')
   })
 
   it('displays correct navigation labels', () => {

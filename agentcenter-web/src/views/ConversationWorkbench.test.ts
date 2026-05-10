@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import { nextTick } from 'vue'
 import ConversationWorkbench from './ConversationWorkbench.vue'
 import { sessionApi } from '../api/sessions'
 import { useRuntimeStore } from '../stores/runtime'
@@ -187,6 +188,10 @@ describe('ConversationWorkbench.vue', () => {
     vi.clearAllMocks()
   })
 
+  afterEach(() => {
+    document.body.innerHTML = ''
+  })
+
   it('shows pause action while the workflow node is running', async () => {
     const pinia = createPinia()
     setActivePinia(pinia)
@@ -261,5 +266,112 @@ describe('ConversationWorkbench.vue', () => {
     const composer = wrapper.find('.conversation-workbench__composer')
     expect(composer.find('.interaction-bar').exists()).toBe(true)
     expect(composer.find('.conversation-workbench__input-area').exists()).toBe(true)
+  })
+
+  it('does not show the workflow advance control while an interaction is active', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(ConversationWorkbench, {
+      props: {
+        workItemId: 'work-1',
+        targetSessionId: 'session-1',
+      },
+      global: {
+        plugins: [pinia],
+      },
+    })
+
+    await flushPromises()
+
+    const runtimeStore = useRuntimeStore()
+    runtimeStore.lastNodeState = 'READY_TO_ADVANCE'
+    await nextTick()
+
+    expect(wrapper.find('.interaction-bar').exists()).toBe(true)
+    expect(wrapper.find('.wf-control').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('进入下一步')
+  })
+
+  it('shows prompt debug replies, annotated events, and copy actions', async () => {
+    vi.mocked(sessionApi.getMessages).mockResolvedValueOnce([
+      {
+        id: 'msg-1',
+        sessionId: 'session-1',
+        role: 'ASSISTANT',
+        content: '这是 Agent 的完整回复',
+        contentFormat: 'MARKDOWN',
+        status: 'COMPLETED',
+        seqNo: 2,
+        createdAt: '2026-05-08T10:02:00Z',
+        workflowNodeInstanceId: 'node-1',
+      },
+    ])
+
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    mount(ConversationWorkbench, {
+      props: {
+        workItemId: 'work-1',
+        targetSessionId: 'session-1',
+      },
+      global: {
+        plugins: [pinia],
+      },
+    })
+
+    await flushPromises()
+
+    const runtimeStore = useRuntimeStore()
+    runtimeStore.events = [
+      {
+        id: 'event-prompt',
+        sessionId: 'session-1',
+        workItemId: 'work-1',
+        workflowInstanceId: 'wf-1',
+        workflowNodeInstanceId: 'node-1',
+        eventType: 'PROCESS_TRACE',
+        eventSource: 'runtime',
+        payloadJson: JSON.stringify({
+          kind: 'prompt_debug',
+          agent: 'build',
+          userPrompt: '请生成 PRD',
+          systemPrompt: '系统提示词',
+        }),
+        createdAt: '2026-05-08T10:01:00Z',
+      },
+      {
+        id: 'event-skill',
+        sessionId: 'session-1',
+        workItemId: 'work-1',
+        workflowInstanceId: 'wf-1',
+        workflowNodeInstanceId: 'node-1',
+        eventType: 'SKILL_STARTED',
+        eventSource: 'runtime',
+        payloadJson: JSON.stringify({ skillName: 'prd-design', summary: '开始执行 PRD Skill' }),
+        createdAt: '2026-05-08T10:01:30Z',
+      },
+    ]
+    runtimeStore.streamingText = '正在流式输出'
+    await nextTick()
+
+    const actionButtons = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.prompt-debug-float__toggle'))
+    const fullscreenButton = actionButtons.find((button) => button.textContent?.includes('全屏'))
+    expect(fullscreenButton).toBeDefined()
+    fullscreenButton?.click()
+    await nextTick()
+
+    expect(document.body.querySelector('.prompt-debug-float--fullscreen')).not.toBeNull()
+    expect(document.body.textContent).toContain('还原')
+    expect(document.body.textContent).toContain('System Prompt')
+    expect(document.body.textContent).toContain('请生成 PRD')
+    expect(document.body.textContent).toContain('Prompt、回复与事件')
+    expect(document.body.textContent).toContain('发送给 Runtime 的 prompt_async 请求')
+    expect(document.body.textContent).toContain('Agent 完整回复')
+    expect(document.body.textContent).toContain('这是 Agent 的完整回复')
+    expect(document.body.textContent).toContain('开始执行 Skill')
+    expect(document.body.textContent).toContain('运行时开始调用 Skill')
+    expect(document.body.textContent).toContain('正在流式回复')
+    expect(document.body.textContent).toContain('界面展示')
+    expect(document.body.textContent).toContain('复制此段')
   })
 })

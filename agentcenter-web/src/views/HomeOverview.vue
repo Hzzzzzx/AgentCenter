@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useWorkItemStore } from '../stores/workItems'
-import { workItemApi } from '../api/workItems'
 import { useWorkflowStore } from '../stores/workflows'
+import { useWorkItemWorkflowProjectionStore } from '../stores/workItemWorkflowProjection'
+import type { ProjectedWorkflowNode } from '../stores/workItemWorkflowProjection'
 import type {
   Priority,
-  StartWorkflowResponse,
   WorkItemDto,
-  WorkItemOverviewTypeStatDto,
   WorkflowInstanceDto,
   WorkflowNodeStatus,
   WorkflowStatus,
@@ -17,15 +16,14 @@ import type {
 
 const store = useWorkItemStore()
 const workflowStore = useWorkflowStore()
+const workflowProjectionStore = useWorkItemWorkflowProjectionStore()
 const selectedType = ref<WorkItemType | 'ALL'>('ALL')
 const selectedStatus = ref<WorkItemStatus | 'ALL'>('ALL')
 const currentPage = ref(1)
-const startingIds = ref<Set<string>>(new Set())
-const startErrors = ref<Record<string, string>>({})
 
 const emit = defineEmits<{
   'select-work-item': [id: string]
-  'start-workflow': [workItemId: string, response?: StartWorkflowResponse]
+  'start-workflow': [workItemId: string]
   'enter-conversation': [workItemId: string]
 }>()
 
@@ -68,6 +66,7 @@ type NodeDistributionBucket = {
 const nodeStatusClass: Record<WorkflowNodeStatus, string> = {
   PENDING: '',
   RUNNING: 'home-overview__node--active',
+  READY: 'home-overview__node--ready',
   WAITING_CONFIRMATION: 'home-overview__node--waiting',
   COMPLETED: 'home-overview__node--done',
   FAILED: 'home-overview__node--failed',
@@ -107,24 +106,7 @@ const statusFilterOptions: Array<{ value: WorkItemStatus | 'ALL'; label: string 
   { value: 'DONE', label: workItemStatusLabels.DONE },
 ]
 
-type FlowNode = {
-  label: string
-  status: WorkflowNodeStatus
-  kind: 'start' | 'skill' | 'end'
-  dynamicNodeCount?: number
-  recoveryCount?: number
-  pendingConfirmationCount?: number
-  latestSummary?: string | null
-}
-
-const defaultStageLabels: Record<WorkItemType, string[]> = {
-  FE: ['需求', '方案', '实施', '验证', '归档'],
-  US: ['故事', '验收', '拆分', '评审', '归档'],
-  TASK: ['理解', '计划', '执行', '验证', '总结'],
-  WORK: ['分析', 'Runbook', '执行', '校验', '报告'],
-  BUG: ['复现', '根因', '修复', '回归', '关闭'],
-  VULN: ['分级', '影响', '修复', '验证', '归档'],
-}
+type FlowNode = ProjectedWorkflowNode
 
 onMounted(() => {
   store.loadItems()
@@ -132,18 +114,8 @@ onMounted(() => {
   workflowStore.loadDefinitions()
 })
 
-const overviewStatsByType = computed(() => {
-  const stats = store.overview?.stats ?? []
-  return new Map(stats.map((stat) => [stat.type, stat]))
-})
-
 const typeStatCards = computed<TypeStatCard[]>(() =>
-  typeOrder.map((type) => {
-    const overviewStat = overviewStatsByType.value.get(type)
-    return overviewStat
-      ? buildTypeStatCardFromOverview(type, overviewStat)
-      : buildTypeStatCard(type, store.items.filter((item) => item.type === type))
-  })
+  typeOrder.map((type) => buildTypeStatCard(type, store.items.filter((item) => item.type === type)))
 )
 
 const filteredItems = computed(() => {
@@ -188,33 +160,7 @@ function goToNextPage() {
 }
 
 function workflowFor(item: WorkItemDto): WorkflowInstanceDto | null {
-  const cached = workflowStore.instancesByWorkItemId[item.id]
-  if (cached) return cached
-  if (item.workflowSummary) {
-    return {
-      id: item.workflowSummary.instanceId,
-      workItemId: item.id,
-      workflowDefinitionId: '',
-      status: item.workflowSummary.status,
-      currentNodeInstanceId: item.workflowSummary.currentNodeInstanceId,
-      nodes: item.workflowSummary.nodes.map((n) => ({
-        id: n.id,
-        nodeDefinitionId: '',
-        status: n.status,
-        inputArtifactId: null,
-        outputArtifactId: null,
-        agentSessionId: null,
-        startedAt: null,
-        completedAt: null,
-        errorMessage: null,
-        definitionName: n.definitionName,
-        skillName: n.skillName,
-      })),
-      startedAt: null,
-      completedAt: null,
-    } as WorkflowInstanceDto & { nodes: typeof item.workflowSummary.nodes }
-  }
-  return null
+  return workflowProjectionStore.projectionFor(item).workflowInstance
 }
 
 function buildTypeStatCard(type: WorkItemType, items: WorkItemDto[]): TypeStatCard {
@@ -277,55 +223,14 @@ function buildTypeStatCard(type: WorkItemType, items: WorkItemDto[]): TypeStatCa
   }
 }
 
-function buildTypeStatCardFromOverview(type: WorkItemType, stat: WorkItemOverviewTypeStatDto): TypeStatCard {
-  const config = typeConfig[type]
-  return {
-    type,
-    label: config.label,
-    color: config.color,
-    total: stat.total,
-    nodeSummary: nodeDistributionSummaryFromBuckets(stat.nodeDistribution, stat.total),
-    progressLabel: `${stat.completionRate}% 节点完成`,
-    completionRate: stat.completionRate,
-    chips: buildStatChips({
-      total: stat.total,
-      runningCount: stat.runningCount,
-      waitingCount: stat.waitingCount,
-      blockedCount: stat.blockedCount,
-      unstartedCount: stat.unstartedCount,
-      completedCount: stat.completedCount,
-    }),
-  }
-}
-
 function statStagesFor(item: WorkItemDto): StatStage[] {
-  const summary = item.workflowSummary
-  if (summary?.stages?.length) {
-    return summary.stages.map((stage) => ({
-      label: stage.name ?? stage.skillName ?? '阶段',
-      status: stage.status,
-      pendingConfirmationCount: stage.pendingConfirmationCount,
-    }))
-  }
-  if (summary?.nodes.length) {
-    return summary.nodes.map((node) => ({
-      label: node.definitionName ?? node.skillName ?? '阶段',
+  return workflowProjectionStore.projectionFor(item).nodes
+    .filter((node) => node.kind === 'skill')
+    .map((node) => ({
+      label: node.label,
       status: node.status,
+      pendingConfirmationCount: node.pendingConfirmationCount,
     }))
-  }
-  const wf = workflowFor(item)
-  if (wf?.nodes.length) {
-    return wf.nodes.map((node) => ({
-      label: (node as { definitionName?: string | null; skillName?: string | null }).definitionName
-        ?? (node as { definitionName?: string | null; skillName?: string | null }).skillName
-        ?? '阶段',
-      status: node.status,
-    }))
-  }
-  return defaultStageNamesFor(item).map((label) => ({
-    label,
-    status: 'PENDING',
-  }))
 }
 
 function buildStatChips(counts: {
@@ -411,80 +316,8 @@ function nodeDistributionSummary(
     .join(' · ')
 }
 
-function nodeDistributionSummaryFromBuckets(
-  buckets: WorkItemOverviewTypeStatDto['nodeDistribution'],
-  total: number
-): string {
-  if (total === 0) return '等待创建事项'
-  if (buckets.length === 0) return '暂无节点数据'
-  return [...buckets]
-    .sort((a, b) => a.priority - b.priority || b.count - a.count || a.label.localeCompare(b.label, 'zh-CN'))
-    .slice(0, 3)
-    .map((bucket) => `${bucket.label} ${bucket.count}`)
-    .join(' · ')
-}
-
-function buildFlowWithAnchors(skillNodes: FlowNode[], wfStatus?: WorkflowStatus | null): FlowNode[] {
-  const hasStarted = Boolean(wfStatus)
-  const allSkillsCompleted = skillNodes.length > 0 && skillNodes.every((node) =>
-    ['COMPLETED', 'SKIPPED'].includes(node.status)
-  )
-  return [
-    { label: '开始', status: hasStarted ? 'COMPLETED' : 'RUNNING', kind: 'start' },
-    ...skillNodes,
-    {
-      label: '完成',
-      status: wfStatus === 'COMPLETED' || allSkillsCompleted ? 'COMPLETED' : 'PENDING',
-      kind: 'end',
-    },
-  ]
-}
-
 function flowNodes(item: WorkItemDto): FlowNode[] {
-  const wf = workflowFor(item)
-  const summary = item.workflowSummary
-  if (summary?.stages?.length) {
-    const stages = summary.stages.map((stage) => ({
-      label: stage.name ?? stage.skillName ?? '阶段',
-      status: stage.status,
-      kind: 'skill' as const,
-      dynamicNodeCount: stage.dynamicNodeCount,
-      recoveryCount: stage.recoveryCount,
-      pendingConfirmationCount: stage.pendingConfirmationCount,
-      latestSummary: stage.latestSummary,
-    }))
-    return buildFlowWithAnchors(stages, summary.status)
-  }
-  if (wf && wf.nodes.length > 0) {
-    const stages = wf.nodes.map((n) => ({
-      label: (n as { definitionName?: string | null; skillName?: string | null }).definitionName
-        ?? (n as { definitionName?: string | null; skillName?: string | null }).skillName
-        ?? '阶段',
-      status: n.status as WorkflowNodeStatus,
-      kind: 'skill' as const,
-    }))
-    return buildFlowWithAnchors(stages, wf.status)
-  }
-  return buildFlowWithAnchors(
-    defaultStageNamesFor(item).map((label) => ({
-      label,
-      status: 'PENDING' as WorkflowNodeStatus,
-      kind: 'skill' as const,
-    })),
-    null,
-  )
-}
-
-function defaultStageNamesFor(item: WorkItemDto): string[] {
-  const definition = workflowStore.definitions.find(
-    (candidate) => candidate.workItemType === item.type && candidate.status === 'ENABLED' && candidate.isDefault
-  ) ?? workflowStore.definitions.find(
-    (candidate) => candidate.workItemType === item.type && candidate.status === 'ENABLED'
-  )
-  if (definition?.nodes.length) {
-    return definition.nodes.map((node) => node.name)
-  }
-  return defaultStageLabels[item.type]
+  return workflowProjectionStore.projectionFor(item).nodes
 }
 
 function isNodeComplete(status: WorkflowNodeStatus) {
@@ -504,39 +337,15 @@ function stageMeta(node: FlowNode): string {
 }
 
 function launchLabel(item: WorkItemDto): string {
-  if (startingIds.value.has(item.id)) return '启动中'
-  const wf = workflowFor(item)
-  if (!wf && !item.currentWorkflowInstanceId) return '开始处理'
-  if (!wf) return '开始处理'
-  if (hasStageStatus(item, 'WAITING_CONFIRMATION')) return '待确认'
-  if (hasStageStatus(item, 'RUNNING')) return '处理中'
-  if (wf.status === 'FAILED' || wf.status === 'BLOCKED') return '查看异常'
-  if (wf.status === 'COMPLETED') return '查看结果'
-  return workflowStatusLabels[wf.status] ?? '开始处理'
-}
-
-function currentFlowNode(item: WorkItemDto): FlowNode | null {
-  const nodes = flowNodes(item)
-  return nodes.find((node) => node.status === 'WAITING_CONFIRMATION')
-    ?? nodes.find((node) => node.status === 'RUNNING' && node.kind === 'skill')
-    ?? nodes.find((node) => node.status === 'FAILED')
-    ?? null
+  return workflowProjectionStore.projectionFor(item).actionLabel
 }
 
 function flowSummaryLabel(item: WorkItemDto): string {
-  const node = currentFlowNode(item)
-  return node ? node.label : launchLabel(item)
+  return workflowProjectionStore.projectionFor(item).flowSummaryLabel
 }
 
 function launchDisabled(item: WorkItemDto): boolean {
-  if (startingIds.value.has(item.id)) return true
-  return false
-}
-
-function hasStageStatus(item: WorkItemDto, status: WorkflowNodeStatus) {
-  return item.workflowSummary?.stages?.some((stage) => stage.status === status)
-    || item.workflowSummary?.nodes?.some((node) => node.status === status)
-    || false
+  return workflowProjectionStore.projectionFor(item).actionDisabled
 }
 
 function handleSelectItem(id: string) {
@@ -544,34 +353,18 @@ function handleSelectItem(id: string) {
 }
 
 function handleLaunchClick(item: WorkItemDto) {
-  const wf = workflowFor(item)
-  if (!wf) {
+  const projection = workflowProjectionStore.projectionFor(item)
+  if (!projection.hasWorkflow) {
     handleStartWorkflow(item.id)
   } else {
     emit('enter-conversation', item.id)
   }
 }
 
-async function handleStartWorkflow(workItemId: string) {
-  if (startingIds.value.has(workItemId)) return
-  startingIds.value = new Set([...startingIds.value, workItemId])
-  const { [workItemId]: _removed, ...restErrors } = startErrors.value
-  startErrors.value = restErrors
-  try {
-    const response = await workItemApi.startWorkflow(workItemId, { mode: 'AUTO' })
-    if (response.workflowInstance) {
-      workflowStore.upsertInstance(response.workflowInstance)
-    }
-    emit('start-workflow', workItemId, response)
-    await store.loadItems()
-    await store.loadOverview()
-  } catch (error) {
-    const message = error instanceof Error ? error.message : '启动工作流失败'
-    startErrors.value = { ...startErrors.value, [workItemId]: message }
-  } finally {
-    const next = new Set(startingIds.value)
-    next.delete(workItemId)
-    startingIds.value = next
+function handleStartWorkflow(workItemId: string) {
+  const item = store.items.find((candidate) => candidate.id === workItemId)
+  if (item && !workflowProjectionStore.projectionFor(item).actionDisabled) {
+    emit('start-workflow', workItemId)
   }
 }
 </script>
@@ -686,8 +479,8 @@ async function handleStartWorkflow(workItemId: string) {
             </template>
             <em>{{ flowSummaryLabel(item) }}</em>
           </div>
-          <div v-if="startErrors[item.id]" class="home-overview__error">
-            {{ startErrors[item.id] }}
+          <div v-if="workflowProjectionStore.errorFor(item.id)" class="home-overview__error">
+            {{ workflowProjectionStore.errorFor(item.id) }}
           </div>
         </div>
       </div>
@@ -750,29 +543,22 @@ async function handleStartWorkflow(workItemId: string) {
 
 .home-overview__stats {
   display: grid;
-  grid-template-columns: repeat(6, minmax(132px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   padding: 10px 18px 8px;
-  overflow-x: auto;
-  overflow-y: hidden;
   border-bottom: 1px solid var(--border-color);
-  overscroll-behavior-x: contain;
-  scrollbar-gutter: stable;
-  scrollbar-color: color-mix(in srgb, var(--brand-primary) 42%, var(--border-color)) transparent;
 }
 
-.home-overview__stats::-webkit-scrollbar {
-  height: 8px;
+@container (max-width: 640px) {
+  .home-overview__stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
-.home-overview__stats::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.home-overview__stats::-webkit-scrollbar-thumb {
-  border: 2px solid var(--bg-card);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--brand-primary) 42%, var(--border-color));
+@container (max-width: 420px) {
+  .home-overview__stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .home-overview__stat {

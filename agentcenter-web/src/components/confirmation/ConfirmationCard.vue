@@ -24,7 +24,7 @@ const confirmationStore = useConfirmationStore()
 const notificationStore = useNotificationStore()
 const busyAction = ref<'approve' | 'reject' | 'submit' | 'retry' | 'skip' | null>(null)
 const modalOpen = ref(false)
-const selectedOption = ref('')
+const selectedOption = ref<{id: string, label: string} | null>(null)
 const supplementText = ref('')
 
 const typeLabels: Record<ConfirmationRequestType, string> = {
@@ -73,15 +73,29 @@ const rejectLabel = computed(() => {
   return '拒绝'
 })
 
-function parseOptions(raw: string | null): string[] {
+function parseOptions(raw: string | null): {id: string, label: string}[] {
   if (!raw || !raw.trim()) return []
   try {
     const parsed = JSON.parse(raw)
     if (Array.isArray(parsed)) {
-      return parsed.map((item) => String(item).trim()).filter(Boolean)
+      return parsed.map((item) => {
+        if (item && typeof item === 'object' && 'id' in (item as object) && 'label' in (item as object)) {
+          const obj = item as {id: unknown, label: unknown}
+          return { id: String(obj.id), label: String(obj.label) }
+        }
+        const str = String(item).trim()
+        return { id: str, label: str }
+      }).filter((o: {id: string, label: string}) => o.label)
     }
     if (parsed && typeof parsed === 'object' && Array.isArray(parsed.options)) {
-      return parsed.options.map((item: unknown) => String(item).trim()).filter(Boolean)
+      return parsed.options.map((item: unknown) => {
+        if (item && typeof item === 'object' && 'id' in (item as object) && 'label' in (item as object)) {
+          const obj = item as {id: unknown, label: unknown}
+          return { id: String(obj.id), label: String(obj.label) }
+        }
+        const str = String(item).trim()
+        return { id: str, label: str }
+      }).filter((o: {id: string, label: string}) => o.label)
     }
   } catch {
     // Fall through to the tolerant text splitter below.
@@ -90,10 +104,11 @@ function parseOptions(raw: string | null): string[] {
     .split(/\s*(?:\/|、|，|,|；|;)\s*/)
     .map((item) => item.trim())
     .filter(Boolean)
+    .map(s => ({ id: s, label: s }))
 }
 
 function openDialog() {
-  selectedOption.value = parsedOptions.value[0] ?? ''
+  selectedOption.value = parsedOptions.value[0] ?? null
   supplementText.value = ''
   modalOpen.value = true
 }
@@ -142,8 +157,14 @@ async function handleDecision() {
   if (busyAction.value || !canSubmitDecision.value) return
   busyAction.value = 'submit'
   try {
-    const choice = parsedOptions.value.length > 0 ? selectedOption.value : supplementText.value.trim()
-    await resolveWith('CHOOSE', { choice }, choice)
+    const opt = parsedOptions.value.length > 0 ? selectedOption.value : null
+    const choice = opt?.label ?? supplementText.value.trim()
+    const isWorkflowAdvance = props.confirmation.interactionType === 'WORKFLOW_ADVANCE'
+    const VALID_ACTION_TYPES: ConfirmationActionType[] = ['ENTER_SESSION', 'APPROVE', 'REJECT', 'SUPPLEMENT', 'CHOOSE', 'RETRY', 'SKIP', 'ADVANCE']
+    const actionType: ConfirmationActionType = (isWorkflowAdvance && opt?.id && VALID_ACTION_TYPES.includes(opt.id as ConfirmationActionType))
+      ? opt.id as ConfirmationActionType
+      : 'CHOOSE'
+    await resolveWith(actionType, { choice }, choice)
   } catch (error) {
     notificationStore.push({
       anchor: 'right-panel',
@@ -326,17 +347,18 @@ function enterSession() {
           <div v-if="parsedOptions.length" class="confirmation-dialog__options" role="radiogroup" aria-label="选择处理路径">
             <label
               v-for="option in parsedOptions"
-              :key="option"
+              :key="option.id"
               class="confirmation-dialog__option"
-              :class="{ 'confirmation-dialog__option--selected': selectedOption === option }"
+              :class="{ 'confirmation-dialog__option--selected': selectedOption?.id === option.id }"
             >
               <input
-                v-model="selectedOption"
                 type="radio"
                 name="confirmation-option"
-                :value="option"
+                :value="option.label"
+                :checked="selectedOption?.id === option.id"
+                @change="selectedOption = option"
               >
-              <span>{{ option }}</span>
+              <span>{{ option.label }}</span>
             </label>
           </div>
           <textarea

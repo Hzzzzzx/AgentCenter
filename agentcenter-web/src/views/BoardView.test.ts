@@ -126,13 +126,15 @@ describe('BoardView.vue', () => {
     const wrapper = await mountBoardView()
 
     const columns = wrapper.findAll('.board-column')
-    expect(columns.length).toBe(6)
+    expect(columns.length).toBe(7)
     expect(columns[0].find('.board-column__label').text()).toBe('待处理')
     expect(columns[0].find('.board-column__count').text()).toBe('1')
     expect(columns[1].find('.board-column__label').text()).toBe('运行中')
     expect(columns[1].find('.board-column__count').text()).toBe('1')
-    expect(columns[2].find('.board-column__label').text()).toBe('阻塞中')
+    expect(columns[2].find('.board-column__label').text()).toBe('待推进')
     expect(columns[2].find('.board-column__count').text()).toBe('0')
+    expect(columns[3].find('.board-column__label').text()).toBe('阻塞中')
+    expect(columns[3].find('.board-column__count').text()).toBe('0')
 
     expect(wrapper.text()).toContain('Feature A')
     expect(wrapper.text()).toContain('FE-001')

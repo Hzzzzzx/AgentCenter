@@ -1,0 +1,50 @@
+import { computed, ref } from 'vue'
+import { defineStore } from 'pinia'
+import type { StartWorkflowRequest } from '../api/types'
+
+const STORAGE_KEY = 'agentcenter.runtimeSettings'
+
+type StoredRuntimeSettings = {
+  autoRunWorkflow?: boolean
+}
+
+export const useRuntimeSettingsStore = defineStore('runtimeSettings', () => {
+  const autoRunWorkflow = ref(false)
+
+  const workflowRunMode = computed<NonNullable<StartWorkflowRequest['mode']>>(() =>
+    autoRunWorkflow.value ? 'AUTO' : 'MANUAL_CONFIRM'
+  )
+
+  function setAutoRunWorkflow(value: boolean) {
+    autoRunWorkflow.value = value
+    persist()
+  }
+
+  function initFromStorage() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY)
+      if (!raw) return
+      const stored = JSON.parse(raw) as StoredRuntimeSettings
+      autoRunWorkflow.value = stored.autoRunWorkflow === true
+    } catch {
+      // Storage is optional; keep the safe default.
+    }
+  }
+
+  function persist() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        autoRunWorkflow: autoRunWorkflow.value,
+      }))
+    } catch {
+      // Storage is optional; the in-memory setting still works for this session.
+    }
+  }
+
+  return {
+    autoRunWorkflow,
+    workflowRunMode,
+    setAutoRunWorkflow,
+    initFromStorage,
+  }
+})

@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useConfirmationStore } from '../../stores/confirmations'
 import { useNotificationStore } from '../../stores/notifications'
+import { parseInteractionSchema, type InteractionSchema, type InteractionOption, type InteractionField } from './interactions/interactionSchema'
 import type {
   ConfirmationActionType,
   ConfirmationRequestDto,
@@ -25,6 +26,9 @@ const activeId = ref<string | null>(null)
 const busyAction = ref<string | null>(null)
 const selectedOptions = ref<Record<string, string>>({})
 const inputValues = ref<Record<string, string>>({})
+const selectedChoices = ref<Record<string, Set<string>>>({})
+const customInput = ref<Record<string, string>>({})
+const fieldValues = ref<Record<string, Record<string, string>>>({})
 
 const typeLabels: Record<ConfirmationRequestType, string> = {
   CONFIRM: '确认',
@@ -45,9 +49,30 @@ const activeInteraction = computed(() =>
   ?? null
 )
 
-const activeOptions = computed(() =>
-  activeInteraction.value ? parseOptions(activeInteraction.value.optionsJson) : []
+const activeSchema = computed<InteractionSchema | null>(() =>
+  activeInteraction.value ? parseInteractionSchema(activeInteraction.value) : null
 )
+
+const activeOptions = computed<InteractionOption[]>(() =>
+  activeSchema.value?.options ?? []
+)
+
+const activeFields = computed<InteractionField[]>(() =>
+  activeSchema.value?.fields ?? []
+)
+
+const isMultiSelect = computed(() =>
+  activeSchema.value?.selection === 'multi'
+)
+
+const allowCustomChoice = computed(() =>
+  activeSchema.value?.allowCustom === true
+)
+
+const activeFieldValues = computed(() => {
+  if (!activeInteraction.value) return {}
+  return fieldValues.value[activeInteraction.value.id] ?? {}
+})
 
 const activeInput = computed({
   get: () => activeInteraction.value ? inputValues.value[activeInteraction.value.id] ?? '' : '',
@@ -59,7 +84,15 @@ const activeInput = computed({
 })
 
 const activeOption = computed({
-  get: () => activeInteraction.value ? selectedOptions.value[activeInteraction.value.id] ?? activeOptions.value[0] ?? '' : '',
+  get: () => {
+    if (!activeInteraction.value) return ''
+    const id = activeInteraction.value.id
+    // If custom input has content, mark as custom-selected so it takes precedence over preset options
+    if (allowCustomChoice.value && (customInput.value[id]?.trim()?.length ?? 0) > 0) {
+      return '__custom__'
+    }
+    return selectedOptions.value[id] ?? (activeOptions.value[0]?.id ?? '')
+  },
   set: (value: string) => {
     if (activeInteraction.value) {
       selectedOptions.value = { ...selectedOptions.value, [activeInteraction.value.id]: value }
@@ -67,8 +100,41 @@ const activeOption = computed({
   },
 })
 
-const canSubmitInput = computed(() => activeInput.value.trim().length > 0)
-const canSubmitChoice = computed(() => activeOptions.value.length > 0 ? activeOption.value.length > 0 : activeInput.value.trim().length > 0)
+function setFieldValue(fieldId: string, value: string) {
+  if (!activeInteraction.value) return
+  const id = activeInteraction.value.id
+  fieldValues.value = {
+    ...fieldValues.value,
+    [id]: { ...(fieldValues.value[id] ?? {}), [fieldId]: value }
+  }
+}
+
+function toggleChoice(optionId: string) {
+  if (!activeInteraction.value) return
+  const id = activeInteraction.value.id
+  const current = new Set(selectedChoices.value[id] ?? [])
+  if (current.has(optionId)) current.delete(optionId)
+  else current.add(optionId)
+  selectedChoices.value = { ...selectedChoices.value, [id]: current }
+}
+
+const canSubmitInput = computed(() => {
+  if (!activeInteraction.value) return false
+  if (activeFields.value.length > 0) {
+    const vals = fieldValues.value[activeInteraction.value.id] ?? {}
+    return activeFields.value.every(f => !f.required || (vals[f.id]?.trim()?.length ?? 0) > 0)
+  }
+  return activeInput.value.trim().length > 0
+})
+const canSubmitChoice = computed(() => {
+  if (activeInteraction.value?.requestType !== 'DECISION') return true
+  if (activeOptions.value.length === 0) return activeInput.value.trim().length > 0
+  if (isMultiSelect.value) {
+    const chosen = selectedChoices.value[activeInteraction.value.id]
+    return (chosen?.size ?? 0) > 0 || (allowCustomChoice.value && (customInput.value[activeInteraction.value.id]?.trim()?.length ?? 0) > 0)
+  }
+  return activeOption.value.length > 0
+})
 
 watch(
   visibleInteractions,
@@ -85,40 +151,53 @@ watch(
   { immediate: true }
 )
 
-function parseOptions(raw: string | null): string[] {
-  if (!raw || !raw.trim()) return []
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    if (Array.isArray(parsed)) {
-      return parsed.map((item) => String(item).trim()).filter(Boolean)
-    }
-    if (parsed && typeof parsed === 'object' && Array.isArray((parsed as { options?: unknown[] }).options)) {
-      return (parsed as { options: unknown[] }).options.map((item) => String(item).trim()).filter(Boolean)
-    }
-  } catch {
-    // Fall through to tolerant text splitting.
+function interactionIndex(item: ConfirmationRequestDto): number {
+  const index = visibleInteractions.value.findIndex((candidate) => candidate.id === item.id)
+  return index >= 0 ? index + 1 : 1
+}
+
+function schemaFor(item: ConfirmationRequestDto): InteractionSchema | null {
+  return parseInteractionSchema(item)
+}
+
+function removeKnownContext(value: string, item: ConfirmationRequestDto): string {
+  const tokens = [
+    item.workItemCode,
+    item.workItemTitle,
+    item.workflowNodeName,
+  ]
+    .map((token) => token?.trim())
+    .filter((token): token is string => Boolean(token))
+
+  let result = value
+  for (const token of tokens) {
+    result = result.replaceAll(token, '')
   }
-  return raw
-    .split(/\s*(?:\/|、|，|,|；|;)\s*/)
-    .map((item) => item.trim())
-    .filter(Boolean)
+  return result
+    .replace(/[·•|｜:：,，、-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
-function interactionSummary(item: ConfirmationRequestDto): string {
-  return item.contextSummary || item.content || item.title || '等待你完成当前交互'
-}
+function interactionQuestion(item: ConfirmationRequestDto): string {
+  const schema = schemaFor(item)
+  const candidates = [
+    item.interactionSchemaJson ? schema?.question : null,
+    item.title,
+    item.content,
+    item.contextSummary,
+  ]
 
-function interactionTaskLabel(item: ConfirmationRequestDto): string {
-  const code = item.workItemCode?.trim()
-  const title = item.workItemTitle?.trim()
-  if (code && title) return `${code} · ${title}`
-  if (title) return title
-  if (code) return code
-  return '未关联任务'
+  for (const candidate of candidates) {
+    const cleaned = removeKnownContext(candidate?.trim() ?? '', item)
+    if (cleaned) return cleaned
+  }
+
+  return '请处理当前待交互项'
 }
 
 function interactionTabTitle(item: ConfirmationRequestDto): string {
-  return `${interactionTaskLabel(item)} · ${item.workflowNodeName || item.title}`
+  return `问题 ${interactionIndex(item)}`
 }
 
 function primaryActionLabel(item: ConfirmationRequestDto): string {
@@ -170,15 +249,63 @@ function handlePrimary() {
   const interaction = activeInteraction.value
   if (!interaction) return
   if (interaction.requestType === 'INPUT_REQUIRED') {
+    if (activeFields.value.length > 0) {
+      const vals = fieldValues.value[interaction.id] ?? {}
+      void resolveActive('SUPPLEMENT', { input: Object.values(vals).join('\n'), fields: vals })
+      return
+    }
     const input = activeInput.value.trim()
     if (!input) return
     void resolveActive('SUPPLEMENT', { input }, input)
     return
   }
   if (interaction.requestType === 'DECISION') {
+    if (isMultiSelect.value) {
+      const chosen = selectedChoices.value[interaction.id]
+      const selectedIds = Array.from(chosen ?? [])
+      const selectedLabels = selectedIds.map(id => activeOptions.value.find(o => o.id === id)?.label ?? id)
+      const payload: Record<string, unknown> = {
+        choiceIds: selectedIds,
+        choiceLabels: selectedLabels,
+        choices: selectedLabels,
+      }
+      const customVal = customInput.value[interaction.id]?.trim()
+      if (allowCustomChoice.value && customVal) {
+        payload.customChoice = customVal
+        payload.choices = [...selectedLabels, customVal]
+      }
+      const firstSelectedId = selectedIds[0]
+      const isWorkflowAdvance = interaction.interactionType === 'WORKFLOW_ADVANCE'
+      const VALID_ACTION_TYPES: ConfirmationActionType[] = ['ENTER_SESSION', 'APPROVE', 'REJECT', 'SUPPLEMENT', 'CHOOSE', 'RETRY', 'SKIP', 'ADVANCE']
+      const actionType: ConfirmationActionType = (isWorkflowAdvance && VALID_ACTION_TYPES.includes(firstSelectedId as ConfirmationActionType))
+        ? firstSelectedId as ConfirmationActionType
+        : 'CHOOSE'
+      void resolveActive(actionType, payload, JSON.stringify(payload.choices))
+      return
+    }
+    if (activeOption.value === '__custom__') {
+      // Custom input selected — use custom input value instead of preset option
+      const customVal = customInput.value[interaction.id]?.trim()
+      if (!customVal) return
+      const payload: Record<string, unknown> = { choice: customVal, customChoice: customVal }
+      void resolveActive('CHOOSE', payload, customVal)
+      return
+    }
     const choice = activeOptions.value.length > 0 ? activeOption.value : activeInput.value.trim()
     if (!choice) return
-    void resolveActive('CHOOSE', { choice }, choice)
+    const selectedOpt = activeOptions.value.find(o => o.id === choice || o.label === choice)
+    const payload: Record<string, unknown> = { choice }
+    if (selectedOpt) {
+      payload.choiceId = selectedOpt.id
+      payload.choiceLabel = selectedOpt.label
+    }
+    const selectedOptionId = selectedOpt?.id || choice
+    const isWorkflowAdvance = interaction.interactionType === 'WORKFLOW_ADVANCE'
+    const VALID_ACTION_TYPES: ConfirmationActionType[] = ['ENTER_SESSION', 'APPROVE', 'REJECT', 'SUPPLEMENT', 'CHOOSE', 'RETRY', 'SKIP', 'ADVANCE']
+    const actionType: ConfirmationActionType = (isWorkflowAdvance && VALID_ACTION_TYPES.includes(selectedOptionId as ConfirmationActionType))
+      ? selectedOptionId as ConfirmationActionType
+      : 'CHOOSE'
+    void resolveActive(actionType, payload, selectedOpt?.label ?? choice)
     return
   }
   if (interaction.requestType === 'EXCEPTION') {
@@ -223,60 +350,75 @@ function handleSecondary() {
 
 <template>
   <section v-if="visibleInteractions.length" class="interaction-bar" :class="{ 'interaction-bar--collapsed': !expanded }">
-    <button
-      type="button"
-      class="interaction-bar__header"
-      :aria-expanded="expanded"
-      @click="expanded = !expanded"
-    >
+    <div class="interaction-bar__header">
       <span class="interaction-bar__title">
         <span class="interaction-bar__dot"></span>
         当前需要交互
         <span class="interaction-bar__count">{{ visibleInteractions.length }}</span>
       </span>
-      <span class="interaction-bar__summary">
-        {{ activeInteraction ? `${typeLabels[activeInteraction.requestType]} · ${interactionTabTitle(activeInteraction)}` : '暂无待处理交互' }}
-      </span>
-      <span class="interaction-bar__chevron" :class="{ 'interaction-bar__chevron--open': expanded }">v</span>
-    </button>
-
-    <div v-if="expanded && activeInteraction" class="interaction-bar__body">
       <div class="interaction-bar__tabs" role="tablist" aria-label="当前交互列表">
         <button
           v-for="item in visibleInteractions"
           :key="item.id"
           type="button"
           class="interaction-bar__tab"
-          :class="{ 'interaction-bar__tab--active': item.id === activeInteraction.id }"
+          :class="{ 'interaction-bar__tab--active': item.id === activeInteraction?.id }"
           @click="activeId = item.id"
         >
-          <span>{{ typeLabels[item.requestType] }}</span>
-          <strong>{{ interactionTaskLabel(item) }}</strong>
-          <em>{{ item.workflowNodeName || item.title }}</em>
+          <span>{{ interactionTabTitle(item) }}</span>
         </button>
       </div>
+      <button
+        type="button"
+        class="interaction-bar__chevron-button"
+        :aria-expanded="expanded"
+        :aria-label="expanded ? '收起当前交互' : '展开当前交互'"
+        @click="expanded = !expanded"
+      >
+        <span class="interaction-bar__chevron" :class="{ 'interaction-bar__chevron--open': expanded }">v</span>
+      </button>
+    </div>
 
+    <div v-if="expanded && activeInteraction" class="interaction-bar__body">
       <div class="interaction-bar__main">
         <div class="interaction-bar__copy">
           <span class="interaction-bar__type">{{ typeLabels[activeInteraction.requestType] }}</span>
-          <div class="interaction-bar__task">{{ interactionTaskLabel(activeInteraction) }}</div>
-          <strong>{{ activeInteraction.title }}</strong>
-          <p>{{ interactionSummary(activeInteraction) }}</p>
+          <strong>{{ interactionQuestion(activeInteraction) }}</strong>
         </div>
 
         <div v-if="activeInteraction.requestType === 'DECISION'" class="interaction-bar__control interaction-bar__control--options">
-          <button
-            v-for="option in activeOptions"
-            :key="option"
-            type="button"
-            class="interaction-bar__option"
-            :class="{ 'interaction-bar__option--selected': activeOption === option }"
-            @click="activeOption = option"
-          >
-            {{ option }}
-          </button>
+          <template v-if="activeOptions.length">
+            <button
+              v-for="(option, optionIndex) in activeOptions"
+              :key="option.id"
+              type="button"
+              class="interaction-bar__option"
+              :class="{
+                'interaction-bar__option--selected': isMultiSelect
+                  ? (selectedChoices[activeInteraction.id]?.has(option.id) ?? false)
+                  : activeOption === option.id
+              }"
+              @click="isMultiSelect ? toggleChoice(option.id) : (activeOption = option.id)"
+            >
+              <span class="interaction-bar__option-index">{{ optionIndex + 1 }}</span>
+              <span class="interaction-bar__option-copy">
+                <strong>{{ option.label }}</strong>
+                <span v-if="option.description" class="interaction-bar__option-desc">{{ option.description }}</span>
+              </span>
+            </button>
+          </template>
+          <label v-if="allowCustomChoice" class="interaction-bar__custom-choice">
+            <span>自定义选择</span>
+            <input
+              :value="customInput[activeInteraction.id] ?? ''"
+              class="interaction-bar__input"
+              type="text"
+              placeholder="自定义输入..."
+              @input="(e: Event) => { if (activeInteraction) { customInput = { ...customInput, [activeInteraction.id]: (e.target as HTMLInputElement).value } } }"
+            >
+          </label>
           <input
-            v-if="!activeOptions.length"
+            v-if="!activeOptions.length && !allowCustomChoice"
             v-model="activeInput"
             class="interaction-bar__input"
             type="text"
@@ -285,12 +427,45 @@ function handleSecondary() {
         </div>
 
         <div v-else-if="activeInteraction.requestType === 'INPUT_REQUIRED'" class="interaction-bar__control">
-          <input
+          <template v-if="activeFields.length > 0">
+            <div class="interaction-bar__fields">
+              <div v-for="field in activeFields" :key="field.id" class="interaction-bar__field">
+                <label :for="'field-' + field.id" class="interaction-bar__field-label">
+                  {{ field.label }}
+                  <span v-if="field.required" class="interaction-bar__field-required">*</span>
+                </label>
+                <textarea
+                  v-if="field.type === 'textarea'"
+                  :id="'field-' + field.id"
+                  :value="activeFieldValues[field.id] ?? ''"
+                  class="interaction-bar__textarea interaction-bar__field-input"
+                  :placeholder="field.placeholder ?? ''"
+                  rows="2"
+                  @input="(e: Event) => setFieldValue(field.id, (e.target as HTMLTextAreaElement).value)"
+                ></textarea>
+                <input
+                  v-else
+                  :id="'field-' + field.id"
+                  :value="activeFieldValues[field.id] ?? ''"
+                  class="interaction-bar__input interaction-bar__field-input"
+                  :type="field.type === 'number' ? 'number' : 'text'"
+                  :placeholder="field.placeholder ?? ''"
+                  @input="(e: Event) => setFieldValue(field.id, (e.target as HTMLInputElement).value)"
+                >
+              </div>
+            </div>
+          </template>
+          <textarea
+            v-else
             v-model="activeInput"
-            class="interaction-bar__input"
-            type="text"
+            class="interaction-bar__textarea"
             placeholder="输入你的补充要求..."
-          >
+            rows="3"
+          ></textarea>
+        </div>
+
+        <div v-else-if="activeInteraction.requestType === 'APPROVAL' || activeInteraction.requestType === 'CONFIRM'" class="interaction-bar__hint">
+          审批当前节点产物或结论。
         </div>
 
         <div v-else class="interaction-bar__hint">
@@ -337,14 +512,11 @@ function handleSecondary() {
   align-items: center;
   gap: 12px;
   padding: 0 12px;
-  border: 0;
   background: color-mix(in srgb, var(--brand-soft) 55%, var(--bg-card));
   color: var(--text-primary);
-  cursor: pointer;
 }
 
 .interaction-bar__title,
-.interaction-bar__summary,
 .interaction-bar__tab,
 .interaction-bar__actions {
   min-width: 0;
@@ -379,14 +551,19 @@ function handleSecondary() {
   font-weight: 900;
 }
 
-.interaction-bar__summary {
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 700;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.interaction-bar__chevron-button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.interaction-bar__chevron-button:hover {
+  background: var(--surface-hover);
 }
 
 .interaction-bar__chevron {
@@ -403,52 +580,40 @@ function handleSecondary() {
 
 .interaction-bar__body {
   display: grid;
-  grid-template-columns: minmax(140px, 180px) minmax(0, 1fr);
   gap: 12px;
-  padding: 10px;
+  padding: 12px;
   border-top: 1px solid var(--border-color);
 }
 
 .interaction-bar__tabs {
-  display: grid;
-  gap: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.interaction-bar__tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .interaction-bar__tab {
-  display: grid;
-  gap: 3px;
-  min-height: 48px;
-  padding: 8px;
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 0 10px;
   border: 1px solid var(--border-color);
   border-radius: 7px;
   background: var(--surface-overlay);
   color: var(--text-secondary);
-  text-align: left;
+  text-align: center;
   cursor: pointer;
 }
 
 .interaction-bar__tab span {
-  font-size: 11px;
-  font-weight: 900;
-  color: var(--accent-blue);
-}
-
-.interaction-bar__tab strong {
-  overflow: hidden;
-  color: var(--text-primary);
   font-size: 12px;
-  font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.interaction-bar__tab em {
-  overflow: hidden;
-  color: var(--text-muted);
-  font-size: 11px;
-  font-style: normal;
-  font-weight: 750;
-  text-overflow: ellipsis;
+  font-weight: 900;
+  color: inherit;
   white-space: nowrap;
 }
 
@@ -459,17 +624,20 @@ function handleSecondary() {
 
 .interaction-bar__main {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .interaction-bar__copy {
-  display: grid;
-  gap: 4px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
 }
 
 .interaction-bar__type {
+  flex: 0 0 auto;
   width: max-content;
-  padding: 2px 7px;
+  padding: 3px 8px;
   border-radius: 6px;
   background: color-mix(in srgb, var(--warning) 14%, var(--bg-card));
   color: var(--warning);
@@ -485,15 +653,31 @@ function handleSecondary() {
 
 .interaction-bar__copy strong {
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 900;
+  line-height: 1.45;
 }
 
 .interaction-bar__copy p,
-.interaction-bar__hint {
+.interaction-bar__hint,
+.interaction-bar__context,
+.interaction-bar__question {
   margin: 0;
   color: var(--text-secondary);
   font-size: 12px;
+  line-height: 1.5;
+}
+
+.interaction-bar__context {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.interaction-bar__question {
+  margin-bottom: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
   line-height: 1.5;
 }
 
@@ -503,7 +687,9 @@ function handleSecondary() {
 }
 
 .interaction-bar__control--options {
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
 }
 
 .interaction-bar__option,
@@ -517,17 +703,87 @@ function handleSecondary() {
 }
 
 .interaction-bar__option {
-  padding: 0 12px;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 64px;
+  padding: 10px;
   border: 1px solid var(--border-color);
-  background: var(--bg-card);
+  background: var(--surface-overlay);
   color: var(--text-secondary);
+  text-align: left;
   cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.interaction-bar__option:hover {
+  border-color: var(--brand-border);
+  background: var(--surface-hover);
+}
+
+.interaction-bar__option-index {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--bg-primary);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.interaction-bar__option-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.interaction-bar__option strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.interaction-bar__option-desc {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .interaction-bar__option--selected {
   border-color: var(--accent-blue);
   background: var(--brand-soft);
   color: var(--accent-blue);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-blue) 35%, transparent);
+}
+
+.interaction-bar__option--selected .interaction-bar__option-index {
+  background: var(--accent-blue);
+  color: var(--on-brand);
+}
+
+.interaction-bar__custom-choice {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 5px;
+  min-width: 0;
+}
+
+.interaction-bar__custom-choice > span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .interaction-bar__input {
@@ -545,10 +801,30 @@ function handleSecondary() {
   box-shadow: 0 0 0 3px var(--brand-soft);
 }
 
+.interaction-bar__textarea {
+  flex: 1;
+  min-width: 180px;
+  min-height: 60px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 12px;
+  resize: vertical;
+  outline: none;
+}
+
+.interaction-bar__textarea:focus {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+
 .interaction-bar__actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+  padding-top: 2px;
 }
 
 .interaction-bar__ghost,
@@ -575,24 +851,39 @@ function handleSecondary() {
   opacity: 0.58;
 }
 
+.interaction-bar__fields {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.interaction-bar__field {
+  display: grid;
+  gap: 3px;
+}
+
+.interaction-bar__field-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.interaction-bar__field-required {
+  color: var(--warning);
+}
+
+.interaction-bar__field-input {
+  width: 100%;
+}
+
 @media (max-width: 760px) {
   .interaction-bar__header {
-    grid-template-columns: 1fr auto;
-  }
-
-  .interaction-bar__summary {
-    grid-column: 1 / -1;
-    padding-bottom: 8px;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 8px;
   }
 
   .interaction-bar__body {
     grid-template-columns: 1fr;
-  }
-
-  .interaction-bar__tabs {
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(140px, 1fr);
-    overflow-x: auto;
   }
 
   .interaction-bar__actions {

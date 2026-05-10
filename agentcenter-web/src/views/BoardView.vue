@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { onMounted, computed } from 'vue'
 import { useWorkItemStore } from '../stores/workItems'
-import type { WorkItemDto, WorkflowNodeStatus, WorkItemType } from '../api/types'
+import { useWorkItemWorkflowProjectionStore } from '../stores/workItemWorkflowProjection'
+import type { WorkItemDto, WorkflowNodeStatus } from '../api/types'
 
 const store = useWorkItemStore()
+const workflowProjectionStore = useWorkItemWorkflowProjectionStore()
 
 const emit = defineEmits<{
   'select-work-item': [id: string]
@@ -35,40 +37,19 @@ interface BoardWorkItemCardData {
 const columns: Column[] = [
   { status: 'PENDING', label: '待处理', color: '#64748b' },
   { status: 'RUNNING', label: '运行中', color: '#2563eb' },
+  { status: 'READY', label: '待推进', color: '#059669' },
   { status: 'WAITING_CONFIRMATION', label: '阻塞中', color: '#d97706' },
   { status: 'FAILED', label: '异常', color: '#dc2626' },
   { status: 'COMPLETED', label: '已完成', color: '#059669' },
   { status: 'SKIPPED', label: '已跳过', color: '#94a3b8' },
 ]
 
-const defaultStageLabels: Record<WorkItemType, string[]> = {
-  FE: ['需求', '方案', '实施', '验证', '归档'],
-  US: ['故事', '验收', '拆分', '评审', '归档'],
-  TASK: ['理解', '计划', '执行', '验证', '总结'],
-  WORK: ['分析', 'Runbook', '执行', '校验', '报告'],
-  BUG: ['复现', '根因', '修复', '回归', '关闭'],
-  VULN: ['分级', '影响', '修复', '验证', '归档'],
-}
-
 function cardForItem(item: WorkItemDto): BoardWorkItemCardData {
-  const stages = item.workflowSummary?.stages?.length
-    ? item.workflowSummary.stages
-    : item.workflowSummary?.nodes.map((node) => ({
-      id: node.id,
-      name: node.definitionName,
-      skillName: node.skillName,
-      status: node.status,
-      dynamicNodeCount: 0,
-      recoveryCount: 0,
-      pendingConfirmationCount: node.status === 'WAITING_CONFIRMATION' ? 1 : 0,
-      latestSummary: node.definitionName ?? node.skillName,
-    }))
-
-  const current = stages?.find((stage) => stage.id === item.workflowSummary?.currentNodeInstanceId)
-    ?? stages?.find((stage) => !['COMPLETED', 'SKIPPED'].includes(stage.status))
-    ?? (stages?.length ? stages[stages.length - 1] : undefined)
-
-  const phaseStatus = item.workflowSummary?.status === 'COMPLETED'
+  const projection = workflowProjectionStore.projectionFor(item)
+  const current = projection.currentNode
+    ?? projection.nodes.find((node) => node.kind === 'skill')
+    ?? null
+  const phaseStatus = projection.commandState === 'COMPLETED'
     ? 'COMPLETED'
     : (current?.status ?? 'PENDING')
 
@@ -77,7 +58,7 @@ function cardForItem(item: WorkItemDto): BoardWorkItemCardData {
     workItemCode: item.code,
     workItemType: item.type,
     workItemTitle: item.title,
-    phaseName: current?.name ?? current?.skillName ?? defaultStageLabels[item.type][0],
+    phaseName: current?.label ?? projection.flowSummaryLabel,
     phaseStatus,
     dynamicNodeCount: current?.dynamicNodeCount ?? 0,
     recoveryCount: current?.recoveryCount ?? 0,
@@ -92,6 +73,7 @@ const groupedNodes = computed(() => {
   const groups: Record<WorkflowNodeStatus, BoardWorkItemCardData[]> = {
     PENDING: [],
     RUNNING: [],
+    READY: [],
     WAITING_CONFIRMATION: [],
     FAILED: [],
     COMPLETED: [],

@@ -62,13 +62,16 @@ describe('ConversationInteractionBar.vue', () => {
     expect(wrapper.find('.interaction-bar').exists()).toBe(true)
     expect(wrapper.text()).toContain('当前需要交互')
     expect(wrapper.text()).toContain('2')
-    expect(wrapper.text()).toContain('FE1002 · 确认项浮层交互回归')
+    expect(wrapper.text()).not.toContain('FE1002 · 确认项浮层交互回归')
+    expect(wrapper.text()).toContain('问题 1')
+    expect(wrapper.text()).toContain('问题 2')
     expect(wrapper.text()).toContain('确认继续下一步')
-    expect(wrapper.text()).toContain('选择处理方式')
-    expect(wrapper.find('.interaction-bar__tab strong').text()).toContain('FE1002')
+    expect(wrapper.findAll('.interaction-bar__tab')).toHaveLength(2)
+    expect(wrapper.find('.interaction-bar__tab').text()).toBe('问题 1')
+    expect(wrapper.find('.interaction-bar__body .interaction-bar__tabs').exists()).toBe(false)
   })
 
-  it('submits a selected decision option', async () => {
+  it('submits a selected decision option with structured payload', async () => {
     const wrapper = mount(ConversationInteractionBar, {
       props: {
         interactions: [
@@ -88,7 +91,7 @@ describe('ConversationInteractionBar.vue', () => {
 
     expect(confirmationApi.resolve).toHaveBeenCalledWith('confirm-2', {
       actionType: 'CHOOSE',
-      payload: { choice: '跳过' },
+      payload: { choice: '跳过', choiceId: '跳过', choiceLabel: '跳过' },
       comment: '跳过',
     })
     expect(wrapper.emitted('resolved')?.[0]).toEqual(['confirm-2'])
@@ -108,7 +111,7 @@ describe('ConversationInteractionBar.vue', () => {
       },
     })
 
-    await wrapper.find('.interaction-bar__input').setValue('请补充异常分支')
+    await wrapper.find('.interaction-bar__textarea').setValue('请补充异常分支')
     await wrapper.find('.interaction-bar__primary').trigger('click')
     await flushPromises()
 
@@ -118,5 +121,189 @@ describe('ConversationInteractionBar.vue', () => {
       comment: '请补充异常分支',
     })
     expect(wrapper.emitted('resolved')?.[0]).toEqual(['confirm-3'])
+  })
+
+  it('renders multi-select checkboxes for DECISION with selection: multi', async () => {
+    const wrapper = mount(ConversationInteractionBar, {
+      props: {
+        interactions: [
+          makeInteraction({
+            id: 'confirm-multi',
+            requestType: 'DECISION',
+            title: '选择多个方案',
+            interactionSchemaJson: JSON.stringify({
+              selection: 'multi',
+              options: [
+                { id: 'opt-1', label: '方案A' },
+                { id: 'opt-2', label: '方案B' },
+                { id: 'opt-3', label: '方案C' },
+              ],
+            }),
+          }),
+        ],
+      },
+    })
+
+    const options = wrapper.findAll('.interaction-bar__option')
+    expect(options).toHaveLength(3)
+
+    await options[0].trigger('click')
+    await options[2].trigger('click')
+    await wrapper.find('.interaction-bar__primary').trigger('click')
+    await flushPromises()
+
+    expect(confirmationApi.resolve).toHaveBeenCalledWith('confirm-multi', {
+      actionType: 'CHOOSE',
+      payload: {
+        choiceIds: ['opt-1', 'opt-3'],
+        choiceLabels: ['方案A', '方案C'],
+        choices: ['方案A', '方案C'],
+      },
+      comment: JSON.stringify(['方案A', '方案C']),
+    })
+  })
+
+  it('renders custom input for DECISION with allowCustom: true', async () => {
+    const wrapper = mount(ConversationInteractionBar, {
+      props: {
+        interactions: [
+          makeInteraction({
+            id: 'confirm-custom',
+            requestType: 'DECISION',
+            title: '选择方案或自定义',
+            interactionSchemaJson: JSON.stringify({
+              selection: 'single',
+              options: [
+                { id: 'opt-1', label: '方案A' },
+              ],
+              allowCustom: true,
+            }),
+          }),
+        ],
+      },
+    })
+
+    const customInputEl = wrapper.find('input[placeholder="自定义输入..."]')
+    expect(customInputEl.exists()).toBe(true)
+    expect(wrapper.findAll('.interaction-bar__option')).toHaveLength(1)
+
+    // Custom input with no preset selected → submits custom text
+    await customInputEl.setValue('自定义方案X')
+    await wrapper.find('.interaction-bar__primary').trigger('click')
+    await flushPromises()
+
+    expect(confirmationApi.resolve).toHaveBeenCalledWith('confirm-custom', {
+      actionType: 'CHOOSE',
+      payload: { choice: '自定义方案X', customChoice: '自定义方案X' },
+      comment: '自定义方案X',
+    })
+  })
+
+  it('submits custom text for single-select DECISION with allowCustom when typing without selecting preset', async () => {
+    const wrapper = mount(ConversationInteractionBar, {
+      props: {
+        interactions: [
+          makeInteraction({
+            id: 'confirm-custom',
+            requestType: 'DECISION',
+            title: '选择方案或自定义',
+            interactionSchemaJson: JSON.stringify({
+              selection: 'single',
+              options: [
+                { id: 'opt-1', label: '方案A' },
+                { id: 'opt-2', label: '方案B' },
+              ],
+              allowCustom: true,
+            }),
+          }),
+        ],
+      },
+    })
+
+    // Type custom text without clicking any preset option
+    const customInputEl = wrapper.find('input[placeholder="自定义输入..."]')
+    await customInputEl.setValue('完全自定义的方案文本')
+    await wrapper.find('.interaction-bar__primary').trigger('click')
+    await flushPromises()
+
+    // Should submit the custom text, not the first preset option
+    expect(confirmationApi.resolve).toHaveBeenCalledWith('confirm-custom', {
+      actionType: 'CHOOSE',
+      payload: { choice: '完全自定义的方案文本', customChoice: '完全自定义的方案文本' },
+      comment: '完全自定义的方案文本',
+    })
+  })
+
+  it('renders multi-field form for INPUT_REQUIRED with fields array', async () => {
+    const wrapper = mount(ConversationInteractionBar, {
+      props: {
+        interactions: [
+          makeInteraction({
+            id: 'confirm-fields',
+            requestType: 'INPUT_REQUIRED',
+            title: '补充设计信息',
+            interactionSchemaJson: JSON.stringify({
+              fields: [
+                { id: 'name', label: '模块名称', type: 'text', required: true, placeholder: '输入模块名' },
+                { id: 'desc', label: '描述', type: 'textarea', required: false, placeholder: '可选描述' },
+                { id: 'count', label: '数量', type: 'number', required: true },
+              ],
+            }),
+          }),
+        ],
+      },
+    })
+
+    expect(wrapper.find('.interaction-bar__fields').exists()).toBe(true)
+    expect(wrapper.findAll('.interaction-bar__field')).toHaveLength(3)
+    expect(wrapper.find('label[for="field-name"]').text()).toContain('模块名称')
+    expect(wrapper.find('label[for="field-name"] .interaction-bar__field-required').exists()).toBe(true)
+
+    const nameInput = wrapper.find('#field-name')
+    const descTextarea = wrapper.find('#field-desc')
+    const countInput = wrapper.find('#field-count')
+
+    expect(nameInput.exists()).toBe(true)
+    expect(descTextarea.exists()).toBe(true)
+    expect(countInput.exists()).toBe(true)
+
+    await nameInput.setValue('AuthService')
+    await descTextarea.setValue('认证服务模块')
+    await countInput.setValue('3')
+    await wrapper.find('.interaction-bar__primary').trigger('click')
+    await flushPromises()
+
+    expect(confirmationApi.resolve).toHaveBeenCalledWith('confirm-fields', {
+      actionType: 'SUPPLEMENT',
+      payload: {
+        input: 'AuthService\n认证服务模块\n3',
+        fields: { name: 'AuthService', desc: '认证服务模块', count: '3' },
+      },
+      comment: undefined,
+    })
+  })
+
+  it('disables submit when required fields are empty', async () => {
+    const wrapper = mount(ConversationInteractionBar, {
+      props: {
+        interactions: [
+          makeInteraction({
+            id: 'confirm-fields',
+            requestType: 'INPUT_REQUIRED',
+            title: '补充信息',
+            interactionSchemaJson: JSON.stringify({
+              fields: [
+                { id: 'name', label: '名称', type: 'text', required: true },
+              ],
+            }),
+          }),
+        ],
+      },
+    })
+
+    expect(wrapper.find('.interaction-bar__primary').attributes('disabled')).toBeDefined()
+
+    await wrapper.find('#field-name').setValue('filled')
+    expect(wrapper.find('.interaction-bar__primary').attributes('disabled')).toBeUndefined()
   })
 })

@@ -28,6 +28,7 @@ export const useConfirmationStore = defineStore('confirmations', () => {
   async function resolveConfirmation(id: string, data: ResolveConfirmationRequest) {
     try {
       currentConfirmation.value = await confirmationApi.resolve(id, data)
+      removeById(id)
     } catch (error) {
       throw error
     }
@@ -61,7 +62,7 @@ export const useConfirmationStore = defineStore('confirmations', () => {
       const payload = event.payloadJson ? JSON.parse(event.payloadJson) : {}
       const id = payload.confirmationId || payload.id
       if (id) {
-        pendingConfirmations.value = pendingConfirmations.value.filter((c) => c.id !== id)
+        removeById(id)
       } else {
         loadPending()
       }
@@ -70,5 +71,12 @@ export const useConfirmationStore = defineStore('confirmations', () => {
     }
   }
 
-  return { pendingConfirmations, currentConfirmation, loading, loadPending, selectConfirmation, resolveConfirmation, rejectConfirmation, addFromEvent, removeFromPending }
+  function removeById(id: string) {
+    pendingConfirmations.value = pendingConfirmations.value.filter((c) => c.id !== id)
+    if (currentConfirmation.value?.id === id) {
+      currentConfirmation.value = null
+    }
+  }
+
+  return { pendingConfirmations, currentConfirmation, loading, loadPending, selectConfirmation, resolveConfirmation, rejectConfirmation, addFromEvent, removeFromPending, removeById }
 })

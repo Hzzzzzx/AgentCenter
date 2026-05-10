@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import HomeOverview from './HomeOverview.vue'
 import { useWorkItemStore } from '../stores/workItems'
 import { useWorkflowStore } from '../stores/workflows'
+import { useWorkItemWorkflowProjectionStore } from '../stores/workItemWorkflowProjection'
 import type { WorkItemDto } from '../api/types'
 
 vi.mock('../api/workItems', () => ({
@@ -107,10 +108,11 @@ function makePaginationItems(total: number): WorkItemDto[] {
   })
 }
 
-function mountHomeOverview() {
+function mountHomeOverview(props = {}) {
   const pinia = createPinia()
   setActivePinia(pinia)
   return mount(HomeOverview, {
+    props,
     global: { plugins: [pinia] },
   })
 }
@@ -236,6 +238,21 @@ describe('HomeOverview.vue', () => {
       expect(node.classes().length).toBe(1)
     }
     expect(wrapper.find('.home-overview__launch').text()).toBe('开始处理')
+  })
+
+  it('reflects workflow projection starting state immediately', async () => {
+    const wrapper = mountHomeOverview()
+    const store = useWorkItemStore()
+    const workflowProjectionStore = useWorkItemWorkflowProjectionStore()
+    workflowProjectionStore.startingIds = new Set(['1'])
+    store.items = [mockItems[0]]
+    store.loading = false
+    await wrapper.vm.$nextTick()
+
+    const btn = wrapper.find('.home-overview__launch')
+    expect(btn.text()).toBe('启动中')
+    expect(btn.attributes('disabled')).toBeDefined()
+    expect(wrapper.find('.home-overview__flow em').text()).toBe('启动中')
   })
 
   it('renders real workflow node statuses from workflowSummary', async () => {

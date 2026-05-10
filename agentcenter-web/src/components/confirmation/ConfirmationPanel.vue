@@ -2,10 +2,12 @@
 import { onMounted, ref, watch, nextTick } from 'vue'
 import { useConfirmationStore } from '../../stores/confirmations'
 import { useWorkItemStore } from '../../stores/workItems'
+import { useWorkItemWorkflowProjectionStore } from '../../stores/workItemWorkflowProjection'
 import ConfirmationCard from './ConfirmationCard.vue'
 
 const store = useConfirmationStore()
 const workItemStore = useWorkItemStore()
+const workflowProjectionStore = useWorkItemWorkflowProjectionStore()
 
 const emit = defineEmits<{
   handle: [id: string]
@@ -32,7 +34,7 @@ async function refreshAfterDecision(workItemId?: string | null) {
   emit('changed', workItemId)
   await Promise.all([
     store.loadPending(),
-    workItemId ? workItemStore.refreshItem(workItemId) : workItemStore.loadItems(),
+    workItemId ? workflowProjectionStore.syncWorkItem(workItemId) : workItemStore.loadItems(),
   ])
 }
 

@@ -37,6 +37,7 @@ const nodes = computed<TimelineNode[]>(() => {
 const statusColors: Record<WorkflowNodeStatus, string> = {
   PENDING: '#94a3b8',
   RUNNING: '#3b82f6',
+  READY: '#22c55e',
   WAITING_CONFIRMATION: '#f59e0b',
   FAILED: '#ef4444',
   COMPLETED: '#10b981',
@@ -46,6 +47,7 @@ const statusColors: Record<WorkflowNodeStatus, string> = {
 const statusLabels: Record<WorkflowNodeStatus, string> = {
   PENDING: '待执行',
   RUNNING: '执行中',
+  READY: '就绪',
   WAITING_CONFIRMATION: '待确认',
   FAILED: '失败',
   COMPLETED: '已完成',

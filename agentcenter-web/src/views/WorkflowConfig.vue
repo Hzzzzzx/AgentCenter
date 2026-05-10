@@ -51,8 +51,6 @@ const inputPolicies = [
 ]
 
 const outputTypes: ArtifactType[] = ['MARKDOWN', 'JSON', 'PATCH', 'LOG', 'REPORT']
-const confirmationTooltip = '这是产物审阅建议，不是固定阻塞门禁。真正的待确认由 Agent 在输出中触发 ASK_USER、DECISION_REQUIRED、ARTIFACT_REVIEW_REQUESTED 或 PERMISSION_REQUIRED。'
-const dynamicActionTooltip = '开启后，Agent 执行该阶段时可以按实际情况临时追加澄清、修复、补充分析、重试等动作，并统一挂在这个阶段下。'
 const interactionTypes = [
   { type: 'ASK_USER', label: '信息缺口', desc: '需求、约束或验收标准缺失时再向用户提问' },
   { type: 'DECISION_REQUIRED', label: '方案选择', desc: '存在多个可行路线且取舍会影响结果时让用户选择' },
@@ -97,8 +95,8 @@ const agentFlowBranches = computed(() => {
     stage: node.name || `阶段 ${index + 1}`,
     skillName: node.skillName || '未选择 Skill',
     input: inputPolicyLabel(node.inputPolicy),
-    review: node.requiredConfirmation ? '可能触发产物审阅' : '默认自动推进',
-    dynamic: node.allowDynamicActions ? '允许澄清/选择/修复分支' : '仅保留失败处理',
+    review: '产物审阅由 Skill/Agent 判断',
+    dynamic: 'Agent 可连续使用 Skill 补动作',
   }))
 })
 
@@ -144,8 +142,7 @@ function recommendedSkills(node: WorkflowNodeDefinitionDto): string {
 }
 
 function blueprintSummary(definition: WorkflowDefinitionDto): string {
-  const dynamicCount = definition.nodes.filter((node) => node.allowDynamicActions !== false).length
-  return `${definition.nodes.length} 个大阶段 · ${dynamicCount} 个阶段允许动态动作 · 交互由 Agent 运行时事件触发`
+  return `${definition.nodes.length} 个大阶段 · Skill 驱动执行 · 交互由 Agent 运行时事件触发`
 }
 
 function stageGoal(node: WorkflowNodeDefinitionDto | NodeDraft): string {
@@ -156,9 +153,8 @@ function stageGoal(node: WorkflowNodeDefinitionDto | NodeDraft): string {
 }
 
 function interactionHint(node: WorkflowNodeDefinitionDto | NodeDraft): string {
-  if (node.requiredConfirmation) return '建议在高风险产物上触发 ARTIFACT_REVIEW_REQUESTED'
-  if (node.allowDynamicActions === false) return '固定阶段，仅在运行失败时进入异常处理'
-  return '可按实际情况触发 ASK_USER、DECISION_REQUIRED 或临时修复动作'
+  const artifactType = node.outputArtifactType ?? 'MARKDOWN'
+  return `运行时按 ${node.skillName || '所选 Skill'} 内容决定是否提问、审阅 ${artifactType} 产物或追加临时动作`
 }
 
 function inputPolicyLabel(policy: string): string {
@@ -179,10 +175,10 @@ function beginEdit(definition: WorkflowDefinitionDto) {
       skillName: node.skillName,
       inputPolicy: node.inputPolicy,
       outputArtifactType: (node.outputArtifactType ?? 'MARKDOWN') as ArtifactType,
-      requiredConfirmation: node.requiredConfirmation,
+      requiredConfirmation: false,
       stageKey: node.stageKey ?? node.nodeKey,
-      allowDynamicActions: node.allowDynamicActions !== false,
-      confirmationPolicy: node.confirmationPolicy ?? (node.requiredConfirmation ? 'REQUIRED' : 'AUTO'),
+      allowDynamicActions: true,
+      confirmationPolicy: 'EVENT_DRIVEN',
     })),
   }
   draft.value = nextDraft
@@ -258,9 +254,10 @@ function generateDraftPlan() {
       name: node.name.trim() || stageNameForSkill(node.skillName, index + 1),
       inputPolicy: index === 0 ? 'WORK_ITEM_ONLY' : 'PREVIOUS_ARTIFACT',
       outputArtifactType: 'MARKDOWN',
+      requiredConfirmation: false,
       stageKey: node.stageKey.trim() || stageKeyForSkill(node.skillName, index + 1),
       allowDynamicActions: true,
-      confirmationPolicy: node.requiredConfirmation ? 'EVENT_DRIVEN_REVIEW' : 'EVENT_DRIVEN',
+      confirmationPolicy: 'EVENT_DRIVEN',
     }))
   agentFlowMermaid.value = buildAgentFlowMermaid(draft.value)
   savedMessage.value = '已根据当前 Skill 和编排意图生成阶段草案，保存后会成为新版编排'
@@ -306,10 +303,10 @@ function serializeDraft(value: DefinitionDraft): string {
       skillName: node.skillName.trim(),
       inputPolicy: node.inputPolicy,
       outputArtifactType: node.outputArtifactType,
-      requiredConfirmation: node.requiredConfirmation,
+      requiredConfirmation: false,
       stageKey: node.stageKey.trim(),
-      allowDynamicActions: node.allowDynamicActions,
-      confirmationPolicy: node.confirmationPolicy,
+      allowDynamicActions: true,
+      confirmationPolicy: 'EVENT_DRIVEN',
     })),
   })
 }
@@ -326,25 +323,17 @@ function buildAgentFlowMermaid(value: DefinitionDraft): string {
     } else {
       lines.push(`  ${id}["${escapeMermaidLabel(stageLabel)}"]`)
     }
-    if (node.allowDynamicActions) {
-      lines.push(`  ${id} --> Q${index + 1}{"信息是否足够？"}`)
-      lines.push(`  Q${index + 1} -->|不足 / ASK_USER| U${index + 1}["向用户澄清输入"]`)
-      lines.push(`  U${index + 1} --> ${id}`)
-      lines.push(`  Q${index + 1} -->|足够| D${index + 1}{"是否存在路线取舍？"}`)
-      lines.push(`  D${index + 1} -->|需要选择 / DECISION_REQUIRED| C${index + 1}["让用户选择方案"]`)
-      lines.push(`  C${index + 1} --> A${index + 1}["生成阶段产物"]`)
-      lines.push(`  D${index + 1} -->|无阻塞| A${index + 1}`)
-    } else {
-      lines.push(`  ${id} --> A${index + 1}["生成阶段产物"]`)
-    }
-    if (node.requiredConfirmation) {
-      lines.push(`  A${index + 1} --> R${index + 1}{"是否需要审阅？"}`)
-      lines.push(`  R${index + 1} -->|是 / ARTIFACT_REVIEW_REQUESTED| V${index + 1}["等待用户审阅"]`)
-      lines.push(`  V${index + 1} --> ${nextId}`)
-      lines.push(`  R${index + 1} -->|否| ${nextId}`)
-    } else {
-      lines.push(`  A${index + 1} --> ${nextId}`)
-    }
+    lines.push(`  ${id} --> Q${index + 1}{"Skill 判断信息是否足够？"}`)
+    lines.push(`  Q${index + 1} -->|不足 / ASK_USER| U${index + 1}["向用户澄清输入"]`)
+    lines.push(`  U${index + 1} --> ${id}`)
+    lines.push(`  Q${index + 1} -->|足够| D${index + 1}{"是否存在路线取舍？"}`)
+    lines.push(`  D${index + 1} -->|需要选择 / DECISION_REQUIRED| C${index + 1}["让用户选择方案"]`)
+    lines.push(`  C${index + 1} --> A${index + 1}["生成阶段产物"]`)
+    lines.push(`  D${index + 1} -->|无阻塞| A${index + 1}`)
+    lines.push(`  A${index + 1} --> R${index + 1}{"Skill/Agent 是否请求审阅？"}`)
+    lines.push(`  R${index + 1} -->|是 / ARTIFACT_REVIEW_REQUESTED| V${index + 1}["等待用户审阅"]`)
+    lines.push(`  V${index + 1} --> ${nextId}`)
+    lines.push(`  R${index + 1} -->|否| ${nextId}`)
     lines.push(`  A${index + 1} -. 异常/缺口 .-> F${index + 1}["临时修复或补充分析"]`)
     lines.push(`  F${index + 1} -. 回到阶段 .-> ${id}`)
   })
@@ -383,12 +372,12 @@ async function saveDraft() {
       skillName: node.skillName.trim(),
       inputPolicy: node.inputPolicy,
       outputArtifactType: node.outputArtifactType,
-      requiredConfirmation: node.requiredConfirmation,
+      requiredConfirmation: false,
       stageKey: node.stageKey.trim() || null,
       stageGoal: node.name.trim(),
       recommendedSkillNames: [node.skillName.trim()],
-      allowDynamicActions: node.allowDynamicActions,
-      confirmationPolicy: node.requiredConfirmation ? 'EVENT_DRIVEN_REVIEW' : 'EVENT_DRIVEN',
+      allowDynamicActions: true,
+      confirmationPolicy: 'EVENT_DRIVEN',
     })),
   }
 
@@ -629,30 +618,7 @@ async function saveDraft() {
                 </div>
 
                 <div class="workflow-editor__runtime">
-                  <label>
-                    <input v-model="node.requiredConfirmation" type="checkbox" />
-                    <span>建议审阅产物</span>
-                    <button
-                      class="workflow-help workflow-help--inline"
-                      type="button"
-                      :title="confirmationTooltip"
-                      aria-label="查看交互事件说明"
-                    >
-                      ?
-                    </button>
-                  </label>
-                  <label>
-                    <input v-model="node.allowDynamicActions" type="checkbox" />
-                    <span>允许 Agent 动态动作</span>
-                    <button
-                      class="workflow-help workflow-help--inline"
-                      type="button"
-                      :title="dynamicActionTooltip"
-                      aria-label="查看动态动作说明"
-                    >
-                      ?
-                    </button>
-                  </label>
+                  <strong>运行时交互交给 Agent</strong>
                   <p>{{ interactionHint(node) }}</p>
                 </div>
               </article>
@@ -858,34 +824,6 @@ async function saveDraft() {
 .workflow-config__button--danger {
   border-color: rgba(239, 68, 68, 0.25);
   color: var(--error);
-}
-
-.workflow-help {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  border: 1px solid var(--border-color);
-  border-radius: 50%;
-  background-color: var(--bg-primary);
-  color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 900;
-  line-height: 1;
-  cursor: help;
-}
-
-.workflow-help:hover,
-.workflow-help:focus-visible {
-  border-color: rgba(59, 130, 246, 0.45);
-  color: var(--accent-blue);
-  outline: none;
-}
-
-.workflow-help--inline {
-  margin-left: 4px;
 }
 
 .workflow-definition {
@@ -1370,10 +1308,10 @@ async function saveDraft() {
   border-top: 1px dashed var(--border-color);
 }
 
-.workflow-editor__runtime label {
-  flex-direction: row;
-  align-items: center;
-  gap: 6px;
+.workflow-editor__runtime strong {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .workflow-editor__runtime p {

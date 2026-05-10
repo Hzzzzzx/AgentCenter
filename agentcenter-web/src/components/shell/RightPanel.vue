@@ -5,7 +5,9 @@ import NotificationBubbles from '../notifications/NotificationBubbles.vue'
 import ArtifactViewer from '../conversation/ArtifactViewer.vue'
 import { useConfirmationStore } from '../../stores/confirmations'
 import { useWorkflowStore } from '../../stores/workflows'
-import type { ArtifactDto, WorkItemDto, WorkflowDefinitionDto, WorkflowNodeStatus } from '../../api/types'
+import { useWorkItemWorkflowProjectionStore } from '../../stores/workItemWorkflowProjection'
+import type { ProjectedWorkflowNode } from '../../stores/workItemWorkflowProjection'
+import type { ArtifactDto, WorkItemDto, WorkflowNodeStatus } from '../../api/types'
 
 interface Props {
   collapsed?: boolean
@@ -39,6 +41,7 @@ function handleConfirmation(id: string) {
 
 const confirmationStore = useConfirmationStore()
 const workflowStore = useWorkflowStore()
+const workflowProjectionStore = useWorkItemWorkflowProjectionStore()
 const activeTab = ref<'confirmations' | 'details' | 'artifact'>('confirmations')
 const pendingConfirmationCount = computed(() => confirmationStore.pendingConfirmations.length)
 const pendingConfirmationCountLabel = computed(() =>
@@ -91,94 +94,13 @@ watch(() => props.selectedArtifact, (artifact) => {
   }
 })
 
-type DetailWorkflowNode = {
-  id: string | null
-  label: string
-  status: WorkflowNodeStatus
-  kind: 'start' | 'skill' | 'end'
-  dynamicNodeCount?: number
-  recoveryCount?: number
-  pendingConfirmationCount?: number
-  latestSummary?: string | null
-  errorMessage?: string | null
-}
-
-function buildWorkflowWithAnchors(skillNodes: DetailWorkflowNode[]): DetailWorkflowNode[] {
+const selectedProjection = computed(() => {
   const item = props.selectedWorkItem
-  const workflowStatus = item?.workflowSummary?.status
-  const hasStarted = Boolean(item?.currentWorkflowInstanceId || item?.workflowSummary)
-  const allSkillsCompleted = skillNodes.length > 0 && skillNodes.every((node) =>
-    ['COMPLETED', 'SKIPPED'].includes(node.status)
-  )
-  return [
-    { id: 'start', label: '开始', status: hasStarted ? 'COMPLETED' : 'PENDING', kind: 'start' },
-    ...skillNodes,
-    {
-      id: 'end',
-      label: '完成',
-      status: workflowStatus === 'COMPLETED' || allSkillsCompleted ? 'COMPLETED' : 'PENDING',
-      kind: 'end',
-    },
-  ]
-}
-
-function pickDefaultDefinition(item: WorkItemDto): WorkflowDefinitionDto | null {
-  const enabledDefinitions = workflowStore.definitions.filter((definition) =>
-    definition.workItemType === item.type && definition.status === 'ENABLED'
-  )
-  return enabledDefinitions.find((definition) => definition.isDefault)
-    ?? enabledDefinitions.sort((a, b) => b.versionNo - a.versionNo)[0]
-    ?? null
-}
-
-const workflowNodes = computed(() => {
-  const item = props.selectedWorkItem
-  if (!item) return []
-  if (item.workflowSummary?.stages?.length) {
-    const stages = item.workflowSummary.stages.map((stage) => ({
-      id: stage.id,
-      label: stage.name ?? stage.skillName ?? '阶段',
-      status: stage.status,
-      kind: 'skill' as const,
-      dynamicNodeCount: stage.dynamicNodeCount,
-      recoveryCount: stage.recoveryCount,
-      pendingConfirmationCount: stage.pendingConfirmationCount,
-      latestSummary: stage.latestSummary,
-      errorMessage: stage.errorMessage,
-    }))
-    return buildWorkflowWithAnchors(stages)
-  }
-  if (item.workflowSummary && item.workflowSummary.nodes.length > 0) {
-    const skills = item.workflowSummary.nodes.map((n) => ({
-      id: n.id,
-      label: n.definitionName ?? n.skillName ?? '阶段',
-      status: n.status,
-      kind: 'skill' as const,
-      errorMessage: n.errorMessage,
-    }))
-    return buildWorkflowWithAnchors(skills)
-  }
-  const defaultDefinition = pickDefaultDefinition(item)
-  if (defaultDefinition?.nodes.length) {
-    const skills = [...defaultDefinition.nodes]
-      .sort((a, b) => a.orderNo - b.orderNo)
-      .map((node) => ({
-        id: node.id,
-        label: node.name ?? node.skillName ?? '阶段',
-        status: 'PENDING' as WorkflowNodeStatus,
-        kind: 'skill' as const,
-        latestSummary: node.skillName,
-      }))
-    return buildWorkflowWithAnchors(skills)
-  }
-  return buildWorkflowWithAnchors([])
+  return item ? workflowProjectionStore.projectionFor(item) : null
 })
 
-const hasActiveWorkflow = computed(() => {
-  const item = props.selectedWorkItem
-  if (!item) return false
-  return !!item.currentWorkflowInstanceId || !!item.workflowSummary
-})
+const workflowNodes = computed(() => selectedProjection.value?.nodes ?? [])
+const hasActiveWorkflow = computed(() => selectedProjection.value?.hasWorkflow ?? false)
 
 const isSelectedWorkItemConversationOpen = computed(() =>
   props.activeView === 'conversation' && Boolean(props.selectedWorkItem)
@@ -191,6 +113,7 @@ const conversationButtonLabel = computed(() =>
 const statusLabels: Record<WorkflowNodeStatus, string> = {
   PENDING: '等待中',
   RUNNING: '运行中',
+  READY: '就绪',
   WAITING_CONFIRMATION: '待确认',
   COMPLETED: '已完成',
   FAILED: '失败',
@@ -201,6 +124,7 @@ function nodeClass(status: WorkflowNodeStatus): string {
   const map: Record<WorkflowNodeStatus, string> = {
     PENDING: '',
     RUNNING: 'detail__node--active',
+    READY: 'detail__node--active',
     WAITING_CONFIRMATION: 'detail__node--waiting',
     COMPLETED: 'detail__node--done',
     FAILED: 'detail__node--failed',
@@ -209,7 +133,7 @@ function nodeClass(status: WorkflowNodeStatus): string {
   return map[status]
 }
 
-function nodeMeta(node: DetailWorkflowNode): string {
+function nodeMeta(node: ProjectedWorkflowNode): string {
   if (node.status === 'FAILED' && node.errorMessage?.trim()) {
     return `失败原因：${node.errorMessage.trim()}`
   }
@@ -220,12 +144,12 @@ function nodeMeta(node: DetailWorkflowNode): string {
   return parts.join(' · ')
 }
 
-function nodeMetaText(node: DetailWorkflowNode): string {
+function nodeMetaText(node: ProjectedWorkflowNode): string {
   return nodeMeta(node) || node.latestSummary || ''
 }
 
 function handleStartWorkflow() {
-  if (props.selectedWorkItem) {
+  if (props.selectedWorkItem && !selectedProjection.value?.actionDisabled) {
     emit('start-workflow', props.selectedWorkItem.id)
   }
 }
@@ -395,9 +319,10 @@ function handleToggleExpanded() {
               <button
                 v-if="!hasActiveWorkflow"
                 class="detail__btn detail__btn--primary"
+                :disabled="selectedProjection?.actionDisabled"
                 @click="handleStartWorkflow"
               >
-                开始处理
+                {{ selectedProjection?.actionLabel ?? '开始处理' }}
               </button>
               <button
                 v-if="hasActiveWorkflow"
@@ -818,6 +743,11 @@ function handleToggleExpanded() {
 
 .detail__btn--primary:hover {
   opacity: 0.9;
+}
+
+.detail__btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
 }
 
 .detail__btn--secondary {

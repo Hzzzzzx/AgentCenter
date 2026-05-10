@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { sessionApi } from '../api/sessions'
-import type { AgentSessionDto, AgentMessageDto } from '../api/types'
+import type { AgentSessionDto, AgentMessageDto, SendMessageRequest } from '../api/types'
 
 export const useSessionStore = defineStore('sessions', () => {
   const sessions = ref<AgentSessionDto[]>([])
@@ -35,9 +35,14 @@ export const useSessionStore = defineStore('sessions', () => {
     sessions.value = [session, ...sessions.value.filter((item) => item.id !== session.id)]
   }
 
-  async function sendMessage(content: string) {
+  async function sendMessage(content: string): Promise<AgentMessageDto | undefined>
+  async function sendMessage(data: SendMessageRequest): Promise<AgentMessageDto | undefined>
+  async function sendMessage(contentOrData: string | SendMessageRequest): Promise<AgentMessageDto | undefined> {
     if (!activeSession.value) return
-    const message = await sessionApi.sendMessage(activeSession.value.id, { content })
+    const data: SendMessageRequest = typeof contentOrData === 'string'
+      ? { content: contentOrData }
+      : contentOrData
+    const message = await sessionApi.sendMessage(activeSession.value.id, data)
     messages.value.push(message)
     return message
   }

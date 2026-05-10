@@ -93,8 +93,9 @@ describe('WorkflowConfig.vue', () => {
     expect(wrapper.findAll('.workflow-editor__stage-card').length).toBe(2)
     expect(wrapper.find('select[aria-label="选择 Skill"]').exists()).toBe(true)
     expect(wrapper.find('input[aria-label="阶段目标"]').exists()).toBe(false)
-    expect(wrapper.find('button[aria-label="查看交互事件说明"]').attributes('title')).toContain('不是固定阻塞门禁')
-    expect(wrapper.find('button[aria-label="查看动态动作说明"]').attributes('title')).toContain('临时追加')
+    expect(wrapper.text()).not.toContain('建议审阅产物')
+    expect(wrapper.text()).not.toContain('允许 Agent 动态动作')
+    expect(wrapper.text()).toContain('运行时交互交给 Agent')
 
     await wrapper.find('button[aria-label="把 hld-design 加入阶段"]').trigger('click')
     expect(wrapper.findAll('.workflow-editor__stage-card').length).toBe(3)
@@ -110,7 +111,16 @@ describe('WorkflowConfig.vue', () => {
 
     expect(workflowApi.updateDefinition).toHaveBeenCalledWith(
       'wf-fe-v1',
-      expect.objectContaining({ name: 'FE 自定义编排' })
+      expect.objectContaining({
+        name: 'FE 自定义编排',
+        nodes: expect.arrayContaining([
+          expect.objectContaining({
+            requiredConfirmation: false,
+            allowDynamicActions: true,
+            confirmationPolicy: 'EVENT_DRIVEN',
+          }),
+        ]),
+      })
     )
   })
 

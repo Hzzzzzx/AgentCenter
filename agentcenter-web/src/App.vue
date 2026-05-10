@@ -9,13 +9,15 @@ import RuntimeResources from './views/RuntimeResources.vue'
 import ProjectContextSettings from './views/ProjectContextSettings.vue'
 import SkillManagement from './views/SkillManagement.vue'
 import McpManagement from './views/McpManagement.vue'
+import RuntimeSettings from './views/RuntimeSettings.vue'
 import { confirmationApi } from './api/confirmations'
-import { workItemApi } from './api/workItems'
 import { useSessionStore } from './stores/sessions'
 import { useConfirmationStore } from './stores/confirmations'
 import { useNotificationStore } from './stores/notifications'
 import { useWorkflowStore } from './stores/workflows'
 import { useWorkItemStore } from './stores/workItems'
+import { useRuntimeSettingsStore } from './stores/runtimeSettings'
+import { useWorkItemWorkflowProjectionStore } from './stores/workItemWorkflowProjection'
 import type { AgentSessionDto, ArtifactDto, StartWorkflowResponse } from './api/types'
 import type { ProjectContextOptions, ProjectContextSelection } from './types/projectContext'
 
@@ -69,9 +71,12 @@ const workflowStore = useWorkflowStore()
 const confirmationStore = useConfirmationStore()
 const notificationStore = useNotificationStore()
 const workItemStore = useWorkItemStore()
+const runtimeSettingsStore = useRuntimeSettingsStore()
+const workflowProjectionStore = useWorkItemWorkflowProjectionStore()
 const refreshTimerIds = new Set<number>()
 
 onMounted(async () => {
+  runtimeSettingsStore.initFromStorage()
   await refreshWorkItemState()
 })
 
@@ -85,58 +90,13 @@ onUnmounted(() => {
 async function refreshWorkItemState() {
   await workItemStore.loadItems()
   await workItemStore.loadOverview()
-  for (const item of workItemStore.items) {
-    if (item.workflowSummary) {
-      workflowStore.upsertInstance({
-        id: item.workflowSummary.instanceId,
-        workItemId: item.id,
-        workflowDefinitionId: '',
-        status: item.workflowSummary.status,
-        currentNodeInstanceId: item.workflowSummary.currentNodeInstanceId,
-        nodes: item.workflowSummary.nodes.map((n) => ({
-          id: n.id,
-          nodeDefinitionId: '',
-          status: n.status,
-          inputArtifactId: null,
-          outputArtifactId: null,
-          agentSessionId: null,
-          startedAt: null,
-          completedAt: null,
-          errorMessage: null,
-        })),
-        startedAt: null,
-        completedAt: null,
-      })
-    }
-  }
+  workflowProjectionStore.syncWorkItemsFromList()
   await confirmationStore.loadPending()
 }
 
 async function refreshOneWorkItemState(workItemId: string) {
-  const item = await workItemStore.refreshItem(workItemId)
+  await workflowProjectionStore.syncWorkItem(workItemId)
   await workItemStore.loadOverview()
-  if (item.workflowSummary) {
-    workflowStore.upsertInstance({
-      id: item.workflowSummary.instanceId,
-      workItemId: item.id,
-      workflowDefinitionId: '',
-      status: item.workflowSummary.status,
-      currentNodeInstanceId: item.workflowSummary.currentNodeInstanceId,
-      nodes: item.workflowSummary.nodes.map((n) => ({
-        id: n.id,
-        nodeDefinitionId: '',
-        status: n.status,
-        inputArtifactId: null,
-        outputArtifactId: null,
-        agentSessionId: null,
-        startedAt: null,
-        completedAt: null,
-        errorMessage: null,
-      })),
-      startedAt: null,
-      completedAt: null,
-    })
-  }
 }
 
 function queueWorkflowRefresh(workItemId?: string | null) {
@@ -168,21 +128,23 @@ const selectedWorkItem = computed(() =>
 
 async function handleStartWorkflow(workItemId: string, response?: StartWorkflowResponse) {
   selectedArtifact.value = null
-  if (!response) {
-    response = await workItemApi.startWorkflow(workItemId, { mode: 'AUTO' })
+  try {
+    response = await workflowProjectionStore.startWorkflow(workItemId, response)
+    selectedWorkItemId.value = workItemId
+    targetSessionId.value = response.session?.id ?? null
+    if (response.workflowInstance) {
+      workflowStore.setActiveInstance(response.workflowInstance)
+      workflowStore.upsertInstance(response.workflowInstance)
+    }
+    if (response.session) {
+      sessionStore.upsertSession(response.session)
+    }
+    await workItemStore.loadOverview()
+    await confirmationStore.loadPending()
+    queueWorkflowRefresh(workItemId)
+  } catch (e) {
+    console.error('Failed to start workflow:', e)
   }
-  selectedWorkItemId.value = workItemId
-  targetSessionId.value = response.session?.id ?? null
-  if (response.workflowInstance) {
-    workflowStore.setActiveInstance(response.workflowInstance)
-    workflowStore.upsertInstance(response.workflowInstance)
-  }
-  if (response.session) {
-    sessionStore.upsertSession(response.session)
-  }
-  await refreshOneWorkItemState(workItemId)
-  await confirmationStore.loadPending()
-  queueWorkflowRefresh(workItemId)
 }
 
 async function handleConfirmationsChanged(workItemId?: string | null) {
@@ -197,8 +159,7 @@ function handleEnterWorkItemConversation(id: string) {
   rememberConversationReturnView()
   selectedWorkItemId.value = id
   selectedArtifact.value = null
-  const session = sessionStore.sessions.find((item) => item.workItemId === id)
-  targetSessionId.value = session?.id ?? null
+  targetSessionId.value = null
   activeView.value = 'conversation'
 }
 
@@ -348,6 +309,7 @@ async function handleShowConfirmation(confirmationId: string) {
       />
       <SkillManagement v-else-if="activeView === 'settings' && settingsTab === 'skills'" />
       <McpManagement v-else-if="activeView === 'settings' && settingsTab === 'mcps'" />
+      <RuntimeSettings v-else-if="activeView === 'settings' && settingsTab === 'runtime'" />
       <ConversationWorkbench
         v-else-if="activeView === 'conversation'"
         :work-item-id="selectedWorkItemId"

@@ -31,6 +31,7 @@ const typeColors: Record<WorkItemType, string> = {
 const statusLabels: Record<WorkflowNodeStatus, string> = {
   PENDING: '待处理',
   RUNNING: '运行中',
+  READY: '待推进',
   WAITING_CONFIRMATION: '阻塞中',
   FAILED: '异常',
   COMPLETED: '已完成',
@@ -40,6 +41,7 @@ const statusLabels: Record<WorkflowNodeStatus, string> = {
 const statusColors: Record<WorkflowNodeStatus, string> = {
   PENDING: '#64748b',
   RUNNING: '#2563eb',
+  READY: '#059669',
   WAITING_CONFIRMATION: '#d97706',
   FAILED: '#dc2626',
   COMPLETED: '#059669',
