@@ -21,5 +21,7 @@ public record WorkflowNodeInstanceDto(
         String skillName,
         String summary,
         String reason,
-        Integer sequenceNo
+        Integer sequenceNo,
+        String agentState,
+        String agentStateReason
 ) {}

@@ -25,5 +25,11 @@ public record ConfirmationRequestDto(
         String contextSummary,
         String optionsJson,
         Priority priority,
-        OffsetDateTime createdAt
+        OffsetDateTime createdAt,
+        String interactionId,
+        String interactionType,
+        String interactionSchemaJson,
+        String interactionContextJson,
+        Boolean interactionRequired,
+        Integer interactionOrderNo
 ) {}

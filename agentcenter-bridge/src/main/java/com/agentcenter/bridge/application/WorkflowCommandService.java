@@ -6,9 +6,7 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
@@ -30,6 +28,7 @@ import com.agentcenter.bridge.api.dto.StartWorkflowResponse;
 import com.agentcenter.bridge.api.dto.WorkflowInstanceDto;
 import com.agentcenter.bridge.api.dto.WorkflowNodeInstanceDto;
 import com.agentcenter.bridge.application.runtime.RuntimeGateway;
+import com.agentcenter.bridge.application.runtime.SkillInvocationRequest;
 import com.agentcenter.bridge.application.runtime.SkillRunResult;
 import com.agentcenter.bridge.domain.artifact.ArtifactType;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationRequestType;
@@ -42,10 +41,16 @@ import com.agentcenter.bridge.domain.session.MessageRole;
 import com.agentcenter.bridge.domain.session.MessageStatus;
 import com.agentcenter.bridge.domain.session.SessionStatus;
 import com.agentcenter.bridge.domain.session.SessionType;
+import com.agentcenter.bridge.application.workflow.InteractionMapper;
+import com.agentcenter.bridge.application.workflow.WorkflowPromptComposer;
 import com.agentcenter.bridge.domain.workitem.Priority;
 import com.agentcenter.bridge.domain.workitem.WorkItemType;
 import com.agentcenter.bridge.domain.workflow.WorkflowNodeStatus;
 import com.agentcenter.bridge.domain.workflow.WorkflowStatus;
+import com.agentcenter.bridge.domain.workflow.protocol.WorkflowNodeInteraction;
+import com.agentcenter.bridge.domain.workflow.protocol.WorkflowNodeState;
+import com.agentcenter.bridge.domain.workflow.protocol.WorkflowNodeStateParser;
+import com.agentcenter.bridge.domain.workflow.protocol.WorkflowNodeStateStatus;
 import com.agentcenter.bridge.infrastructure.id.IdGenerator;
 import com.agentcenter.bridge.infrastructure.persistence.entity.AgentMessageEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.ArtifactEntity;
@@ -71,12 +76,9 @@ public class WorkflowCommandService {
     private static final Logger log = LoggerFactory.getLogger(WorkflowCommandService.class);
     private static final DateTimeFormatter SQLITE_DATETIME =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    private static final List<String> INTERACTION_TYPES = List.of(
-            "ASK_USER",
-            "DECISION_REQUIRED",
-            "ARTIFACT_REVIEW_REQUESTED",
-            "PERMISSION_REQUIRED"
-    );
+    private static final String WORKFLOW_MODE_AUTO = "AUTO";
+    private static final String WORKFLOW_MODE_MANUAL_CONFIRM = "MANUAL_CONFIRM";
+    private static final String WORKFLOW_MODE_START_OR_CONTINUE = "START_OR_CONTINUE";
 
     private final WorkflowMapper workflowMapper;
     private final WorkItemMapper workItemMapper;
@@ -90,6 +92,8 @@ public class WorkflowCommandService {
     private final IdGenerator idGenerator;
     private final RuntimeType workflowRuntimeType;
     private final ExecutorService workflowExecutor;
+    private final InteractionMapper interactionMapper = new InteractionMapper();
+    private final WorkflowPromptComposer workflowPromptComposer = new WorkflowPromptComposer();
 
     public WorkflowCommandService(WorkflowMapper workflowMapper,
                                    WorkItemMapper workItemMapper,
@@ -130,9 +134,15 @@ public class WorkflowCommandService {
 
         WorkflowInstanceEntity existing = findActiveInstance(workItemId);
         if (existing != null) {
-            touchWorkItem(existing.getWorkItemId(), LocalDateTime.now().format(SQLITE_DATETIME));
-            scheduleResume(existing.getId());
-            return buildResponse(existing);
+            String now = LocalDateTime.now().format(SQLITE_DATETIME);
+            applyRequestedExecutionMode(existing, request, now);
+            touchWorkItem(existing.getWorkItemId(), now);
+            PreparedWorkflowNode prepared = prepareNextPendingNode(existing.getId());
+            if (prepared != null) {
+                workflowExecutor.submit(() -> executePreparedNode(prepared));
+            }
+            WorkflowInstanceEntity latest = workflowMapper.findInstanceById(existing.getId());
+            return buildResponse(latest != null ? latest : existing);
         }
 
         WorkflowDefinitionEntity definition = resolveDefinition(workItem, request != null ? request : new StartWorkflowRequest(null, null));
@@ -152,6 +162,7 @@ public class WorkflowCommandService {
         instance.setWorkItemId(workItemId);
         instance.setWorkflowDefinitionId(definition.getId());
         instance.setStatus(WorkflowStatus.RUNNING.name());
+        instance.setExecutionMode(resolveExecutionMode(request));
         instance.setStartedAt(now);
         instance.setCreatedAt(now);
         instance.setUpdatedAt(now);
@@ -253,6 +264,8 @@ public class WorkflowCommandService {
         WorkflowInstanceEntity instance = workflowMapper.findInstanceById(node.getWorkflowInstanceId());
 
         String now = LocalDateTime.now().format(SQLITE_DATETIME);
+        resolveActiveExceptionConfirmations(node, now);
+
         instance.setStatus(WorkflowStatus.RUNNING.name());
         instance.setUpdatedAt(now);
         workflowMapper.updateInstance(instance);
@@ -266,10 +279,35 @@ public class WorkflowCommandService {
         List<WorkflowNodeDefinitionEntity> nodeDefs =
                 workflowMapper.findNodeDefinitionsByWorkflowDefinitionId(instance.getWorkflowDefinitionId());
 
+        prepareWorkflowSession(instance, node, nodeDefs, workItem, now);
         executeSkillOnNode(instance, node, nodeDefs, workItem);
 
         instance = workflowMapper.findInstanceById(instance.getId());
         return buildResponse(instance);
+    }
+
+    private void resolveActiveExceptionConfirmations(WorkflowNodeInstanceEntity node, String now) {
+        WorkflowInstanceEntity instance = workflowMapper.findInstanceById(node.getWorkflowInstanceId());
+        if (instance == null) {
+            return;
+        }
+
+        for (ConfirmationRequestEntity confirmation : confirmationMapper.findByWorkItemId(instance.getWorkItemId())) {
+            boolean activeException = node.getId().equals(confirmation.getWorkflowNodeInstanceId())
+                    && ConfirmationRequestType.EXCEPTION.name().equals(confirmation.getRequestType())
+                    && (ConfirmationStatus.PENDING.name().equals(confirmation.getStatus())
+                    || ConfirmationStatus.IN_CONVERSATION.name().equals(confirmation.getStatus()));
+            if (!activeException) {
+                continue;
+            }
+
+            confirmation.setStatus(ConfirmationStatus.RESOLVED.name());
+            confirmation.setResolvedAt(now);
+            confirmation.setResolvedBy("system");
+            confirmation.setResolutionComment("Retry started for workflow node");
+            confirmation.setUpdatedAt(now);
+            confirmationMapper.update(confirmation);
+        }
     }
 
     public StartWorkflowResponse skipNode(String nodeInstanceId) {
@@ -387,7 +425,10 @@ public class WorkflowCommandService {
         instance.setCurrentNodeInstanceId(node.getId());
         instance.setUpdatedAt(now);
         workflowMapper.updateInstance(instance);
-        touchWorkItem(instance.getWorkItemId(), now);
+
+        workItem.setCurrentWorkflowInstanceId(instance.getId());
+        workItem.setUpdatedAt(now);
+        workItemMapper.update(workItem);
 
         AgentSessionDto session = findWorkflowSession(instance);
         String runtimeSessionId = findWorkflowRuntimeSessionId(instance);
@@ -403,10 +444,16 @@ public class WorkflowCommandService {
             );
         }
 
-        String ensuredRuntimeSessionId = runtimeGateway.ensureSession(workflowRuntimeType, workItem.getId(), session.id(), runtimeSessionId);
-        if (!ensuredRuntimeSessionId.equals(runtimeSessionId)) {
-            runtimeSessionId = ensuredRuntimeSessionId;
-            agentSessionService.bindRuntimeSession(session.id(), runtimeSessionId, workflowRuntimeType);
+        try {
+            String ensuredRuntimeSessionId = runtimeGateway.ensureSession(
+                    workflowRuntimeType, workItem.getId(), session.id(), runtimeSessionId);
+            if (!ensuredRuntimeSessionId.equals(runtimeSessionId)) {
+                runtimeSessionId = ensuredRuntimeSessionId;
+                agentSessionService.bindRuntimeSession(session.id(), runtimeSessionId, workflowRuntimeType);
+            }
+        } catch (Exception e) {
+            log.warn("Runtime session is not ready for workflow node {}, session {}. Workflow context will remain visible.",
+                    node.getId(), session.id(), e);
         }
 
         node.setAgentSessionId(session.id());
@@ -429,7 +476,7 @@ public class WorkflowCommandService {
 
         String inputContext = buildInputContext(workItem, node, nodeDef);
         String skillName = nodeDef.getSkillName();
-        insertWorkflowContextMessage(node.getAgentSessionId(), nodeDef, workItem, inputContext);
+        insertWorkflowContextMessageIfAbsent(node.getAgentSessionId(), node, nodeDef, workItem, inputContext);
 
         runtimeEventService.publishEvent(new RuntimeEventDto(
                 null, node.getAgentSessionId(), workItem.getId(),
@@ -440,20 +487,31 @@ public class WorkflowCommandService {
 
         SkillRunResult result = validateSkillRunnable(workItem, skillName);
         if (result == null) {
-            result = runtimeGateway.runSkill(
-                    workflowRuntimeType, node.getRuntimeSessionId(), skillName, inputContext);
+            if (node.getRuntimeSessionId() == null || node.getRuntimeSessionId().isBlank()) {
+                result = new SkillRunResult(false, null, null,
+                        "Runtime session is not ready. Please check opencode serve and retry this node.",
+                        false);
+            } else {
+                SkillInvocationRequest request = workflowPromptComposer.composeInvocationRequest(skillName, inputContext);
+                result = runtimeGateway.runSkill(
+                        workflowRuntimeType, node.getRuntimeSessionId(), request);
+            }
         }
 
-        List<InteractionPoint> triggeredInteractions = result.success()
-                ? parseTriggeredInteractionPoints(result.outputContent())
-                : List.of();
-        boolean needsConfirmation = !triggeredInteractions.isEmpty();
+        WorkflowNodeState nodeState = result.success()
+                ? WorkflowNodeStateParser.parse(result.outputContent())
+                : WorkflowNodeState.defaultInProgress();
+
         boolean shouldPersistFinalArtifact = result.success()
-                && result.outputContent() != null
-                && !needsConfirmation;
+                && nodeState.getStatus() == WorkflowNodeStateStatus.READY_TO_ADVANCE
+                && result.outputContent() != null;
 
         ArtifactEntity artifact = null;
         if (shouldPersistFinalArtifact) {
+            String artifactTitle = nodeState.getArtifactTitle() != null && !nodeState.getArtifactTitle().isBlank()
+                    ? nodeState.getArtifactTitle()
+                    : "%s-%s.md".formatted(workItem.getCode(), nodeDef.getName());
+
             artifact = new ArtifactEntity();
             artifact.setId(idGenerator.nextId());
             artifact.setWorkItemId(workItem.getId());
@@ -461,8 +519,8 @@ public class WorkflowCommandService {
             artifact.setWorkflowNodeInstanceId(node.getId());
             artifact.setSessionId(node.getAgentSessionId());
             artifact.setArtifactType(ArtifactType.MARKDOWN.name());
-            artifact.setTitle("%s-%s.md".formatted(workItem.getCode(), nodeDef.getName()));
-            artifact.setContent(result.outputContent());
+            artifact.setTitle(artifactTitle);
+            artifact.setContent(WorkflowNodeStateParser.stripStateBlock(result.outputContent()));
             artifact.setVersionNo(1);
             artifact.setCreatedBy(workflowRuntimeType.name());
             artifact.setCreatedAt(LocalDateTime.now().format(SQLITE_DATETIME));
@@ -472,11 +530,8 @@ public class WorkflowCommandService {
 
             insertNodeOutputMessageIfAbsent(
                     node.getAgentSessionId(), nodeDef.getName(), skillName,
-                    result.outputContent(), artifact.getTitle(), node.getId());
+                    WorkflowNodeStateParser.stripStateBlock(result.outputContent()), artifact.getTitle(), node.getId());
         }
-
-        boolean needsConfirmationForMessage = needsConfirmation
-                || Boolean.TRUE.equals(nodeDef.getRequiredConfirmation());
 
         String sessionId = node.getAgentSessionId();
         int nextSeqNo = nextMessageSeqNo(sessionId);
@@ -487,7 +542,7 @@ public class WorkflowCommandService {
         statusMsg.setSessionId(sessionId);
         statusMsg.setRole(MessageRole.SYSTEM.name());
         statusMsg.setContent(buildNodeStatusMessage(
-                result, nodeDef, skillName, artifact, triggeredInteractions.size(), needsConfirmationForMessage));
+                result, nodeDef, skillName, artifact, nodeState));
         statusMsg.setContentFormat(ContentFormat.TEXT.name());
         statusMsg.setStatus(MessageStatus.COMPLETED.name());
         statusMsg.setSeqNo(nextSeqNo);
@@ -497,34 +552,86 @@ public class WorkflowCommandService {
 
         List<ConfirmationRequestEntity> pendingConfirmations = new ArrayList<>();
 
-        if (needsConfirmation) {
-            for (InteractionPoint interaction : triggeredInteractions) {
-                ConfirmationRequestEntity confirmation = buildInteractionConfirmation(
-                        interaction, instance, node, nodeDef, workItem, skillName, artifact, now);
-                confirmationMapper.insert(confirmation);
-                pendingConfirmations.add(confirmation);
-            }
-
-            node.setStatus(WorkflowNodeStatus.WAITING_CONFIRMATION.name());
-            markInstanceBlocked(instance, now);
-        } else if (result.success()) {
-            if (Boolean.TRUE.equals(nodeDef.getRequiredConfirmation())) {
-                ConfirmationRequestEntity approval = buildFallbackApprovalConfirmation(
-                        instance, node, nodeDef, workItem, skillName, artifact, now);
-                confirmationMapper.insert(approval);
-                pendingConfirmations.add(approval);
-                node.setStatus(WorkflowNodeStatus.WAITING_CONFIRMATION.name());
-                markInstanceBlocked(instance, now);
-            } else {
-                node.setStatus(WorkflowNodeStatus.COMPLETED.name());
-                node.setCompletedAt(LocalDateTime.now().format(SQLITE_DATETIME));
-            }
-        } else {
+        if (!result.success()) {
             node.setStatus(WorkflowNodeStatus.FAILED.name());
             node.setErrorMessage(result.errorMessage());
             node.setCompletedAt(now);
             workflowMapper.updateNodeInstance(node);
             createFailureConfirmation(instance, node, nodeDef, workItem, skillName, result.errorMessage(), now);
+        } else {
+            switch (nodeState.getStatus()) {
+                case READY_TO_ADVANCE -> {
+                    node.setAgentState(nodeState.getStatus().name());
+                    node.setAgentStateReason(nodeState.getReason());
+                    node.setAgentStateUpdatedAt(now);
+                    if (nodeState.getArtifactTitle() != null) {
+                        node.setAgentStateArtifactTitle(nodeState.getArtifactTitle());
+                    }
+
+                    if (isAutoRun(instance)) {
+                        node.setStatus(WorkflowNodeStatus.COMPLETED.name());
+                        node.setCompletedAt(now);
+                        instance.setStatus(WorkflowStatus.RUNNING.name());
+                        instance.setUpdatedAt(now);
+                        workflowMapper.updateInstance(instance);
+                    } else {
+                        ConfirmationRequestEntity advanceConfirm = buildAdvanceConfirmation(
+                                instance, node, nodeDef, workItem, now);
+                        confirmationMapper.insert(advanceConfirm);
+                        pendingConfirmations.add(advanceConfirm);
+
+                        node.setStatus(WorkflowNodeStatus.WAITING_CONFIRMATION.name());
+                        markInstanceBlocked(instance, now);
+                    }
+                }
+                case NEEDS_USER_INPUT -> {
+                    if (nodeState.getInteractions() != null && !nodeState.getInteractions().isEmpty()) {
+                        int orderNo = 0;
+                        for (WorkflowNodeInteraction interaction : nodeState.getInteractions()) {
+                            ConfirmationRequestEntity confirmation = interactionMapper.toEntity(
+                                    interaction, workItem.getId(), instance.getId(), node.getId(),
+                                    node.getAgentSessionId(), workflowRuntimeType.name(),
+                                    node.getRuntimeSessionId(), skillName);
+                            confirmation.setId(idGenerator.nextId());
+                            confirmation.setInteractionOrderNo(orderNo++);
+                            confirmation.setCreatedAt(now);
+                            confirmation.setUpdatedAt(now);
+                            confirmationMapper.insert(confirmation);
+                            pendingConfirmations.add(confirmation);
+                        }
+                    } else {
+                        ConfirmationRequestEntity inputRequest = buildGenericInputConfirmation(
+                                instance, node, nodeDef, workItem, skillName,
+                                nodeState.getReason(), now);
+                        confirmationMapper.insert(inputRequest);
+                        pendingConfirmations.add(inputRequest);
+                    }
+                    node.setStatus(WorkflowNodeStatus.WAITING_CONFIRMATION.name());
+
+                    node.setAgentState(nodeState.getStatus().name());
+                    node.setAgentStateReason(nodeState.getReason());
+                    node.setAgentStateUpdatedAt(now);
+
+                    markInstanceBlocked(instance, now);
+                }
+                case BLOCKED -> {
+                    createFailureConfirmation(instance, node, nodeDef, workItem, skillName,
+                            nodeState.getReason(), now);
+                    node.setStatus(WorkflowNodeStatus.WAITING_CONFIRMATION.name());
+
+                    node.setAgentState(nodeState.getStatus().name());
+                    node.setAgentStateReason(nodeState.getReason());
+                    node.setAgentStateUpdatedAt(now);
+
+                    markInstanceBlocked(instance, now);
+                }
+                case IN_PROGRESS -> {
+                    // Stays RUNNING — no artifact, no advance
+                    node.setAgentState(nodeState.getStatus().name());
+                    node.setAgentStateReason(nodeState.getReason());
+                    node.setAgentStateUpdatedAt(now);
+                }
+            }
         }
 
         if (!node.getStatus().equals(WorkflowNodeStatus.FAILED.name())) {
@@ -532,11 +639,14 @@ public class WorkflowCommandService {
         }
         touchWorkItem(workItem.getId(), now);
 
+        String statePayload = nodeState.getStatus().name();
+        String stateReason = nodeState.getReason() != null ? nodeState.getReason() : "";
         runtimeEventService.publishEvent(new RuntimeEventDto(
                 null, node.getAgentSessionId(), workItem.getId(),
                 instance.getId(), node.getId(),
                 RuntimeEventType.SKILL_COMPLETED, RuntimeEventSource.WORKFLOW,
-                buildSkillCompletedPayload(skillName, result), null
+                buildSkillCompletedPayload(skillName, result, statePayload, stateReason),
+                null
         ));
 
         for (ConfirmationRequestEntity confirmation : pendingConfirmations) {
@@ -549,6 +659,38 @@ public class WorkflowCommandService {
         }
     }
 
+    private ConfirmationRequestEntity buildAdvanceConfirmation(WorkflowInstanceEntity instance,
+                                                               WorkflowNodeInstanceEntity node,
+                                                               WorkflowNodeDefinitionEntity nodeDef,
+                                                               WorkItemEntity workItem,
+                                                               String now) {
+        String advanceTitle = "%s %s · 等待推进确认".formatted(
+                workItem != null ? workItem.getCode() : "",
+                nodeDef.getName());
+        String advanceOptionsJson = "[{\"id\":\"ADVANCE\",\"label\":\"进入下一节点\"},{\"id\":\"SUPPLEMENT\",\"label\":\"继续补充当前节点\"},{\"id\":\"RETRY\",\"label\":\"重新执行\"}]";
+
+        ConfirmationRequestEntity confirmation = new ConfirmationRequestEntity();
+        confirmation.setId(idGenerator.nextId());
+        confirmation.setRequestType(ConfirmationRequestType.DECISION.name());
+        confirmation.setStatus(ConfirmationStatus.PENDING.name());
+        confirmation.setWorkItemId(instance.getWorkItemId());
+        confirmation.setWorkflowInstanceId(instance.getId());
+        confirmation.setWorkflowNodeInstanceId(node.getId());
+        confirmation.setAgentSessionId(node.getAgentSessionId());
+        confirmation.setRuntimeType(workflowRuntimeType.name());
+        confirmation.setRuntimeSessionId(node.getRuntimeSessionId());
+        confirmation.setSkillName(nodeDef.getSkillName());
+        confirmation.setTitle(advanceTitle);
+        confirmation.setContent("当前节点已完成，请选择下一步操作。");
+        confirmation.setOptionsJson(advanceOptionsJson);
+        confirmation.setInteractionType("WORKFLOW_ADVANCE");
+        confirmation.setPriority(Priority.MEDIUM.name());
+        confirmation.setInteractionRequired(1);
+        confirmation.setCreatedAt(now);
+        confirmation.setUpdatedAt(now);
+        return confirmation;
+    }
+
     private void createFailureConfirmation(WorkflowInstanceEntity instance,
                                            WorkflowNodeInstanceEntity node,
                                            WorkflowNodeDefinitionEntity nodeDef,
@@ -556,18 +698,29 @@ public class WorkflowCommandService {
                                            String skillName,
                                            String errorMessage,
                                            String now) {
-        boolean alreadyPending = confirmationMapper.findByWorkItemId(workItem.getId()).stream()
-                .anyMatch(confirmation ->
+        String detail = nonBlank(errorMessage, "节点执行失败，Runtime 未返回明确错误原因。");
+        ConfirmationRequestEntity existing = confirmationMapper.findByWorkItemId(workItem.getId()).stream()
+                .filter(confirmation ->
                         node.getId().equals(confirmation.getWorkflowNodeInstanceId())
                                 && ConfirmationRequestType.EXCEPTION.name().equals(confirmation.getRequestType())
                                 && (ConfirmationStatus.PENDING.name().equals(confirmation.getStatus())
-                                || ConfirmationStatus.IN_CONVERSATION.name().equals(confirmation.getStatus())));
-        if (alreadyPending) {
+                                || ConfirmationStatus.IN_CONVERSATION.name().equals(confirmation.getStatus())))
+                .findFirst()
+                .orElse(null);
+        if (existing != null) {
+            existing.setAgentSessionId(node.getAgentSessionId());
+            existing.setRuntimeType(workflowRuntimeType.name());
+            existing.setRuntimeSessionId(node.getRuntimeSessionId());
+            existing.setSkillName(skillName);
+            existing.setContent(buildFailureConfirmationContent(detail));
+            existing.setContextSummary("工作流节点 %s（Skill：%s）执行失败，流程已暂停等待处理。"
+                    .formatted(nodeDef.getName(), skillName));
+            existing.setUpdatedAt(now);
+            confirmationMapper.update(existing);
             markInstanceBlocked(instance, now);
             return;
         }
 
-        String detail = nonBlank(errorMessage, "节点执行失败，Runtime 未返回明确错误原因。");
         ConfirmationRequestEntity confirmation = new ConfirmationRequestEntity();
         confirmation.setId(idGenerator.nextId());
         confirmation.setRequestType(ConfirmationRequestType.EXCEPTION.name());
@@ -583,13 +736,7 @@ public class WorkflowCommandService {
         confirmation.setRuntimeSessionId(node.getRuntimeSessionId());
         confirmation.setSkillName(skillName);
         confirmation.setTitle("%s %s · 执行异常".formatted(workItem.getCode(), nodeDef.getName()));
-        confirmation.setContent("""
-                节点执行失败，需要用户决定后续处理方式。
-
-                失败原因：%s
-
-                可选择重试当前节点；如果确认该节点暂时不阻塞后续流程，也可以跳过。
-                """.formatted(detail).trim());
+        confirmation.setContent(buildFailureConfirmationContent(detail));
         confirmation.setContextSummary("工作流节点 %s（Skill：%s）执行失败，流程已暂停等待处理。"
                 .formatted(nodeDef.getName(), skillName));
         confirmation.setOptionsJson("[\"重试当前节点\",\"跳过该节点继续\"]");
@@ -606,6 +753,16 @@ public class WorkflowCommandService {
                 RuntimeEventType.CONFIRMATION_CREATED, RuntimeEventSource.BRIDGE,
                 "{\"confirmationId\":\"" + confirmation.getId() + "\"}", null
         ));
+    }
+
+    private String buildFailureConfirmationContent(String detail) {
+        return """
+                节点执行失败，需要用户决定后续处理方式。
+
+                失败原因：%s
+
+                可选择重试当前节点；如果确认该节点暂时不阻塞后续流程，也可以跳过。
+                """.formatted(detail).trim();
     }
 
     private void markInstanceBlocked(WorkflowInstanceEntity instance, String now) {
@@ -684,6 +841,36 @@ public class WorkflowCommandService {
         return confirmation;
     }
 
+    private ConfirmationRequestEntity buildGenericInputConfirmation(
+            WorkflowInstanceEntity instance,
+            WorkflowNodeInstanceEntity node,
+            WorkflowNodeDefinitionEntity nodeDef,
+            WorkItemEntity workItem,
+            String skillName,
+            String reason,
+            String now) {
+        ConfirmationRequestEntity confirmation = new ConfirmationRequestEntity();
+        confirmation.setId(idGenerator.nextId());
+        confirmation.setRequestType(ConfirmationRequestType.INPUT_REQUIRED.name());
+        confirmation.setStatus(ConfirmationStatus.PENDING.name());
+        confirmation.setWorkItemId(workItem.getId());
+        confirmation.setWorkflowInstanceId(instance.getId());
+        confirmation.setWorkflowNodeInstanceId(node.getId());
+        confirmation.setAgentSessionId(node.getAgentSessionId());
+        confirmation.setRuntimeType(workflowRuntimeType.name());
+        confirmation.setRuntimeSessionId(node.getRuntimeSessionId());
+        confirmation.setSkillName(skillName);
+        confirmation.setTitle("%s %s · 需要补充输入".formatted(workItem.getCode(), nodeDef.getName()));
+        confirmation.setContent(nonBlank(reason, "Agent 需要用户补充信息"));
+        confirmation.setContextSummary(reason);
+        confirmation.setInteractionType("INPUT");
+        confirmation.setInteractionRequired(1);
+        confirmation.setPriority("MEDIUM");
+        confirmation.setCreatedAt(now);
+        confirmation.setUpdatedAt(now);
+        return confirmation;
+    }
+
     private SkillRunResult validateSkillRunnable(WorkItemEntity workItem, String skillName) {
         RuntimeSkillEntity skill = runtimeSkillMapper.findByProjectIdAndName(workItem.getProjectId(), skillName);
         if (skill == null) {
@@ -704,242 +891,19 @@ public class WorkflowCommandService {
         return null;
     }
 
-    private record InteractionPoint(
-            String name,
-            String type,
-            String options,
-            String condition,
-            String action,
-            String defaultHandling
-    ) {}
-
-    private List<InteractionPoint> parseTriggeredInteractionPoints(String content) {
-        if (content == null || content.isBlank()) {
-            return List.of();
-        }
-
-        List<String> lines = content.lines().toList();
-        List<InteractionPoint> points = new ArrayList<>();
-        for (int i = 0; i < lines.size(); i += 1) {
-            String line = lines.get(i).trim();
-            if (!line.startsWith("|") || !line.contains("类型") || !line.contains("是否触发")) {
-                continue;
-            }
-
-            List<String> headers = splitMarkdownRow(line);
-            if (headers.isEmpty()) {
-                continue;
-            }
-
-            int rowIndex = i + 1;
-            if (rowIndex < lines.size() && isSeparatorRow(lines.get(rowIndex))) {
-                rowIndex += 1;
-            }
-
-            while (rowIndex < lines.size()) {
-                String row = lines.get(rowIndex).trim();
-                if (!row.startsWith("|")) {
-                    break;
-                }
-                List<String> cells = splitMarkdownRow(row);
-                if (cells.size() >= 2) {
-                    InteractionPoint point = interactionPointFromRow(headers, cells);
-                    if (point != null) {
-                        points.add(point);
-                    }
-                }
-                rowIndex += 1;
-            }
-            i = rowIndex;
-        }
-        return points;
-    }
-
-    private InteractionPoint interactionPointFromRow(List<String> headers, List<String> cells) {
-        String type = cell(headers, cells, "类型");
-        if (!INTERACTION_TYPES.contains(type)) {
-            return null;
-        }
-        String triggered = cell(headers, cells, "是否触发");
-        if (!isTriggered(triggered)) {
-            return null;
-        }
-
-        String name = firstNonBlank(
-                cell(headers, cells, "交互点"),
-                cell(headers, cells, "节点/动作"),
-                cell(headers, cells, "节点"),
-                cells.isEmpty() ? "" : cells.get(0)
-        );
-        return new InteractionPoint(
-                nonBlank(name, "用户交互"),
-                type,
-                cell(headers, cells, "选项"),
-                cell(headers, cells, "触发条件"),
-                cell(headers, cells, "建议问题/动作"),
-                cell(headers, cells, "默认处理")
-        );
-    }
-
-    private ConfirmationRequestEntity buildInteractionConfirmation(InteractionPoint interaction,
-                                                                   WorkflowInstanceEntity instance,
-                                                                   WorkflowNodeInstanceEntity node,
-                                                                   WorkflowNodeDefinitionEntity nodeDef,
-                                                                   WorkItemEntity workItem,
-                                                                   String skillName,
-                                                                   ArtifactEntity artifact,
-                                                                   String now) {
-        ConfirmationRequestEntity confirmation = new ConfirmationRequestEntity();
-        confirmation.setId(idGenerator.nextId());
-        confirmation.setRequestType(requestTypeFor(interaction.type()).name());
-        confirmation.setStatus(ConfirmationStatus.PENDING.name());
-        confirmation.setProjectId(workItem.getProjectId());
-        confirmation.setSpaceId(workItem.getSpaceId());
-        confirmation.setIterationId(workItem.getIterationId());
-        confirmation.setWorkItemId(workItem.getId());
-        confirmation.setWorkflowInstanceId(instance.getId());
-        confirmation.setWorkflowNodeInstanceId(node.getId());
-        confirmation.setAgentSessionId(node.getAgentSessionId());
-        confirmation.setRuntimeType(workflowRuntimeType.name());
-        confirmation.setRuntimeSessionId(node.getRuntimeSessionId());
-        confirmation.setSkillName(skillName);
-        confirmation.setTitle("%s %s · %s".formatted(workItem.getCode(), nodeDef.getName(), interaction.name()));
-        confirmation.setContent(nonBlank(interaction.action(), interaction.condition()));
-        confirmation.setContextSummary(buildInteractionSummary(interaction, artifact));
-        confirmation.setOptionsJson(optionsJsonFor(interaction));
-        confirmation.setPriority(Priority.MEDIUM.name());
-        if ("PERMISSION_REQUIRED".equals(interaction.type())) {
-            confirmation.setPriority(Priority.HIGH.name());
-        }
-        confirmation.setCreatedAt(now);
-        confirmation.setUpdatedAt(now);
-        return confirmation;
-    }
-
-    private ConfirmationRequestType requestTypeFor(String interactionType) {
-        return switch (interactionType) {
-            case "ASK_USER" -> ConfirmationRequestType.INPUT_REQUIRED;
-            case "DECISION_REQUIRED" -> ConfirmationRequestType.DECISION;
-            case "PERMISSION_REQUIRED" -> ConfirmationRequestType.PERMISSION;
-            case "ARTIFACT_REVIEW_REQUESTED" -> ConfirmationRequestType.APPROVAL;
-            default -> ConfirmationRequestType.CONFIRM;
-        };
-    }
-
-    private String buildInteractionSummary(InteractionPoint interaction, ArtifactEntity artifact) {
+    private String buildSkillCompletedPayload(String skillName, SkillRunResult result, String nodeState, String nodeStateReason) {
         StringBuilder sb = new StringBuilder();
-        sb.append("Agent 在节点产物中触发了 ")
-                .append(interaction.type())
-                .append(" 交互。");
-        if (artifact != null) {
-            sb.append("关联产物：").append(artifact.getTitle()).append("。");
-        }
-        if (interaction.condition() != null && !interaction.condition().isBlank()) {
-            sb.append("触发条件：").append(interaction.condition()).append("。");
-        }
-        if (interaction.defaultHandling() != null && !interaction.defaultHandling().isBlank()) {
-            sb.append("默认处理：").append(interaction.defaultHandling()).append("。");
-        }
-        return sb.toString();
-    }
-
-    private String optionsJsonFor(InteractionPoint interaction) {
-        List<String> options = splitOptions(interaction.options());
-        if (options.isEmpty() && "DECISION_REQUIRED".equals(interaction.type())) {
-            options = splitOptions(interaction.action());
-        }
-        if (options.isEmpty()) {
-            return null;
-        }
-        return options.stream()
-                .map(value -> "\"" + escapeJson(value) + "\"")
-                .collect(Collectors.joining(",", "[", "]"));
-    }
-
-    private List<String> splitOptions(String value) {
-        if (value == null || value.isBlank()) {
-            return List.of();
-        }
-        String cleaned = value
-                .replace("请用户选择", "")
-                .replace("用户选择", "")
-                .replace("选择", "")
-                .trim();
-        List<String> options = new ArrayList<>();
-        for (String part : cleaned.split("\\s*(?:/|、|，|,|；|;)\\s*")) {
-            String option = part.trim();
-            if (!option.isBlank() && !"-".equals(option)) {
-                options.add(option);
-            }
-        }
-        return options;
-    }
-
-    private List<String> splitMarkdownRow(String row) {
-        String text = row.trim();
-        if (text.startsWith("|")) {
-            text = text.substring(1);
-        }
-        if (text.endsWith("|")) {
-            text = text.substring(0, text.length() - 1);
-        }
-        String[] raw = text.split("\\|", -1);
-        List<String> cells = new ArrayList<>();
-        for (String cell : raw) {
-            cells.add(cell.trim());
-        }
-        return cells;
-    }
-
-    private boolean isSeparatorRow(String row) {
-        if (row == null || !row.trim().startsWith("|")) {
-            return false;
-        }
-        return splitMarkdownRow(row).stream()
-                .allMatch(cell -> cell.matches(":?-{3,}:?"));
-    }
-
-    private String cell(List<String> headers, List<String> cells, String headerName) {
-        Map<String, Integer> index = new LinkedHashMap<>();
-        for (int i = 0; i < headers.size(); i += 1) {
-            index.put(headers.get(i).replace(" ", ""), i);
-        }
-        for (Map.Entry<String, Integer> entry : index.entrySet()) {
-            if (entry.getKey().contains(headerName)) {
-                int position = entry.getValue();
-                return position < cells.size() ? cells.get(position).trim() : "";
-            }
-        }
-        return "";
-    }
-
-    private boolean isTriggered(String value) {
-        String normalized = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
-        return normalized.equals("是")
-                || normalized.equals("yes")
-                || normalized.equals("true")
-                || normalized.equals("y")
-                || normalized.equals("triggered")
-                || normalized.equals("需要")
-                || normalized.equals("已触发");
-    }
-
-    private String firstNonBlank(String... values) {
-        for (String value : values) {
-            if (value != null && !value.isBlank()) {
-                return value;
-            }
-        }
-        return "";
-    }
-
-    private String buildSkillCompletedPayload(String skillName, SkillRunResult result) {
-        String payload = "{\"skillName\":\"%s\",\"success\":%s".formatted(
-                escapeJson(skillName), result.success());
+        sb.append("{\"skillName\":\"").append(escapeJson(skillName)).append("\"");
+        sb.append(",\"success\":").append(result.success());
         if (!result.success() && result.errorMessage() != null && !result.errorMessage().isBlank()) {
-            payload += ",\"errorMessage\":\"" + escapeJson(result.errorMessage()) + "\"";
+            sb.append(",\"errorMessage\":\"").append(escapeJson(result.errorMessage())).append("\"");
         }
-        return payload + "}";
+        sb.append(",\"nodeState\":\"").append(escapeJson(nodeState)).append("\"");
+        if (nodeStateReason != null && !nodeStateReason.isBlank()) {
+            sb.append(",\"nodeStateReason\":\"").append(escapeJson(nodeStateReason)).append("\"");
+        }
+        sb.append("}");
+        return sb.toString();
     }
 
     private String escapeJson(String value) {
@@ -973,10 +937,16 @@ public class WorkflowCommandService {
                 .orElse(null);
     }
 
-    private void insertWorkflowContextMessage(String sessionId,
-                                              WorkflowNodeDefinitionEntity nodeDef,
-                                              WorkItemEntity workItem,
-                                              String inputContext) {
+    private synchronized void insertWorkflowContextMessageIfAbsent(String sessionId,
+                                                                   WorkflowNodeInstanceEntity node,
+                                                                   WorkflowNodeDefinitionEntity nodeDef,
+                                                                   WorkItemEntity workItem,
+                                                                   String inputContext) {
+        if (agentMessageMapper.findBySessionId(sessionId).stream()
+                .anyMatch(message -> MessageRole.USER.name().equals(message.getRole())
+                        && node.getId().equals(message.getWorkflowNodeInstanceId()))) {
+            return;
+        }
         AgentMessageEntity contextMsg = new AgentMessageEntity();
         contextMsg.setId(idGenerator.nextId());
         contextMsg.setSessionId(sessionId);
@@ -1020,6 +990,7 @@ public class WorkflowCommandService {
         contextMsg.setSeqNo(nextMessageSeqNo(sessionId));
         contextMsg.setCreatedBy("workflow-engine");
         contextMsg.setCreatedAt(LocalDateTime.now().format(SQLITE_DATETIME));
+        contextMsg.setWorkflowNodeInstanceId(node.getId());
         agentMessageMapper.insert(contextMsg);
     }
 
@@ -1166,6 +1137,12 @@ public class WorkflowCommandService {
 
         String now = LocalDateTime.now().format(SQLITE_DATETIME);
         prepareWorkflowSession(instance, nextPending, nodeDefs, workItem, now);
+        WorkflowNodeDefinitionEntity nextNodeDef = nodeDefs.stream()
+                .filter(d -> d.getId().equals(nextPending.getNodeDefinitionId()))
+                .findFirst().orElseThrow();
+        insertWorkflowContextMessageIfAbsent(
+                nextPending.getAgentSessionId(), nextPending, nextNodeDef, workItem,
+                buildInputContext(workItem, nextPending, nextNodeDef));
 
         WorkflowInstanceEntity preparedInstance = workflowMapper.findInstanceById(instance.getId());
         WorkflowNodeInstanceEntity preparedNode = workflowMapper.findNodeInstanceById(nextPending.getId());
@@ -1203,8 +1180,11 @@ public class WorkflowCommandService {
         if (node == null) {
             return;
         }
+        String errorMessage = error.getMessage() != null && !error.getMessage().isBlank()
+                ? error.getMessage()
+                : error.getClass().getSimpleName();
         node.setStatus(WorkflowNodeStatus.FAILED.name());
-        node.setErrorMessage(error.getMessage());
+        node.setErrorMessage(errorMessage);
         String now = LocalDateTime.now().format(SQLITE_DATETIME);
         node.setCompletedAt(now);
         workflowMapper.updateNodeInstance(node);
@@ -1219,7 +1199,7 @@ public class WorkflowCommandService {
                     .orElse(null);
             if (workItem != null && nodeDef != null) {
                 String skillName = node.getSkillName() != null ? node.getSkillName() : nodeDef.getSkillName();
-                createFailureConfirmation(instance, node, nodeDef, workItem, skillName, error.getMessage(), now);
+                createFailureConfirmation(instance, node, nodeDef, workItem, skillName, errorMessage, now);
             }
             touchWorkItem(instance.getWorkItemId(), now);
         }
@@ -1292,6 +1272,31 @@ public class WorkflowCommandService {
                 .orElseGet(workflowMapper::findDefaultEnabledDefinition);
     }
 
+    private void applyRequestedExecutionMode(WorkflowInstanceEntity instance,
+                                             StartWorkflowRequest request,
+                                             String now) {
+        if (request == null || request.mode() == null
+                || WORKFLOW_MODE_START_OR_CONTINUE.equals(request.mode())) {
+            return;
+        }
+        instance.setExecutionMode(resolveExecutionMode(request));
+        instance.setUpdatedAt(now);
+        workflowMapper.updateInstance(instance);
+    }
+
+    private String resolveExecutionMode(StartWorkflowRequest request) {
+        if (request == null || request.mode() == null) {
+            return WORKFLOW_MODE_MANUAL_CONFIRM;
+        }
+        return WORKFLOW_MODE_AUTO.equals(request.mode())
+                ? WORKFLOW_MODE_AUTO
+                : WORKFLOW_MODE_MANUAL_CONFIRM;
+    }
+
+    private boolean isAutoRun(WorkflowInstanceEntity instance) {
+        return WORKFLOW_MODE_AUTO.equals(instance.getExecutionMode());
+    }
+
     private void touchWorkItem(String workItemId, String now) {
         WorkItemEntity workItem = workItemMapper.findById(workItemId);
         if (workItem == null) {
@@ -1305,19 +1310,17 @@ public class WorkflowCommandService {
                                           WorkflowNodeDefinitionEntity nodeDef,
                                           String skillName,
                                           ArtifactEntity artifact,
-                                          int pendingInteractionCount,
-                                          boolean needsConfirmation) {
+                                          WorkflowNodeState nodeState) {
         if (result.success()) {
             String artifactText = artifact != null ? "，产物：" + artifact.getTitle() : "";
-            if (pendingInteractionCount > 0) {
-                return "%s（Skill：%s）需要用户补充/确认，已触发 %d 个交互点；处理后会回到当前 Skill 继续执行。"
-                        .formatted(nodeDef.getName(), skillName, pendingInteractionCount);
-            }
-            if (needsConfirmation) {
-                return "已生成 %s（Skill：%s）的节点产物%s，等待确认。"
-                        .formatted(nodeDef.getName(), skillName, artifactText);
-            }
-            return "已完成 %s（Skill：%s）%s".formatted(nodeDef.getName(), skillName, artifactText);
+            return switch (nodeState.getStatus()) {
+                case READY_TO_ADVANCE -> "已完成 %s（Skill：%s）%s".formatted(nodeDef.getName(), skillName, artifactText);
+                case NEEDS_USER_INPUT -> "%s（Skill：%s）需要用户补充/确认；处理后会回到当前 Skill 继续执行。"
+                        .formatted(nodeDef.getName(), skillName);
+                case BLOCKED -> "%s（Skill：%s）被阻塞：%s".formatted(
+                        nodeDef.getName(), skillName, nonBlank(nodeState.getReason(), "原因未知"));
+                case IN_PROGRESS -> "%s（Skill：%s）仍在执行中。".formatted(nodeDef.getName(), skillName);
+            };
         }
         String reason = result.errorMessage() != null && !result.errorMessage().isBlank()
                 ? "：" + result.errorMessage()
@@ -1532,7 +1535,9 @@ public class WorkflowCommandService {
                 e.getSkillName(),
                 e.getSummary(),
                 e.getReason(),
-                e.getSequenceNo()
+                e.getSequenceNo(),
+                e.getAgentState(),
+                e.getAgentStateReason()
         );
     }
 
@@ -1570,7 +1575,13 @@ public class WorkflowCommandService {
                 e.getContextSummary(),
                 e.getOptionsJson(),
                 Priority.valueOf(e.getPriority()),
-                parseDateTime(e.getCreatedAt())
+                parseDateTime(e.getCreatedAt()),
+                e.getInteractionId(),
+                e.getInteractionType(),
+                e.getInteractionSchemaJson(),
+                e.getInteractionContextJson(),
+                e.getInteractionRequired() != null ? e.getInteractionRequired() != 0 : null,
+                e.getInteractionOrderNo()
         );
     }
 

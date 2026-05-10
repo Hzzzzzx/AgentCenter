@@ -4,7 +4,9 @@ import com.agentcenter.bridge.domain.session.ContentFormat;
 
 public record SendMessageRequest(
         String content,
-        ContentFormat contentFormat
+        ContentFormat contentFormat,
+        String workflowUserAction,
+        String workflowNodeInstanceId
 ) {
     public SendMessageRequest {
         if (contentFormat == null) {

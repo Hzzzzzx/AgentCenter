@@ -95,7 +95,7 @@ public class SessionWebSocketHandler extends TextWebSocketHandler {
         }
 
         ContentFormat contentFormat = parseContentFormat(payload.path("contentFormat").asText("TEXT"));
-        var created = sessionService.sendMessage(agentSessionId, new SendMessageRequest(content, contentFormat));
+        var created = sessionService.sendMessage(agentSessionId, new SendMessageRequest(content, contentFormat, null, null));
         sessionRegistry.sendToSession(agentSessionId, envelope("message.created", Map.of("message", created)));
         sessionRegistry.sendToSession(agentSessionId, messagesEnvelope(agentSessionId));
     }

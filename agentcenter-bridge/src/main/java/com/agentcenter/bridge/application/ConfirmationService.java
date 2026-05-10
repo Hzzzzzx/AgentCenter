@@ -18,6 +18,7 @@ import org.springframework.web.server.ResponseStatusException;
 import com.agentcenter.bridge.api.dto.ConfirmationRequestDto;
 import com.agentcenter.bridge.api.dto.ResolveConfirmationRequest;
 import com.agentcenter.bridge.api.dto.RuntimeEventDto;
+import com.agentcenter.bridge.application.runtime.translation.PermissionConfirmationHandler;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationActionType;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationRequestType;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationStatus;
@@ -49,19 +50,22 @@ public class ConfirmationService {
     private final WorkflowMapper workflowMapper;
     private final AgentMessageMapper agentMessageMapper;
     private final RuntimeEventService runtimeEventService;
+    private final PermissionConfirmationHandler permissionConfirmationHandler;
 
     public ConfirmationService(ConfirmationMapper confirmationMapper,
                                WorkflowCommandService workflowCommandService,
                                WorkItemMapper workItemMapper,
                                WorkflowMapper workflowMapper,
                                AgentMessageMapper agentMessageMapper,
-                               RuntimeEventService runtimeEventService) {
+                               RuntimeEventService runtimeEventService,
+                               PermissionConfirmationHandler permissionConfirmationHandler) {
         this.confirmationMapper = confirmationMapper;
         this.workflowCommandService = workflowCommandService;
         this.workItemMapper = workItemMapper;
         this.workflowMapper = workflowMapper;
         this.agentMessageMapper = agentMessageMapper;
         this.runtimeEventService = runtimeEventService;
+        this.permissionConfirmationHandler = permissionConfirmationHandler;
     }
 
     public List<ConfirmationRequestDto> listPending() {
@@ -128,8 +132,19 @@ public class ConfirmationService {
                     || ConfirmationActionType.REJECT.equals(actionType);
             case APPROVAL, CONFIRM, PERMISSION -> ConfirmationActionType.APPROVE.equals(actionType)
                     || ConfirmationActionType.REJECT.equals(actionType);
-            case DECISION -> ConfirmationActionType.CHOOSE.equals(actionType)
-                    || ConfirmationActionType.REJECT.equals(actionType);
+            case DECISION -> {
+                boolean isWorkflowAdvance = "WORKFLOW_ADVANCE".equals(entity.getInteractionType());
+                if (isWorkflowAdvance) {
+                    yield ConfirmationActionType.CHOOSE.equals(actionType)
+                            || ConfirmationActionType.ADVANCE.equals(actionType)
+                            || ConfirmationActionType.SUPPLEMENT.equals(actionType)
+                            || ConfirmationActionType.RETRY.equals(actionType)
+                            || ConfirmationActionType.REJECT.equals(actionType);
+                } else {
+                    yield ConfirmationActionType.CHOOSE.equals(actionType)
+                            || ConfirmationActionType.REJECT.equals(actionType);
+                }
+            }
             case INPUT_REQUIRED -> ConfirmationActionType.SUPPLEMENT.equals(actionType)
                     || ConfirmationActionType.REJECT.equals(actionType);
         };
@@ -137,6 +152,10 @@ public class ConfirmationService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     requestType + " confirmation does not accept " + actionType + ". "
                     + "Valid actions for " + requestType + ": " + validActionsFor(requestType));
+        }
+
+        if (ConfirmationRequestType.PERMISSION.equals(requestType)) {
+            respondPermissionBeforeResolving(entity, actionType);
         }
 
         if (ConfirmationActionType.REJECT.equals(actionType)) {
@@ -164,22 +183,33 @@ public class ConfirmationService {
 
         var nodeInstanceId = entity.getWorkflowNodeInstanceId();
         boolean shouldDispatchWorkflow = nodeInstanceId != null && !hasOtherBlockingForNode(entity);
+        boolean isDecision = ConfirmationRequestType.DECISION.name().equals(entity.getRequestType());
         boolean isException = ConfirmationRequestType.EXCEPTION.name().equals(entity.getRequestType());
         boolean isSkip = ConfirmationActionType.SKIP.equals(actionType);
-        boolean shouldResumeCurrentSkill = shouldResumeCurrentSkill(entity);
+        // Only route DECISION as system action for WORKFLOW_ADVANCE confirmations
+        boolean isWorkflowAdvance = isDecision
+                && "WORKFLOW_ADVANCE".equals(entity.getInteractionType());
 
         publishResolutionEventAfterCommit(entity, actionType, actionDescription, () -> {
             if (shouldDispatchWorkflow) {
-                if (isException) {
+                if (isWorkflowAdvance) {
+                    switch (actionType) {
+                        case ADVANCE -> workflowCommandService.completeNodeAndScheduleAdvance(nodeInstanceId);
+                        case SUPPLEMENT -> workflowCommandService.resumeNodeAfterInteraction(nodeInstanceId);
+                        case RETRY -> workflowCommandService.retryNode(nodeInstanceId);
+                        default -> workflowCommandService.resumeNodeAfterInteraction(nodeInstanceId);
+                    }
+                } else if (isDecision) {
+                    // Non-WORKFLOW_ADVANCE DECISION: treat as normal confirmation
+                    workflowCommandService.resumeNodeAfterInteraction(nodeInstanceId);
+                } else if (isException) {
                     if (isSkip) {
                         workflowCommandService.skipNode(nodeInstanceId);
                     } else {
                         workflowCommandService.retryNode(nodeInstanceId);
                     }
-                } else if (shouldResumeCurrentSkill) {
-                    workflowCommandService.resumeNodeAfterInteraction(nodeInstanceId);
                 } else {
-                    workflowCommandService.completeNodeAndScheduleAdvance(nodeInstanceId);
+                    workflowCommandService.resumeNodeAfterInteraction(nodeInstanceId);
                 }
             }
         });
@@ -187,18 +217,17 @@ public class ConfirmationService {
         return toDto(entity);
     }
 
-    private boolean shouldResumeCurrentSkill(ConfirmationRequestEntity entity) {
-        return !isFallbackNodeApproval(entity);
-    }
-
-    private boolean isFallbackNodeApproval(ConfirmationRequestEntity entity) {
-        if (!ConfirmationRequestType.APPROVAL.name().equals(entity.getRequestType())) {
-            return false;
+    private void respondPermissionBeforeResolving(ConfirmationRequestEntity entity,
+                                                  ConfirmationActionType actionType) {
+        try {
+            permissionConfirmationHandler.respondPermission(
+                    entity.getRuntimeSessionId(),
+                    entity.getInteractionId(),
+                    ConfirmationActionType.APPROVE.equals(actionType));
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                    "Failed to respond to OpenCode permission: " + e.getMessage(), e);
         }
-        String content = entity.getContent() != null ? entity.getContent() : "";
-        String summary = entity.getContextSummary() != null ? entity.getContextSummary() : "";
-        return content.contains("执行完成，需要确认后继续")
-                || summary.contains("标记为需要确认，自动创建审批");
     }
 
     private ConfirmationRequestDto handleReject(ConfirmationRequestEntity entity,
@@ -225,7 +254,7 @@ public class ConfirmationService {
         return switch (requestType) {
             case EXCEPTION -> "RETRY, SKIP, REJECT";
             case APPROVAL, CONFIRM, PERMISSION -> "APPROVE, REJECT";
-            case DECISION -> "CHOOSE, REJECT";
+            case DECISION -> "CHOOSE, REJECT (ADVANCE/SUPPLEMENT/RETRY only for WORKFLOW_ADVANCE)";
             case INPUT_REQUIRED -> "SUPPLEMENT, REJECT";
         };
     }
@@ -235,12 +264,27 @@ public class ConfirmationService {
         return switch (actionType) {
             case APPROVE -> "用户确认通过" + (request.comment() != null ? "：" + request.comment() : "");
             case CHOOSE -> {
+                String choiceId = extractPayloadField(request, "choiceId");
+                String choiceLabel = extractPayloadField(request, "choiceLabel");
                 String choice = extractPayloadField(request, "choice");
-                yield "用户选择" + (choice != null ? "：" + choice : "");
+                if (choiceLabel != null) {
+                    yield "用户选择：" + choiceLabel + (choiceId != null ? "（" + choiceId + "）" : "");
+                } else {
+                    yield "用户选择" + (choice != null ? "：" + choice : "");
+                }
             }
             case SUPPLEMENT -> {
                 String input = extractPayloadField(request, "input");
-                yield "用户补充" + (input != null ? "：" + input : "");
+                if (input != null) {
+                    yield "用户补充：" + input;
+                }
+                Object fields = request.payload() != null ? request.payload().get("fields") : null;
+                if (fields instanceof Map) {
+                    StringBuilder sb = new StringBuilder("用户补充：");
+                    ((Map<?, ?>) fields).forEach((k, v) -> sb.append(k).append("=").append(v).append("; "));
+                    yield sb.toString();
+                }
+                yield "用户补充" + (request.comment() != null ? "：" + request.comment() : "");
             }
             case RETRY -> "用户重试" + (request.comment() != null ? "：" + request.comment() : "");
             case SKIP -> "用户跳过" + (request.comment() != null ? "：" + request.comment() : "");
@@ -471,7 +515,13 @@ public class ConfirmationService {
                 e.getContextSummary(),
                 e.getOptionsJson(),
                 e.getPriority() != null ? Priority.valueOf(e.getPriority()) : Priority.MEDIUM,
-                parseDateTime(e.getCreatedAt())
+                parseDateTime(e.getCreatedAt()),
+                e.getInteractionId(),
+                e.getInteractionType(),
+                e.getInteractionSchemaJson(),
+                e.getInteractionContextJson(),
+                e.getInteractionRequired() != null ? e.getInteractionRequired() != 0 : null,
+                e.getInteractionOrderNo()
         );
     }
 

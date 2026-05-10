@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -27,14 +28,18 @@ import com.agentcenter.bridge.domain.session.MessageRole;
 import com.agentcenter.bridge.domain.session.MessageStatus;
 import com.agentcenter.bridge.domain.session.SessionStatus;
 import com.agentcenter.bridge.domain.session.SessionType;
+import com.agentcenter.bridge.domain.workflow.WorkflowStatus;
+import com.agentcenter.bridge.domain.workflow.WorkflowUserAction;
 import com.agentcenter.bridge.infrastructure.id.IdGenerator;
 import com.agentcenter.bridge.infrastructure.event.WebSocketSessionRegistry;
 import com.agentcenter.bridge.infrastructure.persistence.entity.AgentMessageEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.AgentSessionEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.RuntimeEventEntity;
+import com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowInstanceEntity;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.AgentMessageMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.AgentSessionMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.RuntimeEventMapper;
+import com.agentcenter.bridge.infrastructure.persistence.mapper.WorkflowMapper;
 
 import jakarta.annotation.PreDestroy;
 
@@ -51,6 +56,8 @@ public class AgentSessionService {
     private final RuntimeGateway runtimeGateway;
     private final WebSocketSessionRegistry webSocketSessionRegistry;
     private final RuntimeEventService runtimeEventService;
+    private final WorkflowCommandService workflowCommandService;
+    private final WorkflowMapper workflowMapper;
     private final ExecutorService messageExecutor = Executors.newCachedThreadPool(runnable -> {
         Thread thread = new Thread(runnable, "agentcenter-message-" + MESSAGE_THREAD_COUNTER.getAndIncrement());
         thread.setDaemon(true);
@@ -63,7 +70,9 @@ public class AgentSessionService {
                                IdGenerator idGenerator,
                                RuntimeGateway runtimeGateway,
                                WebSocketSessionRegistry webSocketSessionRegistry,
-                               RuntimeEventService runtimeEventService) {
+                               RuntimeEventService runtimeEventService,
+                               @Lazy WorkflowCommandService workflowCommandService,
+                               WorkflowMapper workflowMapper) {
         this.sessionMapper = sessionMapper;
         this.messageMapper = messageMapper;
         this.eventMapper = eventMapper;
@@ -71,6 +80,8 @@ public class AgentSessionService {
         this.runtimeGateway = runtimeGateway;
         this.webSocketSessionRegistry = webSocketSessionRegistry;
         this.runtimeEventService = runtimeEventService;
+        this.workflowCommandService = workflowCommandService;
+        this.workflowMapper = workflowMapper;
     }
 
     @PreDestroy
@@ -155,8 +166,55 @@ public class AgentSessionService {
         entity.setCreatedBy("system");
         messageMapper.insert(entity);
 
-        messageExecutor.submit(() -> dispatchToRuntime(sessionId, request.content()));
+        if (session.getWorkflowInstanceId() != null && !session.getWorkflowInstanceId().isBlank()) {
+            routeWorkflowMessage(session, request);
+        } else {
+            messageExecutor.submit(() -> dispatchToRuntime(sessionId, request.content()));
+        }
         return toMessageDto(entity);
+    }
+
+    private void routeWorkflowMessage(AgentSessionEntity session, SendMessageRequest request) {
+        String workflowInstanceId = session.getWorkflowInstanceId();
+        WorkflowInstanceEntity instance = workflowMapper.findInstanceById(workflowInstanceId);
+        if (instance == null) {
+            log.warn("Workflow instance {} not found for session {}, falling back to runtime dispatch",
+                    workflowInstanceId, session.getId());
+            messageExecutor.submit(() -> dispatchToRuntime(session.getId(), request.content()));
+            return;
+        }
+
+        String nodeInstanceId = resolveNodeInstanceId(instance, request);
+
+        if (request.workflowUserAction() != null && !request.workflowUserAction().isBlank()) {
+            WorkflowUserAction action = WorkflowUserAction.valueOf(request.workflowUserAction());
+            switch (action) {
+                case CONTINUE_CURRENT -> workflowCommandService.resumeNodeAfterInteraction(nodeInstanceId);
+                case ADVANCE_NEXT -> workflowCommandService.completeNodeAndScheduleAdvance(nodeInstanceId);
+                case RERUN_NODE -> workflowCommandService.retryNode(nodeInstanceId);
+                case SKIP_NODE -> workflowCommandService.skipNode(nodeInstanceId);
+                case PAUSE_WORKFLOW -> {
+                    String now = java.time.LocalDateTime.now()
+                            .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+                    instance.setStatus(WorkflowStatus.BLOCKED.name());
+                    instance.setUpdatedAt(now);
+                    workflowMapper.updateInstance(instance);
+                }
+            }
+        } else {
+            if (nodeInstanceId != null) {
+                workflowCommandService.resumeNodeAfterInteraction(nodeInstanceId);
+            } else {
+                messageExecutor.submit(() -> dispatchToRuntime(session.getId(), request.content()));
+            }
+        }
+    }
+
+    private String resolveNodeInstanceId(WorkflowInstanceEntity instance, SendMessageRequest request) {
+        if (request.workflowNodeInstanceId() != null && !request.workflowNodeInstanceId().isBlank()) {
+            return request.workflowNodeInstanceId();
+        }
+        return instance.getCurrentNodeInstanceId();
     }
 
     public void cancelRuntime(String sessionId) {
