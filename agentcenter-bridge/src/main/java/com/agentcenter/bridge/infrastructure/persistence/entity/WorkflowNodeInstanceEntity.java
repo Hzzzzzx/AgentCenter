@@ -21,6 +21,11 @@ public class WorkflowNodeInstanceEntity {
     private String summary;
     private String reason;
     private Integer sequenceNo;
+    private String agentState;
+    private String agentStateReason;
+    private String agentStateArtifactTitle;
+    private String agentStatePayloadJson;
+    private String agentStateUpdatedAt;
 
     public WorkflowNodeInstanceEntity() {}
 
@@ -64,4 +69,14 @@ public class WorkflowNodeInstanceEntity {
     public void setReason(String reason) { this.reason = reason; }
     public Integer getSequenceNo() { return sequenceNo; }
     public void setSequenceNo(Integer sequenceNo) { this.sequenceNo = sequenceNo; }
+    public String getAgentState() { return agentState; }
+    public void setAgentState(String agentState) { this.agentState = agentState; }
+    public String getAgentStateReason() { return agentStateReason; }
+    public void setAgentStateReason(String agentStateReason) { this.agentStateReason = agentStateReason; }
+    public String getAgentStateArtifactTitle() { return agentStateArtifactTitle; }
+    public void setAgentStateArtifactTitle(String agentStateArtifactTitle) { this.agentStateArtifactTitle = agentStateArtifactTitle; }
+    public String getAgentStatePayloadJson() { return agentStatePayloadJson; }
+    public void setAgentStatePayloadJson(String agentStatePayloadJson) { this.agentStatePayloadJson = agentStatePayloadJson; }
+    public String getAgentStateUpdatedAt() { return agentStateUpdatedAt; }
+    public void setAgentStateUpdatedAt(String agentStateUpdatedAt) { this.agentStateUpdatedAt = agentStateUpdatedAt; }
 }

@@ -30,6 +30,12 @@ public class ConfirmationRequestEntity {
     private String resolvedAt;
     private String resolutionComment;
     private String resolutionPayloadJson;
+    private String interactionId;
+    private String interactionType;
+    private String interactionSchemaJson;
+    private String interactionContextJson;
+    private Integer interactionRequired;
+    private Integer interactionOrderNo;
 
     public ConfirmationRequestEntity() {}
 
@@ -91,4 +97,16 @@ public class ConfirmationRequestEntity {
     public void setResolutionComment(String resolutionComment) { this.resolutionComment = resolutionComment; }
     public String getResolutionPayloadJson() { return resolutionPayloadJson; }
     public void setResolutionPayloadJson(String resolutionPayloadJson) { this.resolutionPayloadJson = resolutionPayloadJson; }
+    public String getInteractionId() { return interactionId; }
+    public void setInteractionId(String interactionId) { this.interactionId = interactionId; }
+    public String getInteractionType() { return interactionType; }
+    public void setInteractionType(String interactionType) { this.interactionType = interactionType; }
+    public String getInteractionSchemaJson() { return interactionSchemaJson; }
+    public void setInteractionSchemaJson(String interactionSchemaJson) { this.interactionSchemaJson = interactionSchemaJson; }
+    public String getInteractionContextJson() { return interactionContextJson; }
+    public void setInteractionContextJson(String interactionContextJson) { this.interactionContextJson = interactionContextJson; }
+    public Integer getInteractionRequired() { return interactionRequired; }
+    public void setInteractionRequired(Integer interactionRequired) { this.interactionRequired = interactionRequired; }
+    public Integer getInteractionOrderNo() { return interactionOrderNo; }
+    public void setInteractionOrderNo(Integer interactionOrderNo) { this.interactionOrderNo = interactionOrderNo; }
 }

@@ -5,6 +5,7 @@ public class WorkflowInstanceEntity {
     private String workItemId;
     private String workflowDefinitionId;
     private String status;
+    private String executionMode;
     private String currentNodeInstanceId;
     private String startedAt;
     private String completedAt;
@@ -21,6 +22,8 @@ public class WorkflowInstanceEntity {
     public void setWorkflowDefinitionId(String workflowDefinitionId) { this.workflowDefinitionId = workflowDefinitionId; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public String getExecutionMode() { return executionMode; }
+    public void setExecutionMode(String executionMode) { this.executionMode = executionMode; }
     public String getCurrentNodeInstanceId() { return currentNodeInstanceId; }
     public void setCurrentNodeInstanceId(String currentNodeInstanceId) { this.currentNodeInstanceId = currentNodeInstanceId; }
     public String getStartedAt() { return startedAt; }

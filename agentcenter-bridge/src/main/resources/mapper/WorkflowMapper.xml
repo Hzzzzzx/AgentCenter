@@ -78,7 +78,7 @@
     </insert>
 
     <select id="findInstanceById" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowInstanceEntity">
-        SELECT id, work_item_id, workflow_definition_id, status, current_node_instance_id,
+        SELECT id, work_item_id, workflow_definition_id, status, execution_mode, current_node_instance_id,
                started_at, completed_at, created_at, updated_at
         FROM workflow_instance WHERE id = #{id}
     </select>
@@ -88,7 +88,9 @@
                wni.input_artifact_id, wni.output_artifact_id, wni.agent_session_id, wni.runtime_session_id,
                wni.started_at, wni.completed_at, wni.error_message, wni.version,
                wni.node_kind, wni.origin, wni.parent_node_instance_id,
-               wni.stage_key, wni.skill_name, wni.summary, wni.reason, wni.sequence_no
+               wni.stage_key, wni.skill_name, wni.summary, wni.reason, wni.sequence_no,
+               wni.agent_state, wni.agent_state_reason, wni.agent_state_artifact_title,
+               wni.agent_state_payload_json, wni.agent_state_updated_at
         FROM workflow_node_instance wni
         JOIN workflow_node_definition wnd ON wni.node_definition_id = wnd.id
         WHERE wni.workflow_instance_id = #{workflowInstanceId}
@@ -96,15 +98,16 @@
     </select>
 
     <insert id="insertInstance">
-        INSERT INTO workflow_instance (id, work_item_id, workflow_definition_id, status,
+        INSERT INTO workflow_instance (id, work_item_id, workflow_definition_id, status, execution_mode,
                                        current_node_instance_id, started_at, completed_at)
-        VALUES (#{id}, #{workItemId}, #{workflowDefinitionId}, #{status},
+        VALUES (#{id}, #{workItemId}, #{workflowDefinitionId}, #{status}, COALESCE(#{executionMode}, 'MANUAL_CONFIRM'),
                 #{currentNodeInstanceId}, #{startedAt}, #{completedAt})
     </insert>
 
     <update id="updateInstance">
         UPDATE workflow_instance
-        SET status = #{status}, current_node_instance_id = #{currentNodeInstanceId},
+        SET status = #{status}, execution_mode = COALESCE(#{executionMode}, execution_mode),
+            current_node_instance_id = #{currentNodeInstanceId},
             completed_at = #{completedAt}, updated_at = datetime('now')
         WHERE id = #{id}
     </update>
@@ -115,13 +118,17 @@
                                             runtime_session_id, started_at, completed_at,
                                             error_message, version, node_kind, origin,
                                             parent_node_instance_id, stage_key, skill_name,
-                                            summary, reason, sequence_no)
+                                             summary, reason, sequence_no,
+                                             agent_state, agent_state_reason, agent_state_artifact_title,
+                                             agent_state_payload_json, agent_state_updated_at)
         VALUES (#{id}, #{workflowInstanceId}, #{nodeDefinitionId}, #{status},
                 #{inputArtifactId}, #{outputArtifactId}, #{agentSessionId},
                 #{runtimeSessionId}, #{startedAt}, #{completedAt},
                 #{errorMessage}, #{version}, COALESCE(#{nodeKind}, 'STAGE'),
                 COALESCE(#{origin}, 'DEFINITION'), #{parentNodeInstanceId},
-                #{stageKey}, #{skillName}, #{summary}, #{reason}, #{sequenceNo})
+                #{stageKey}, #{skillName}, #{summary}, #{reason}, #{sequenceNo},
+                #{agentState}, #{agentStateReason}, #{agentStateArtifactTitle},
+                #{agentStatePayloadJson}, #{agentStateUpdatedAt})
     </insert>
 
     <update id="updateNodeInstance">
@@ -142,6 +149,11 @@
             summary = #{summary},
             reason = #{reason},
             sequence_no = #{sequenceNo},
+            agent_state = COALESCE(#{agentState}, agent_state),
+            agent_state_reason = COALESCE(#{agentStateReason}, agent_state_reason),
+            agent_state_artifact_title = COALESCE(#{agentStateArtifactTitle}, agent_state_artifact_title),
+            agent_state_payload_json = COALESCE(#{agentStatePayloadJson}, agent_state_payload_json),
+            agent_state_updated_at = COALESCE(#{agentStateUpdatedAt}, agent_state_updated_at),
             version = version + 1
         WHERE id = #{id}
     </update>
@@ -150,13 +162,15 @@
         SELECT id, workflow_instance_id, node_definition_id, status,
                input_artifact_id, output_artifact_id, agent_session_id, runtime_session_id,
                started_at, completed_at, error_message, version,
-               node_kind, origin, parent_node_instance_id,
-               stage_key, skill_name, summary, reason, sequence_no
+                node_kind, origin, parent_node_instance_id,
+                stage_key, skill_name, summary, reason, sequence_no,
+                agent_state, agent_state_reason, agent_state_artifact_title,
+                agent_state_payload_json, agent_state_updated_at
         FROM workflow_node_instance WHERE id = #{id}
     </select>
 
     <select id="findInstancesByWorkItemId" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowInstanceEntity">
-        SELECT id, work_item_id, workflow_definition_id, status, current_node_instance_id,
+        SELECT id, work_item_id, workflow_definition_id, status, execution_mode, current_node_instance_id,
                started_at, completed_at, created_at, updated_at
         FROM workflow_instance WHERE work_item_id = #{workItemId}
         ORDER BY created_at DESC
