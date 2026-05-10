@@ -20,6 +20,7 @@
 # Local runtime sandboxes
 .opencode/
 runtime-test-workspace/
+runtime-workspace/
 
 # Logs
 *.log
