@@ -1,0 +1,1287 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AgentCenter Conversation UI Mapping v2</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f7fb;
+      --surface: #ffffff;
+      --surface-soft: #f8fafc;
+      --surface-blue: #eef5ff;
+      --surface-green: #edfdf7;
+      --surface-amber: #fff7e8;
+      --surface-red: #fff1f2;
+      --surface-purple: #f5f2ff;
+      --line: #d8e1ec;
+      --line-strong: #b8c6d7;
+      --text: #172033;
+      --muted: #63748c;
+      --weak: #8a9ab0;
+      --blue: #2673e8;
+      --blue-dark: #195ec4;
+      --green: #07966d;
+      --amber: #c87600;
+      --red: #d13b4a;
+      --purple: #7057d2;
+      --shadow: 0 18px 42px rgba(21, 34, 55, 0.12);
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      letter-spacing: 0;
+    }
+
+    button {
+      font: inherit;
+    }
+
+    .app-shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: 58px 1fr;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 260px minmax(360px, 1fr) 390px;
+      align-items: center;
+      gap: 16px;
+      padding: 0 20px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(18px);
+      position: sticky;
+      top: 0;
+      z-index: 5;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      font-weight: 900;
+    }
+
+    .brand-mark {
+      width: 32px;
+      height: 32px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: #6f66f2;
+      color: #fff;
+      font-family: var(--mono);
+      font-size: 15px;
+      box-shadow: 0 8px 22px rgba(111, 102, 242, 0.28);
+    }
+
+    .version {
+      min-height: 22px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 8px;
+      border-radius: 7px;
+      background: #eaf1ff;
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .search {
+      height: 38px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--weak);
+      font-weight: 650;
+      min-width: 0;
+    }
+
+    .mode-tabs {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .mode-tab {
+      min-height: 34px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 850;
+    }
+
+    .mode-tab.active {
+      border-color: var(--blue);
+      background: var(--surface-blue);
+      color: var(--blue-dark);
+    }
+
+    .workbench {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 252px minmax(680px, 1fr) 408px;
+      gap: 0;
+    }
+
+    .sidebar,
+    .inspector {
+      min-height: 0;
+      background: var(--surface);
+    }
+
+    .sidebar {
+      border-right: 1px solid var(--line);
+      padding: 16px 12px;
+    }
+
+    .nav-title {
+      margin: 4px 8px 12px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .nav-item {
+      display: grid;
+      grid-template-columns: 26px 1fr auto;
+      align-items: center;
+      gap: 8px;
+      min-height: 46px;
+      padding: 0 10px;
+      border-radius: 8px;
+      color: var(--muted);
+      font-weight: 800;
+    }
+
+    .nav-item.active {
+      background: #edf4ff;
+      color: var(--blue);
+    }
+
+    .nav-icon,
+    .mini-icon {
+      width: 24px;
+      height: 24px;
+      display: grid;
+      place-items: center;
+      border-radius: 7px;
+      background: var(--surface-soft);
+      color: currentColor;
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .count {
+      min-width: 22px;
+      height: 22px;
+      display: inline-grid;
+      place-items: center;
+      border-radius: 999px;
+      background: #e6efff;
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .turn-list {
+      margin-top: 22px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .turn-row {
+      padding: 10px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: transparent;
+    }
+
+    .turn-row.active {
+      border-color: #a9c8ff;
+      background: #edf4ff;
+    }
+
+    .turn-row strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 13px;
+    }
+
+    .turn-row span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .stage-map {
+      margin-top: 22px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-soft);
+    }
+
+    .stage-map h3 {
+      margin: 0 0 10px;
+      font-size: 13px;
+    }
+
+    .stage {
+      display: grid;
+      grid-template-columns: 8px 1fr;
+      gap: 8px;
+      align-items: start;
+      padding: 7px 0;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .stage:first-of-type {
+      border-top: 0;
+    }
+
+    .stage-dot {
+      width: 8px;
+      height: 8px;
+      margin-top: 4px;
+      border-radius: 50%;
+      background: var(--blue);
+    }
+
+    .stage:nth-of-type(3) .stage-dot { background: var(--green); }
+    .stage:nth-of-type(4) .stage-dot { background: var(--amber); }
+    .stage:nth-of-type(5) .stage-dot { background: var(--purple); }
+
+    .center {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: 78px 1fr 86px;
+      background: #fbfdff;
+    }
+
+    .conversation-header {
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 22px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.88);
+    }
+
+    .back-btn,
+    .icon-btn {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--muted);
+      font-family: var(--mono);
+      font-weight: 900;
+    }
+
+    .conversation-title {
+      min-width: 0;
+    }
+
+    .conversation-title h1 {
+      margin: 0;
+      overflow: hidden;
+      color: var(--text);
+      font-size: 18px;
+      font-weight: 950;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .conversation-title p {
+      margin: 5px 0 0;
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-pill {
+      min-height: 34px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 0 12px;
+      border-radius: 8px;
+      background: var(--surface-green);
+      color: var(--green);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .pulse {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0 4px rgba(7, 150, 109, 0.14);
+    }
+
+    .feed {
+      min-height: 0;
+      overflow: auto;
+      padding: 22px 28px 26px;
+    }
+
+    .turn {
+      max-width: 900px;
+      margin: 0 auto 18px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .user-message {
+      justify-self: end;
+      width: min(650px, 78%);
+      padding: 12px 14px;
+      border-radius: 8px 8px 2px 8px;
+      background: var(--blue);
+      color: #fff;
+      box-shadow: 0 12px 26px rgba(38, 115, 232, 0.18);
+    }
+
+    .user-message .eyebrow,
+    .assistant-segment .eyebrow,
+    .tool-panel .eyebrow,
+    .decision-panel .eyebrow {
+      color: inherit;
+      opacity: 0.72;
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .user-message strong {
+      display: block;
+      margin-top: 4px;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .assistant-turn {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr);
+      gap: 14px;
+    }
+
+    .rail {
+      position: relative;
+    }
+
+    .rail::after {
+      content: "";
+      position: absolute;
+      top: 34px;
+      bottom: -8px;
+      left: 15px;
+      width: 1px;
+      background: linear-gradient(180deg, #b8c6d7, transparent);
+    }
+
+    .avatar {
+      position: sticky;
+      top: 84px;
+      z-index: 1;
+      width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: #101827;
+      color: #fff;
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 900;
+      box-shadow: 0 0 0 4px #fbfdff;
+    }
+
+    .segments {
+      display: grid;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .assistant-segment,
+    .tool-panel,
+    .decision-panel,
+    .artifact-row,
+    .runtime-note {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: 0 8px 22px rgba(21, 34, 55, 0.06);
+    }
+
+    .assistant-segment {
+      padding: 14px 16px;
+    }
+
+    .segment-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .segment-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      font-size: 13px;
+      font-weight: 950;
+    }
+
+    .segment-title span:last-child {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .badge {
+      min-height: 24px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 8px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface-soft);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .badge.blue { border-color: #b8d1ff; background: var(--surface-blue); color: var(--blue-dark); }
+    .badge.green { border-color: #b7ecdd; background: var(--surface-green); color: var(--green); }
+    .badge.amber { border-color: #f0d4a4; background: var(--surface-amber); color: var(--amber); }
+    .badge.red { border-color: #f1b8bf; background: var(--surface-red); color: var(--red); }
+    .badge.purple { border-color: #d2c9ff; background: var(--surface-purple); color: var(--purple); }
+
+    .answer {
+      margin: 0;
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.75;
+    }
+
+    .answer strong {
+      font-weight: 950;
+    }
+
+    .inline-metrics {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .metric {
+      min-width: 0;
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-soft);
+    }
+
+    .metric dt {
+      margin: 0 0 4px;
+      color: var(--weak);
+      font-size: 11px;
+      font-weight: 850;
+    }
+
+    .metric dd {
+      margin: 0;
+      overflow: hidden;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 950;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .runtime-note {
+      display: grid;
+      grid-template-columns: 28px 1fr auto;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: var(--surface-soft);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .runtime-note .mini-icon {
+      background: var(--surface-blue);
+      color: var(--blue);
+    }
+
+    .tool-panel {
+      overflow: hidden;
+    }
+
+    .tool-head,
+    .decision-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 42px;
+      padding: 0 12px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface-soft);
+    }
+
+    .tool-grid {
+      display: grid;
+      gap: 0;
+    }
+
+    .tool-row {
+      display: grid;
+      grid-template-columns: 130px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      border-top: 1px solid var(--line);
+    }
+
+    .tool-row:first-child {
+      border-top: 0;
+    }
+
+    .tool-name {
+      min-width: 0;
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .tool-copy {
+      min-height: 28px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 850;
+    }
+
+    .tool-desc {
+      min-width: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .code-snippet {
+      margin: 8px 0 0;
+      padding: 9px 10px;
+      border-radius: 8px;
+      background: #111827;
+      color: #dbeafe;
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.55;
+      overflow: auto;
+      white-space: pre;
+    }
+
+    .decision-panel {
+      overflow: hidden;
+      border-color: #f0d4a4;
+    }
+
+    .question-tabs {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .question-tab {
+      min-height: 30px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .question-tab.active {
+      border-color: var(--amber);
+      background: var(--surface-amber);
+      color: var(--amber);
+    }
+
+    .decision-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 230px;
+      gap: 14px;
+      padding: 14px;
+    }
+
+    .decision-question h3 {
+      margin: 0 0 7px;
+      font-size: 15px;
+      font-weight: 950;
+    }
+
+    .decision-question p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .choices {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .choice {
+      display: grid;
+      grid-template-columns: 26px 1fr auto;
+      align-items: center;
+      gap: 10px;
+      min-height: 48px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+
+    .choice.active {
+      border-color: var(--blue);
+      background: var(--surface-blue);
+    }
+
+    .choice-index {
+      width: 26px;
+      height: 26px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      background: #e6efff;
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 950;
+    }
+
+    .choice strong {
+      display: block;
+      font-size: 13px;
+    }
+
+    .choice span {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    .decision-side {
+      padding: 12px;
+      border-radius: 8px;
+      background: var(--surface-soft);
+      border: 1px solid var(--line);
+    }
+
+    .decision-side h4 {
+      margin: 0 0 8px;
+      font-size: 12px;
+      font-weight: 950;
+    }
+
+    .decision-side ul {
+      margin: 0;
+      padding-left: 16px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .artifact-row {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+    }
+
+    .artifact-row strong {
+      display: block;
+      font-size: 13px;
+    }
+
+    .artifact-row span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .composer {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 46px;
+      gap: 10px;
+      align-items: center;
+      padding: 14px 28px;
+      border-top: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.92);
+    }
+
+    .composer-box {
+      min-height: 46px;
+      display: flex;
+      align-items: center;
+      padding: 0 15px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--muted);
+      font-weight: 750;
+    }
+
+    .send-btn {
+      width: 46px;
+      height: 46px;
+      border: 0;
+      border-radius: 8px;
+      background: #7c69e8;
+      color: #fff;
+      font-family: var(--mono);
+      font-size: 16px;
+      font-weight: 950;
+    }
+
+    .inspector {
+      border-left: 1px solid var(--line);
+      display: grid;
+      grid-template-rows: 52px 1fr;
+      min-width: 0;
+    }
+
+    .inspector-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 0 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .inspector-head h2 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 950;
+    }
+
+    .inspector-body {
+      min-height: 0;
+      overflow: auto;
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+      align-content: start;
+      background: #fbfdff;
+    }
+
+    .mapping-panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+
+    .mapping-panel h3 {
+      margin: 0;
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface-soft);
+      font-size: 13px;
+      font-weight: 950;
+    }
+
+    .map-row {
+      display: grid;
+      grid-template-columns: 122px 1fr;
+      gap: 10px;
+      padding: 10px 12px;
+      border-top: 1px solid var(--line);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .map-row:first-of-type {
+      border-top: 0;
+    }
+
+    .map-key {
+      min-width: 0;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 900;
+      overflow-wrap: anywhere;
+    }
+
+    .map-value {
+      min-width: 0;
+      color: var(--muted);
+    }
+
+    .raw-block {
+      margin: 0;
+      padding: 11px 12px;
+      background: #101827;
+      color: #dbeafe;
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .copy-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 10px 12px;
+      border-top: 1px solid var(--line);
+    }
+
+    .copy-row button {
+      min-height: 30px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 850;
+    }
+
+    .taxonomy {
+      grid-column: 1 / -1;
+      padding: 18px 22px 26px;
+      border-top: 1px solid var(--line);
+      background: var(--surface);
+    }
+
+    .taxonomy h2 {
+      margin: 0 0 12px;
+      font-size: 16px;
+      font-weight: 950;
+    }
+
+    .taxonomy-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .taxonomy-card {
+      padding: 13px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfdff;
+    }
+
+    .taxonomy-card h3 {
+      margin: 0 0 8px;
+      font-size: 13px;
+      font-weight: 950;
+    }
+
+    .taxonomy-card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    @media (max-width: 1180px) {
+      .topbar,
+      .workbench {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar,
+      .inspector {
+        display: none;
+      }
+
+      .center {
+        min-height: calc(100vh - 58px);
+      }
+
+      .decision-body,
+      .inline-metrics,
+      .taxonomy-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .user-message {
+        width: min(100%, 620px);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">AC</div>
+        <span>AgentCenter</span>
+        <span class="version">UI Mapping v2</span>
+      </div>
+      <div class="search">搜索 FE、US、Task、Runtime 事件、工具输出、补充确认...</div>
+      <nav class="mode-tabs" aria-label="映射视图">
+        <button class="mode-tab active">对话映射</button>
+        <button class="mode-tab">事件矩阵</button>
+        <button class="mode-tab">调试原文</button>
+      </nav>
+    </header>
+
+    <main class="workbench">
+      <aside class="sidebar">
+        <div class="nav-title">工作台</div>
+        <div class="nav-item active">
+          <span class="nav-icon">H</span>
+          <span>会话映射</span>
+          <span class="count">3</span>
+        </div>
+        <div class="nav-item">
+          <span class="nav-icon">B</span>
+          <span>任务看板</span>
+          <span></span>
+        </div>
+        <div class="nav-item">
+          <span class="nav-icon">W</span>
+          <span>工作流编排</span>
+          <span></span>
+        </div>
+
+        <div class="turn-list">
+          <div class="nav-title">本轮事件</div>
+          <div class="turn-row active">
+            <strong>FE1234 · 需求整理</strong>
+            <span>1 条回答 · 3 个工具 · 1 个待交互 · 2 个产物</span>
+          </div>
+          <div class="turn-row">
+            <strong>系统调试</strong>
+            <span>Prompt、raw event、normalized event 可逐段复制</span>
+          </div>
+          <div class="turn-row">
+            <strong>历史回复</strong>
+            <span>按 user turn 聚合，不再把事件散落成噪声卡片</span>
+          </div>
+        </div>
+
+        <section class="stage-map">
+          <h3>显示分层</h3>
+          <div class="stage"><span class="stage-dot"></span><span>Answer：用户真正要读的回复文本</span></div>
+          <div class="stage"><span class="stage-dot"></span><span>Activity：工具、状态、公开思考摘要</span></div>
+          <div class="stage"><span class="stage-dot"></span><span>Decision：问题、选项、补充输入</span></div>
+          <div class="stage"><span class="stage-dot"></span><span>Debug：原始事件与映射结果</span></div>
+        </section>
+      </aside>
+
+      <section class="center">
+        <header class="conversation-header">
+          <button class="back-btn" aria-label="返回">‹</button>
+          <div class="conversation-title">
+            <h1>FE1234 · 用户登录优化 · PRD 节点</h1>
+            <p>OpenCode / Codex 统一映射：把模型回复、工具、交互、产物按同一 turn 聚合</p>
+          </div>
+          <div class="header-actions">
+            <span class="status-pill"><span class="pulse"></span>Runtime 运行中</span>
+            <button class="icon-btn" aria-label="刷新">R</button>
+          </div>
+        </header>
+
+        <div class="feed">
+          <section class="turn">
+            <article class="user-message">
+              <div class="eyebrow">USER TURN</div>
+              <strong>执行 FE1234 的需求整理节点，并在需要取舍时让我确认。</strong>
+            </article>
+
+            <article class="assistant-turn">
+              <div class="rail"><div class="avatar">A</div></div>
+              <div class="segments">
+                <section class="assistant-segment">
+                  <div class="segment-head">
+                    <div class="segment-title">
+                      <span class="mini-icon">T</span>
+                      <span>回复正文 · PRD 摘要</span>
+                    </div>
+                    <span class="badge green">stream text</span>
+                  </div>
+                  <p class="answer">
+                    <strong>PRD 已生成到可推进状态。</strong>当前登录优化的核心假设是“微信 + Google 第三方登录优先，账号密码兜底，移动端首屏交互不超过 2 步”。还需要你确认推进策略后进入 HLD。
+                  </p>
+                  <dl class="inline-metrics">
+                    <div class="metric"><dt>节点</dt><dd>需求整理</dd></div>
+                    <div class="metric"><dt>置信度</dt><dd>0.82</dd></div>
+                    <div class="metric"><dt>产物</dt><dd>PRD.md</dd></div>
+                    <div class="metric"><dt>下一步</dt><dd>HLD</dd></div>
+                  </dl>
+                </section>
+
+                <div class="runtime-note">
+                  <span class="mini-icon">R</span>
+                  <span>公开思考摘要：已确认登录方式、安全策略、移动端适配三类问题，隐藏私有推理，仅展示可解释摘要。</span>
+                  <span class="badge purple">reasoning_summary</span>
+                </div>
+
+                <section class="tool-panel">
+                  <div class="tool-head">
+                    <div class="segment-title">
+                      <span class="mini-icon">M</span>
+                      <span>工具与运行过程</span>
+                    </div>
+                    <span class="badge blue">3 个工具 · 可展开</span>
+                  </div>
+                  <div class="tool-grid">
+                    <div class="tool-row">
+                      <div class="tool-name">read</div>
+                      <div class="tool-desc">读取历史需求与工作项上下文，提取登录优化约束。</div>
+                      <button class="tool-copy">复制 raw</button>
+                    </div>
+                    <div class="tool-row">
+                      <div class="tool-name">write</div>
+                      <div class="tool-desc">
+                        生成 PRD 产物，记录关键假设与验收标准。
+                        <pre class="code-snippet">artifact: FE1234-PRD.md
+changed: docs/requirements/FE1234-PRD.md</pre>
+                      </div>
+                      <button class="tool-copy">复制 raw</button>
+                    </div>
+                    <div class="tool-row">
+                      <div class="tool-name">todo</div>
+                      <div class="tool-desc">同步待办：确认推进策略、进入 HLD、补充移动端验证。</div>
+                      <button class="tool-copy">复制 raw</button>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="decision-panel">
+                  <div class="decision-head">
+                    <div class="question-tabs" aria-label="问题切换">
+                      <button class="question-tab active">问题 1</button>
+                      <button class="question-tab">问题 2</button>
+                      <button class="question-tab">问题 3</button>
+                    </div>
+                    <span class="badge amber">input.required</span>
+                  </div>
+                  <div class="decision-body">
+                    <div class="decision-question">
+                      <div class="eyebrow">待交互项</div>
+                      <h3>PRD 采用哪种推进策略？</h3>
+                      <p>请只展示问题本身、必要背景和可执行选项；单号、节点名、重复 PRD 文案由标题区承载，不进入问题卡片。</p>
+                      <div class="choices">
+                        <div class="choice active">
+                          <span class="choice-index">1</span>
+                          <div><strong>直接采用当前 PRD</strong><span>基于现有假设继续进入 HLD。</span></div>
+                          <span class="badge blue">推荐</span>
+                        </div>
+                        <div class="choice">
+                          <span class="choice-index">2</span>
+                          <div><strong>调整后再推进</strong><span>先修改登录范围或验收标准。</span></div>
+                          <span class="badge">选择</span>
+                        </div>
+                        <div class="choice">
+                          <span class="choice-index">3</span>
+                          <div><strong>只先做最小方案</strong><span>优先完成核心登录链路，其余后续迭代。</span></div>
+                          <span class="badge">选择</span>
+                        </div>
+                      </div>
+                    </div>
+                    <aside class="decision-side">
+                      <h4>映射规则</h4>
+                      <ul>
+                        <li>问题 tab 放在交互标题栏，可快速切换。</li>
+                        <li>内容区只放问题、背景、选项、输入。</li>
+                        <li>每个选项保留 raw payload 复制入口。</li>
+                        <li>提交后作为 user action 回写到同一 turn。</li>
+                      </ul>
+                    </aside>
+                  </div>
+                </section>
+
+                <div class="artifact-row">
+                  <span class="mini-icon">D</span>
+                  <div>
+                    <strong>FE1234-PRD.md</strong>
+                    <span>由 patch / file / tool output 映射为产物行，而不是塞进助手正文。</span>
+                  </div>
+                  <span class="badge green">artifact</span>
+                </div>
+              </div>
+            </article>
+          </section>
+        </div>
+
+        <footer class="composer">
+          <div class="composer-box">节点已完成，等待你选择“进入下一节点”或补充说明...</div>
+          <button class="send-btn" aria-label="发送">›</button>
+        </footer>
+      </section>
+
+      <aside class="inspector">
+        <div class="inspector-head">
+          <h2>Prompt Debug / Event Inspector</h2>
+          <span class="badge blue">全屏</span>
+        </div>
+        <div class="inspector-body">
+          <section class="mapping-panel">
+            <h3>OpenCode 原始事件</h3>
+            <div class="map-row">
+              <div class="map-key">message.part.updated</div>
+              <div class="map-value">part.type=text/reasoning/tool/file/patch/...；进入统一 turn。</div>
+            </div>
+            <div class="map-row">
+              <div class="map-key">session.status</div>
+              <div class="map-value">busy/idle/retry 只更新 turn 状态，不单独刷屏。</div>
+            </div>
+            <div class="map-row">
+              <div class="map-key">permission.updated</div>
+              <div class="map-value">映射为 Decision panel，附可复制原始 payload。</div>
+            </div>
+            <pre class="raw-block">{
+  "type": "message.part.updated",
+  "properties": {
+    "part": {
+      "type": "tool",
+      "tool": "write",
+      "state": {
+        "status": "completed",
+        "title": "生成 PRD",
+        "output": "FE1234-PRD.md"
+      }
+    }
+  }
+}</pre>
+            <div class="copy-row">
+              <button>复制本段</button>
+              <button>复制映射后事件</button>
+              <button>复制可见 UI 文案</button>
+            </div>
+          </section>
+
+          <section class="mapping-panel">
+            <h3>Codex 可观察 UI 映射</h3>
+            <div class="map-row">
+              <div class="map-key">commentary</div>
+              <div class="map-value">进运行提示，不进入最终助手正文。</div>
+            </div>
+            <div class="map-row">
+              <div class="map-key">tool call/result</div>
+              <div class="map-value">进工具折叠块，保留命令、输出、状态、复制。</div>
+            </div>
+            <div class="map-row">
+              <div class="map-key">final</div>
+              <div class="map-value">进 Answer segment，作为用户主要阅读对象。</div>
+            </div>
+            <div class="map-row">
+              <div class="map-key">analysis</div>
+              <div class="map-value">不展示；只允许公开摘要或调试授权视图。</div>
+            </div>
+          </section>
+
+          <section class="mapping-panel">
+            <h3>当前缺口</h3>
+            <div class="map-row">
+              <div class="map-key">丢失</div>
+              <div class="map-value">file/patch/snapshot/retry/compaction/subtask/agent/todo/session.diff。</div>
+            </div>
+            <div class="map-row">
+              <div class="map-key">混淆</div>
+              <div class="map-value">tool 被压成 Skill，metadata、input、attachments 丢失。</div>
+            </div>
+            <div class="map-row">
+              <div class="map-key">噪声</div>
+              <div class="map-value">状态事件独立成卡片；应成为 turn 内的 activity rail。</div>
+            </div>
+          </section>
+        </div>
+      </aside>
+
+      <section class="taxonomy">
+        <h2>建议的 UI 映射层级</h2>
+        <div class="taxonomy-grid">
+          <article class="taxonomy-card">
+            <h3>Answer Segment</h3>
+            <p>承载 text/final，可流式更新；只放用户需要读的结论、说明、下一步。</p>
+          </article>
+          <article class="taxonomy-card">
+            <h3>Activity Segment</h3>
+            <p>承载 reasoning_summary、tool lifecycle、status、retry；默认压缩，必要时展开。</p>
+          </article>
+          <article class="taxonomy-card">
+            <h3>Decision Segment</h3>
+            <p>承载 permission/input/confirmation；问题 tab 在标题区，内容区只放问题和选项。</p>
+          </article>
+          <article class="taxonomy-card">
+            <h3>Evidence Segment</h3>
+            <p>承载 file、patch、snapshot、artifact、diff、copy raw；从调试到审查都有证据。</p>
+          </article>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

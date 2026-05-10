@@ -1,7 +1,7 @@
 # Prototype
 
 > 当前首页高保真原型
-> 最近更新：2026-05-07
+> 最近更新：2026-05-10
 
 ## 当前基线
 
@@ -43,6 +43,9 @@ node tools/opencode-bridge.mjs --mock --port 4789
 | 文件 | 说明 |
 |------|------|
 | [homepage.html](./homepage.html) | 静态高保真首页原型（当前基线） |
+| [workflow-runtime-explainer.html](./workflow-runtime-explainer.html) | 当前工作流、对话 UI 映射和用户交互形态说明页 |
+| [../../agentcenter-web/public/prototypes/conversation-layered-turn-hifi.html](../../agentcenter-web/public/prototypes/conversation-layered-turn-hifi.html) | 对话 UI 映射高保真：文本主回答、有序执行步骤、工具/证据/决策按因果挂载 |
+| [../../.sisyphus/evidence/conversation-layered-turn-sequenced-steps.png](../../.sisyphus/evidence/conversation-layered-turn-sequenced-steps.png) | 对话 UI 有序步骤原型截图证据 |
 | [HOMEPAGE-VUE-HIGH-FI-GAP.md](./HOMEPAGE-VUE-HIGH-FI-GAP.md) | Vue 实现与首页高保真的差距清单和验收合同 |
 | [THEME-SYSTEM-DESIGN.md](./THEME-SYSTEM-DESIGN.md) | Vue 工作台主题切换、配色 token 和 7 套主题方案 |
 | [theme-system-highfi-board.png](./theme-system-highfi-board.png) | 主题高保真对照图 |

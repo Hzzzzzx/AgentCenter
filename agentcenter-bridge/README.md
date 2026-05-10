@@ -24,6 +24,17 @@ Java Spring Boot 后端。管理工作事项、工作流、会话、确认项，
 
 启动后监听 8080 端口。首次发消息时会自动启动 `opencode serve`（4097 端口）。
 
+> **企业环境**：如果 Maven 无法下载依赖，需在 `~/.m2/settings.xml` 配置企业仓库 mirror。详见根目录 README.md 的"企业环境配置"章节。
+
+也可以用项目根目录的一键启动脚本：
+```bash
+../start.sh          # 后台启动全部服务
+../start.sh --check  # 先检查环境
+../start.sh --dev    # 开发模式：tmux 保活 + Spring Boot DevTools
+```
+
+开发模式启用 `spring-boot-devtools`。修改 Java 源码后执行 `./mvnw compile`，DevTools 会在 classpath 变化后自动重启 Spring Context；这会断开当前 SSE 连接，但不需要手动停止再启动 Bridge。
+
 ## Build & Test
 
 ```bash
@@ -96,7 +107,7 @@ Java Spring Boot 后端。管理工作事项、工作流、会话、确认项，
 | `server.port` | 8080 | Bridge 端口 |
 | `agentcenter.runtime.opencode.serve.enabled` | true | 是否启用 opencode 适配器 |
 | `agentcenter.runtime.opencode.serve.port` | 4097 | opencode serve 端口 |
-| `agentcenter.runtime.opencode.serve.working-directory` | `${user.dir}/..` | opencode 工作目录 |
+| `agentcenter.runtime.opencode.serve.working-directory` | `${user.dir}/runtime-workspace` | opencode 工作目录（自动定位到项目根目录下，自动创建） |
 
 ## Database
 

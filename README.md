@@ -17,51 +17,58 @@
 
 > **opencode 必须登录过**：`opencode auth`。Bridge 会在首次使用时自动启动 `opencode serve`。
 
-### 三步启动
-
-本项目需要三个服务协同运行：**opencode serve**（AI 引擎）、**Java Bridge**（后端）、**Vue 前端**。
-
-#### 第一步：启动 opencode serve（AI 引擎）
+### 一键启动
 
 ```bash
-# 在项目根目录下执行
+./start.sh            # 后台启动所有服务
+./start.sh --check    # 先检查环境
+./start.sh --status   # 查看运行状态
+./start.sh --stop     # 停止所有服务
+./start.sh --restart  # 重启
+./start.sh --fg       # 前台模式（Ctrl+C 停止）
+./start.sh --dev      # 开发模式（tmux 保活 + Bridge DevTools）
+```
+
+启动成功后访问 **http://localhost:5173**
+
+### 开发模式与热加载
+
+本地改 Java Bridge 时推荐使用开发模式：
+
+```bash
+./start.sh --dev
+```
+
+开发模式会把 opencode、Java Bridge、Vue Dev Server 放进固定的 tmux 会话里保活，并启用 Spring Boot DevTools。Java 源码变更后需要让 classpath 更新，常用方式是：
+
+```bash
+cd agentcenter-bridge && ./mvnw compile
+```
+
+DevTools 检测到编译后的 class 变化后会自动重启 Spring Context；SSE 连接和当前会话 UI 可能短暂断开，刷新页面或重新进入会话即可。停止仍统一使用：
+
+```bash
+./start.sh --stop
+```
+
+### 手动分步启动
+
+如果不用 `start.sh`，可以手动按顺序启动三个服务：
+
+**第一步：opencode serve（可选，Bridge 会自动启动）**
+```bash
 opencode serve --hostname 127.0.0.1 --port 4097 --print-logs --log-level WARN
 ```
 
-> **也可以不手动启动**——Java Bridge 会在首次发消息时自动启动 opencode serve。但手动启动方便看日志。
-
-验证：
-
+**第二步：Java Bridge**
 ```bash
-curl http://127.0.0.1:4097/path -H 'x-opencode-directory: .'
-# 返回 200 即可
+cd agentcenter-bridge && ./mvnw spring-boot:run
 ```
 
-#### 第二步：启动 Java Bridge（后端）
-
+**第三步：Vue 前端**
 ```bash
-cd agentcenter-bridge
-./mvnw spring-boot:run
+cd agentcenter-web && npm install && npm run dev
 ```
-
-等待出现 `Started AgentCenterBridgeApplication in X.XXX seconds`。
-
-验证：
-
-```bash
-curl http://localhost:8080/api/agent-sessions
-# 返回 [] 或 JSON 数组即可
-```
-
-#### 第三步：启动 Vue 前端
-
-```bash
-cd agentcenter-web
-npm install        # 首次需要
-npm run dev
-```
-
-打开浏览器访问 **http://localhost:5173**
 
 ### 验证 E2E 对话
 
@@ -120,26 +127,49 @@ AgentCenter/
 
 ## 工作目录配置
 
-opencode serve 需要知道在哪个目录下工作（读文件、执行命令等）。
+opencode serve 的工作目录固定在 **项目根目录下的 `runtime-workspace/`**（自动创建）。所有组件统一使用此目录。
 
-**默认**：`application.yml` 中 `working-directory: ${user.dir}/..`，即 `agentcenter-bridge/` 的父目录（项目根目录）。
-
-**修改方式**：
-
-```yaml
-# agentcenter-bridge/src/main/resources/application.yml
-agentcenter:
-  runtime:
-    opencode:
-      serve:
-        working-directory: /absolute/path/to/your/project
+```
+AgentCenter/
+├── agentcenter-bridge/
+├── agentcenter-web/
+├── runtime-workspace/          ← opencode 工作目录（自动创建）
+│   └── .opencode/
+│       ├── skills/             ← 技能文件
+│       └── mcp.json            ← MCP 配置
+└── start.sh
 ```
 
-或环境变量：
+覆盖方式：`export AGENTCENTER_RUNTIME_WORKSPACE=/my/path`
 
-```bash
-export AGENTCENTER_RUNTIME_OPENCODE_SERVE_WORKING_DIRECTORY=/my/project
-```
+## 企业环境配置
+
+> **重要**：在企业网络内使用时，Maven 可能无法直接访问 Maven Central。请提前配置：
+
+1. **Maven settings.xml**：创建或编辑 `~/.m2/settings.xml`，添加企业仓库 mirror：
+   ```xml
+   <settings>
+     <mirrors>
+       <mirror>
+         <id>enterprise</id>
+         <mirrorOf>*</mirrorOf>
+         <url>https://your-company-nexus/repository/maven-public/</url>
+       </mirror>
+     </mirrors>
+   </settings>
+   ```
+
+2. **Maven 本地仓库路径**：避免使用 Windows C 盘默认路径。在 `settings.xml` 中配置：
+   ```xml
+   <localRepository>D:/maven-repo</localRepository>
+   ```
+
+3. **自定义 settings.xml 位置**：
+   ```bash
+   export MAVEN_SETTINGS=/path/to/your/settings.xml
+   ```
+
+`./start.sh --check` 会自动检测这些配置并给出提示。
 
 ---
 
@@ -221,4 +251,4 @@ lsof -ti:5173 | xargs kill
 
 ---
 
-*最后更新：2026-05-06*
+*最后更新：2026-05-10*

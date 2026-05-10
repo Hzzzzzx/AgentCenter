@@ -333,6 +333,8 @@ classDiagram
 | `runtime.status` | Runtime 状态变化 | `runtime_event` |
 | `runtime.error` | Runtime 异常 | `runtime_event` / error message |
 
+对话 UI 不能直接按上表的事件类型做主层级展示。事件进入前端后必须先投影成“主回答 + 有序执行步骤 + 待交互 + 调试详情”，并且只允许合并同一对象生命周期。具体 UI 映射规则见 [CONVERSATION-UI-EVENT-MAPPING-DESIGN.md](./CONVERSATION-UI-EVENT-MAPPING-DESIGN.md)。
+
 ## 9. HTTP(S)+SSE 传输映射
 
 适用场景：
@@ -658,6 +660,8 @@ WebSocket Provider 推荐按 `runtimeType + project/workspace + security context
 - `conversation.completed`：落最终 assistant message，是会话结果的权威事件。
 
 `RuntimeEventProjector` 必须按 `operationId`、`runtimeEventId` 或 `finalMessageId` 做幂等，避免断线重放造成重复消息、重复确认项或重复资源版本。
+
+前端展示层还需要一个独立的 `ConversationTurnProjection`：它按 `seqNo` 还原真实顺序，把工具、产物、确认项挂到产生它们的执行步骤下。不要把 `tool.started` / `tool.completed` 统一渲染成全局工具组，也不要按工具名兜底合并不同 `toolCallId` 的调用。
 
 ### 16.7 修订后的组件边界
 

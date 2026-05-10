@@ -1,0 +1,831 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AgentCenter 工作流与对话映射说明</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f8fb;
+        --panel: #ffffff;
+        --panel-soft: #f1f5fb;
+        --line: #d9e2ef;
+        --line-strong: #9fb5d1;
+        --text: #102033;
+        --muted: #60728a;
+        --blue: #2563eb;
+        --green: #0f9f6e;
+        --orange: #d97706;
+        --red: #dc2626;
+        --purple: #7c3aed;
+        --shadow: 0 14px 36px rgba(32, 56, 84, 0.10);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+        line-height: 1.55;
+      }
+
+      .page {
+        width: min(1180px, calc(100vw - 48px));
+        margin: 0 auto;
+        padding: 36px 0 56px;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
+        gap: 18px;
+        align-items: stretch;
+        margin-bottom: 18px;
+      }
+
+      .hero__main,
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+      }
+
+      .hero__main {
+        padding: 28px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        min-height: 26px;
+        padding: 0 10px;
+        border-radius: 999px;
+        background: #e8f0ff;
+        color: var(--blue);
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+        line-height: 1.2;
+      }
+
+      h1 {
+        margin-top: 14px;
+        font-size: 34px;
+        letter-spacing: 0;
+      }
+
+      h2 {
+        font-size: 22px;
+      }
+
+      h3 {
+        font-size: 16px;
+      }
+
+      p {
+        margin: 10px 0 0;
+        color: var(--muted);
+      }
+
+      .hero__aside {
+        padding: 18px;
+      }
+
+      .legend {
+        display: grid;
+        gap: 10px;
+        margin-top: 14px;
+      }
+
+      .legend__row {
+        display: grid;
+        grid-template-columns: 88px minmax(0, 1fr);
+        gap: 10px;
+        align-items: start;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel-soft);
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 24px;
+        padding: 0 8px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 850;
+      }
+
+      .tag--blue { background: #dbeafe; color: #1d4ed8; }
+      .tag--green { background: #d1fae5; color: #047857; }
+      .tag--orange { background: #ffedd5; color: #c2410c; }
+      .tag--purple { background: #ede9fe; color: #6d28d9; }
+      .tag--red { background: #fee2e2; color: #b91c1c; }
+      .tag--gray { background: #e2e8f0; color: #334155; }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+      }
+
+      .panel {
+        margin-top: 18px;
+        padding: 22px;
+      }
+
+      .flow {
+        display: grid;
+        gap: 12px;
+        margin-top: 16px;
+      }
+
+      .flow__row {
+        display: grid;
+        grid-template-columns: 160px minmax(0, 1fr);
+        gap: 12px;
+        align-items: stretch;
+      }
+
+      .flow__label {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 62px;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel-soft);
+        color: var(--text);
+        font-weight: 850;
+        text-align: center;
+      }
+
+      .flow__body {
+        position: relative;
+        min-height: 62px;
+        padding: 12px 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .flow__body::before {
+        content: "";
+        position: absolute;
+        top: -13px;
+        left: 26px;
+        width: 2px;
+        height: 12px;
+        background: var(--line-strong);
+      }
+
+      .flow__row:first-child .flow__body::before {
+        display: none;
+      }
+
+      .flow__body strong {
+        display: block;
+        margin-bottom: 4px;
+      }
+
+      .swimlane {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 16px;
+      }
+
+      .lane {
+        min-height: 168px;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel-soft);
+      }
+
+      .lane h3 {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+
+      .lane ul,
+      .rules ul {
+        margin: 0;
+        padding-left: 18px;
+        color: var(--muted);
+      }
+
+      .lane li,
+      .rules li {
+        margin: 6px 0;
+      }
+
+      .conversation {
+        display: grid;
+        grid-template-columns: 210px minmax(0, 1fr);
+        gap: 14px;
+        margin-top: 16px;
+      }
+
+      .tabs {
+        display: grid;
+        gap: 8px;
+      }
+
+      .tab {
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel-soft);
+      }
+
+      .tab strong {
+        display: block;
+      }
+
+      .bubble-stack {
+        display: grid;
+        gap: 10px;
+      }
+
+      .bubble {
+        max-width: 88%;
+        padding: 12px 14px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: #fff;
+      }
+
+      .bubble--user {
+        justify-self: end;
+        border-color: #7db0ff;
+        background: #eaf2ff;
+      }
+
+      .bubble--agent {
+        justify-self: start;
+      }
+
+      .bubble--system {
+        max-width: 100%;
+        border-color: #f2c978;
+        background: #fff7e6;
+      }
+
+      .interaction-bar {
+        margin-top: 14px;
+        border: 1px solid #8eb7ff;
+        border-radius: 8px;
+        background: #f8fbff;
+        overflow: hidden;
+      }
+
+      .interaction-bar__head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 12px;
+        border-bottom: 1px solid #cfe0ff;
+        background: #eef5ff;
+        font-weight: 850;
+      }
+
+      .interaction-bar__body {
+        display: grid;
+        grid-template-columns: 180px minmax(0, 1fr);
+        gap: 12px;
+        padding: 12px;
+      }
+
+      .choice-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .choice {
+        min-height: 68px;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .choice strong {
+        display: block;
+        color: var(--text);
+      }
+
+      .matrix {
+        width: 100%;
+        margin-top: 14px;
+        border-collapse: collapse;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .matrix th,
+      .matrix td {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      .matrix th {
+        background: var(--panel-soft);
+        color: var(--text);
+        font-size: 13px;
+      }
+
+      .matrix tr:last-child td {
+        border-bottom: 0;
+      }
+
+      code {
+        padding: 2px 5px;
+        border-radius: 5px;
+        background: #e8eef7;
+        color: #19324f;
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 0.92em;
+      }
+
+      .note {
+        margin-top: 14px;
+        padding: 12px 14px;
+        border: 1px solid #f0c46b;
+        border-radius: 8px;
+        background: #fff8e8;
+        color: #7c4a03;
+      }
+
+      .mode-switch {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 12px;
+        margin-top: 16px;
+      }
+
+      .mode-card {
+        position: relative;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .mode-card--active {
+        border-color: #8eb7ff;
+        background: #f4f8ff;
+      }
+
+      .toggle-demo {
+        display: inline-grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px;
+        min-height: 36px;
+        padding: 4px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--panel-soft);
+      }
+
+      .toggle-demo span {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 14px;
+        border-radius: 999px;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 850;
+        white-space: nowrap;
+      }
+
+      .toggle-demo .is-active {
+        background: var(--blue);
+        color: #fff;
+      }
+
+      .mode-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 14px;
+      }
+
+      .settings-preview {
+        display: grid;
+        grid-template-columns: 190px minmax(0, 1fr);
+        gap: 14px;
+        margin-top: 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        overflow: hidden;
+      }
+
+      .settings-preview__nav {
+        display: grid;
+        align-content: start;
+        gap: 6px;
+        padding: 12px;
+        background: var(--panel-soft);
+        border-right: 1px solid var(--line);
+      }
+
+      .settings-preview__nav button {
+        min-height: 36px;
+        padding: 0 10px;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--muted);
+        font: inherit;
+        font-weight: 800;
+        text-align: left;
+      }
+
+      .settings-preview__nav .is-active {
+        border-color: #9fc0ff;
+        background: #eaf2ff;
+        color: var(--blue);
+      }
+
+      .settings-preview__content {
+        padding: 16px;
+      }
+
+      .setting-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 14px;
+        align-items: center;
+        min-height: 70px;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .switch {
+        position: relative;
+        width: 54px;
+        height: 30px;
+        border-radius: 999px;
+        background: var(--blue);
+        box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+      }
+
+      .switch::after {
+        content: "";
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background: #fff;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.2);
+      }
+
+      @media (max-width: 900px) {
+        .page {
+          width: min(100vw - 28px, 760px);
+        }
+
+        .hero,
+        .grid,
+        .conversation,
+        .interaction-bar__body,
+        .swimlane {
+          grid-template-columns: 1fr;
+        }
+
+        .mode-switch {
+          grid-template-columns: 1fr;
+        }
+
+        .settings-preview {
+          grid-template-columns: 1fr;
+        }
+
+        .settings-preview__nav {
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+        }
+
+        .flow__row {
+          grid-template-columns: 1fr;
+        }
+
+        .flow__body::before {
+          left: 50%;
+        }
+
+        .choice-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <div class="hero__main">
+          <span class="eyebrow">AgentCenter 当前工作流说明</span>
+          <h1>它不是一个固定流水线，而是“按顺序调用 Skill 的对话式执行器”</h1>
+          <p>
+            当前实现的目标是：工作流负责提供顺序、上下文和状态协议；真正的产出、是否需要澄清、何时完成，尽量交给 Agent 和 Skill 自己判断。
+            前端对话区展示的是绑定到当前工作流节点的 Agent 会话消息。
+          </p>
+        </div>
+        <aside class="hero__aside panel">
+          <h2>读图钥匙</h2>
+          <div class="legend">
+            <div class="legend__row"><span class="tag tag--blue">工作项</span><span>FE / US / TASK / BUG 等业务对象，是工作流的入口。</span></div>
+            <div class="legend__row"><span class="tag tag--green">节点</span><span>PRD / HLD / LLD 等阶段，只声明顺序和 Skill。</span></div>
+            <div class="legend__row"><span class="tag tag--purple">Skill</span><span>真正执行任务的说明和能力，应优先发挥自身作用。</span></div>
+            <div class="legend__row"><span class="tag tag--orange">交互</span><span>Agent 需要用户选择、确认、补充或审批时创建。</span></div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="panel">
+        <h2>一条工作流从点击“开始处理”到对话区出现内容</h2>
+        <div class="mode-meta">
+          <p>模式更适合放在左下角“设置”里的“运行设置”，作为用户的默认执行偏好。</p>
+          <div class="toggle-demo" aria-label="运行模式切换示意">
+            <span class="is-active">自动模式</span>
+            <span>人工确认</span>
+          </div>
+        </div>
+        <div class="settings-preview" aria-label="左下角设置中的运行设置示意">
+          <div class="settings-preview__nav">
+            <button>项目设置</button>
+            <button>Skill 管理</button>
+            <button>MCP 管理</button>
+            <button class="is-active">运行设置</button>
+          </div>
+          <div class="settings-preview__content">
+            <h3>运行设置</h3>
+            <div class="setting-row">
+              <div>
+                <strong>自动运行工作流</strong>
+                <p>开启后，Agent 判断当前节点已完成时，系统可以自动进入下一节点；关闭后，每个节点完成后都需要用户确认。</p>
+              </div>
+              <span class="switch" aria-hidden="true"></span>
+            </div>
+            <p>这个设置可以作为默认值；单个工作项启动时未来也可以允许临时覆盖。</p>
+          </div>
+        </div>
+        <div class="mode-switch">
+          <div class="mode-card mode-card--active">
+            <span class="tag tag--green">AUTO</span>
+            <h3>自动模式</h3>
+            <p>Agent 认为当前 Skill 已完成且条件充分时，可以进入“准备推进”状态；系统可按策略自动推进，或在高风险节点前弹出确认。</p>
+          </div>
+          <div class="mode-card">
+            <span class="tag tag--orange">MANUAL</span>
+            <h3>人工确认模式</h3>
+            <p>每个节点输出完成后都创建“进入下一节点 / 继续补充 / 重新执行”的确认项，由用户明确选择后再推进。</p>
+          </div>
+        </div>
+        <div class="flow">
+          <div class="flow__row">
+            <div class="flow__label">1. 用户点击开始</div>
+            <div class="flow__body">
+              <strong>前端调用 <code>POST /api/work-items/{id}/start-workflow</code></strong>
+              <p>按钮所在位置可能是首页列表、右侧详情或会话入口。请求使用“运行设置”里的默认模式，例如 <code>mode: AUTO</code> 或 <code>mode: MANUAL_CONFIRM</code>。</p>
+            </div>
+          </div>
+          <div class="flow__row">
+            <div class="flow__label">2. Bridge 建立实例</div>
+            <div class="flow__body">
+              <strong>创建或复用 <code>workflow_instance</code> 与 <code>workflow_node_instance</code></strong>
+              <p>每个节点保存自己的状态：<code>PENDING</code>、<code>RUNNING</code>、<code>WAITING_CONFIRMATION</code>、<code>COMPLETED</code> 等。</p>
+            </div>
+          </div>
+          <div class="flow__row">
+            <div class="flow__label">3. 绑定 Agent 会话</div>
+            <div class="flow__body">
+              <strong>当前节点绑定 <code>agent_session_id</code></strong>
+              <p>对话 UI 的消息来源应是当前节点绑定的 AgentSession，而不是同一个工作项下最新的一条任意会话。</p>
+            </div>
+          </div>
+          <div class="flow__row">
+            <div class="flow__label">4. 写入用户输入</div>
+            <div class="flow__body">
+              <strong>工作项编号、标题、描述、Skill、节点上下文作为 USER 消息展示</strong>
+              <p>这就是你要求的“任务信息和 Skill 不是只展示，而是作为用户输入进入对话”。</p>
+            </div>
+          </div>
+          <div class="flow__row">
+            <div class="flow__label">5. Runtime 执行 Skill</div>
+            <div class="flow__body">
+              <strong>OpenCode 收到三段文本：调用 Skill、用户输入上下文、节点状态协议</strong>
+              <p>协议只告诉 Agent 怎么报告状态，不应该把工作流写死成僵硬脚本。</p>
+            </div>
+          </div>
+          <div class="flow__row">
+            <div class="flow__label">6. 前端流式展示</div>
+            <div class="flow__body">
+              <strong>SSE 把 Agent 文本、工具调用、状态事件推回浏览器</strong>
+              <p>对话区应该像正常聊天一样看到用户输入、Agent 输出、工具过程和最终状态。</p>
+            </div>
+          </div>
+          <div class="flow__row">
+            <div class="flow__label">7. 按模式决定推进</div>
+            <div class="flow__body">
+              <strong>自动模式看策略，人工确认模式等用户</strong>
+              <p>同样是 <code>READY_TO_ADVANCE</code>，自动模式可以继续跑下一节点；人工确认模式会在输入框上方固定展示推进确认。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid">
+        <div class="panel">
+          <h2>节点状态怎么理解</h2>
+          <table class="matrix">
+            <thead>
+              <tr>
+                <th>状态</th>
+                <th>用户会看到什么</th>
+                <th>系统动作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>IN_PROGRESS</code></td>
+                <td>Agent 正在输出，输入框显示运行中</td>
+                <td>不推进节点，继续等 Runtime</td>
+              </tr>
+              <tr>
+                <td><code>NEEDS_USER_INPUT</code></td>
+                <td>输入框上方出现“当前需要交互”折叠栏</td>
+                <td>创建确认项，用户处理后把回答回灌给当前 Skill</td>
+              </tr>
+              <tr>
+                <td><code>READY_TO_ADVANCE</code></td>
+                <td>自动模式可继续推进；人工确认模式出现“进入下一节点 / 继续补充 / 重新执行”</td>
+                <td>按当前模式和节点风险决定是否创建推进确认项</td>
+              </tr>
+              <tr>
+                <td><code>BLOCKED</code></td>
+                <td>出现异常或阻塞交互</td>
+                <td>等待重试、跳过、补充信息或人工处理</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="panel">
+          <h2>当前对话 UI 映射</h2>
+          <div class="swimlane">
+            <div class="lane">
+              <h3><span>左侧</span><span class="tag tag--gray">会话</span></h3>
+              <ul>
+                <li>普通会话</li>
+                <li>任务会话</li>
+                <li>当前工作项的入口</li>
+              </ul>
+            </div>
+            <div class="lane">
+              <h3><span>中间</span><span class="tag tag--blue">对话</span></h3>
+              <ul>
+                <li>USER：工作项输入、用户交互回答</li>
+                <li>ASSISTANT：Agent 真实回复</li>
+                <li>SYSTEM：状态和工作流记录</li>
+              </ul>
+            </div>
+            <div class="lane">
+              <h3><span>右侧</span><span class="tag tag--green">详情</span></h3>
+              <ul>
+                <li>工作项信息</li>
+                <li>工作流进度</li>
+                <li>待确认列表</li>
+              </ul>
+            </div>
+            <div class="lane">
+              <h3><span>浮层</span><span class="tag tag--orange">交互</span></h3>
+              <ul>
+                <li>固定在输入框上方</li>
+                <li>多个交互用 Tab 切换</li>
+                <li>处理后写回 USER 消息</li>
+              </ul>
+            </div>
+          </div>
+          <div class="note">
+            当前正确映射应该是：<code>workItem.currentWorkflowInstanceId</code> → <code>currentNodeInstanceId</code> → <code>node.agentSessionId</code> → <code>agent_message</code>。
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>你后续会体会到的交互形态</h2>
+        <div class="conversation">
+          <div class="tabs">
+            <div class="tab">
+              <span class="tag tag--orange">选择</span>
+              <strong>方案取舍</strong>
+              <p>例如“最小方案 / 标准方案 / 完整方案”。</p>
+            </div>
+            <div class="tab">
+              <span class="tag tag--blue">输入</span>
+              <strong>补充信息</strong>
+              <p>例如目标用户、验收标准、边界条件。</p>
+            </div>
+            <div class="tab">
+              <span class="tag tag--green">审批</span>
+              <strong>产物审阅</strong>
+              <p>例如 PRD、HLD、LLD 是否通过。</p>
+            </div>
+            <div class="tab">
+              <span class="tag tag--red">异常</span>
+              <strong>重试或跳过</strong>
+              <p>例如工具失败、权限不足、上下文缺失。</p>
+            </div>
+          </div>
+          <div>
+            <div class="bubble-stack">
+              <div class="bubble bubble--user">
+                <strong>用户输入</strong>
+                工作项编号 FE1234，标题“用户登录优化”，使用 Skill：prd-design。
+              </div>
+              <div class="bubble bubble--agent">
+                <strong>Agent 回复</strong>
+                我已基于现有信息生成 PRD，并发现需要用户选择本次优化范围。
+              </div>
+              <div class="bubble bubble--system">
+                <strong>系统提示</strong>
+                已创建 1 个交互项，请在输入框上方处理。
+              </div>
+            </div>
+            <div class="interaction-bar">
+              <div class="interaction-bar__head">
+                <span>当前需要交互 <span class="tag tag--blue">1</span></span>
+                <span>选择 · FE1234 · 需求整理 (PRD)</span>
+              </div>
+              <div class="interaction-bar__body">
+                <div class="tab">
+                  <span class="tag tag--orange">决策</span>
+                  <strong>选择优化方案范围</strong>
+                  <p>请选择本次登录优化的方案范围。</p>
+                </div>
+                <div class="choice-grid">
+                  <div class="choice">
+                    <strong>最小可用方案</strong>
+                    <p>只做表单、错误反馈、性能。</p>
+                  </div>
+                  <div class="choice">
+                    <strong>标准方案</strong>
+                    <p>增加记住登录、密码切换、埋点。</p>
+                  </div>
+                  <div class="choice">
+                    <strong>完整方案</strong>
+                    <p>再加入验证码登录、骨架屏。</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel rules">
+        <h2>现在这套设计的关键规则</h2>
+        <ul>
+          <li>工作流只负责顺序和上下文，不应该强行替代 Skill 的判断。</li>
+          <li>启动工作流时应明确模式：<code>AUTO</code> 自动推进优先，<code>MANUAL_CONFIRM</code> 人工确认优先。</li>
+          <li>用户手动输入和交互选择都要写成 USER 消息，留在对话历史里。</li>
+          <li>Agent 的文本输出应该按流式进入中间对话区，工具调用作为过程事件展示。</li>
+          <li>普通业务决策只提交 <code>CHOOSE</code>；只有 <code>WORKFLOW_ADVANCE</code> 确认项才能触发进入下一节点、继续补充或重跑。</li>
+          <li>如果用户中途补充要求，系统应回到当前 Skill，而不是代码层直接跳到下一节点。</li>
+          <li>节点是否完成主要由 Agent 输出的状态协议判断，再由用户确认或策略决定是否推进。</li>
+        </ul>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,1332 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AgentCenter Text-first Conversation Mapping</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f7fb;
+      --panel: #ffffff;
+      --soft: #f7f9fc;
+      --soft-2: #eef4fb;
+      --line: #d8e2ee;
+      --line-strong: #b6c5d7;
+      --text: #111827;
+      --muted: #53667e;
+      --weak: #8796aa;
+      --blue: #246fe5;
+      --blue-soft: #eaf2ff;
+      --green: #078765;
+      --green-soft: #e9fbf5;
+      --amber: #b76800;
+      --amber-soft: #fff4df;
+      --red: #ca3445;
+      --red-soft: #fff1f3;
+      --violet: #6552cf;
+      --violet-soft: #f2efff;
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      letter-spacing: 0;
+    }
+
+    button {
+      font: inherit;
+    }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: 58px 1fr;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 250px minmax(360px, 1fr) auto;
+      align-items: center;
+      gap: 18px;
+      padding: 0 20px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(16px);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      font-weight: 950;
+    }
+
+    .logo {
+      width: 32px;
+      height: 32px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: #7567f4;
+      color: #fff;
+      font-family: var(--mono);
+      font-weight: 950;
+    }
+
+    .version {
+      min-height: 22px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 8px;
+      border-radius: 7px;
+      background: var(--blue-soft);
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 950;
+      white-space: nowrap;
+    }
+
+    .search {
+      min-width: 0;
+      height: 38px;
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--weak);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .top-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .top-actions button,
+    .ghost-btn,
+    .copy-btn {
+      min-height: 34px;
+      padding: 0 11px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .top-actions .primary {
+      border-color: #aac8ff;
+      background: var(--blue-soft);
+      color: var(--blue);
+    }
+
+    .layout {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 260px minmax(720px, 1fr) 350px;
+    }
+
+    .left,
+    .right {
+      min-height: 0;
+      background: var(--panel);
+    }
+
+    .left {
+      padding: 16px 12px;
+      border-right: 1px solid var(--line);
+    }
+
+    .right {
+      display: grid;
+      grid-template-rows: 52px 1fr;
+      border-left: 1px solid var(--line);
+    }
+
+    .nav-label {
+      margin: 0 8px 10px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 950;
+    }
+
+    .nav-block {
+      margin-bottom: 22px;
+    }
+
+    .nav-item {
+      min-height: 44px;
+      display: grid;
+      grid-template-columns: 24px 1fr auto;
+      align-items: center;
+      gap: 8px;
+      padding: 0 10px;
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 850;
+    }
+
+    .nav-item.active {
+      background: #edf4ff;
+      color: var(--blue);
+    }
+
+    .glyph,
+    .avatar,
+    .inline-icon {
+      font-family: var(--mono);
+      font-weight: 950;
+    }
+
+    .glyph {
+      width: 24px;
+      height: 24px;
+      display: grid;
+      place-items: center;
+      border-radius: 7px;
+      background: var(--soft);
+      font-size: 11px;
+    }
+
+    .thread {
+      padding: 12px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      color: var(--muted);
+    }
+
+    .thread.active {
+      border-color: #9fc3ff;
+      background: #edf4ff;
+      color: var(--text);
+    }
+
+    .thread strong {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 13px;
+      font-weight: 950;
+    }
+
+    .thread span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .legend {
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--soft);
+    }
+
+    .legend-row {
+      display: grid;
+      grid-template-columns: 8px 1fr;
+      gap: 8px;
+      align-items: start;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      margin-top: 5px;
+      border-radius: 50%;
+      background: var(--blue);
+    }
+
+    .dot.green { background: var(--green); }
+    .dot.amber { background: var(--amber); }
+    .dot.violet { background: var(--violet); }
+
+    .center {
+      min-height: 0;
+      display: grid;
+      grid-template-rows: 76px 1fr 84px;
+      background: #fbfdff;
+    }
+
+    .conversation-head {
+      display: grid;
+      grid-template-columns: 40px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 22px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.92);
+    }
+
+    .icon-btn {
+      width: 38px;
+      height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--muted);
+      font-family: var(--mono);
+      font-weight: 950;
+    }
+
+    .title {
+      min-width: 0;
+    }
+
+    .title h1 {
+      margin: 0;
+      overflow: hidden;
+      font-size: 18px;
+      font-weight: 950;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .title p {
+      margin: 5px 0 0;
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .status {
+      min-height: 34px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 11px;
+      border-radius: 8px;
+      background: var(--green-soft);
+      color: var(--green);
+      font-size: 12px;
+      font-weight: 950;
+    }
+
+    .status::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0 4px rgba(7, 135, 101, 0.14);
+    }
+
+    .feed {
+      min-height: 0;
+      overflow: auto;
+      padding: 24px 28px 30px;
+    }
+
+    .thread-flow {
+      width: min(880px, 100%);
+      margin: 0 auto;
+      display: grid;
+      gap: 22px;
+    }
+
+    .user-turn {
+      justify-self: end;
+      width: min(660px, 78%);
+      padding: 12px 14px;
+      border-radius: 8px 8px 2px 8px;
+      background: var(--blue);
+      color: #fff;
+      box-shadow: 0 14px 28px rgba(36, 111, 229, 0.18);
+    }
+
+    .user-turn .eyebrow {
+      color: rgba(255, 255, 255, 0.72);
+    }
+
+    .user-turn strong {
+      display: block;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .eyebrow {
+      margin-bottom: 5px;
+      color: var(--weak);
+      font-size: 11px;
+      font-weight: 950;
+      text-transform: uppercase;
+    }
+
+    .assistant-turn {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr);
+      gap: 14px;
+      align-items: start;
+    }
+
+    .rail {
+      position: relative;
+    }
+
+    .rail::after {
+      content: "";
+      position: absolute;
+      top: 36px;
+      bottom: -20px;
+      left: 15px;
+      width: 1px;
+      background: linear-gradient(180deg, var(--line-strong), transparent);
+    }
+
+    .avatar {
+      position: sticky;
+      top: 88px;
+      z-index: 1;
+      width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: #111827;
+      color: #fff;
+      font-size: 12px;
+      box-shadow: 0 0 0 4px #fbfdff;
+    }
+
+    .assistant-main {
+      min-width: 0;
+      padding-top: 1px;
+    }
+
+    .assistant-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 28px;
+      margin-bottom: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 850;
+    }
+
+    .pill {
+      min-height: 22px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 8px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .pill.blue { border-color: #b7d0ff; background: var(--blue-soft); color: var(--blue); }
+    .pill.green { border-color: #abe8d6; background: var(--green-soft); color: var(--green); }
+    .pill.amber { border-color: #edd19f; background: var(--amber-soft); color: var(--amber); }
+    .pill.violet { border-color: #cac1ff; background: var(--violet-soft); color: var(--violet); }
+
+    .assistant-text {
+      max-width: 760px;
+      color: var(--text);
+      font-size: 15px;
+      line-height: 1.75;
+    }
+
+    .assistant-text h2 {
+      margin: 0 0 8px;
+      font-size: 17px;
+      line-height: 1.35;
+      font-weight: 950;
+    }
+
+    .assistant-text p {
+      margin: 0 0 10px;
+    }
+
+    .assistant-text ul {
+      margin: 8px 0 12px;
+      padding-left: 20px;
+    }
+
+    .assistant-text li {
+      margin: 4px 0;
+    }
+
+    .inline-facts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 12px 0 14px;
+    }
+
+    .fact {
+      min-height: 30px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 9px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--soft);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 850;
+    }
+
+    .fact strong {
+      color: var(--text);
+      font-weight: 950;
+    }
+
+    .answer-note {
+      margin: 12px 0 0;
+      padding: 10px 12px;
+      border-left: 3px solid var(--blue);
+      background: #f7faff;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .folds {
+      max-width: 780px;
+      display: grid;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    details.fold {
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid transparent;
+    }
+
+    details.fold[open] {
+      padding-bottom: 8px;
+      border-bottom-color: var(--line);
+    }
+
+    .fold > summary {
+      min-height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 950;
+      cursor: pointer;
+      list-style: none;
+    }
+
+    .fold > summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .summary-left {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .chev {
+      width: 20px;
+      height: 20px;
+      display: grid;
+      place-items: center;
+      border-radius: 6px;
+      background: var(--soft);
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 12px;
+      transform: rotate(0deg);
+    }
+
+    details[open] .chev {
+      transform: rotate(90deg);
+    }
+
+    .fold-body {
+      padding: 0 0 8px 28px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .event-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .step-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr);
+      gap: 10px;
+      position: relative;
+    }
+
+    .step:not(:last-child)::after {
+      content: "";
+      position: absolute;
+      top: 30px;
+      bottom: -12px;
+      left: 13px;
+      width: 1px;
+      background: var(--line);
+    }
+
+    .step-index {
+      position: relative;
+      z-index: 1;
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--panel);
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 950;
+    }
+
+    .step-index.tool {
+      border-color: #b7d0ff;
+      background: var(--blue-soft);
+      color: var(--blue);
+    }
+
+    .step-index.wait {
+      border-color: #edd19f;
+      background: var(--amber-soft);
+      color: var(--amber);
+    }
+
+    .step-main {
+      min-width: 0;
+      padding-bottom: 2px;
+    }
+
+    .step-head {
+      min-height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .step-head strong {
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 950;
+    }
+
+    .step-main p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .step-tool {
+      margin-top: 8px;
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    .step-tool-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 950;
+    }
+
+    .step-tool-desc {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .event-row {
+      display: grid;
+      grid-template-columns: 110px minmax(0, 1fr) auto;
+      align-items: start;
+      gap: 10px;
+      padding: 8px 0;
+      border-top: 1px solid #e7edf4;
+    }
+
+    .event-row:first-child {
+      border-top: 0;
+    }
+
+    .event-kind {
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 950;
+    }
+
+    .event-desc {
+      min-width: 0;
+    }
+
+    .event-desc strong {
+      display: block;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 950;
+    }
+
+    .event-desc span {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .tool-output {
+      margin: 7px 0 0;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: #111827;
+      color: #dbeafe;
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .mini-details {
+      margin-top: 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    .mini-details > summary {
+      min-height: 34px;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .mini-details pre {
+      margin: 0;
+      padding: 9px 10px;
+      border-top: 1px solid var(--line);
+      background: #111827;
+      color: #dbeafe;
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+    }
+
+    .decision {
+      margin-top: 14px;
+      border: 1px solid #eccd96;
+      border-radius: 8px;
+      background: #fffaf0;
+      overflow: hidden;
+    }
+
+    .decision-head {
+      min-height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 0 12px;
+      border-bottom: 1px solid #f1d9ad;
+      background: #fff7e8;
+    }
+
+    .question-tabs {
+      display: flex;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .q-tab {
+      min-height: 28px;
+      padding: 0 10px;
+      border: 1px solid #e8c685;
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--amber);
+      font-size: 12px;
+      font-weight: 950;
+    }
+
+    .q-tab.active {
+      background: var(--amber-soft);
+    }
+
+    .decision-body {
+      padding: 12px;
+    }
+
+    .decision-body h3 {
+      margin: 0 0 6px;
+      font-size: 15px;
+      font-weight: 950;
+    }
+
+    .decision-body p {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .choices {
+      display: grid;
+      gap: 8px;
+    }
+
+    .choice {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr) auto;
+      gap: 9px;
+      align-items: center;
+      min-height: 48px;
+      padding: 8px 10px;
+      border: 1px solid #d8e2ee;
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    .choice.recommended {
+      border-color: #a9c8ff;
+      background: #f2f7ff;
+    }
+
+    .choice-num {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      background: var(--blue-soft);
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 950;
+    }
+
+    .choice strong {
+      display: block;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 950;
+    }
+
+    .choice span {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .evidence-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .evidence-chip {
+      min-height: 34px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 850;
+    }
+
+    .evidence-chip strong {
+      color: var(--text);
+      font-weight: 950;
+    }
+
+    .composer {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 46px;
+      gap: 10px;
+      align-items: center;
+      padding: 14px 28px;
+      border-top: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.94);
+    }
+
+    .input {
+      min-height: 46px;
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 750;
+    }
+
+    .send {
+      width: 46px;
+      height: 46px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--violet);
+      color: #fff;
+      font-family: var(--mono);
+      font-size: 16px;
+      font-weight: 950;
+    }
+
+    .right-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 0 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .right-head h2 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 950;
+    }
+
+    .right-body {
+      min-height: 0;
+      overflow: auto;
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+      align-content: start;
+      background: #fbfdff;
+    }
+
+    .side-panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      overflow: hidden;
+    }
+
+    .side-panel h3 {
+      margin: 0;
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--line);
+      background: var(--soft);
+      font-size: 13px;
+      font-weight: 950;
+    }
+
+    .map-row {
+      display: grid;
+      grid-template-columns: 86px 1fr;
+      gap: 10px;
+      padding: 10px 12px;
+      border-top: 1px solid var(--line);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .map-row:first-of-type {
+      border-top: 0;
+    }
+
+    .map-key {
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 950;
+      overflow-wrap: anywhere;
+    }
+
+    .map-value {
+      color: var(--muted);
+    }
+
+    .raw {
+      margin: 0;
+      padding: 11px 12px;
+      background: #111827;
+      color: #dbeafe;
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    @media (max-width: 1180px) {
+      .topbar,
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .left,
+      .right {
+        display: none;
+      }
+
+      .center {
+        min-height: calc(100vh - 58px);
+      }
+
+      .user-turn {
+        width: 100%;
+      }
+
+      .event-row,
+      .choice {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">AC</div>
+        <span>AgentCenter</span>
+        <span class="version">Text-first</span>
+      </div>
+      <div class="search">搜索文本回复、工具调用、产物、权限确认、raw event...</div>
+      <div class="top-actions">
+        <button class="primary">Codex-like 对话</button>
+        <button>调试</button>
+        <button>复制本轮</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="left">
+        <section class="nav-block">
+          <p class="nav-label">导航</p>
+          <div class="nav-item active"><span class="glyph">C</span><span>对话流</span><span class="pill blue">新</span></div>
+          <div class="nav-item"><span class="glyph">B</span><span>任务看板</span><span></span></div>
+          <div class="nav-item"><span class="glyph">W</span><span>工作流</span><span></span></div>
+        </section>
+
+        <section class="nav-block">
+          <p class="nav-label">当前会话</p>
+          <div class="thread active">
+            <strong>FE1234 · 用户登录优化</strong>
+            <span>主回复是文本；过程按真实执行顺序展开；工具挂在对应步骤里。</span>
+          </div>
+          <div class="thread">
+            <strong>PRD 补充确认</strong>
+            <span>问题 tab 保留，但不把单号和节点名重复写进问题内容。</span>
+          </div>
+        </section>
+
+        <section class="legend">
+          <p class="nav-label" style="margin:0 0 2px;">显示原则</p>
+          <div class="legend-row"><span class="dot"></span><span>正文默认展开，像 Codex 一样直接读。</span></div>
+          <div class="legend-row"><span class="dot green"></span><span>运行过程按 seq/timestamp 排列，工具不再按类型聚合。</span></div>
+          <div class="legend-row"><span class="dot amber"></span><span>待用户操作才展开成交互区。</span></div>
+          <div class="legend-row"><span class="dot violet"></span><span>raw、diff、文件放到证据折叠层。</span></div>
+        </section>
+      </aside>
+
+      <section class="center">
+        <header class="conversation-head">
+          <button class="icon-btn" aria-label="返回">‹</button>
+          <div class="title">
+            <h1>FE1234 · 用户登录优化 · 需求整理 PRD</h1>
+            <p>Text-first mapping：正文不气泡化，工具/过程/证据按需展开。</p>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="status">OpenCode running</span>
+            <button class="ghost-btn">刷新 Skill</button>
+          </div>
+        </header>
+
+        <div class="feed">
+          <section class="thread-flow">
+            <article class="user-turn">
+              <div class="eyebrow">USER</div>
+              <strong>请执行 FE1234 的 PRD 节点。生成结果后，把关键假设、工具过程、产物和需要我确认的问题都展示出来。</strong>
+            </article>
+
+            <article class="assistant-turn">
+              <div class="rail"><div class="avatar">A</div></div>
+              <div class="assistant-main">
+                <div class="assistant-meta">
+                  <strong style="color:var(--text);">Agent</strong>
+                  <span>01:24</span>
+                  <span class="pill green">已完成</span>
+                  <span class="pill blue">1 answer</span>
+                  <span class="pill">3 tools</span>
+                  <span class="pill amber">1 decision</span>
+                </div>
+
+                <section class="assistant-text">
+                  <h2>PRD 已生成，可进入 HLD，但建议先确认登录策略取舍</h2>
+                  <p>当前版本覆盖微信与 Google 第三方登录、账号密码兜底、短信/邮箱验证码恢复路径，以及移动端首屏登录流程。主要风险是第三方登录失败后的降级体验和风控提示文案，需要你确认后续推进策略。</p>
+                  <ul>
+                    <li><strong>关键假设：</strong>微信 + Google 第三方登录优先，账号密码作为兜底。</li>
+                    <li><strong>验收标准：</strong>P95 登录链路小于 500ms，首次可交互小于 1s。</li>
+                    <li><strong>下一步：</strong>确认策略后进入 HLD，补齐系统边界和异常流程。</li>
+                  </ul>
+
+                  <div class="inline-facts">
+                    <span class="fact">置信度 <strong>0.86</strong></span>
+                    <span class="fact">产物 <strong>FE1234-PRD.md</strong></span>
+                    <span class="fact">工具 <strong>3 个</strong></span>
+                    <span class="fact">待确认 <strong>1 项</strong></span>
+                  </div>
+
+                  <p class="answer-note">这里的主回复保持文本形态。下面的执行过程按真实步骤展开，工具挂在触发它的步骤里，不再做不恰当的工具聚类。</p>
+                </section>
+
+                <section class="folds" aria-label="辅助信息">
+                  <details class="fold" open>
+                    <summary>
+                      <span class="summary-left"><span class="chev">›</span><span>执行过程 · 按真实顺序 5 步</span></span>
+                      <span class="pill blue">工具嵌在步骤里</span>
+                    </summary>
+                    <div class="fold-body">
+                      <div class="step-list">
+                        <div class="step">
+                          <span class="step-index tool">1</span>
+                          <div class="step-main">
+                            <div class="step-head">
+                              <strong>建立上下文</strong>
+                              <span class="pill green">completed</span>
+                            </div>
+                            <p>先读取工作项、历史会话、当前节点约束，确定本轮 PRD 的输入边界。</p>
+                            <div class="step-tool">
+                              <div class="step-tool-head">
+                                <span>context.read</span>
+                                <button class="copy-btn">复制 raw</button>
+                              </div>
+                              <div class="step-tool-desc">输入：workItem=FE1234、node=PRD、history=最近 3 条会话。</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div class="step">
+                          <span class="step-index">2</span>
+                          <div class="step-main">
+                            <div class="step-head">
+                              <strong>收敛公开思考摘要</strong>
+                              <span class="pill violet">reasoning summary</span>
+                            </div>
+                            <p>从登录方式、安全策略、移动端适配三类问题收敛方案。私有推理不展示，只保留可解释摘要。</p>
+                          </div>
+                        </div>
+
+                        <div class="step">
+                          <span class="step-index tool">3</span>
+                          <div class="step-main">
+                            <div class="step-head">
+                              <strong>生成并写入 PRD 产物</strong>
+                              <span class="pill green">artifact created</span>
+                            </div>
+                            <p>生成 PRD 文件，并把文件、diff、关键段落作为本轮 evidence 挂在这一步下面。</p>
+                            <div class="step-tool">
+                              <div class="step-tool-head">
+                                <span>prd.write</span>
+                                <button class="copy-btn">复制 raw</button>
+                              </div>
+                              <pre class="tool-output">output: docs/requirements/FE1234-PRD.md
+sections: 背景 / 范围 / 验收标准 / 风险 / 待确认</pre>
+                              <div class="evidence-list" style="margin-top:8px;">
+                                <span class="evidence-chip"><strong>FE1234-PRD.md</strong> artifact</span>
+                                <span class="evidence-chip"><strong>session.diff</strong> diff</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div class="step">
+                          <span class="step-index tool">4</span>
+                          <div class="step-main">
+                            <div class="step-head">
+                              <strong>判断是否能进入下一节点</strong>
+                              <span class="pill amber">needs input</span>
+                            </div>
+                            <p>检测当前 PRD 满足进入 HLD 的门槛，但推进策略需要用户选择，因此在这里生成确认项。</p>
+                            <div class="step-tool">
+                              <div class="step-tool-head">
+                                <span>workflow.next</span>
+                                <button class="copy-btn">复制 raw</button>
+                              </div>
+                              <div class="step-tool-desc">输出：创建 input.required，包含 3 个推进策略选项。</div>
+                            </div>
+                            <section class="decision">
+                              <div class="decision-head">
+                                <div class="question-tabs">
+                                  <button class="q-tab active">问题 1</button>
+                                  <button class="q-tab">问题 2</button>
+                                  <button class="q-tab">问题 3</button>
+                                </div>
+                                <span class="pill amber">等待推进确认</span>
+                              </div>
+                              <div class="decision-body">
+                                <h3>PRD 采用哪种推进策略？</h3>
+                                <p>这里不重复 FE 单号、节点名、PRD 字样，因为标题和上下文已经有了。这里专注告诉用户要决定什么、为什么决定、选什么。</p>
+                                <div class="choices">
+                                  <div class="choice recommended">
+                                    <span class="choice-num">1</span>
+                                    <span><strong>直接采用当前 PRD，进入 HLD</strong><span>当前假设足够推进，后续在 HLD 细化边界。</span></span>
+                                    <span class="pill blue">推荐</span>
+                                  </div>
+                                  <div class="choice">
+                                    <span class="choice-num">2</span>
+                                    <span><strong>先调整登录方式范围</strong><span>例如暂缓 Google 登录或先做手机号登录。</span></span>
+                                    <span class="pill">选择</span>
+                                  </div>
+                                  <div class="choice">
+                                    <span class="choice-num">3</span>
+                                    <span><strong>只做最小登录方案</strong><span>优先验证核心链路，其余登录能力后移。</span></span>
+                                    <span class="pill">选择</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </section>
+                          </div>
+                        </div>
+
+                        <div class="step">
+                          <span class="step-index wait">5</span>
+                          <div class="step-main">
+                            <div class="step-head">
+                              <strong>等待用户选择</strong>
+                              <span class="pill amber">waiting_user</span>
+                            </div>
+                            <p>Runtime 暂停在这里。用户选择后，才会把结果写回本轮并继续进入 HLD。</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </details>
+
+                  <details class="fold">
+                    <summary>
+                      <span class="summary-left"><span class="chev">›</span><span>证据与 raw · 文件、diff、事件</span></span>
+                      <span class="pill violet">默认收起</span>
+                    </summary>
+                    <div class="fold-body">
+                      <div class="evidence-list">
+                        <span class="evidence-chip"><strong>FE1234-PRD.md</strong> artifact</span>
+                        <span class="evidence-chip"><strong>session.diff</strong> diff</span>
+                        <span class="evidence-chip"><strong>raw-events.json</strong> debug</span>
+                        <span class="evidence-chip"><strong>message.part.tool</strong> raw</span>
+                      </div>
+                      <details class="mini-details">
+                        <summary>查看 OpenCode raw event</summary>
+                        <pre>{
+  "type": "message.part.updated",
+  "part": {
+    "type": "tool",
+    "tool": "prd.write",
+    "state": {
+      "status": "completed",
+      "output": "FE1234-PRD.md"
+    }
+  }
+}</pre>
+                      </details>
+                    </div>
+                  </details>
+                </section>
+              </div>
+            </article>
+          </section>
+        </div>
+
+        <footer class="composer">
+          <div class="input">选择问题 1 的推进策略，或补充你想调整的登录范围...</div>
+          <button class="send" aria-label="发送">›</button>
+        </footer>
+      </section>
+
+      <aside class="right">
+        <div class="right-head">
+          <h2>映射说明</h2>
+          <span class="pill blue">可复制</span>
+        </div>
+        <div class="right-body">
+          <section class="side-panel">
+            <h3>这版不是卡片流</h3>
+            <div class="map-row"><div class="map-key">text</div><div class="map-value">作为主正文直接展示，像 Codex 的最终回答。</div></div>
+            <div class="map-row"><div class="map-key">tool</div><div class="map-value">挂在实际执行步骤下，只合并同一个 toolCallId 的 start/delta/result。</div></div>
+            <div class="map-row"><div class="map-key">reasoning</div><div class="map-value">只展示公开摘要，并且默认收起。</div></div>
+            <div class="map-row"><div class="map-key">decision</div><div class="map-value">待用户操作才展开，不作为普通日志。</div></div>
+            <div class="map-row"><div class="map-key">raw</div><div class="map-value">证据层收起，点击查看和复制。</div></div>
+          </section>
+
+          <section class="side-panel">
+            <h3>Raw Event 示例</h3>
+            <pre class="raw">{
+  "type": "message.part.updated",
+  "part": {
+    "type": "tool",
+    "tool": "prd.write",
+    "state": {
+      "status": "completed",
+      "output": "FE1234-PRD.md"
+    }
+  }
+}</pre>
+          </section>
+        </div>
+      </aside>
+    </main>
+  </div>
+</body>
+</html>

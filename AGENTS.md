@@ -128,6 +128,63 @@ UI 或原型改动必须留下截图或 Playwright evidence 到 `.sisyphus/evide
 
 ---
 
+## 测试数据管理
+
+### 快速重置
+
+当你需要干净的前端测试数据（比如验证看板、工作流启动、对话等 UI 流程），用这个脚本：
+
+```bash
+cd agentcenter-bridge
+
+# 默认：清空所有数据 → 插入 10 条 FE 任务
+./scripts/reset-test-data.sh
+
+# 指定数量和类型
+./scripts/reset-test-data.sh --count 20 --type FE
+
+# 只看会执行什么 SQL，不真正执行
+./scripts/reset-test-data.sh --dry-run
+
+# 支持的类型: FE / US / BUG / TASK / WORK / VULN
+./scripts/reset-test-data.sh --type BUG --count 5
+```
+
+### 脚本做了什么
+
+1. **级联清理**：按外键依赖顺序删除 confirmation_action → confirmation_request → agent_message → agent_session → runtime_event → artifact → workflow_node_instance → workflow_instance → work_item
+2. **重新插入**：从内置种子数据池取前 N 条插入 work_item 表
+3. **结果验证**：自动打印最终表状态和关联表统计
+
+### 种子数据说明
+
+每种类型内置了不同数量的真实场景测试数据：
+
+| 类型 | 内置条数 | 典型场景 |
+|------|----------|----------|
+| FE | 10 | 登录重构、虚拟滚动、深色模式、i18n 等 |
+| US | 5 | 性能提升、订阅设置、用户画像等 |
+| BUG | 4 | 拖拽异常、滚动高度、上传 500 等 |
+| TASK | 2 | 缓存策略、集成测试 |
+| WORK | 2 | SSO 联调、CI/CD |
+| VULN | 2 | 权限校验、XSS |
+
+数据状态覆盖 BACKLOG / TODO / IN_PROGRESS，优先级覆盖 URGENT / HIGH / MEDIUM / LOW。
+
+### 手动 SQL（不推荐，除非脚本不可用）
+
+```bash
+sqlite3 agentcenter-bridge/data/agentcenter.db "DELETE FROM confirmation_action; DELETE FROM confirmation_request; DELETE FROM agent_message; DELETE FROM agent_session; DELETE FROM runtime_event; DELETE FROM artifact; DELETE FROM workflow_node_instance; DELETE FROM workflow_instance; DELETE FROM work_item;"
+```
+
+### 注意事项
+
+- 脚本会**不可逆删除**所有 work_item 及其关联数据，不要在生产环境使用。
+- 重置后需要**重启 Bridge** 才能让 Flyway checksum 校验通过（如果改了 migration 文件的话）。
+- 如果只是追加数据不改旧数据，用 `--dry-run` 先看 SQL 再手动执行部分。
+
+---
+
 ## 审查卡片
 
 每个任务完成后输出简短审查卡片：
@@ -158,14 +215,11 @@ L0/L1 可简化为 summary + changes + verification。
 
 > 详细经验见 `.sisyphus/notepads/opencode-bridge-sse-rest/learnings.md`。以下是踩过且容易再犯的坑。
 
-### 0. OpenCode Runtime 工作目录必须隔离
-本地 `opencode serve` 和测试用 Skill 必须运行在独立沙箱目录，默认：
+### 0. OpenCode Runtime 工作目录统一管理
+所有 Runtime 组件通过 `RuntimeWorkspace.resolve()` 统一解析，固定在**项目根目录下的 `runtime-workspace/`**（从 `user.dir` 向上查找包含 `agentcenter-bridge/` 的目录）。环境变量 `AGENTCENTER_RUNTIME_WORKSPACE` 可覆盖。测试 Skill 放在该目录的 `.opencode/skills/` 下。
 
-```text
-${user.home}/.agentcenter/runtime-workspace
-```
-
-不要把 `agentcenter.runtime.opencode.serve.working-directory` 指向 `/Users/hzz/workspace/AgentCenter` 或任何源码仓库目录，避免 Runtime 读取、修改或污染当前代码库。需要覆盖时使用 `AGENTCENTER_RUNTIME_WORKSPACE`，也必须指向仓库外的空白/专用目录。测试 Skill 放在该目录的 `.opencode/skills/` 下。
+### 0.5 企业环境配置
+企业内网部署时，Maven 默认配置可能无法访问中央仓库。必须在 `~/.m2/settings.xml` 中配置企业仓库 mirror。Windows 用户避免使用 C 盘默认 Maven 本地仓库路径。`start.sh --check` 会自动检测并提示。Agent 引导用户启动时，先建议运行 `./start.sh --check`。
 
 ### 1. SSE 事件的 session ID 必须贯穿始终
 事件的发布者（EventSubscriber）和消费者（SseEmitterRegistry）必须用同一个 session ID。适配器内部的 mapping key（如 `acs_xxx`）不能泄漏到事件回调链路——必须用 DB session ID（ULID）。
@@ -194,7 +248,7 @@ ${user.home}/.agentcenter/runtime-workspace
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **AgentCenter** (6467 symbols, 15471 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **AgentCenter** (7710 symbols, 18652 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
