@@ -1,6 +1,7 @@
 package com.agentcenter.bridge.application.runtime.translation;
 
 import java.util.List;
+import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,6 +10,8 @@ import org.springframework.stereotype.Component;
 import com.agentcenter.bridge.api.dto.RuntimeEventDto;
 import com.agentcenter.bridge.application.RuntimeEventService;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeEventEnvelope;
+import com.agentcenter.bridge.application.runtime.protocol.RuntimeEventTypes;
+import com.fasterxml.jackson.databind.JsonNode;
 
 @Component
 public class RuntimeEventEnvelopeDispatcher {
@@ -19,15 +22,18 @@ public class RuntimeEventEnvelopeDispatcher {
     private final AssistantMessageProjector projector;
     private final RuntimeEventService eventService;
     private final RuntimeOperationEventHandler operationHandler;
+    private final PermissionConfirmationHandler permissionHandler;
 
     public RuntimeEventEnvelopeDispatcher(LegacyRuntimeEventBridge legacyBridge,
                                            AssistantMessageProjector projector,
                                            RuntimeEventService eventService,
-                                           RuntimeOperationEventHandler operationHandler) {
+                                           RuntimeOperationEventHandler operationHandler,
+                                           PermissionConfirmationHandler permissionHandler) {
         this.legacyBridge = legacyBridge;
         this.projector = projector;
         this.eventService = eventService;
         this.operationHandler = operationHandler;
+        this.permissionHandler = permissionHandler;
     }
 
     public void dispatch(List<RuntimeEventEnvelope> envelopes) {
@@ -38,6 +44,21 @@ public class RuntimeEventEnvelopeDispatcher {
                 log.warn("Operation handler failed for event {}: {}",
                         envelope.type(), e.getMessage());
             }
+
+            if (RuntimeEventTypes.PERMISSION_REQUESTED.equals(envelope.type())) {
+                try {
+                    permissionHandler.createPermissionConfirmation(
+                        envelope.agentSessionId(),
+                        envelope.runtimeSessionId(),
+                        extractPermissionId(envelope),
+                        extractTitle(envelope),
+                        extractSkillName(envelope)
+                    );
+                } catch (Exception e) {
+                    log.warn("Failed to create permission confirmation: {}", e.getMessage());
+                }
+            }
+
             projector.onEnvelope(envelope);
 
             RuntimeEventDto legacyEvent = legacyBridge.toLegacyEvent(envelope);
@@ -50,5 +71,38 @@ public class RuntimeEventEnvelopeDispatcher {
                 }
             }
         }
+    }
+
+    private String extractPermissionId(RuntimeEventEnvelope envelope) {
+        try {
+            JsonNode payload = envelope.payload();
+            if (payload != null) {
+                JsonNode meta = payload.path("meta");
+                if (meta.has("permissionId")) return meta.get("permissionId").asText();
+                if (meta.has("confirmationId")) return meta.get("confirmationId").asText();
+            }
+        } catch (Exception ignored) {}
+        return envelope.messageId() != null ? envelope.messageId() : UUID.randomUUID().toString();
+    }
+
+    private String extractTitle(RuntimeEventEnvelope envelope) {
+        try {
+            JsonNode payload = envelope.payload();
+            if (payload != null) {
+                JsonNode meta = payload.path("meta");
+                if (meta.has("title")) return meta.get("title").asText();
+            }
+        } catch (Exception ignored) {}
+        return "OpenCode permission request";
+    }
+
+    private String extractSkillName(RuntimeEventEnvelope envelope) {
+        try {
+            JsonNode payload = envelope.payload();
+            if (payload != null && payload.has("skillName")) {
+                return payload.get("skillName").asText();
+            }
+        } catch (Exception ignored) {}
+        return null;
     }
 }

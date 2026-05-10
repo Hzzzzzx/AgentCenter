@@ -39,7 +39,7 @@ public class OpenCodeSkillFileService {
 
     public OpenCodeSkillFileService(
             @Value("${agentcenter.runtime.opencode.serve.working-directory}") String workingDirectory) {
-        this.workingDir = Path.of(workingDirectory).toAbsolutePath().normalize();
+        this.workingDir = RuntimeWorkspace.resolve(workingDirectory);
     }
 
     public List<RuntimeSkillDto> scanSkills() {

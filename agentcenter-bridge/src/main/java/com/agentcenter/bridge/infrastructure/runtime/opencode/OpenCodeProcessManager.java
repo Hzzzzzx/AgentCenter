@@ -1,6 +1,8 @@
 package com.agentcenter.bridge.infrastructure.runtime.opencode;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -46,7 +48,7 @@ public class OpenCodeProcessManager {
             @Value("${agentcenter.runtime.opencode.serve.command:opencode}") String command,
             @Value("${agentcenter.runtime.opencode.serve.hostname:127.0.0.1}") String hostname,
             @Value("${agentcenter.runtime.opencode.serve.port:4097}") int port,
-            @Value("${agentcenter.runtime.opencode.serve.working-directory:${user.dir}}") String workingDirectory,
+            @Value("${agentcenter.runtime.opencode.serve.working-directory:${user.dir}/runtime-workspace}") String workingDirectory,
             @Value("${agentcenter.runtime.opencode.serve.enabled:true}") boolean enabled) {
         this.command = command;
         this.hostname = hostname;
@@ -114,11 +116,7 @@ public class OpenCodeProcessManager {
      * Returns the configured working directory as an absolute path.
      */
     public Path resolveWorkingDirectory() {
-        Path configured = Path.of(workingDirectory).toAbsolutePath().normalize();
-        if (Files.isDirectory(configured)) {
-            return configured;
-        }
-        return Path.of(System.getProperty("user.dir")).toAbsolutePath().normalize();
+        return RuntimeWorkspace.resolve(workingDirectory);
     }
 
     /**
@@ -174,6 +172,11 @@ public class OpenCodeProcessManager {
             log.info("opencode serve already running at {}, reusing existing instance", baseUrl);
             started = true;
             return;
+        }
+        if (isPortOpen()) {
+            throw new IllegalStateException(
+                    "opencode serve port " + port
+                            + " is occupied but did not respond to /path. Restart opencode serve or free the port.");
         }
 
         String resolvedCommand = resolveCommand();
@@ -299,6 +302,15 @@ public class OpenCodeProcessManager {
             // not found
         }
         return null;
+    }
+
+    private boolean isPortOpen() {
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress(hostname, port), 500);
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
     }
 
     private boolean isAlive() {

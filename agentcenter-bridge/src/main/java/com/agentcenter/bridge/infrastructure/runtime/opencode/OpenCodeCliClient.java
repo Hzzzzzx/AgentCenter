@@ -29,7 +29,7 @@ public class OpenCodeCliClient {
     public OpenCodeCliClient(ObjectMapper objectMapper,
                              @Value("${agentcenter.runtime.opencode.command:opencode}") String command,
                              @Value("${agentcenter.runtime.opencode.model:}") String model,
-                             @Value("${agentcenter.runtime.opencode.working-directory:}") String workingDirectory,
+                             @Value("${agentcenter.runtime.opencode.serve.working-directory:${user.dir}/runtime-workspace}") String workingDirectory,
                              @Value("${agentcenter.runtime.opencode.timeout-seconds:180}") long timeoutSeconds) {
         this.objectMapper = objectMapper;
         this.command = command;
@@ -106,22 +106,7 @@ public class OpenCodeCliClient {
     }
 
     private Path resolveWorkingDirectory() {
-        Path configured = isBlank(workingDirectory)
-                ? defaultProjectDirectory()
-                : Path.of(workingDirectory);
-        Path normalized = configured.toAbsolutePath().normalize();
-        if (Files.isDirectory(normalized)) {
-            return normalized;
-        }
-        return defaultProjectDirectory();
-    }
-
-    private Path defaultProjectDirectory() {
-        Path userDir = Path.of(System.getProperty("user.dir")).toAbsolutePath().normalize();
-        if ("agentcenter-bridge".equals(userDir.getFileName().toString()) && userDir.getParent() != null) {
-            return userDir.getParent();
-        }
-        return userDir;
+        return RuntimeWorkspace.resolve(workingDirectory);
     }
 
     private String readAll(InputStream inputStream) {

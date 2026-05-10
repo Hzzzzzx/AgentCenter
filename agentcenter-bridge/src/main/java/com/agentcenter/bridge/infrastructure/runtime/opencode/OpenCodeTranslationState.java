@@ -1,34 +1,70 @@
 package com.agentcenter.bridge.infrastructure.runtime.opencode;
 
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class OpenCodeTranslationState {
-    private final Map<String, Set<String>> seenTextParts = new ConcurrentHashMap<>();
+    private final Map<String, Map<String, String>> textPartSnapshots = new ConcurrentHashMap<>();
+    private final Map<String, Map<String, PartMetadata>> partMetadata = new ConcurrentHashMap<>();
     private final Map<String, Set<String>> runningTools = new ConcurrentHashMap<>();
     private final Map<String, Set<String>> userMessageIds = new ConcurrentHashMap<>();
 
     public void initSession(String opencodeSessionId) {
-        seenTextParts.computeIfAbsent(opencodeSessionId, k -> ConcurrentHashMap.newKeySet());
+        textPartSnapshots.computeIfAbsent(opencodeSessionId, k -> new ConcurrentHashMap<>());
+        partMetadata.computeIfAbsent(opencodeSessionId, k -> new ConcurrentHashMap<>());
         runningTools.computeIfAbsent(opencodeSessionId, k -> ConcurrentHashMap.newKeySet());
         userMessageIds.computeIfAbsent(opencodeSessionId, k -> ConcurrentHashMap.newKeySet());
     }
 
     public void cleanupSession(String opencodeSessionId) {
-        seenTextParts.remove(opencodeSessionId);
+        textPartSnapshots.remove(opencodeSessionId);
+        partMetadata.remove(opencodeSessionId);
         runningTools.remove(opencodeSessionId);
         userMessageIds.remove(opencodeSessionId);
     }
 
-    public boolean isSeenTextPart(String opencodeSessionId, String partId) {
-        Set<String> seen = seenTextParts.get(opencodeSessionId);
-        return seen != null && seen.contains(partId);
+    public void recordPartMetadata(String opencodeSessionId, String partId, String partType, String messageId) {
+        if (partId == null || partId.isBlank()) {
+            return;
+        }
+        partMetadata
+                .computeIfAbsent(opencodeSessionId, k -> new ConcurrentHashMap<>())
+                .put(partId, new PartMetadata(partType == null ? "" : partType, messageId == null ? "" : messageId));
     }
 
-    public void markSeenTextPart(String opencodeSessionId, String partId) {
-        seenTextParts.computeIfAbsent(opencodeSessionId, k -> ConcurrentHashMap.newKeySet()).add(partId);
+    public PartMetadata findPartMetadata(String opencodeSessionId, String partId) {
+        Map<String, PartMetadata> byPart = partMetadata.get(opencodeSessionId);
+        return byPart == null ? null : byPart.get(partId);
+    }
+
+    public String recordTextDelta(String opencodeSessionId, String partId, String delta) {
+        if (partId == null || partId.isBlank()) {
+            return delta;
+        }
+        textPartSnapshots
+                .computeIfAbsent(opencodeSessionId, k -> new ConcurrentHashMap<>())
+                .merge(partId, delta, String::concat);
+        return delta;
+    }
+
+    public String recordTextSnapshot(String opencodeSessionId, String partId, String text) {
+        if (partId == null || partId.isBlank()) {
+            return text;
+        }
+        Map<String, String> snapshots = textPartSnapshots
+                .computeIfAbsent(opencodeSessionId, k -> new ConcurrentHashMap<>());
+        String previous = snapshots.put(partId, text);
+        if (previous == null || previous.isEmpty()) {
+            return text;
+        }
+        if (text.equals(previous)) {
+            return "";
+        }
+        if (text.startsWith(previous)) {
+            return text.substring(previous.length());
+        }
+        return text;
     }
 
     public boolean isUserMessage(String opencodeSessionId, String messageId) {
@@ -49,4 +85,6 @@ public class OpenCodeTranslationState {
         Set<String> tools = runningTools.get(opencodeSessionId);
         if (tools != null) tools.remove(callId);
     }
+
+    public record PartMetadata(String partType, String messageId) {}
 }

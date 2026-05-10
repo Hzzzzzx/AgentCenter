@@ -56,6 +56,7 @@ public class OpenCodeHttpCommandTransport implements RuntimeCommandTransport {
             case RuntimeCommandTypes.SESSION_ENSURE -> handleSessionCreate(command, timeout);
             case RuntimeCommandTypes.CONVERSATION_MESSAGE_SEND -> handleConversationSend(command, timeout);
             case RuntimeCommandTypes.CONVERSATION_CANCEL -> buildAck(command, null);
+            case RuntimeCommandTypes.PERMISSION_RESPOND -> handlePermissionRespond(command, timeout);
             default -> RuntimeAckEnvelope.nack(command.messageId(), RuntimeType.OPENCODE,
                     "Unsupported command type: " + command.type());
         };
@@ -103,6 +104,28 @@ public class OpenCodeHttpCommandTransport implements RuntimeCommandTransport {
         HttpRequest request = buildPost(baseUrl, "/session/" + sessionId + "/prompt_async", body, cwd, timeout);
         execute(request);
 
+        return buildAck(command, null);
+    }
+
+    private RuntimeAckEnvelope handlePermissionRespond(RuntimeCommandEnvelope command, Duration timeout) {
+        String sessionId = command.runtimeSessionId();
+        if (sessionId == null || sessionId.isBlank()) {
+            return RuntimeAckEnvelope.nack(command.messageId(), RuntimeType.OPENCODE,
+                    "runtimeSessionId is required for PERMISSION_RESPOND");
+        }
+
+        JsonNode payload = command.payload();
+        String baseUrl = payload.path("baseUrl").asText("");
+        String cwd = payload.path("workingDirectory").asText("");
+        String permissionId = payload.path("permissionId").asText("");
+        boolean approved = payload.path("approved").asBoolean(true);
+
+        ObjectNode body = objectMapper.createObjectNode();
+        body.put("id", permissionId);
+        body.put("action", approved ? "allow" : "deny");
+
+        HttpRequest request = buildPost(baseUrl, "/session/" + sessionId + "/permission", body, cwd, timeout);
+        execute(request);
         return buildAck(command, null);
     }
 

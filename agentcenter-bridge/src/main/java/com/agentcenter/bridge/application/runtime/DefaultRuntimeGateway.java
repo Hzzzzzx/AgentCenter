@@ -42,7 +42,13 @@ public class DefaultRuntimeGateway implements RuntimeGateway {
 
     @Override
     public SkillRunResult runSkill(RuntimeType runtimeType, String sessionId, String skillName, String inputContext) {
-        return registry.getProvider(runtimeType).runSkill(sessionId, skillName, inputContext);
+        return runSkill(runtimeType, sessionId,
+                new SkillInvocationRequest(skillName, inputContext, null, RuntimeInstructionInjectionMode.USER_PROMPT));
+    }
+
+    @Override
+    public SkillRunResult runSkill(RuntimeType runtimeType, String sessionId, SkillInvocationRequest request) {
+        return registry.getProvider(runtimeType).runSkill(sessionId, request);
     }
 
     @Override

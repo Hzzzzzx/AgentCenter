@@ -1,5 +1,6 @@
 package com.agentcenter.bridge.infrastructure.runtime.opencode;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -84,7 +85,7 @@ public class OpenCodeMcpFileService {
                 mcpServers = Map.of();
             }
 
-            root.put("mcp", mcpServers);
+            root.put("mcp", normalizeMcpServers(mcpServers));
             Files.createDirectories(configPath.getParent());
             Path tempPath = configPath.resolveSibling("opencode.json.tmp");
             objectMapper.writerWithDefaultPrettyPrinter().writeValue(tempPath.toFile(), root);
@@ -105,6 +106,28 @@ public class OpenCodeMcpFileService {
         }
     }
 
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> normalizeMcpServers(Object mcpServers) {
+        if (!(mcpServers instanceof Map<?, ?> rawServers)) {
+            return Map.of();
+        }
+
+        Map<String, Object> normalized = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : rawServers.entrySet()) {
+            if (entry.getKey() == null || !(entry.getValue() instanceof Map<?, ?> rawConfig)) {
+                continue;
+            }
+
+            Map<String, Object> config = new LinkedHashMap<>((Map<String, Object>) rawConfig);
+            config.putIfAbsent("enabled", true);
+            if (!config.containsKey("type")) {
+                config.put("type", config.containsKey("url") ? "remote" : "local");
+            }
+            normalized.put(entry.getKey().toString(), config);
+        }
+        return normalized;
+    }
+
     private Path resolveWorkingDirectory(Path projectWorkdir) {
         if (projectWorkdir != null) {
             Path normalized = projectWorkdir.toAbsolutePath().normalize();
@@ -112,11 +135,7 @@ public class OpenCodeMcpFileService {
                 return normalized;
             }
         }
-        Path configured = Path.of(workingDirectory).toAbsolutePath().normalize();
-        if (Files.isDirectory(configured)) {
-            return configured;
-        }
-        return Path.of(System.getProperty("user.dir")).toAbsolutePath().normalize();
+        return RuntimeWorkspace.resolve(workingDirectory);
     }
 
 }

@@ -1,6 +1,7 @@
 package com.agentcenter.bridge.infrastructure.runtime.opencode;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -10,12 +11,14 @@ import org.slf4j.LoggerFactory;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeEventEnvelope;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeEventTypes;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeRawEvent;
+import com.agentcenter.bridge.application.runtime.translation.PermissionConfirmationHandler;
 import com.agentcenter.bridge.application.runtime.translation.RuntimeEventTranslator;
 import com.agentcenter.bridge.application.runtime.translation.RuntimeTranslationContext;
 import com.agentcenter.bridge.application.runtime.translation.RuntimeTranslationResult;
 import com.agentcenter.bridge.domain.runtime.RuntimeType;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
 
@@ -53,13 +56,16 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
             }
             case "session.idle" -> {
                 result.add(buildEnvelope(RuntimeEventTypes.RUNTIME_STATUS_CHANGED, agentSessionId,
-                    opencodeSessionId, payloadNode("status", "waiting_user")));
+                    opencodeSessionId, payloadNode("status", "waiting_user",
+                    projectionMeta("session.idle", null, Map.of()))));
                 result.add(buildProcessTraceEnvelope(
                     RuntimeEventTypes.PROCESS_TRACE, agentSessionId, opencodeSessionId,
-                    processTracePayload("node_status", "completed", "状态", "Agent 本轮处理已完成", null, null),
+                    processTracePayload("node_status", "completed", "状态", "Agent 本轮处理已完成", null, null,
+                        "session.idle", null, Map.of()),
                     context));
                 result.add(buildEnvelope(RuntimeEventTypes.CONVERSATION_COMPLETED, agentSessionId,
-                    opencodeSessionId, JsonNodeFactory.instance.objectNode()));
+                    opencodeSessionId, payloadNode("_completed", true,
+                    projectionMeta("session.idle", null, Map.of()))));
             }
             case "permission.asked", "permission.updated" -> {
                 result.addAll(translatePermission(opencodeSessionId, agentSessionId, props, context));
@@ -80,62 +86,86 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
         JsonNode part = properties.path("part");
         if (part.isMissingNode()) part = properties;
 
-        String msgId = part.path("messageID").asText(part.path("message_id").asText(""));
+        String partId = part.path("id").asText(part.path("partID").asText(properties.path("partID").asText("")));
+        String msgId = part.path("messageID").asText(part.path("message_id").asText(
+                properties.path("messageID").asText(properties.path("message_id").asText(""))));
+        String partType = part.path("type").asText("");
+
+        if (!partId.isEmpty() && !partType.isEmpty()) {
+            state.recordPartMetadata(opencodeSessionId, partId, partType, msgId);
+        } else if (!partId.isEmpty()) {
+            OpenCodeTranslationState.PartMetadata metadata = state.findPartMetadata(opencodeSessionId, partId);
+            if (metadata != null) {
+                if (partType.isEmpty()) partType = metadata.partType();
+                if (msgId.isEmpty()) msgId = metadata.messageId();
+            }
+        }
+
         if (!msgId.isEmpty() && state.isUserMessage(opencodeSessionId, msgId)) return result;
 
         String delta = properties.path("delta").asText("");
-        String partType = part.path("type").asText("");
 
         if ("text".equals(partType)) {
             String text = resolvePartText(opencodeSessionId, part, delta);
             if (!text.isEmpty()) {
                 result.add(buildEnvelope(RuntimeEventTypes.CONVERSATION_DELTA, agentSessionId,
-                    opencodeSessionId, payloadNode("assistant_delta", text, Map.of("delta", text))));
+                    opencodeSessionId, payloadNode("assistant_delta", text,
+                    projectionMeta(eventType, partType, Map.of("delta", text, "messageId", msgId, "partId", partId)))));
             }
         } else if ("tool".equals(partType)) {
-            result.addAll(translateToolPart(opencodeSessionId, agentSessionId, part, context));
+            result.addAll(translateToolPart(opencodeSessionId, agentSessionId, part, eventType, context));
         } else if ("reasoning".equals(partType)) {
             String summary = safeReasoningSummary(part, delta);
             if (!summary.isBlank()) {
                 result.add(buildProcessTraceEnvelope(
                     RuntimeEventTypes.PROCESS_TRACE, agentSessionId, opencodeSessionId,
-                    processTracePayload("reasoning_summary", "running", "思考摘要", summary, null, null),
+                    processTracePayload("reasoning_summary", "running", "思考摘要", summary, null, null,
+                        eventType, partType, Map.of("messageId", msgId, "partId", partId)),
                     context));
             }
+        } else if ("file".equals(partType) || "patch".equals(partType) || "artifact".equals(partType)) {
+            result.addAll(translateArtifactPart(opencodeSessionId, agentSessionId, part, eventType, partType, context));
+        } else if ("retry".equals(partType)) {
+            result.addAll(translateRetryPart(opencodeSessionId, agentSessionId, part, eventType, context));
+        } else if ("subtask".equals(partType)) {
+            result.addAll(translateSubtaskPart(opencodeSessionId, agentSessionId, part, eventType, context));
+        } else if ("agent-handoff".equals(partType)) {
+            result.addAll(translateAgentHandoffPart(opencodeSessionId, agentSessionId, part, eventType, context));
         }
 
         return result;
     }
 
     private String resolvePartText(String opencodeSessionId, JsonNode part, String delta) {
-        String partId = part.path("id").asText("");
+        String partId = part.path("id").asText(part.path("partID").asText(""));
         if (!delta.isEmpty()) {
-            if (!partId.isEmpty()) state.markSeenTextPart(opencodeSessionId, partId);
-            return delta;
+            return state.recordTextDelta(opencodeSessionId, partId, delta);
         }
         String partText = part.path("text").asText("");
         if (partText.isEmpty()) return "";
-        if (partId.isEmpty()) return partText;
-        if (state.isSeenTextPart(opencodeSessionId, partId)) return "";
-        state.markSeenTextPart(opencodeSessionId, partId);
-        return partText;
+        return state.recordTextSnapshot(opencodeSessionId, partId, partText);
     }
 
     private List<RuntimeEventEnvelope> translateToolPart(String opencodeSessionId, String agentSessionId,
-                                                          JsonNode part, RuntimeTranslationContext context) {
+                                                           JsonNode part, String eventType,
+                                                           RuntimeTranslationContext context) {
         List<RuntimeEventEnvelope> result = new ArrayList<>();
         String callId = part.path("callID").asText(part.path("call_id").asText(part.path("id").asText("tool_" + System.currentTimeMillis())));
         String skillName = part.path("tool").asText(part.path("name").asText("unknown"));
+        String displayName = part.path("name").asText(skillName);
         JsonNode stateNode = part.path("state");
         String status = stateNode.path("status").asText("running");
 
         if (("running".equals(status) || "completed".equals(status) || "error".equals(status))
                 && state.addRunningTool(opencodeSessionId, callId)) {
             result.add(buildEnvelope(RuntimeEventTypes.TOOL_STARTED, agentSessionId,
-                opencodeSessionId, payloadNode("skill_started", skillName, Map.of("toolCallId", callId))));
+                opencodeSessionId, payloadNode("skill_started", skillName,
+                projectionMeta(eventType, "tool", Map.of(
+                    "toolCallId", callId, "rawName", skillName, "displayName", displayName)))));
             result.add(buildProcessTraceEnvelope(
                 RuntimeEventTypes.PROCESS_TRACE, agentSessionId, opencodeSessionId,
-                processTracePayload("tool_call", "running", "调用工具", "正在调用 " + skillName, skillName, callId),
+                processTracePayload("tool_call", "running", "调用工具", "正在调用 " + skillName, skillName, callId,
+                    eventType, "tool", Map.of()),
                 context));
         }
 
@@ -147,13 +177,16 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
                     : stateNode.path("output"));
             boolean isError = "error".equals(status);
             result.add(buildEnvelope(RuntimeEventTypes.TOOL_COMPLETED, agentSessionId,
-                opencodeSessionId, payloadNode("skill_completed", skillName, Map.of(
-                    "toolCallId", callId, "isError", isError, "output", output))));
+                opencodeSessionId, payloadNode("skill_completed", skillName,
+                projectionMeta(eventType, "tool", Map.of(
+                    "toolCallId", callId, "rawName", skillName, "displayName", displayName,
+                    "isError", isError, "output", output)))));
             String traceStatus = isError ? "failed" : "completed";
             String traceSummary = isError ? skillName + " 调用失败" : skillName + " 调用完成";
             result.add(buildProcessTraceEnvelope(
                 RuntimeEventTypes.PROCESS_TRACE, agentSessionId, opencodeSessionId,
-                processTracePayload("tool_call", traceStatus, "调用工具", traceSummary, skillName, callId),
+                processTracePayload("tool_call", traceStatus, "调用工具", traceSummary, skillName, callId,
+                    eventType, "tool", Map.of()),
                 context));
             state.removeRunningTool(opencodeSessionId, callId);
         }
@@ -162,7 +195,7 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
     }
 
     private List<RuntimeEventEnvelope> translateSessionStatus(String opencodeSessionId, String agentSessionId,
-                                                               JsonNode properties, RuntimeTranslationContext context) {
+                                                                JsonNode properties, RuntimeTranslationContext context) {
         List<RuntimeEventEnvelope> result = new ArrayList<>();
         JsonNode statusNode = properties.path("status");
         String rawStatus = statusNode.isObject() ? statusNode.path("type").asText("") : statusNode.asText("");
@@ -170,42 +203,48 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
         String status = "busy".equals(rawStatus) ? "running" : rawStatus;
 
         result.add(buildEnvelope(RuntimeEventTypes.RUNTIME_STATUS_CHANGED, agentSessionId,
-            opencodeSessionId, payloadNode("status", status)));
+            opencodeSessionId, payloadNode("status", status,
+            projectionMeta("session.status", null, Map.of()))));
         result.add(buildProcessTraceEnvelope(
             RuntimeEventTypes.PROCESS_TRACE, agentSessionId, opencodeSessionId,
             processTracePayload("node_status", traceStatusForRuntimeStatus(status), "状态",
-                statusSummary(status), null, null), context));
+                statusSummary(status), null, null, "session.status", null, Map.of()),
+            context));
 
         if ("idle".equals(status) || "waiting_user".equals(status)) {
             result.add(buildEnvelope(RuntimeEventTypes.CONVERSATION_COMPLETED, agentSessionId,
-                opencodeSessionId, JsonNodeFactory.instance.objectNode()));
+                opencodeSessionId, payloadNode("_completed", true,
+                projectionMeta("session.status", null, Map.of()))));
         }
 
         return result;
     }
 
     private List<RuntimeEventEnvelope> translatePermission(String opencodeSessionId, String agentSessionId,
-                                                            JsonNode properties, RuntimeTranslationContext context) {
+                                                             JsonNode properties, RuntimeTranslationContext context) {
         List<RuntimeEventEnvelope> result = new ArrayList<>();
         String permissionId = properties.path("id").asText("");
         String permission = properties.path("permission").asText(properties.path("type").asText("opencode_permission"));
         String skillName = properties.path("tool").path("tool").asText(
                 properties.path("tool").path("name").asText(permission));
         String title = properties.path("title").asText("OpenCode permission: " + permission);
+        String confirmationId = PermissionConfirmationHandler.confirmationIdFor(opencodeSessionId, permissionId);
 
         result.add(buildEnvelope(RuntimeEventTypes.PERMISSION_REQUESTED, agentSessionId,
-            opencodeSessionId, payloadNode("permission_required", skillName, Map.of(
-                "permissionId", permissionId,
-                "title", title))));
+            opencodeSessionId, payloadNode("permission_required", skillName,
+            projectionMeta("permission.asked", null, Map.of(
+                "permissionId", permissionId, "confirmationId", confirmationId,
+                "title", title)))));
         result.add(buildProcessTraceEnvelope(
             RuntimeEventTypes.PROCESS_TRACE, agentSessionId, opencodeSessionId,
-            processTracePayload("confirmation", "waiting", "权限确认", title, skillName, permissionId),
+            processTracePayload("confirmation", "waiting", "权限确认", title, skillName, permissionId,
+                "permission.asked", null, Map.of()),
             context));
         return result;
     }
 
     private List<RuntimeEventEnvelope> translateSessionError(String opencodeSessionId, String agentSessionId,
-                                                             JsonNode properties, RuntimeTranslationContext context) {
+                                                              JsonNode properties, RuntimeTranslationContext context) {
         List<RuntimeEventEnvelope> result = new ArrayList<>();
         JsonNode error = properties.path("error");
         String reason = error.path("data").path("message").asText("");
@@ -213,10 +252,87 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
         if (reason.isEmpty()) reason = properties.path("message").asText("unknown OpenCode session error");
 
         result.add(buildEnvelope(RuntimeEventTypes.RUNTIME_ERROR, agentSessionId,
-            opencodeSessionId, payloadNode("status", "failed", Map.of("reason", reason))));
+            opencodeSessionId, payloadNode("status", "failed",
+            projectionMeta("session.error", null, Map.of("reason", reason)))));
         result.add(buildProcessTraceEnvelope(
             RuntimeEventTypes.PROCESS_TRACE, agentSessionId, opencodeSessionId,
-            processTracePayload("error", "failed", "异常", reason, null, null),
+            processTracePayload("error", "failed", "异常", reason, null, null,
+                "session.error", null, Map.of()),
+            context));
+        return result;
+    }
+
+    private List<RuntimeEventEnvelope> translateArtifactPart(String opencodeSessionId, String agentSessionId,
+                                                              JsonNode part, String eventType, String partType,
+                                                              RuntimeTranslationContext context) {
+        List<RuntimeEventEnvelope> result = new ArrayList<>();
+        String artifactId = part.path("id").asText("");
+        String filePath = part.path("path").asText(part.path("name").asText(""));
+        String summary = switch (partType) {
+            case "file" -> "生成文件 " + filePath;
+            case "patch" -> "应用补丁 " + filePath;
+            default -> "产物 " + filePath;
+        };
+
+        result.add(buildProcessTraceEnvelope(
+            RuntimeEventTypes.PROCESS_TRACE, agentSessionId, opencodeSessionId,
+            processTracePayload("artifact", "completed", "产物变更", summary, null, null,
+                eventType, partType, Map.of("artifactId", artifactId, "filePath", filePath)),
+            context));
+        return result;
+    }
+
+    private List<RuntimeEventEnvelope> translateRetryPart(String opencodeSessionId, String agentSessionId,
+                                                           JsonNode part, String eventType,
+                                                           RuntimeTranslationContext context) {
+        List<RuntimeEventEnvelope> result = new ArrayList<>();
+        String retryId = part.path("id").asText("");
+        int attempt = part.path("attempt").asInt(1);
+        int maxAttempts = part.path("maxAttempts").asInt(3);
+        String reason = part.path("reason").asText("");
+        String summary = "重试中 (" + attempt + "/" + maxAttempts + ")" + (reason.isEmpty() ? "" : ": " + reason);
+
+        result.add(buildProcessTraceEnvelope(
+            RuntimeEventTypes.PROCESS_TRACE, agentSessionId, opencodeSessionId,
+            processTracePayload("retry", "running", "重试", summary, null, null,
+                eventType, "retry", Map.of("operationId", retryId)),
+            context));
+        return result;
+    }
+
+    private List<RuntimeEventEnvelope> translateSubtaskPart(String opencodeSessionId, String agentSessionId,
+                                                             JsonNode part, String eventType,
+                                                             RuntimeTranslationContext context) {
+        List<RuntimeEventEnvelope> result = new ArrayList<>();
+        String subtaskId = part.path("id").asText("");
+        String name = part.path("name").asText("子任务");
+        String subtaskStatus = part.path("status").asText("running");
+
+        result.add(buildProcessTraceEnvelope(
+            RuntimeEventTypes.PROCESS_TRACE, agentSessionId, opencodeSessionId,
+            processTracePayload("subtask", subtaskStatus, "子任务", name, null, null,
+                eventType, "subtask", Map.of("operationId", subtaskId)),
+            context));
+        return result;
+    }
+
+    private List<RuntimeEventEnvelope> translateAgentHandoffPart(String opencodeSessionId, String agentSessionId,
+                                                                   JsonNode part, String eventType,
+                                                                   RuntimeTranslationContext context) {
+        List<RuntimeEventEnvelope> result = new ArrayList<>();
+        String handoffId = part.path("id").asText("");
+        String targetAgent = part.path("targetAgent").asText("unknown");
+        String parentStepId = part.path("parentStepId").asText("");
+        String summary = "移交至 " + targetAgent;
+
+        Map<String, Object> extra = new LinkedHashMap<>();
+        extra.put("operationId", handoffId);
+        if (!parentStepId.isEmpty()) extra.put("parentStepId", parentStepId);
+
+        result.add(buildProcessTraceEnvelope(
+            RuntimeEventTypes.PROCESS_TRACE, agentSessionId, opencodeSessionId,
+            processTracePayload("agent_handoff", "running", "Agent 移交", summary, null, null,
+                eventType, "agent-handoff", extra),
             context));
         return result;
     }
@@ -240,18 +356,29 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
     }
 
     private JsonNode payloadNode(String type, Object label, Map<String, Object> extra) {
-        var node = com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode();
+        var node = JsonNodeFactory.instance.objectNode();
         node.put("type", type);
         if (label instanceof String s) node.put("label", s);
         else if (label instanceof Boolean b) node.put("label", b);
         else if (label instanceof Number n) node.put("label", n.doubleValue());
         for (var entry : extra.entrySet()) {
-            Object v = entry.getValue();
-            if (v instanceof String s) node.put(entry.getKey(), s);
-            else if (v instanceof Boolean b) node.put(entry.getKey(), b);
-            else if (v instanceof Number n) node.put(entry.getKey(), n.doubleValue());
+            putValue(node, entry.getKey(), entry.getValue());
         }
         return node;
+    }
+
+    private Map<String, Object> projectionMeta(String rawEventType, String rawPartType, Map<String, Object> extra) {
+        Map<String, Object> meta = new LinkedHashMap<>();
+        if (rawEventType != null) meta.put("rawEventType", rawEventType);
+        if (rawPartType != null) meta.put("rawPartType", rawPartType);
+        meta.putAll(extra);
+        return meta;
+    }
+
+    private void putValue(ObjectNode node, String key, Object v) {
+        if (v instanceof String s) node.put(key, s);
+        else if (v instanceof Boolean b) node.put(key, b);
+        else if (v instanceof Number n) node.put(key, n.doubleValue());
     }
 
     private String stringifyValue(JsonNode value) {
@@ -311,8 +438,10 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
     }
 
     private JsonNode processTracePayload(String kind, String status, String title, String summary,
-                                          String toolName, String toolCallId) {
-        var node = com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode();
+                                          String toolName, String toolCallId,
+                                          String rawEventType, String rawPartType,
+                                          Map<String, Object> extraMeta) {
+        var node = JsonNodeFactory.instance.objectNode();
         node.put("kind", kind);
         node.put("status", status);
         node.put("title", title);
@@ -320,6 +449,11 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
         if (toolName != null) node.put("toolName", toolName);
         if (toolCallId != null) node.put("toolCallId", toolCallId);
         node.put("visibility", "public_summary");
+        if (rawEventType != null) node.put("rawEventType", rawEventType);
+        if (rawPartType != null) node.put("rawPartType", rawPartType);
+        for (var entry : extraMeta.entrySet()) {
+            putValue(node, entry.getKey(), entry.getValue());
+        }
         return node;
     }
 }

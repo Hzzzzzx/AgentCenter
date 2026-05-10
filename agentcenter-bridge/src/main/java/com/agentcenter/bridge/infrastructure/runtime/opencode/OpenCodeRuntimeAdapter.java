@@ -2,6 +2,7 @@ package com.agentcenter.bridge.infrastructure.runtime.opencode;
 
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -17,7 +18,9 @@ import com.agentcenter.bridge.api.dto.RuntimeEventDto;
 import com.agentcenter.bridge.application.RuntimeEventService;
 import com.agentcenter.bridge.api.dto.RuntimeSkillDto;
 import com.agentcenter.bridge.application.runtime.AgentRuntimeAdapter;
+import com.agentcenter.bridge.application.runtime.SkillInvocationRequest;
 import com.agentcenter.bridge.application.runtime.SkillRunResult;
+import com.agentcenter.bridge.application.runtime.RuntimeSkillSnapshot;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeAckEnvelope;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeCommandEnvelope;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeCommandTypes;
@@ -47,6 +50,11 @@ import jakarta.annotation.PreDestroy;
 public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
     private static final Logger log = LoggerFactory.getLogger(OpenCodeRuntimeAdapter.class);
+    private static final String RUNTIME_WORKSPACE_BOUNDARY = """
+            运行边界：
+            - 当前工作目录是 AgentCenter 为 Runtime 准备的隔离工作区；只读取、搜索和修改该工作目录内的文件。
+            - 不要访问、搜索或引用 AgentCenter 源码目录、父目录、用户主目录或其他绝对路径，除非输入上下文明确把某个文件内容作为资料提供。
+            - 如果任务需要工作目录之外的信息，请先说明缺失信息，并向 AgentCenter 请求补充，不要自行扩大读取范围。""";
     private final OpenCodeProcessManager processManager;
     private final OpenCodeEventSubscriber eventSubscriber;
     private final ObjectMapper objectMapper;
@@ -204,6 +212,26 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         return new SkillRunResult(true, output, "MARKDOWN", null, false);
     }
 
+    /**
+     * Sends a skill invocation as 3 separate text parts via prompt_async.
+     * This avoids wrapping the instructionPrompt (node state protocol) inside a code block.
+     */
+    public SkillRunResult runSkill(String sessionId, SkillInvocationRequest request) {
+        ArrayNode parts = buildSkillParts(request);
+        String output = dispatchMultiPartPromptAndWait(sessionId, parts, request.skillName());
+        if (output == null || output.isBlank()) {
+            return new SkillRunResult(
+                    false,
+                    null,
+                    "MARKDOWN",
+                    "Agent Runtime 已接收 Skill `" + request.skillName() + "`，但在 "
+                            + responseTimeoutSeconds + " 秒内没有返回可用输出。",
+                    false
+            );
+        }
+        return new SkillRunResult(true, output, "MARKDOWN", null, false);
+    }
+
     @Override
     public void sendMessage(String sessionId, String userMessage) {
         dispatchPrompt(sessionId, userMessage);
@@ -219,12 +247,58 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
                 - 如果需要用户继续澄清，请直接提出问题或给出选项。
                 - 如果信息已经足够，请输出当前 Skill 的最终结果。
 
+                %s
+
                 输入上下文：
 
                 ```text
                 %s
                 ```
-                """.formatted(skillName, inputContext).trim();
+                """.formatted(skillName, RUNTIME_WORKSPACE_BOUNDARY, inputContext).trim();
+    }
+
+    /**
+     * Builds 3 text parts for the prompt_async API:
+     * <ol>
+     *   <li>Skill invocation instruction with workflow guidance</li>
+     *   <li>User input context wrapped in a text code block</li>
+     *   <li>AgentCenter node state protocol as plain markdown (no code block wrapping)</li>
+     * </ol>
+     * Part 3 is omitted when instructionPrompt is null or blank.
+     */
+    ArrayNode buildSkillParts(SkillInvocationRequest request) {
+        ArrayNode parts = objectMapper.createArrayNode();
+
+        // Part 1: Skill invocation instruction
+        String part1Text = """
+                请使用当前 Agent Runtime 中的 Skill `%s` 处理下面的用户输入。
+
+                工作方式：
+                - 优先遵循 Skill 自身说明和当前会话上下文。
+                - AgentCenter 工作流只提供调用顺序、工作项信息、上游产物和用户交互回答，不替代 Skill 的判断。
+                - 如果需要用户继续澄清，请直接提出问题或给出选项。
+                - 如果信息已经足够，请输出当前 Skill 的最终结果。
+
+                %s""".formatted(request.skillName(), RUNTIME_WORKSPACE_BOUNDARY).trim();
+
+        ObjectNode part1 = parts.addObject();
+        part1.put("type", "text");
+        part1.put("text", part1Text);
+
+        // Part 2: User input context in text code block
+        String part2Text = "输入上下文：\n\n```text\n" + request.userPrompt() + "\n```";
+        ObjectNode part2 = parts.addObject();
+        part2.put("type", "text");
+        part2.put("text", part2Text);
+
+        // Part 3: AgentCenter node state protocol — plain markdown, no code block
+        if (request.instructionPrompt() != null && !request.instructionPrompt().isBlank()) {
+            ObjectNode part3 = parts.addObject();
+            part3.put("type", "text");
+            part3.put("text", request.instructionPrompt());
+        }
+
+        return parts;
     }
 
     private String dispatchPromptAndWait(String sessionId, String userMessage, boolean allowToolOutputFallback) {
@@ -237,9 +311,22 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
                 allowToolOutputFallback);
     }
 
+    private String dispatchMultiPartPromptAndWait(String sessionId, ArrayNode parts, String skillName) {
+        DispatchContext context = dispatchMultiPartPrompt(sessionId, parts, skillName);
+        return waitForAssistantText(
+                context.baseUrl(),
+                context.cwd(),
+                context.opencodeSessionId(),
+                context.knownMessageIds(),
+                false);
+    }
+
     private DispatchContext dispatchPrompt(String sessionId, String userMessage) {
+        if (sessionId == null || sessionId.isBlank()) {
+            throw new IllegalArgumentException("Agent session id is required before dispatching to opencode");
+        }
         String opencodeSessionId = agentToOpencodeSession.get(sessionId);
-        if (opencodeSessionId == null && sessionId != null && sessionId.startsWith("ses_")) {
+        if (opencodeSessionId == null && sessionId.startsWith("ses_")) {
             opencodeSessionId = sessionId;
             agentToOpencodeSession.put(sessionId, sessionId);
         }
@@ -275,6 +362,45 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         return new DispatchContext(baseUrl, cwd.toString(), opencodeSessionId, knownMessageIds);
     }
 
+    private DispatchContext dispatchMultiPartPrompt(String sessionId, ArrayNode parts, String skillName) {
+        if (sessionId == null || sessionId.isBlank()) {
+            throw new IllegalArgumentException("Agent session id is required before dispatching skill " + skillName);
+        }
+        String opencodeSessionId = agentToOpencodeSession.get(sessionId);
+        if (opencodeSessionId == null && sessionId.startsWith("ses_")) {
+            opencodeSessionId = sessionId;
+            agentToOpencodeSession.put(sessionId, sessionId);
+        }
+        if (opencodeSessionId == null) {
+            throw new IllegalArgumentException("No opencode session mapped for agent session: " + sessionId);
+        }
+
+        String baseUrl = processManager.ensureRunning();
+        Path cwd = processManager.resolveWorkingDirectory();
+        Set<String> knownMessageIds = fetchMessageIds(baseUrl, cwd.toString(), opencodeSessionId);
+
+        ObjectNode sendPayload = objectMapper.createObjectNode();
+        sendPayload.put("baseUrl", baseUrl);
+        sendPayload.put("workingDirectory", cwd.toString());
+        sendPayload.put("agent", agent);
+        sendPayload.set("parts", parts);
+
+        RuntimeCommandEnvelope command = RuntimeCommandEnvelope.of(
+                RuntimeCommandTypes.CONVERSATION_MESSAGE_SEND, RuntimeType.OPENCODE,
+                opencodeSessionId, sendPayload);
+
+        String userPromptSummary = "[multi-part skill invocation: " + skillName + "]";
+        publishPromptDebugEvent(sessionId, opencodeSessionId, baseUrl, cwd.toString(), sendPayload, userPromptSummary);
+
+        RuntimeAckEnvelope ack = commandTransport.send(command);
+        if (!ack.success()) {
+            throw new RuntimeException("opencode prompt_async failed: " + ack.message());
+        }
+
+        log.debug("Sent multi-part skill prompt to opencode session {} (agent session {})", opencodeSessionId, sessionId);
+        return new DispatchContext(baseUrl, cwd.toString(), opencodeSessionId, knownMessageIds);
+    }
+
     @Override
     public void cancel(String sessionId) {
         String opencodeSessionId = agentToOpencodeSession.remove(sessionId);
@@ -286,6 +412,12 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
     @Override
     public void refreshMcps() {
+        agentToOpencodeSession.clear();
+        processManager.restartIfRunning();
+    }
+
+    @Override
+    public void refreshSkills(RuntimeSkillSnapshot snapshot) {
         agentToOpencodeSession.clear();
         processManager.restartIfRunning();
     }
@@ -326,6 +458,23 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
     public String getOpencodeSessionId(String agentSessionId) {
         return agentToOpencodeSession.get(agentSessionId);
+    }
+
+    public void respondPermission(String opencodeSessionId, String permissionId, boolean approved) {
+        String baseUrl = processManager.ensureRunning();
+        Path cwd = processManager.resolveWorkingDirectory();
+
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("baseUrl", baseUrl);
+        payload.put("workingDirectory", cwd.toString());
+        payload.put("permissionId", permissionId);
+        payload.put("approved", approved);
+
+        RuntimeCommandEnvelope command = RuntimeCommandEnvelope.of(
+            RuntimeCommandTypes.PERMISSION_RESPOND, RuntimeType.OPENCODE,
+            opencodeSessionId, payload);
+
+        commandTransport.send(command);
     }
 
     private Set<String> fetchMessageIds(String baseUrl, String cwd, String opencodeSessionId) {
@@ -372,7 +521,8 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
             payload.put("runtimeSessionId", opencodeSessionId);
             payload.put("baseUrl", baseUrl);
             payload.put("workingDirectory", cwd);
-            payload.put("systemPrompt", "AgentCenter 当前没有向 OpenCode prompt_async 发送显式 system prompt；系统/agent 指令由 OpenCode agent=`"
+            payload.put("systemPrompt", "AgentCenter 当前没有向 OpenCode prompt_async 发送显式 system prompt；"
+                    + "本轮用户消息内包含 Runtime 工作目录边界约束；系统/agent 指令由 OpenCode agent=`"
                     + agent + "`、OpenCode 配置与 Skill 文件加载。");
             payload.put("userPrompt", userPrompt);
             payload.set("requestPayload", requestPayload.deepCopy());
@@ -399,10 +549,13 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
                                         Set<String> knownMessageIds,
                                         boolean allowToolOutputFallback) {
         long deadline = System.nanoTime() + Duration.ofSeconds(responseTimeoutSeconds).toNanos();
+        Map<String, Integer> streamedTextLengths = new HashMap<>();
         while (System.nanoTime() < deadline) {
             JsonNode messages = commandTransport.fetchMessages(baseUrl, cwd, opencodeSessionId);
+            publishAssistantTextSnapshotDeltas(opencodeSessionId, messages, knownMessageIds, streamedTextLengths);
             String text = extractNewAssistantText(messages, knownMessageIds);
             if (text != null && !text.isBlank()) {
+                publishAssistantCompleted(opencodeSessionId);
                 return text;
             }
             if (allowToolOutputFallback) {
@@ -419,6 +572,109 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
             }
         }
         return null;
+    }
+
+    private void publishAssistantTextSnapshotDeltas(String opencodeSessionId,
+                                                    JsonNode messages,
+                                                    Set<String> knownMessageIds,
+                                                    Map<String, Integer> streamedTextLengths) {
+        if (messages == null || !messages.isArray()) {
+            return;
+        }
+        for (JsonNode message : messages) {
+            JsonNode info = message.path("info");
+            String id = info.path("id").asText("");
+            if (id.isBlank() || knownMessageIds.contains(id)) {
+                continue;
+            }
+            if (!"assistant".equals(info.path("role").asText(""))) {
+                continue;
+            }
+            if ("tool-calls".equals(info.path("finish").asText(""))) {
+                continue;
+            }
+
+            String text = collectTextParts(message);
+            int previousLength = streamedTextLengths.getOrDefault(id, 0);
+            if (text.length() <= previousLength) {
+                continue;
+            }
+
+            String delta = text.substring(previousLength);
+            streamedTextLengths.put(id, text.length());
+            publishAssistantDelta(opencodeSessionId, id, delta);
+        }
+    }
+
+    private String collectTextParts(JsonNode message) {
+        StringBuilder result = new StringBuilder();
+        for (JsonNode part : message.path("parts")) {
+            if (!"text".equals(part.path("type").asText(""))) {
+                continue;
+            }
+            String text = part.path("text").asText("");
+            if (!text.isBlank()) {
+                if (!result.isEmpty()) {
+                    result.append("\n\n");
+                }
+                result.append(text);
+            }
+        }
+        return result.toString();
+    }
+
+    private void publishAssistantDelta(String opencodeSessionId, String messageId, String delta) {
+        if (delta == null || delta.isEmpty()) {
+            return;
+        }
+        String agentSessionId = eventSubscriber.getAgentSessionId(opencodeSessionId);
+        if (agentSessionId == null || agentSessionId.isBlank()) {
+            return;
+        }
+        try {
+            ObjectNode payload = objectMapper.createObjectNode();
+            payload.put("delta", delta);
+            payload.put("messageId", messageId);
+            payload.put("rawEventType", "session.messages.snapshot");
+            payload.put("rawPartType", "text");
+            runtimeEventService.publishEvent(new RuntimeEventDto(
+                    null,
+                    agentSessionId,
+                    eventSubscriber.getWorkItemId(agentSessionId),
+                    eventSubscriber.getWorkflowInstanceId(agentSessionId),
+                    eventSubscriber.getWorkflowNodeInstanceId(agentSessionId),
+                    RuntimeEventType.ASSISTANT_DELTA,
+                    RuntimeEventSource.OPENCODE,
+                    payload.toString(),
+                    null
+            ));
+        } catch (Exception e) {
+            log.debug("Failed to publish assistant delta for opencode session {}", opencodeSessionId, e);
+        }
+    }
+
+    private void publishAssistantCompleted(String opencodeSessionId) {
+        String agentSessionId = eventSubscriber.getAgentSessionId(opencodeSessionId);
+        if (agentSessionId == null || agentSessionId.isBlank()) {
+            return;
+        }
+        try {
+            ObjectNode payload = objectMapper.createObjectNode();
+            payload.put("rawEventType", "session.messages.snapshot");
+            runtimeEventService.publishEvent(new RuntimeEventDto(
+                    null,
+                    agentSessionId,
+                    eventSubscriber.getWorkItemId(agentSessionId),
+                    eventSubscriber.getWorkflowInstanceId(agentSessionId),
+                    eventSubscriber.getWorkflowNodeInstanceId(agentSessionId),
+                    RuntimeEventType.ASSISTANT_COMPLETED,
+                    RuntimeEventSource.OPENCODE,
+                    payload.toString(),
+                    null
+            ));
+        } catch (Exception e) {
+            log.debug("Failed to publish assistant completed for opencode session {}", opencodeSessionId, e);
+        }
     }
 
     private String extractNewAssistantText(JsonNode messages, Set<String> knownMessageIds) {

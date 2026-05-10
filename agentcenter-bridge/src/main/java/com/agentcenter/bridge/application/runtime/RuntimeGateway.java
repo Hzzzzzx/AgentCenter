@@ -15,6 +15,9 @@ public interface RuntimeGateway {
     String createSession(RuntimeType runtimeType, String workItemId, String agentSessionId);
     String ensureSession(RuntimeType runtimeType, String workItemId, String agentSessionId, String runtimeSessionId);
     SkillRunResult runSkill(RuntimeType runtimeType, String sessionId, String skillName, String inputContext);
+    default SkillRunResult runSkill(RuntimeType runtimeType, String sessionId, SkillInvocationRequest request) {
+        return runSkill(runtimeType, sessionId, request.skillName(), request.userPrompt());
+    }
     void sendMessage(RuntimeType runtimeType, String sessionId, String userMessage);
     void cancel(RuntimeType runtimeType, String sessionId);
     void refreshSkills(RuntimeType runtimeType, RuntimeSkillSnapshot snapshot);

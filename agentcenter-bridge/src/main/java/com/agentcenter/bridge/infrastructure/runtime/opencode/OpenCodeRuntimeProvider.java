@@ -68,6 +68,11 @@ public class OpenCodeRuntimeProvider implements RuntimeProvider {
     }
 
     @Override
+    public SkillRunResult runSkill(String sessionId, SkillInvocationRequest request) {
+        return adapter.runSkill(sessionId, request);
+    }
+
+    @Override
     public void sendMessage(String sessionId, String userMessage) {
         adapter.sendMessage(sessionId, userMessage);
     }
