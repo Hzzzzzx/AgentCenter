@@ -23,6 +23,7 @@ class RuntimeEventEnvelopeDispatcherTest {
     private LegacyRuntimeEventBridge legacyBridge;
     private RuntimeEventService eventService;
     private RuntimeOperationEventHandler operationHandler;
+    private PermissionConfirmationHandler permissionHandler;
     private RuntimeEventEnvelopeDispatcher dispatcher;
 
     @BeforeEach
@@ -31,7 +32,8 @@ class RuntimeEventEnvelopeDispatcherTest {
         legacyBridge = mock(LegacyRuntimeEventBridge.class);
         eventService = mock(RuntimeEventService.class);
         operationHandler = mock(RuntimeOperationEventHandler.class);
-        dispatcher = new RuntimeEventEnvelopeDispatcher(legacyBridge, projector, eventService, operationHandler);
+        permissionHandler = mock(PermissionConfirmationHandler.class);
+        dispatcher = new RuntimeEventEnvelopeDispatcher(legacyBridge, projector, eventService, operationHandler, permissionHandler);
     }
 
     private RuntimeEventEnvelope envelope(String type) {
@@ -48,8 +50,12 @@ class RuntimeEventEnvelopeDispatcherTest {
     }
 
     private RuntimeEventDto legacyDto(String sessionId) {
+        return legacyDto(sessionId, "evt_1");
+    }
+
+    private RuntimeEventDto legacyDto(String sessionId, String eventId) {
         return new RuntimeEventDto(
-            "evt_1", sessionId, null, null, null,
+            eventId, sessionId, null, null, null,
             RuntimeEventType.ASSISTANT_DELTA, RuntimeEventSource.OPENCODE,
             "{}", OffsetDateTime.now());
     }
@@ -58,8 +64,8 @@ class RuntimeEventEnvelopeDispatcherTest {
     void dispatchesToProjectorAndBridge() {
         RuntimeEventEnvelope env1 = envelope(RuntimeEventTypes.CONVERSATION_DELTA);
         RuntimeEventEnvelope env2 = envelope(RuntimeEventTypes.TOOL_STARTED);
-        RuntimeEventDto dto1 = legacyDto("agent_ses_1");
-        RuntimeEventDto dto2 = legacyDto("agent_ses_1");
+        RuntimeEventDto dto1 = legacyDto("agent_ses_1", "evt_publish_1");
+        RuntimeEventDto dto2 = legacyDto("agent_ses_1", "evt_publish_2");
 
         when(legacyBridge.toLegacyEvent(env1)).thenReturn(dto1);
         when(legacyBridge.toLegacyEvent(env2)).thenReturn(dto2);

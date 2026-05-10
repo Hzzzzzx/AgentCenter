@@ -68,6 +68,42 @@ class OpenCodeRuntimeProviderTest {
     }
 
     @Test
+    void runSkillWithRequest_delegatesToAdapter() {
+        SkillRunResult expected = new SkillRunResult(true, "out", "MD", null, false);
+        SkillInvocationRequest request = new SkillInvocationRequest(
+                "skill", "user prompt", "instruction prompt", null);
+        when(adapter.runSkill("ses_1", request))
+                .thenReturn(expected);
+
+        SkillRunResult result = provider.runSkill("ses_1", request);
+        assertEquals(expected, result);
+    }
+
+    @Test
+    void runSkillWithRequest_noInstruction_delegatesToAdapter() {
+        SkillRunResult expected = new SkillRunResult(true, "out", "MD", null, false);
+        SkillInvocationRequest request = new SkillInvocationRequest(
+                "skill", "user prompt", null, null);
+        when(adapter.runSkill("ses_1", request))
+                .thenReturn(expected);
+
+        SkillRunResult result = provider.runSkill("ses_1", request);
+        assertEquals(expected, result);
+    }
+
+    @Test
+    void runSkillWithRequest_blankInstruction_delegatesToAdapter() {
+        SkillRunResult expected = new SkillRunResult(true, "out", "MD", null, false);
+        SkillInvocationRequest request = new SkillInvocationRequest(
+                "skill", "user prompt", "  ", null);
+        when(adapter.runSkill("ses_1", request))
+                .thenReturn(expected);
+
+        SkillRunResult result = provider.runSkill("ses_1", request);
+        assertEquals(expected, result);
+    }
+
+    @Test
     void sendMessageDelegates() {
         provider.sendMessage("ses_1", "hello");
         verify(adapter).sendMessage("ses_1", "hello");

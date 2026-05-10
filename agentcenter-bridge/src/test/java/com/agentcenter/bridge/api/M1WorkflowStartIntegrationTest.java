@@ -87,7 +87,7 @@ class M1WorkflowStartIntegrationTest {
         assertThat(instanceId).isNotBlank();
 
         var firstNode = json.at("/workflowInstance/nodes/0");
-        assertThat(firstNode.get("status").asText()).isEqualTo("COMPLETED");
+        assertThat(firstNode.get("status").asText()).isEqualTo("WAITING_CONFIRMATION");
         assertThat(firstNode.get("outputArtifactId").asText()).isNotEmpty();
         assertThat(TestWorkflowExecutorConfig.CAPTURED_INPUT_CONTEXTS).isNotEmpty();
         String firstInputContext = TestWorkflowExecutorConfig.CAPTURED_INPUT_CONTEXTS.get(0);
@@ -116,8 +116,7 @@ class M1WorkflowStartIntegrationTest {
                 .contains("## 节点上下文");
 
         var secondNode = json.at("/workflowInstance/nodes/1");
-        assertThat(secondNode.get("status").asText()).isEqualTo("WAITING_CONFIRMATION");
-        assertThat(secondNode.get("agentSessionId").asText()).isNotEmpty();
+        assertThat(secondNode.get("status").asText()).isEqualTo("PENDING");
 
         var thirdNode = json.at("/workflowInstance/nodes/2");
         assertThat(thirdNode.get("status").asText()).isEqualTo("PENDING");
@@ -130,15 +129,9 @@ class M1WorkflowStartIntegrationTest {
         var eventTypes = java.util.stream.StreamSupport.stream(events.spliterator(), false)
                 .map(e -> e.get("eventType").asText())
                 .toList();
-        assertThat(eventTypes).contains("SKILL_STARTED", "SKILL_COMPLETED", "CONFIRMATION_CREATED");
+        assertThat(eventTypes).contains("SKILL_STARTED", "SKILL_COMPLETED");
         assertThat(java.util.stream.StreamSupport.stream(events.spliterator(), false)
                 .allMatch(e -> instanceId.equals(e.get("workflowInstanceId").asText()))).isTrue();
-
-        var confirmation = json.get("confirmation");
-        assertThat(confirmation).isNotNull();
-        assertThat(confirmation.get("id").asText()).isNotEmpty();
-        assertThat(confirmation.get("requestType").asText()).isEqualTo("DECISION");
-        assertThat(confirmation.get("optionsJson").asText()).contains("低风险方案", "低成本方案", "完整方案");
 
         MvcResult workItemResult = mockMvc.perform(get("/api/work-items/" + fe1234Id))
                 .andExpect(status().isOk())
@@ -150,6 +143,43 @@ class M1WorkflowStartIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(instanceId))
                 .andExpect(jsonPath("$.status").value("BLOCKED"));
+    }
+
+    @Test
+    void startWorkflow_autoMode_advancesAfterReadyNodeUntilUserInput() throws Exception {
+        String fe1234Id = findWorkItemIdByCode("FE1234");
+
+        MvcResult result = mockMvc.perform(
+                        post("/api/work-items/" + fe1234Id + "/start-workflow")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"mode\": \"AUTO\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.workflowInstance.status").value("BLOCKED"))
+                .andExpect(jsonPath("$.confirmation").exists())
+                .andReturn();
+
+        var json = objectMapper.readTree(result.getResponse().getContentAsString());
+        String instanceId = json.at("/workflowInstance/id").asText();
+
+        assertThat(json.at("/workflowInstance/nodes/0/status").asText()).isEqualTo("COMPLETED");
+        assertThat(json.at("/workflowInstance/nodes/1/status").asText()).isEqualTo("WAITING_CONFIRMATION");
+        assertThat(json.at("/workflowInstance/nodes/2/status").asText()).isEqualTo("PENDING");
+        assertThat(TestWorkflowExecutorConfig.CAPTURED_SKILL_NAMES)
+                .contains("prd-desingn", "hld-design");
+
+        String executionMode = jdbcTemplate.queryForObject(
+                "SELECT execution_mode FROM workflow_instance WHERE id = ?",
+                String.class, instanceId);
+        assertThat(executionMode).isEqualTo("AUTO");
+
+        String waitingNodeId = json.at("/workflowInstance/nodes/1/id").asText();
+        var pendingConfirmations = jdbcTemplate.queryForList(
+                "SELECT request_type, workflow_node_instance_id, interaction_type FROM confirmation_request WHERE workflow_instance_id = ? AND status = 'PENDING'",
+                instanceId);
+        assertThat(pendingConfirmations).hasSize(1);
+        assertThat(pendingConfirmations.get(0).get("request_type")).isEqualTo("DECISION");
+        assertThat(pendingConfirmations.get(0).get("workflow_node_instance_id")).isEqualTo(waitingNodeId);
+        assertThat(pendingConfirmations.get(0).get("interaction_type")).isNotEqualTo("WORKFLOW_ADVANCE");
     }
 
     @Test
@@ -188,6 +218,128 @@ class M1WorkflowStartIntegrationTest {
     }
 
     @Test
+    void startWorkflow_existingPendingInstance_returnsPreparedSessionAndInputMessage() throws Exception {
+        String fe1234Id = findWorkItemIdByCode("FE1234");
+        String definitionId = jdbcTemplate.queryForObject(
+                "SELECT id FROM workflow_definition WHERE work_item_type = 'FE' AND status = 'ENABLED' AND is_default = 1 LIMIT 1",
+                String.class);
+        var nodeDefs = jdbcTemplate.queryForList(
+                "SELECT id, name, order_no, skill_name, stage_key FROM workflow_node_definition WHERE workflow_definition_id = ? ORDER BY order_no",
+                definitionId);
+        String instanceId = "01TESTEXISTINGPENDINGWF000001";
+        String firstNodeId = "01TESTEXISTINGPENDINGNODE001";
+
+        jdbcTemplate.update("""
+                INSERT INTO workflow_instance (
+                    id, work_item_id, workflow_definition_id, status, execution_mode,
+                    current_node_instance_id, started_at
+                ) VALUES (?, ?, ?, 'RUNNING', 'MANUAL_CONFIRM', ?, datetime('now'))
+                """, instanceId, fe1234Id, definitionId, firstNodeId);
+
+        for (int i = 0; i < nodeDefs.size(); i++) {
+            var nodeDef = nodeDefs.get(i);
+            String nodeId = i == 0 ? firstNodeId : "01TESTEXISTINGPENDINGNODE00" + (i + 1);
+            jdbcTemplate.update("""
+                    INSERT INTO workflow_node_instance (
+                        id, workflow_instance_id, node_definition_id, status, version,
+                        node_kind, origin, stage_key, skill_name, summary, sequence_no
+                    ) VALUES (?, ?, ?, 'PENDING', 1, 'STAGE', 'DEFINITION', ?, ?, ?, ?)
+                    """,
+                    nodeId,
+                    instanceId,
+                    nodeDef.get("id"),
+                    nodeDef.get("stage_key"),
+                    nodeDef.get("skill_name"),
+                    nodeDef.get("name"),
+                    nodeDef.get("order_no"));
+        }
+
+        MvcResult result = mockMvc.perform(
+                        post("/api/work-items/" + fe1234Id + "/start-workflow")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"mode\": \"START_OR_CONTINUE\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.session").exists())
+                .andExpect(jsonPath("$.workflowInstance.id").value(instanceId))
+                .andReturn();
+
+        var json = objectMapper.readTree(result.getResponse().getContentAsString());
+        String sessionId = json.at("/session/id").asText();
+        assertThat(sessionId).isNotBlank();
+
+        var workflowInputs = jdbcTemplate.queryForList(
+                "SELECT role, content, workflow_node_instance_id FROM agent_message WHERE session_id = ? AND role = 'USER'",
+                sessionId);
+        assertThat(workflowInputs).hasSize(1);
+        assertThat(workflowInputs.get(0).get("workflow_node_instance_id")).isEqualTo(firstNodeId);
+        assertThat(workflowInputs.get(0).get("content").toString())
+                .contains("请执行工作流节点")
+                .contains("工作项编号：FE1234");
+
+        String currentWorkflowInstanceId = jdbcTemplate.queryForObject(
+                "SELECT current_workflow_instance_id FROM work_item WHERE id = ?",
+                String.class, fe1234Id);
+        assertThat(currentWorkflowInstanceId).isEqualTo(instanceId);
+    }
+
+    @Test
+    void startWorkflow_runtimeSessionUnavailable_recordsClearFailureInsteadOfNullPointer() throws Exception {
+        TestWorkflowExecutorConfig.setEnsureSessionError(new IllegalStateException("opencode serve is unavailable"));
+        String fe1234Id = findWorkItemIdByCode("FE1234");
+
+        MvcResult result = mockMvc.perform(
+                        post("/api/work-items/" + fe1234Id + "/start-workflow")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"mode\": \"START_OR_CONTINUE\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.workflowInstance.status").value("BLOCKED"))
+                .andExpect(jsonPath("$.workflowInstance.nodes[0].status").value("FAILED"))
+                .andExpect(jsonPath("$.workflowInstance.nodes[0].errorMessage")
+                        .value("Runtime session is not ready. Please check opencode serve and retry this node."))
+                .andReturn();
+
+        var json = objectMapper.readTree(result.getResponse().getContentAsString());
+        String sessionId = json.at("/session/id").asText();
+        assertThat(sessionId).isNotBlank();
+        String nodeId = json.at("/workflowInstance/nodes/0/id").asText();
+
+        var confirmations = jdbcTemplate.queryForList(
+                "SELECT title, content FROM confirmation_request WHERE workflow_node_instance_id = ? AND status = 'PENDING'",
+                nodeId);
+        assertThat(confirmations).hasSize(1);
+        assertThat(confirmations.get(0).get("content").toString())
+                .contains("Runtime session is not ready")
+                .doesNotContain("NullPointerException");
+
+        var messages = jdbcTemplate.queryForList(
+                "SELECT role, content FROM agent_message WHERE session_id = ? ORDER BY seq_no",
+                sessionId);
+        assertThat(messages).anySatisfy(message -> {
+            assertThat(message.get("role")).isEqualTo("USER");
+            assertThat(message.get("content").toString()).contains("请执行工作流节点");
+        });
+
+        TestWorkflowExecutorConfig.setEnsureSessionError(null);
+        TestWorkflowExecutorConfig.CAPTURED_SKILL_NAMES.clear();
+        mockMvc.perform(post("/api/workflow-node-instances/" + nodeId + "/retry"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.workflowInstance.nodes[0].status").value("WAITING_CONFIRMATION"));
+
+        assertThat(TestWorkflowExecutorConfig.CAPTURED_SKILL_NAMES).contains("prd-desingn");
+        String runtimeSessionId = jdbcTemplate.queryForObject(
+                "SELECT runtime_session_id FROM workflow_node_instance WHERE id = ?",
+                String.class, nodeId);
+        assertThat(runtimeSessionId).startsWith("stub-session-");
+        Integer activeExceptionCount = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM confirmation_request
+                WHERE workflow_node_instance_id = ?
+                  AND request_type = 'EXCEPTION'
+                  AND status IN ('PENDING', 'IN_CONVERSATION')
+                """, Integer.class, nodeId);
+        assertThat(activeExceptionCount).isZero();
+    }
+
+    @Test
     void continueWorkflow_conflictWhenWaitingConfirmation() throws Exception {
         String fe1234Id = findWorkItemIdByCode("FE1234");
 
@@ -201,12 +353,20 @@ class M1WorkflowStartIntegrationTest {
         var json = objectMapper.readTree(startResult.getResponse().getContentAsString());
         String instanceId = json.at("/workflowInstance/id").asText();
 
+        String firstNodeId = json.at("/workflowInstance/nodes/0/id").asText();
+        String sessionId = json.at("/workflowInstance/nodes/0/agentSessionId").asText();
+
+        mockMvc.perform(post("/api/agent-sessions/" + sessionId + "/messages")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"advance\",\"workflowUserAction\":\"ADVANCE_NEXT\",\"workflowNodeInstanceId\":\"" + firstNodeId + "\"}"))
+                .andExpect(status().isCreated());
+
         mockMvc.perform(post("/api/workflow-instances/" + instanceId + "/continue"))
                 .andExpect(status().isConflict());
     }
 
     @Test
-    void skipNode_onCompletedNode_skipsWaitingConfirmationAndAdvances() throws Exception {
+    void skipNode_onReadyNode_skipsAndAdvances() throws Exception {
         String fe1234Id = findWorkItemIdByCode("FE1234");
 
         MvcResult startResult = mockMvc.perform(
@@ -225,7 +385,7 @@ class M1WorkflowStartIntegrationTest {
                 .andReturn();
 
         var skipJson = objectMapper.readTree(skipResult.getResponse().getContentAsString());
-        assertThat(skipJson.at("/workflowInstance/status").asText()).isIn("RUNNING", "COMPLETED");
+        assertThat(skipJson.at("/workflowInstance/status").asText()).isIn("RUNNING", "BLOCKED");
     }
 
     @Test

@@ -145,6 +145,152 @@ class OpenCodeRuntimeEventTranslatorTest {
     }
 
     @Test
+    void textUpdatedWithGrowingFullTextEmitsOnlySuffix() throws Exception {
+        RuntimeRawEvent first = rawEvent("message.part.updated", """
+        {
+          "type": "message.part.updated",
+          "properties": {
+            "part": {"type": "text", "id": "p-grow", "text": "Hello"}
+          }
+        }
+        """);
+        RuntimeRawEvent second = rawEvent("message.part.updated", """
+        {
+          "type": "message.part.updated",
+          "properties": {
+            "part": {"type": "text", "id": "p-grow", "text": "Hello world"}
+          }
+        }
+        """);
+
+        List<RuntimeEventEnvelope> firstResult = translator.translate(first, fixedContext());
+        List<RuntimeEventEnvelope> secondResult = translator.translate(second, fixedContext());
+
+        assertEquals(1, firstResult.size());
+        assertEquals("Hello", firstResult.get(0).payload().path("delta").asText());
+        assertEquals(1, secondResult.size());
+        assertEquals(" world", secondResult.get(0).payload().path("delta").asText());
+    }
+
+    @Test
+    void textDeltaBeforeFullTextSnapshotDoesNotDuplicatePreviousDelta() throws Exception {
+        RuntimeRawEvent delta = rawEvent("message.part.delta", """
+        {
+          "type": "message.part.delta",
+          "properties": {
+            "delta": "Hello",
+            "part": {"type": "text", "id": "p-mixed"}
+          }
+        }
+        """);
+        RuntimeRawEvent snapshot = rawEvent("message.part.updated", """
+        {
+          "type": "message.part.updated",
+          "properties": {
+            "part": {"type": "text", "id": "p-mixed", "text": "Hello world"}
+          }
+        }
+        """);
+
+        List<RuntimeEventEnvelope> deltaResult = translator.translate(delta, fixedContext());
+        List<RuntimeEventEnvelope> snapshotResult = translator.translate(snapshot, fixedContext());
+
+        assertEquals(1, deltaResult.size());
+        assertEquals("Hello", deltaResult.get(0).payload().path("delta").asText());
+        assertEquals(1, snapshotResult.size());
+        assertEquals(" world", snapshotResult.get(0).payload().path("delta").asText());
+    }
+
+    @Test
+    void opencodeDeltaWithoutNestedPartUsesPreviouslyRecordedPartMetadata() throws Exception {
+        RuntimeRawEvent partCreated = rawEvent("message.part.updated", """
+        {
+          "type": "message.part.updated",
+          "properties": {
+            "sessionID": "opencode_ses_1",
+            "part": {
+              "id": "prt_text_1",
+              "messageID": "msg_assistant_1",
+              "sessionID": "opencode_ses_1",
+              "type": "text",
+              "text": ""
+            }
+          }
+        }
+        """);
+        RuntimeRawEvent firstDelta = rawEvent("message.part.delta", """
+        {
+          "type": "message.part.delta",
+          "properties": {
+            "sessionID": "opencode_ses_1",
+            "messageID": "msg_assistant_1",
+            "partID": "prt_text_1",
+            "field": "text",
+            "delta": "一"
+          }
+        }
+        """);
+        RuntimeRawEvent secondDelta = rawEvent("message.part.delta", """
+        {
+          "type": "message.part.delta",
+          "properties": {
+            "sessionID": "opencode_ses_1",
+            "messageID": "msg_assistant_1",
+            "partID": "prt_text_1",
+            "field": "text",
+            "delta": "\\n二"
+          }
+        }
+        """);
+
+        assertTrue(translator.translate(partCreated, fixedContext()).isEmpty());
+        List<RuntimeEventEnvelope> firstResult = translator.translate(firstDelta, fixedContext());
+        List<RuntimeEventEnvelope> secondResult = translator.translate(secondDelta, fixedContext());
+
+        assertEquals(1, firstResult.size());
+        assertEquals(RuntimeEventTypes.CONVERSATION_DELTA, firstResult.get(0).type());
+        assertEquals("一", firstResult.get(0).payload().path("delta").asText());
+        assertEquals("message.part.delta", firstResult.get(0).payload().path("rawEventType").asText());
+        assertEquals("text", firstResult.get(0).payload().path("rawPartType").asText());
+        assertEquals("prt_text_1", firstResult.get(0).payload().path("partId").asText());
+        assertEquals(1, secondResult.size());
+        assertEquals("\n二", secondResult.get(0).payload().path("delta").asText());
+    }
+
+    @Test
+    void reasoningDeltaWithoutNestedPartDoesNotBecomeAssistantText() throws Exception {
+        RuntimeRawEvent reasoningPart = rawEvent("message.part.updated", """
+        {
+          "type": "message.part.updated",
+          "properties": {
+            "part": {
+              "id": "prt_reasoning_1",
+              "messageID": "msg_assistant_1",
+              "type": "reasoning",
+              "text": ""
+            }
+          }
+        }
+        """);
+        RuntimeRawEvent reasoningDelta = rawEvent("message.part.delta", """
+        {
+          "type": "message.part.delta",
+          "properties": {
+            "messageID": "msg_assistant_1",
+            "partID": "prt_reasoning_1",
+            "field": "text",
+            "delta": "Thinking"
+          }
+        }
+        """);
+
+        assertTrue(translator.translate(reasoningPart, fixedContext()).isEmpty());
+        List<RuntimeEventEnvelope> result = translator.translate(reasoningDelta, fixedContext());
+
+        assertTrue(result.stream().noneMatch(env -> RuntimeEventTypes.CONVERSATION_DELTA.equals(env.type())));
+    }
+
+    @Test
     void userMessageFiltered() throws Exception {
         // First record a user message
         String userMsgJson = """
@@ -351,6 +497,7 @@ class OpenCodeRuntimeEventTranslatorTest {
         assertEquals(2, result.size());
         assertEquals(RuntimeEventTypes.PERMISSION_REQUESTED, result.get(0).type());
         assertEquals("perm_1", result.get(0).payload().path("permissionId").asText());
+        assertEquals("perm_opencode_ses_1_perm_1", result.get(0).payload().path("confirmationId").asText());
         assertEquals("Allow file write?", result.get(0).payload().path("title").asText());
         assertEquals(RuntimeEventTypes.PROCESS_TRACE, result.get(1).type());
         assertEquals("confirmation", result.get(1).payload().path("kind").asText());
@@ -568,6 +715,288 @@ class OpenCodeRuntimeEventTranslatorTest {
 
         assertEquals(1, result.size());
         assertEquals("Short structured summary", result.get(0).payload().path("summary").asText());
+    }
+
+    // --- Projection Metadata Tests ---
+
+    @Test
+    void textDeltaIncludesProjectionMetadata() throws Exception {
+        String json = """
+        {
+          "type": "message.part.delta",
+          "properties": {
+            "delta": "Hello with metadata",
+            "part": {"type": "text", "id": "p_meta1", "messageID": "msg_meta1"}
+          }
+        }
+        """;
+        RuntimeRawEvent raw = rawEvent("message.part.delta", json);
+        List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
+
+        assertEquals(1, result.size());
+        JsonNode payload = result.get(0).payload();
+        assertEquals("message.part.delta", payload.path("rawEventType").asText());
+        assertEquals("text", payload.path("rawPartType").asText());
+        assertEquals("msg_meta1", payload.path("messageId").asText());
+        assertEquals("p_meta1", payload.path("partId").asText());
+    }
+
+    @Test
+    void toolRunningIncludesProjectionMetadata() throws Exception {
+        String json = """
+        {
+          "type": "message.part.updated",
+          "properties": {
+            "part": {"type": "tool", "callID": "call_meta1", "tool": "Read", "name": "Read File", "state": {"status": "running"}}
+          }
+        }
+        """;
+        RuntimeRawEvent raw = rawEvent("message.part.updated", json);
+        List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
+
+        // TOOL_STARTED
+        RuntimeEventEnvelope started = result.get(0);
+        assertEquals(RuntimeEventTypes.TOOL_STARTED, started.type());
+        assertEquals("message.part.updated", started.payload().path("rawEventType").asText());
+        assertEquals("tool", started.payload().path("rawPartType").asText());
+        assertEquals("call_meta1", started.payload().path("toolCallId").asText());
+        assertEquals("Read", started.payload().path("rawName").asText());
+        assertEquals("Read File", started.payload().path("displayName").asText());
+
+        // PROCESS_TRACE for tool_call
+        RuntimeEventEnvelope trace = result.get(1);
+        assertEquals("message.part.updated", trace.payload().path("rawEventType").asText());
+        assertEquals("tool", trace.payload().path("rawPartType").asText());
+    }
+
+    @Test
+    void reasoningIncludesProjectionMetadata() throws Exception {
+        String json = """
+        {
+          "type": "message.part.delta",
+          "properties": {
+            "delta": "",
+            "part": {"type": "reasoning", "id": "r_part1", "messageID": "msg_r1", "visibility": "public_summary", "summary": "Analyzing metadata"}
+          }
+        }
+        """;
+        RuntimeRawEvent raw = rawEvent("message.part.delta", json);
+        List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
+
+        assertEquals(1, result.size());
+        JsonNode payload = result.get(0).payload();
+        assertEquals("message.part.delta", payload.path("rawEventType").asText());
+        assertEquals("reasoning", payload.path("rawPartType").asText());
+        assertEquals("msg_r1", payload.path("messageId").asText());
+        assertEquals("r_part1", payload.path("partId").asText());
+    }
+
+    @Test
+    void permissionIncludesConfirmationId() throws Exception {
+        String json = """
+        {
+          "type": "permission.asked",
+          "properties": {
+            "id": "perm_conf1",
+            "permission": "file_write",
+            "tool": {"tool": "Bash"},
+            "title": "Allow write?"
+          }
+        }
+        """;
+        RuntimeRawEvent raw = rawEvent("permission.asked", json);
+        List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
+
+        assertEquals(2, result.size());
+        JsonNode payload = result.get(0).payload();
+        assertEquals("permission.asked", payload.path("rawEventType").asText());
+        assertEquals("perm_conf1", payload.path("permissionId").asText());
+        assertEquals("perm_opencode_ses_1_perm_conf1", payload.path("confirmationId").asText());
+    }
+
+    @Test
+    void sessionStatusIncludesRawEventType() throws Exception {
+        String json = """
+        {
+          "type": "session.status",
+          "properties": {
+            "status": {"type": "busy"}
+          }
+        }
+        """;
+        RuntimeRawEvent raw = rawEvent("session.status", json);
+        List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
+
+        assertEquals(2, result.size());
+        assertEquals("session.status", result.get(0).payload().path("rawEventType").asText());
+        assertEquals("session.status", result.get(1).payload().path("rawEventType").asText());
+    }
+
+    @Test
+    void sessionErrorIncludesRawEventType() throws Exception {
+        String json = """
+        {
+          "type": "session.error",
+          "properties": {
+            "error": {"data": {"message": "err"}}
+          }
+        }
+        """;
+        RuntimeRawEvent raw = rawEvent("session.error", json);
+        List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
+
+        assertEquals(2, result.size());
+        assertEquals("session.error", result.get(0).payload().path("rawEventType").asText());
+    }
+
+    @Test
+    void sessionIdleIncludesRawEventType() throws Exception {
+        String json = """
+        {
+          "type": "session.idle",
+          "properties": {}
+        }
+        """;
+        RuntimeRawEvent raw = rawEvent("session.idle", json);
+        List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
+
+        assertEquals(3, result.size());
+        assertEquals("session.idle", result.get(0).payload().path("rawEventType").asText());
+    }
+
+    // --- New Mapping Tests: file, patch, artifact, retry, subtask, agent-handoff ---
+
+    @Test
+    void filePartProducesArtifactTrace() throws Exception {
+        String json = """
+        {
+          "type": "message.part.updated",
+          "properties": {
+            "part": {"type": "file", "id": "file_p1", "path": "/src/main/App.java", "content": "public class App {}"}
+          }
+        }
+        """;
+        RuntimeRawEvent raw = rawEvent("message.part.updated", json);
+        List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
+
+        assertFalse(result.isEmpty(), "file part should produce at least one event");
+        RuntimeEventEnvelope env = result.get(0);
+        assertEquals(RuntimeEventTypes.PROCESS_TRACE, env.type());
+        assertEquals("artifact", env.payload().path("kind").asText());
+        assertEquals("/src/main/App.java", env.payload().path("filePath").asText());
+        assertEquals("file_p1", env.payload().path("artifactId").asText());
+        assertEquals("message.part.updated", env.payload().path("rawEventType").asText());
+        assertEquals("file", env.payload().path("rawPartType").asText());
+    }
+
+    @Test
+    void patchPartProducesArtifactTrace() throws Exception {
+        String json = """
+        {
+          "type": "message.part.updated",
+          "properties": {
+            "part": {"type": "patch", "id": "patch_p1", "path": "/src/main/App.java", "diff": "--- a/App.java\\n+++ b/App.java\\n@@ -1 +1 @@"}
+          }
+        }
+        """;
+        RuntimeRawEvent raw = rawEvent("message.part.updated", json);
+        List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
+
+        assertFalse(result.isEmpty(), "patch part should produce at least one event");
+        RuntimeEventEnvelope env = result.get(0);
+        assertEquals(RuntimeEventTypes.PROCESS_TRACE, env.type());
+        assertEquals("artifact", env.payload().path("kind").asText());
+        assertEquals("/src/main/App.java", env.payload().path("filePath").asText());
+        assertEquals("patch_p1", env.payload().path("artifactId").asText());
+        assertEquals("patch", env.payload().path("rawPartType").asText());
+    }
+
+    @Test
+    void artifactPartProducesArtifactTrace() throws Exception {
+        String json = """
+        {
+          "type": "message.part.updated",
+          "properties": {
+            "part": {"type": "artifact", "id": "art_p1", "name": "report.pdf", "url": "/files/report.pdf"}
+          }
+        }
+        """;
+        RuntimeRawEvent raw = rawEvent("message.part.updated", json);
+        List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
+
+        assertFalse(result.isEmpty(), "artifact part should produce at least one event");
+        RuntimeEventEnvelope env = result.get(0);
+        assertEquals(RuntimeEventTypes.PROCESS_TRACE, env.type());
+        assertEquals("artifact", env.payload().path("kind").asText());
+        assertEquals("art_p1", env.payload().path("artifactId").asText());
+        assertEquals("report.pdf", env.payload().path("filePath").asText());
+    }
+
+    @Test
+    void retryEventProducesProcessTrace() throws Exception {
+        String json = """
+        {
+          "type": "message.part.updated",
+          "properties": {
+            "part": {"type": "retry", "id": "retry_p1", "attempt": 2, "maxAttempts": 3, "reason": "timeout"}
+          }
+        }
+        """;
+        RuntimeRawEvent raw = rawEvent("message.part.updated", json);
+        List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
+
+        assertFalse(result.isEmpty(), "retry part should produce at least one event");
+        RuntimeEventEnvelope env = result.get(0);
+        assertEquals(RuntimeEventTypes.PROCESS_TRACE, env.type());
+        assertEquals("retry", env.payload().path("kind").asText());
+        assertEquals("running", env.payload().path("status").asText());
+        assertEquals("retry_p1", env.payload().path("operationId").asText());
+        assertEquals("message.part.updated", env.payload().path("rawEventType").asText());
+        assertEquals("retry", env.payload().path("rawPartType").asText());
+    }
+
+    @Test
+    void subtaskPartProducesProcessTrace() throws Exception {
+        String json = """
+        {
+          "type": "message.part.updated",
+          "properties": {
+            "part": {"type": "subtask", "id": "sub_p1", "name": "Analyze codebase", "status": "running"}
+          }
+        }
+        """;
+        RuntimeRawEvent raw = rawEvent("message.part.updated", json);
+        List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
+
+        assertFalse(result.isEmpty(), "subtask part should produce at least one event");
+        RuntimeEventEnvelope env = result.get(0);
+        assertEquals(RuntimeEventTypes.PROCESS_TRACE, env.type());
+        assertEquals("subtask", env.payload().path("kind").asText());
+        assertEquals("running", env.payload().path("status").asText());
+        assertEquals("sub_p1", env.payload().path("operationId").asText());
+        assertEquals("subtask", env.payload().path("rawPartType").asText());
+    }
+
+    @Test
+    void agentHandoffPartProducesProcessTrace() throws Exception {
+        String json = """
+        {
+          "type": "message.part.updated",
+          "properties": {
+            "part": {"type": "agent-handoff", "id": "ah_p1", "targetAgent": "code-reviewer", "parentStepId": "step_42"}
+          }
+        }
+        """;
+        RuntimeRawEvent raw = rawEvent("message.part.updated", json);
+        List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
+
+        assertFalse(result.isEmpty(), "agent-handoff part should produce at least one event");
+        RuntimeEventEnvelope env = result.get(0);
+        assertEquals(RuntimeEventTypes.PROCESS_TRACE, env.type());
+        assertEquals("agent_handoff", env.payload().path("kind").asText());
+        assertEquals("running", env.payload().path("status").asText());
+        assertEquals("step_42", env.payload().path("parentStepId").asText());
+        assertEquals("agent-handoff", env.payload().path("rawPartType").asText());
     }
 
     @Test

@@ -22,6 +22,7 @@ class LegacyRuntimeEventBridgeTest {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
+        objectMapper.findAndRegisterModules();
         bridge = new LegacyRuntimeEventBridge();
     }
 
@@ -31,6 +32,145 @@ class LegacyRuntimeEventBridgeTest {
             "runtime-event", type, null, null, null,
             RuntimeType.OPENCODE, "agent_ses_1", null, null, null, null,
             payload, null);
+    }
+
+    // --- Metadata pass-through tests ---
+
+    @Test
+    void messageIdFromEnvelopeMergedIntoPayloadJson() throws Exception {
+        JsonNode payload = objectMapper.readTree("{\"type\":\"test\",\"label\":\"value\"}");
+        RuntimeEventEnvelope env = new RuntimeEventEnvelope(
+            "runtime-event", RuntimeEventTypes.CONVERSATION_DELTA,
+            "msg_123", "corr_456", "op_789",
+            RuntimeType.OPENCODE, "agent_ses_1", null, null, null, null,
+            payload, null);
+        RuntimeEventDto dto = bridge.toLegacyEvent(env);
+
+        assertNotNull(dto);
+        JsonNode result = objectMapper.readTree(dto.payloadJson());
+        assertEquals("msg_123", result.get("messageId").asText());
+        assertEquals("corr_456", result.get("correlationId").asText());
+        assertEquals("op_789", result.get("operationId").asText());
+        // original payload fields preserved
+        assertEquals("test", result.get("type").asText());
+        assertEquals("value", result.get("label").asText());
+    }
+
+    @Test
+    void toolCallIdFromPayloadPreservedInPayloadJson() throws Exception {
+        JsonNode payload = objectMapper.readTree("{\"toolCallId\":\"tc_abc\",\"delta\":\"hello\"}");
+        RuntimeEventEnvelope env = new RuntimeEventEnvelope(
+            "runtime-event", RuntimeEventTypes.CONVERSATION_DELTA,
+            "msg_1", null, null,
+            RuntimeType.OPENCODE, "agent_ses_1", null, null, null, null,
+            payload, null);
+        RuntimeEventDto dto = bridge.toLegacyEvent(env);
+
+        assertNotNull(dto);
+        JsonNode result = objectMapper.readTree(dto.payloadJson());
+        assertEquals("tc_abc", result.get("toolCallId").asText());
+        assertEquals("hello", result.get("delta").asText());
+    }
+
+    @Test
+    void partIdFromPayloadPreservedInPayloadJson() throws Exception {
+        JsonNode payload = objectMapper.readTree("{\"partId\":\"part_1\",\"text\":\"hi\"}");
+        RuntimeEventEnvelope env = new RuntimeEventEnvelope(
+            "runtime-event", RuntimeEventTypes.CONVERSATION_DELTA,
+            null, null, null,
+            RuntimeType.OPENCODE, "agent_ses_1", null, null, null, null,
+            payload, null);
+        RuntimeEventDto dto = bridge.toLegacyEvent(env);
+
+        assertNotNull(dto);
+        JsonNode result = objectMapper.readTree(dto.payloadJson());
+        assertEquals("part_1", result.get("partId").asText());
+        assertEquals("hi", result.get("text").asText());
+    }
+
+    @Test
+    void rawEventTypeAndRawPartTypePreserved() throws Exception {
+        JsonNode payload = objectMapper.readTree("{\"rawEventType\":\"content_block_start\",\"rawPartType\":\"thinking\"}");
+        RuntimeEventEnvelope env = new RuntimeEventEnvelope(
+            "runtime-event", RuntimeEventTypes.CONVERSATION_DELTA,
+            null, null, null,
+            RuntimeType.OPENCODE, "agent_ses_1", null, null, null, null,
+            payload, null);
+        RuntimeEventDto dto = bridge.toLegacyEvent(env);
+
+        assertNotNull(dto);
+        JsonNode result = objectMapper.readTree(dto.payloadJson());
+        assertEquals("content_block_start", result.get("rawEventType").asText());
+        assertEquals("thinking", result.get("rawPartType").asText());
+    }
+
+    @Test
+    void confirmationIdArtifactIdFilePathPreserved() throws Exception {
+        JsonNode payload = objectMapper.readTree(
+            "{\"confirmationId\":\"conf_1\",\"artifactId\":\"art_2\",\"filePath\":\"/a/b.java\"}");
+        RuntimeEventEnvelope env = new RuntimeEventEnvelope(
+            "runtime-event", RuntimeEventTypes.TOOL_STARTED,
+            null, null, null,
+            RuntimeType.OPENCODE, "agent_ses_1", null, null, null, null,
+            payload, null);
+        RuntimeEventDto dto = bridge.toLegacyEvent(env);
+
+        assertNotNull(dto);
+        JsonNode result = objectMapper.readTree(dto.payloadJson());
+        assertEquals("conf_1", result.get("confirmationId").asText());
+        assertEquals("art_2", result.get("artifactId").asText());
+        assertEquals("/a/b.java", result.get("filePath").asText());
+    }
+
+    @Test
+    void parentStepIdPreserved() throws Exception {
+        JsonNode payload = objectMapper.readTree("{\"parentStepId\":\"step_parent\",\"label\":\"task\"}");
+        RuntimeEventEnvelope env = new RuntimeEventEnvelope(
+            "runtime-event", RuntimeEventTypes.PROCESS_TRACE,
+            null, null, null,
+            RuntimeType.OPENCODE, "agent_ses_1", null, null, null, null,
+            payload, null);
+        RuntimeEventDto dto = bridge.toLegacyEvent(env);
+
+        assertNotNull(dto);
+        JsonNode result = objectMapper.readTree(dto.payloadJson());
+        assertEquals("step_parent", result.get("parentStepId").asText());
+        assertEquals("task", result.get("label").asText());
+    }
+
+    @Test
+    void envelopeMetadataDoesNotOverwritePayloadFields() throws Exception {
+        // payload already has messageId=existing_msg
+        JsonNode payload = objectMapper.readTree("{\"messageId\":\"existing_msg\",\"label\":\"orig\"}");
+        RuntimeEventEnvelope env = new RuntimeEventEnvelope(
+            "runtime-event", RuntimeEventTypes.CONVERSATION_DELTA,
+            "envelope_msg", null, null,
+            RuntimeType.OPENCODE, "agent_ses_1", null, null, null, null,
+            payload, null);
+        RuntimeEventDto dto = bridge.toLegacyEvent(env);
+
+        assertNotNull(dto);
+        JsonNode result = objectMapper.readTree(dto.payloadJson());
+        // payload field takes precedence over envelope metadata
+        assertEquals("existing_msg", result.get("messageId").asText());
+        assertEquals("orig", result.get("label").asText());
+    }
+
+    @Test
+    void nullEnvelopeMetadataDoesNotPollutePayload() throws Exception {
+        JsonNode payload = objectMapper.readTree("{\"type\":\"test\",\"label\":\"value\"}");
+        RuntimeEventEnvelope env = new RuntimeEventEnvelope(
+            "runtime-event", RuntimeEventTypes.CONVERSATION_DELTA,
+            null, null, null,
+            RuntimeType.OPENCODE, "agent_ses_1", null, null, null, null,
+            payload, null);
+        RuntimeEventDto dto = bridge.toLegacyEvent(env);
+
+        assertNotNull(dto);
+        JsonNode result = objectMapper.readTree(dto.payloadJson());
+        assertEquals("test", result.get("type").asText());
+        assertEquals("value", result.get("label").asText());
+        assertFalse(result.has("messageId") && result.get("messageId").isNull());
     }
 
     @Test

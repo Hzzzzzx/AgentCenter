@@ -52,11 +52,39 @@ class FlywayMigrationTest {
     }
 
     @Test
-    void feDefaultWorkflowHasSixNodes() {
+    void legacyRuleBasedFeWorkflowIsRemoved() {
         Integer nodeCount = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM workflow_node_definition WHERE workflow_definition_id='01FEDEFAULTWFDEF00000000000001'",
                 Integer.class);
-        assertThat(nodeCount).isEqualTo(6);
+        assertThat(nodeCount).isZero();
+    }
+
+    @Test
+    void agentFirstDefaultWorkflowsAreEventDriven() {
+        Integer legacyDefinitionCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM workflow_definition WHERE id='01FEDEFAULTWFDEF00000000000001'",
+                Integer.class);
+        assertThat(legacyDefinitionCount).isZero();
+
+        Integer currentDefinitionCount = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM workflow_definition
+                WHERE status='ENABLED' AND is_default=1 AND version_no=1
+                """,
+                Integer.class);
+        assertThat(currentDefinitionCount).isEqualTo(6);
+
+        Integer ruleDrivenNodeCount = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM workflow_node_definition
+                WHERE required_confirmation <> 0
+                   OR allow_dynamic_actions <> 1
+                   OR confirmation_policy <> 'EVENT_DRIVEN'
+                """,
+                Integer.class);
+        assertThat(ruleDrivenNodeCount).isZero();
     }
 
     private boolean workItemExists(String code) {

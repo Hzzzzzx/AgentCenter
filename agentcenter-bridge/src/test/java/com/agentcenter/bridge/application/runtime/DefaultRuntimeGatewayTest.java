@@ -67,9 +67,39 @@ class DefaultRuntimeGatewayTest {
     @Test
     void runSkillDelegates() {
         SkillRunResult expected = new SkillRunResult(true, "output", "MARKDOWN", null, false);
-        when(provider.runSkill("ses_1", "skill1", "ctx")).thenReturn(expected);
+        when(provider.runSkill(eq("ses_1"), any(SkillInvocationRequest.class))).thenReturn(expected);
         SkillRunResult result = gateway.runSkill(RuntimeType.OPENCODE, "ses_1", "skill1", "ctx");
         assertEquals(expected, result);
+        verifyNoInteractions(operationService);
+    }
+
+    @Test
+    void runSkillWithRequestDelegatesToProvider() {
+        SkillRunResult expected = new SkillRunResult(true, "output", "MARKDOWN", null, false);
+        SkillInvocationRequest request = SkillInvocationRequest.userPromptInjection("skill1", "user prompt", "instruction");
+        when(provider.runSkill(eq("ses_1"), eq(request))).thenReturn(expected);
+
+        SkillRunResult result = gateway.runSkill(RuntimeType.OPENCODE, "ses_1", request);
+
+        assertEquals(expected, result);
+        verify(provider).runSkill("ses_1", request);
+        verifyNoInteractions(operationService);
+    }
+
+    @Test
+    void runSkillWithLegacySignatureDelegatesViaRequest() {
+        SkillRunResult expected = new SkillRunResult(true, "output", "MARKDOWN", null, false);
+        when(provider.runSkill(eq("ses_1"), any(SkillInvocationRequest.class))).thenReturn(expected);
+
+        SkillRunResult result = gateway.runSkill(RuntimeType.OPENCODE, "ses_1", "skill1", "ctx");
+
+        assertEquals(expected, result);
+        ArgumentCaptor<SkillInvocationRequest> captor = ArgumentCaptor.forClass(SkillInvocationRequest.class);
+        verify(provider).runSkill(eq("ses_1"), captor.capture());
+        assertEquals("skill1", captor.getValue().skillName());
+        assertEquals("ctx", captor.getValue().userPrompt());
+        assertNull(captor.getValue().instructionPrompt());
+        assertEquals(RuntimeInstructionInjectionMode.USER_PROMPT, captor.getValue().injectionMode());
         verifyNoInteractions(operationService);
     }
 

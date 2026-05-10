@@ -25,7 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Integration tests for workflow conversation interaction gaps.
  * Covers:
  * - B1: Node skill output persisted as ASSISTANT message (deduplicated)
- * - B2: requiredConfirmation=true auto-creates APPROVAL when no interaction points triggered
+ * - B2: Protocol node without state block stays RUNNING (no legacy fallback approval)
  * - B3: Skill failure creates EXCEPTION confirmation with retry/skip options
  * - B5: DB writes happen BEFORE runtime event publishing
  */
@@ -86,9 +86,9 @@ class WorkflowConversationInteractionTest {
 
         var json = objectMapper.readTree(result.getResponse().getContentAsString());
 
-        // Find the first completed node (requirement_refine / prd-desingn)
+        // Find the first node (requirement_refine / prd-desingn) — READY_TO_ADVANCE sets WAITING_CONFIRMATION
         var firstNode = json.at("/workflowInstance/nodes/0");
-        assertThat(firstNode.get("status").asText()).isEqualTo("COMPLETED");
+        assertThat(firstNode.get("status").asText()).isEqualTo("WAITING_CONFIRMATION");
         String sessionId = firstNode.get("agentSessionId").asText();
         assertThat(sessionId).isNotEmpty();
 
@@ -136,20 +136,16 @@ class WorkflowConversationInteractionTest {
     }
 
     // ========================================================================
-    // B2: requiredConfirmation=true fallback creates APPROVAL when no
-    //     interaction points triggered
+    // B2: Protocol node without state block stays RUNNING
     // ========================================================================
 
     @Test
-    void requiredConfirmationNode_withNoTriggeredInteractions_createsApprovalConfirmation() throws Exception {
+    void protocolNode_withNoStateBlock_staysRunning() throws Exception {
         TestWorkflowExecutorConfig.setSkillOutputForName("hld-design", """
                 # HLD Output
 
-                This is a simple HLD document with no triggered interactions.
-
-                | 交互点 | 类型 | 是否触发 | 选项 | 触发条件 | 建议问题/动作 | 默认处理 |
-                | --- | --- | --- | --- | --- | --- | --- |
-                | 方案选择 | DECISION_REQUIRED | 否 | 低风险 / 高风险 | 无 | 无 | 自动 |
+                This is a simple HLD document with no protocol state block.
+                Agent is still working on it.
                 """);
 
         String fe1234Id = findWorkItemIdByCode("FE1234");
@@ -164,21 +160,21 @@ class WorkflowConversationInteractionTest {
         var json = objectMapper.readTree(result.getResponse().getContentAsString());
         String instanceId = json.at("/workflowInstance/id").asText();
 
+        var firstNode = json.at("/workflowInstance/nodes/0");
+        assertThat(firstNode.get("status").asText()).isEqualTo("WAITING_CONFIRMATION");
+
         var secondNode = json.at("/workflowInstance/nodes/1");
-        assertThat(secondNode.get("status").asText()).isEqualTo("WAITING_CONFIRMATION");
+        assertThat(secondNode.get("status").asText()).isEqualTo("PENDING");
 
         String secondNodeId = secondNode.get("id").asText();
         List<Map<String, Object>> confirmations = jdbcTemplate.queryForList(
-                "SELECT id, request_type, status, workflow_node_instance_id FROM confirmation_request " +
+                "SELECT id FROM confirmation_request " +
                         "WHERE workflow_instance_id = ? AND workflow_node_instance_id = ?",
                 instanceId, secondNodeId);
 
-        assertThat(confirmations).hasSize(1);
-        Map<String, Object> conf = confirmations.get(0);
-        assertThat(conf.get("request_type")).isEqualTo("APPROVAL");
-        assertThat(conf.get("status")).isEqualTo("PENDING");
+        assertThat(confirmations).isEmpty();
 
-        assertThat(json.at("/workflowInstance/status").asText()).isIn("RUNNING", "BLOCKED");
+        assertThat(json.at("/workflowInstance/status").asText()).isEqualTo("BLOCKED");
 
         TestWorkflowExecutorConfig.clearSkillOutputOverrides();
     }

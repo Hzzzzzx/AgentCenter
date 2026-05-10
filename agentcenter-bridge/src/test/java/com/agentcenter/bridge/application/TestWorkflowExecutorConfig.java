@@ -22,6 +22,7 @@ public class TestWorkflowExecutorConfig {
     public static final List<String> CAPTURED_INPUT_CONTEXTS = new CopyOnWriteArrayList<>();
     private static final AtomicReference<String> CUSTOM_SKILL_OUTPUT = new AtomicReference<>();
     private static final AtomicReference<SkillRunResult> CUSTOM_SKILL_RESULT = new AtomicReference<>();
+    private static final AtomicReference<RuntimeException> ENSURE_SESSION_ERROR = new AtomicReference<>();
     private static final ConcurrentHashMap<String, String> SKILL_OUTPUT_OVERRIDES = new ConcurrentHashMap<>();
 
     public static void clearCapturedRuntimeInputs() {
@@ -29,6 +30,7 @@ public class TestWorkflowExecutorConfig {
         CAPTURED_INPUT_CONTEXTS.clear();
         CUSTOM_SKILL_OUTPUT.set(null);
         CUSTOM_SKILL_RESULT.set(null);
+        ENSURE_SESSION_ERROR.set(null);
         SKILL_OUTPUT_OVERRIDES.clear();
     }
 
@@ -54,6 +56,10 @@ public class TestWorkflowExecutorConfig {
 
     public static void clearSkillOutputOverrides() {
         SKILL_OUTPUT_OVERRIDES.clear();
+    }
+
+    public static void setEnsureSessionError(RuntimeException error) {
+        ENSURE_SESSION_ERROR.set(error);
     }
 
     @Bean
@@ -102,6 +108,10 @@ public class TestWorkflowExecutorConfig {
 
             @Override
             public String ensureSession(RuntimeType rt, String workItemId, String agentSessionId, String runtimeSessionId) {
+                RuntimeException error = ENSURE_SESSION_ERROR.get();
+                if (error != null) {
+                    throw error;
+                }
                 return runtimeSessionId != null ? runtimeSessionId : "stub-session-" + (workItemId != null ? workItemId : "test");
             }
 
@@ -131,21 +141,54 @@ public class TestWorkflowExecutorConfig {
 
                             测试 PRD 输出
 
-                            | 交互点 | 类型 | 是否触发 | 选项 | 触发条件 | 建议问题/动作 | 默认处理 |
-                            | --- | --- | --- | --- | --- | --- | --- |
-                            | 需求澄清 | ASK_USER | 否 |  | 信息完整 | 无需用户补充 | 自动进入 HLD |
+                            <!-- AGENTCENTER_NODE_STATE
+                            status: READY_TO_ADVANCE
+                            reason: PRD complete
+                            artifact_title: FE1234-需求整理 (PRD).md
+                            -->
                             """.trim();
                     case "fe.solution.design", "hld-design" -> """
                             # HLD
 
                             测试 HLD 输出
 
-                            | 交互点 | 类型 | 是否触发 | 选项 | 触发条件 | 建议问题/动作 | 默认处理 |
-                            | --- | --- | --- | --- | --- | --- | --- |
-                            | 方案选择 | DECISION_REQUIRED | 是 | 低风险方案 / 低成本方案 / 完整方案 | 存在多个成本/风险差异明显的方案 | 请用户选择推荐方案 | 默认选择低风险方案 |
+                            <!-- AGENTCENTER_NODE_STATE
+                            status: NEEDS_USER_INPUT
+                            reason: 存在多个成本/风险差异明显的方案，需要用户选择
+                            interactions:
+                              - id: hld-decision-1
+                                type: DECISION
+                                title: FE1234 方案设计 · 方案选择
+                                question: 请选择推荐方案
+                                options:
+                                  - id: opt-1
+                                    label: 低风险方案
+                                  - id: opt-2
+                                    label: 低成本方案
+                                  - id: opt-3
+                                    label: 完整方案
+                            -->
                             """.trim();
-                    case "fe.implementation.plan", "lld-design" -> "# LLD\n\n测试 LLD 输出";
-                    default -> "# %s 输出\n\n测试节点输出".formatted(skillName);
+                    case "fe.implementation.plan", "lld-design" -> """
+                            # LLD
+
+                            测试 LLD 输出
+
+                            <!-- AGENTCENTER_NODE_STATE
+                            status: READY_TO_ADVANCE
+                            reason: LLD complete
+                            -->
+                            """.trim();
+                    default -> """
+                            # %s 输出
+
+                            测试节点输出
+
+                            <!-- AGENTCENTER_NODE_STATE
+                            status: READY_TO_ADVANCE
+                            reason: Default complete
+                            -->
+                            """.formatted(skillName).trim();
                 };
                 return new SkillRunResult(true, output, "MARKDOWN", null, true);
             }

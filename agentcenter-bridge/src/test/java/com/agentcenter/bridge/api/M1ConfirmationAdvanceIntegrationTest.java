@@ -13,6 +13,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import java.util.List;
+import java.util.Map;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -58,33 +61,58 @@ class M1ConfirmationAdvanceIntegrationTest {
         throw new AssertionError("No work item with code " + code);
     }
 
-    @Test
-    void fullM1Flow_startWorkflow_resolveConfirmation_resumesCurrentSkill() throws Exception {
-        String fe1234Id = findWorkItemIdByCode("FE1234");
-
+    private MvcResult startAndAdvanceToSecondNode(String workItemId) throws Exception {
         MvcResult startResult = mockMvc.perform(
-                        post("/api/work-items/" + fe1234Id + "/start-workflow")
+                        post("/api/work-items/" + workItemId + "/start-workflow")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.workflowInstance.status").value("BLOCKED"))
-                .andExpect(jsonPath("$.confirmation").exists())
-                .andExpect(jsonPath("$.confirmation.id").isNotEmpty())
-                .andExpect(jsonPath("$.artifacts").isArray())
                 .andReturn();
 
         var startJson = objectMapper.readTree(startResult.getResponse().getContentAsString());
         String instanceId = startJson.at("/workflowInstance/id").asText();
-        String confirmationId = startJson.at("/confirmation/id").asText();
-        assertThat(confirmationId).isNotEmpty();
+        String firstNodeId = startJson.at("/workflowInstance/nodes/0/id").asText();
 
-        assertThat(startJson.get("artifacts").size()).isGreaterThanOrEqualTo(1);
+        List<Map<String, Object>> advanceConfirmations = jdbcTemplate.queryForList(
+                "SELECT id FROM confirmation_request WHERE workflow_instance_id = ? AND workflow_node_instance_id = ? AND status = 'PENDING'",
+                instanceId, firstNodeId);
+        assertThat(advanceConfirmations).hasSize(1);
+        String advanceConfirmationId = (String) advanceConfirmations.get(0).get("id");
+
+        mockMvc.perform(post("/api/confirmations/" + advanceConfirmationId + "/resolve")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"actionType\":\"ADVANCE\",\"comment\":\"进入下一节点\"}"))
+                .andExpect(status().isOk());
+
+        return mockMvc.perform(get("/api/workflow-instances/" + instanceId))
+                .andExpect(status().isOk())
+                .andReturn();
+    }
+
+    @Test
+    void fullM1Flow_startWorkflow_resolveConfirmation_resumesCurrentSkill() throws Exception {
+        String fe1234Id = findWorkItemIdByCode("FE1234");
+
+        MvcResult advancedResult = startAndAdvanceToSecondNode(fe1234Id);
+        var advancedJson = objectMapper.readTree(advancedResult.getResponse().getContentAsString());
+        String instanceId = advancedJson.at("/id").asText();
+
+        List<Map<String, Object>> confirmations = jdbcTemplate.queryForList(
+                "SELECT id, request_type, status, options_json FROM confirmation_request WHERE workflow_instance_id = ? AND status = 'PENDING'",
+                instanceId);
+        assertThat(confirmations).hasSize(1);
+        String confirmationId = (String) confirmations.get(0).get("id");
+        String optionsJson = (String) confirmations.get(0).get("options_json");
+        assertThat(optionsJson).contains("低风险方案");
+
+        int artifactCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM artifact WHERE workflow_instance_id = ?", Integer.class, instanceId);
+        assertThat(artifactCount).isGreaterThanOrEqualTo(1);
 
         mockMvc.perform(get("/api/confirmations/" + confirmationId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("PENDING"))
                 .andExpect(jsonPath("$.requestType").value("DECISION"))
-                .andExpect(jsonPath("$.optionsJson").value(org.hamcrest.Matchers.containsString("低风险方案")))
                 .andExpect(jsonPath("$.workflowInstanceId").value(instanceId));
 
         mockMvc.perform(post("/api/confirmations/" + confirmationId + "/resolve")
@@ -125,19 +153,15 @@ class M1ConfirmationAdvanceIntegrationTest {
     void rejectConfirmation_doesNotAdvanceWorkflow() throws Exception {
         String fe1234Id = findWorkItemIdByCode("FE1234");
 
-        MvcResult startResult = mockMvc.perform(
-                        post("/api/work-items/" + fe1234Id + "/start-workflow")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content("{}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.confirmation").exists())
-                .andExpect(jsonPath("$.confirmation.id").isNotEmpty())
-                .andReturn();
+        MvcResult advancedResult = startAndAdvanceToSecondNode(fe1234Id);
+        var advancedJson = objectMapper.readTree(advancedResult.getResponse().getContentAsString());
+        String instanceId = advancedJson.at("/id").asText();
 
-        var startJson = objectMapper.readTree(startResult.getResponse().getContentAsString());
-        String confirmationId = startJson.at("/confirmation/id").asText();
-        String instanceId = startJson.at("/workflowInstance/id").asText();
-        assertThat(confirmationId).isNotEmpty();
+        List<Map<String, Object>> confirmations = jdbcTemplate.queryForList(
+                "SELECT id FROM confirmation_request WHERE workflow_instance_id = ? AND status = 'PENDING'",
+                instanceId);
+        assertThat(confirmations).hasSize(1);
+        String confirmationId = (String) confirmations.get(0).get("id");
 
         mockMvc.perform(post("/api/confirmations/" + confirmationId + "/reject")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -161,18 +185,16 @@ class M1ConfirmationAdvanceIntegrationTest {
     void resolvingOneConfirmation_keepsNodeBlockedWhenAnotherInteractionIsInConversation() throws Exception {
         String fe1234Id = findWorkItemIdByCode("FE1234");
 
-        MvcResult startResult = mockMvc.perform(
-                        post("/api/work-items/" + fe1234Id + "/start-workflow")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content("{}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.confirmation").exists())
-                .andReturn();
+        MvcResult advancedResult = startAndAdvanceToSecondNode(fe1234Id);
+        var advancedJson = objectMapper.readTree(advancedResult.getResponse().getContentAsString());
+        String instanceId = advancedJson.at("/id").asText();
 
-        var startJson = objectMapper.readTree(startResult.getResponse().getContentAsString());
-        String confirmationId = startJson.at("/confirmation/id").asText();
-        String instanceId = startJson.at("/workflowInstance/id").asText();
-        String nodeInstanceId = startJson.at("/confirmation/workflowNodeInstanceId").asText();
+        List<Map<String, Object>> confirmations = jdbcTemplate.queryForList(
+                "SELECT id, workflow_node_instance_id FROM confirmation_request WHERE workflow_instance_id = ? AND status = 'PENDING'",
+                instanceId);
+        assertThat(confirmations).hasSize(1);
+        String confirmationId = (String) confirmations.get(0).get("id");
+        String nodeInstanceId = (String) confirmations.get(0).get("workflow_node_instance_id");
 
         jdbcTemplate.update("""
                 INSERT INTO confirmation_request (
@@ -202,18 +224,16 @@ class M1ConfirmationAdvanceIntegrationTest {
     void resolvingLastBlockingConfirmation_resumesCurrentNode() throws Exception {
         String fe1234Id = findWorkItemIdByCode("FE1234");
 
-        MvcResult startResult = mockMvc.perform(
-                        post("/api/work-items/" + fe1234Id + "/start-workflow")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content("{}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.confirmation").exists())
-                .andReturn();
+        MvcResult advancedResult = startAndAdvanceToSecondNode(fe1234Id);
+        var advancedJson = objectMapper.readTree(advancedResult.getResponse().getContentAsString());
+        String instanceId = advancedJson.at("/id").asText();
 
-        var startJson = objectMapper.readTree(startResult.getResponse().getContentAsString());
-        String confirmationId = startJson.at("/confirmation/id").asText();
-        String instanceId = startJson.at("/workflowInstance/id").asText();
-        String nodeInstanceId = startJson.at("/confirmation/workflowNodeInstanceId").asText();
+        List<Map<String, Object>> confirmations = jdbcTemplate.queryForList(
+                "SELECT id, workflow_node_instance_id FROM confirmation_request WHERE workflow_instance_id = ? AND status = 'PENDING'",
+                instanceId);
+        assertThat(confirmations).hasSize(1);
+        String confirmationId = (String) confirmations.get(0).get("id");
+        String nodeInstanceId = (String) confirmations.get(0).get("workflow_node_instance_id");
 
         jdbcTemplate.update("""
                 INSERT INTO confirmation_request (
@@ -255,17 +275,15 @@ class M1ConfirmationAdvanceIntegrationTest {
     void continueWorkflow_conflictsWhenCurrentNodeIsRunning() throws Exception {
         String fe1234Id = findWorkItemIdByCode("FE1234");
 
-        MvcResult startResult = mockMvc.perform(
-                        post("/api/work-items/" + fe1234Id + "/start-workflow")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content("{}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.confirmation").exists())
-                .andReturn();
+        MvcResult advancedResult = startAndAdvanceToSecondNode(fe1234Id);
+        var advancedJson = objectMapper.readTree(advancedResult.getResponse().getContentAsString());
+        String instanceId = advancedJson.at("/id").asText();
 
-        var startJson = objectMapper.readTree(startResult.getResponse().getContentAsString());
-        String instanceId = startJson.at("/workflowInstance/id").asText();
-        String nodeInstanceId = startJson.at("/confirmation/workflowNodeInstanceId").asText();
+        List<Map<String, Object>> confirmations = jdbcTemplate.queryForList(
+                "SELECT workflow_node_instance_id FROM confirmation_request WHERE workflow_instance_id = ? AND status = 'PENDING'",
+                instanceId);
+        assertThat(confirmations).hasSize(1);
+        String nodeInstanceId = (String) confirmations.get(0).get("workflow_node_instance_id");
 
         jdbcTemplate.update("UPDATE workflow_node_instance SET status = 'RUNNING' WHERE id = ?", nodeInstanceId);
         jdbcTemplate.update("""

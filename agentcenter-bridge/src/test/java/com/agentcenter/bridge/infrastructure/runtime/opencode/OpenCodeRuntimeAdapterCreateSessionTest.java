@@ -148,6 +148,59 @@ class OpenCodeRuntimeAdapterCreateSessionTest {
     }
 
     @Test
+    void runSkillPublishesAssistantSnapshotDeltasWhilePollingMessages() throws Exception {
+        ObjectNode ackPayload = objectMapper.createObjectNode();
+        RuntimeAckEnvelope ack = new RuntimeAckEnvelope(
+                null, "agentcenter.runtime.v1", null,
+                "ack-msg-id", "corr-id", null,
+                RuntimeType.OPENCODE, null, "ses_stream",
+                true, null, ackPayload, null);
+
+        when(commandTransport.send(any())).thenReturn(ack);
+        when(eventSubscriber.getAgentSessionId("ses_stream")).thenReturn("agent-stream");
+        when(eventSubscriber.getWorkItemId("agent-stream")).thenReturn("work-stream");
+        when(eventSubscriber.getWorkflowInstanceId("agent-stream")).thenReturn("workflow-stream");
+        when(eventSubscriber.getWorkflowNodeInstanceId("agent-stream")).thenReturn("node-stream");
+        when(commandTransport.fetchMessages(anyString(), anyString(), eq("ses_stream")))
+                .thenReturn(objectMapper.readTree("[]"))
+                .thenReturn(objectMapper.readTree("""
+                        [
+                          {
+                            "info": {"id": "msg-stream", "role": "assistant", "finish": ""},
+                            "parts": [{"type": "text", "text": "第一段"}]
+                          }
+                        ]
+                        """))
+                .thenReturn(objectMapper.readTree("""
+                        [
+                          {
+                            "info": {"id": "msg-stream", "role": "assistant", "finish": "stop"},
+                            "parts": [{"type": "text", "text": "第一段第二段"}]
+                          }
+                        ]
+                        """));
+
+        SkillRunResult result = adapter.runSkill("ses_stream", "prd-desingn", "ctx");
+
+        assertTrue(result.success());
+        assertEquals("第一段第二段", result.outputContent());
+
+        ArgumentCaptor<RuntimeEventDto> eventCaptor = ArgumentCaptor.forClass(RuntimeEventDto.class);
+        verify(runtimeEventService, atLeastOnce()).publishEvent(eventCaptor.capture());
+        var assistantEvents = eventCaptor.getAllValues().stream()
+                .filter(event -> event.eventType() == RuntimeEventType.ASSISTANT_DELTA
+                        || event.eventType() == RuntimeEventType.ASSISTANT_COMPLETED)
+                .toList();
+
+        assertEquals(3, assistantEvents.size());
+        assertEquals(RuntimeEventType.ASSISTANT_DELTA, assistantEvents.get(0).eventType());
+        assertTrue(assistantEvents.get(0).payloadJson().contains("\"delta\":\"第一段\""));
+        assertEquals(RuntimeEventType.ASSISTANT_DELTA, assistantEvents.get(1).eventType());
+        assertTrue(assistantEvents.get(1).payloadJson().contains("\"delta\":\"第二段\""));
+        assertEquals(RuntimeEventType.ASSISTANT_COMPLETED, assistantEvents.get(2).eventType());
+    }
+
+    @Test
     void sendMessagePublishesPromptDebugEvent() {
         ObjectNode createAckPayload = objectMapper.createObjectNode();
         createAckPayload.put("sessionId", "ses_debug");
@@ -178,7 +231,7 @@ class OpenCodeRuntimeAdapterCreateSessionTest {
         assertEquals(RuntimeEventType.PROCESS_TRACE, event.eventType());
         assertTrue(event.payloadJson().contains("\"kind\":\"prompt_debug\""));
         assertTrue(event.payloadJson().contains("请检查当前 prompt 组装"));
-        assertTrue(event.payloadJson().contains("AgentCenter 当前没有向 OpenCode prompt_async 发送显式 system prompt"));
+        assertTrue(event.payloadJson().contains("本轮用户消息内包含 Runtime 工作目录边界约束"));
         assertTrue(event.payloadJson().contains("\"opencodePromptAsyncBody\""));
     }
 }

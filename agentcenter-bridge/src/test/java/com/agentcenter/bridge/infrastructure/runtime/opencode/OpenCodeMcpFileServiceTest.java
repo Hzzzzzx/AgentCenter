@@ -91,7 +91,12 @@ class OpenCodeMcpFileServiceTest {
         Path configFile = tempDir.resolve("opencode.json");
         assertThat(configFile).exists();
         String content = Files.readString(configFile, StandardCharsets.UTF_8);
-        assertThat(content).contains("\"mcp\"").contains("myServer").contains("node");
+        assertThat(content)
+                .contains("\"mcp\"")
+                .contains("myServer")
+                .contains("node")
+                .contains("\"type\" : \"local\"")
+                .contains("\"enabled\" : true");
     }
 
     @Test
@@ -109,6 +114,8 @@ class OpenCodeMcpFileServiceTest {
         assertThat(content)
                 .contains("\"autoupdate\" : false")
                 .contains("newServer")
+                .contains("\"type\" : \"local\"")
+                .contains("\"enabled\" : true")
                 .doesNotContain("old");
     }
 }
