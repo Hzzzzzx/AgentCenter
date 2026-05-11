@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { CurrentActionProjection, ExecutionStep, TurnStatus } from './projection/types'
 import ExecutionStepItem from './ExecutionStepItem.vue'
 
@@ -16,10 +16,37 @@ defineEmits<{
   'resolve': [confirmationId: string, value: string, meta: { requestType?: string; interactionType?: string }]
 }>()
 
-const shouldOpen = computed(() =>
-  props.status === 'failed'
+const autoOpen = computed(() =>
+  props.status === 'running'
+  || props.status === 'failed'
   || props.status === 'waiting_input'
   || !props.collapsedByDefault
+)
+
+const isOpen = ref(false)
+const manuallyPinned = ref(false)
+
+watch(autoOpen, (value) => {
+  if (value) {
+    isOpen.value = true
+    manuallyPinned.value = false
+    return
+  }
+  if (!manuallyPinned.value) {
+    isOpen.value = false
+  }
+}, { immediate: true })
+
+function toggleOpen(): void {
+  const next = !isOpen.value
+  isOpen.value = next
+  manuallyPinned.value = !autoOpen.value && next
+}
+
+const shouldShowBody = computed(() =>
+  props.status === 'failed'
+  || props.status === 'waiting_input'
+  || isOpen.value
 )
 
 const toolCount = computed(() => props.steps.filter(step => step.kind === 'tool').length)
@@ -85,26 +112,36 @@ function toolCategorySummary(): string {
 </script>
 
 <template>
-  <details
+  <section
     class="execution-steps"
     :class="[
       `execution-steps--${status}`,
       { 'execution-steps--compact': hasAnswer },
       { 'execution-steps--breathing': status === 'running' || status === 'waiting_input' },
+      { 'execution-steps--open': shouldShowBody },
+      { 'execution-steps--pinned': manuallyPinned },
     ]"
-    :open="shouldOpen"
   >
-    <summary class="execution-steps__summary">
+    <button
+      type="button"
+      class="execution-steps__summary"
+      :aria-expanded="shouldShowBody"
+      @click="toggleOpen"
+    >
       <span class="execution-steps__summary-left">
-        <span class="execution-steps__chev">›</span>
-      <span>{{ summaryText }}</span>
+        <span
+          v-if="status === 'running' || status === 'waiting_input'"
+          class="execution-steps__beacon"
+          aria-hidden="true"
+        />
+        <span>{{ summaryText }}</span>
       </span>
       <span class="execution-steps__badge">
-        {{ status === 'running' ? '进行中' : status === 'waiting_input' ? '需确认' : status === 'failed' ? '异常' : shouldOpen ? '过程' : '已收起' }}
+        {{ status === 'running' ? '进行中' : status === 'waiting_input' ? '需确认' : status === 'failed' ? '异常' : shouldShowBody ? '收起详情' : '展开详情' }}
       </span>
-    </summary>
+    </button>
 
-    <div v-if="steps.length > 0" class="execution-steps__body">
+    <div v-if="steps.length > 0 && shouldShowBody" class="execution-steps__body">
       <div class="execution-steps__list">
         <ExecutionStepItem
           v-for="(step, index) in steps"
@@ -117,43 +154,47 @@ function toolCategorySummary(): string {
         />
       </div>
     </div>
-  </details>
+  </section>
 </template>
 
 <style scoped>
 .execution-steps {
-  max-width: 780px;
-  margin: 4px 0 12px;
-  border-top: 1px solid var(--border-color);
-  border-bottom: 1px solid transparent;
+  max-width: 100%;
+  margin: 6px 0 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
 }
 
 .execution-steps--compact {
-  max-width: 620px;
+  max-width: 100%;
   margin: 2px 0 12px;
-  border-top-color: color-mix(in srgb, var(--border-color) 62%, transparent);
 }
 
-.execution-steps--completed:not([open]) {
-  border-bottom-color: transparent;
+.execution-steps--completed:not(.execution-steps--open) {
+  background: transparent;
 }
 
-.execution-steps[open] {
-  padding-bottom: 8px;
-  border-bottom-color: var(--border-color);
+.execution-steps--open {
+  border-color: transparent;
 }
 
 .execution-steps__summary {
   min-height: 42px;
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--text-primary);
   font-size: 13px;
   font-weight: 950;
   cursor: pointer;
-  list-style: none;
+  text-align: left;
 }
 
 .execution-steps--compact .execution-steps__summary {
@@ -161,10 +202,6 @@ function toolCategorySummary(): string {
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 850;
-}
-
-.execution-steps__summary::-webkit-details-marker {
-  display: none;
 }
 
 .execution-steps__summary-left {
@@ -178,31 +215,18 @@ function toolCategorySummary(): string {
   color: var(--text-secondary);
 }
 
-.execution-steps__chev {
-  width: 20px;
-  height: 20px;
-  display: grid;
-  place-items: center;
-  border-radius: 6px;
-  background: var(--surface-card, var(--bg-card));
-  border: 1px solid var(--border-color);
-  color: var(--text-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 12px;
-  transition: transform 0.15s ease;
-}
-
-.execution-steps[open] .execution-steps__chev {
-  transform: rotate(90deg);
+.execution-steps__beacon {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--accent-blue);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-blue) 24%, transparent);
+  animation: execution-pulse 1.55s ease-in-out infinite;
 }
 
 .execution-steps--breathing .execution-steps__summary-left > span:last-child {
   animation: execution-breathe 1.6s ease-in-out infinite;
-}
-
-.execution-steps--running .execution-steps__chev,
-.execution-steps--waiting_input .execution-steps__chev {
-  animation: execution-pulse 1.8s ease-in-out infinite;
 }
 
 .execution-steps__badge {
@@ -245,7 +269,9 @@ function toolCategorySummary(): string {
 }
 
 .execution-steps__body {
-  padding: 4px 0 0 28px;
+  padding: 6px 0 0;
+  border-top: 0;
+  animation: execution-reveal 0.18s ease-out;
 }
 
 .execution-steps__list {
@@ -255,15 +281,7 @@ function toolCategorySummary(): string {
 
 @media (max-width: 760px) {
   .execution-steps__body {
-    padding-left: 0;
-  }
-
-  .execution-steps__current {
-    width: 100%;
-  }
-
-  .execution-steps__current small {
-    max-width: 100%;
+    padding: 6px 0 0;
   }
 }
 
@@ -273,7 +291,26 @@ function toolCategorySummary(): string {
 }
 
 @keyframes execution-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-blue) 26%, transparent); }
-  50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent-blue) 0%, transparent); }
+  0%, 100% {
+    opacity: 0.68;
+    transform: scale(0.88);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-blue) 26%, transparent);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent-blue) 0%, transparent);
+  }
+}
+
+@keyframes execution-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>

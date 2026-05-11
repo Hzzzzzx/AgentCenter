@@ -78,6 +78,7 @@ const PROMPT_DEBUG_ENABLED = true
 const PROMPT_DEBUG_EDGE_GAP = 16
 const PROMPT_DEBUG_RUNTIME_EVENT_LIMIT = 24
 const CONTINUE_CURRENT_MESSAGE = '请继续当前节点未完成的回答，不要重新开始节点，也不要重复发送或复述工作流节点提示词。'
+const AUTO_SCROLL_BOTTOM_THRESHOLD = 180
 
 const props = defineProps<{
   workItemId?: string
@@ -652,18 +653,30 @@ onUnmounted(() => {
   runtimeStore.disconnectSSE()
 })
 
-function scrollToBottom() {
+function isNearMessagesBottom(el: HTMLElement): boolean {
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= AUTO_SCROLL_BOTTOM_THRESHOLD
+}
+
+function scrollToBottom(behavior: ScrollBehavior = 'smooth') {
+  const currentEl = messagesRef.value
+  const shouldFollowBottom = !currentEl || isNearMessagesBottom(currentEl)
+
   nextTick(() => {
     const el = messagesRef.value
-    if (el) {
-      el.scrollTop = el.scrollHeight
+    if (!el || !shouldFollowBottom) return
+
+    const targetTop = el.scrollHeight
+    if (typeof el.scrollTo === 'function') {
+      el.scrollTo({ top: targetTop, behavior })
+      return
     }
+    el.scrollTop = targetTop
   })
 }
 
-watch(() => sessionStore.messages.length, scrollToBottom)
-watch(() => currentStreamingText.value, scrollToBottom)
-watch(() => currentRuntimeEvents.value.length, scrollToBottom)
+watch(() => sessionStore.messages.length, () => scrollToBottom())
+watch(() => currentStreamingText.value, () => scrollToBottom())
+watch(() => currentRuntimeEvents.value.length, () => scrollToBottom())
 watch(
   () => runtimeSettingsStore.promptDebugPanelEnabled,
   (enabled) => {
@@ -1606,7 +1619,14 @@ function timestamp(value: string | null | undefined): number {
   display: flex;
   flex-direction: column;
   overscroll-behavior: contain;
+  scroll-behavior: smooth;
   scrollbar-gutter: stable;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .conversation-workbench__messages {
+    scroll-behavior: auto;
+  }
 }
 
 .conversation-workbench__notice {

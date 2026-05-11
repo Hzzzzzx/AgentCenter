@@ -11,6 +11,7 @@ import { confirmationApi } from '../api/confirmations'
 import { eventApi } from '../api/events'
 import { useRuntimeStore } from '../stores/runtime'
 import { useRuntimeSettingsStore } from '../stores/runtimeSettings'
+import { useSessionStore } from '../stores/sessions'
 import { useWorkflowStore } from '../stores/workflows'
 import type { AgentMessageDto, AgentSessionDto, ArtifactDto, ConfirmationRequestDto, WorkflowInstanceDto } from '../api/types'
 
@@ -156,6 +157,20 @@ function deferred<T>() {
     resolve = res
   })
   return { promise, resolve }
+}
+
+function makeAssistantMessage(id: string, seqNo: number): AgentMessageDto {
+  return {
+    id,
+    sessionId: 'session-1',
+    role: 'ASSISTANT',
+    content: `回复 ${seqNo}`,
+    contentFormat: 'MARKDOWN',
+    status: 'COMPLETED',
+    seqNo,
+    createdAt: `2026-05-08T10:0${seqNo}:00Z`,
+    workflowNodeInstanceId: 'node-1',
+  }
 }
 
 vi.mock('../api/workItems', () => ({
@@ -348,6 +363,68 @@ describe('ConversationWorkbench.vue', () => {
     expect(wrapper.emitted('open-artifact')?.[0]).toEqual([mocks.capturedArtifact])
   })
 
+  it('smoothly follows new conversation content when the user is already near the bottom', async () => {
+    vi.mocked(confirmationApi.list).mockResolvedValue([])
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(ConversationWorkbench, {
+      props: {
+        workItemId: 'work-1',
+        targetSessionId: 'session-1',
+      },
+      global: {
+        plugins: [pinia],
+      },
+    })
+
+    await flushPromises()
+
+    const scroller = wrapper.find<HTMLElement>('.conversation-workbench__messages').element
+    Object.defineProperty(scroller, 'scrollHeight', { configurable: true, value: 1000 })
+    Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 300 })
+    scroller.scrollTop = 660
+    const scrollTo = vi.fn()
+    Object.defineProperty(scroller, 'scrollTo', { configurable: true, value: scrollTo })
+
+    const sessionStore = useSessionStore()
+    sessionStore.messages.push(makeAssistantMessage('msg-smooth-follow', 3))
+    await nextTick()
+    await nextTick()
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 1000, behavior: 'smooth' })
+  })
+
+  it('does not steal scroll position when the user is reading older conversation content', async () => {
+    vi.mocked(confirmationApi.list).mockResolvedValue([])
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(ConversationWorkbench, {
+      props: {
+        workItemId: 'work-1',
+        targetSessionId: 'session-1',
+      },
+      global: {
+        plugins: [pinia],
+      },
+    })
+
+    await flushPromises()
+
+    const scroller = wrapper.find<HTMLElement>('.conversation-workbench__messages').element
+    Object.defineProperty(scroller, 'scrollHeight', { configurable: true, value: 1000 })
+    Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 300 })
+    scroller.scrollTop = 120
+    const scrollTo = vi.fn()
+    Object.defineProperty(scroller, 'scrollTo', { configurable: true, value: scrollTo })
+
+    const sessionStore = useSessionStore()
+    sessionStore.messages.push(makeAssistantMessage('msg-no-scroll-steal', 4))
+    await nextTick()
+    await nextTick()
+
+    expect(scrollTo).not.toHaveBeenCalled()
+  })
+
   it('cancels the active session and releases the input when pause is clicked', async () => {
     vi.mocked(confirmationApi.list).mockResolvedValue([])
     const pinia = createPinia()
@@ -481,8 +558,8 @@ describe('ConversationWorkbench.vue', () => {
 
     const interactionBar = wrapper.find('.interaction-bar')
     expect(interactionBar.exists()).toBe(true)
-    expect(interactionBar.text()).toContain('需要你确认')
     expect(interactionBar.text()).toContain('确认继续下一步')
+    expect(interactionBar.text()).toContain('确认')
 
     const composer = wrapper.find('.conversation-workbench__composer')
     expect(composer.find('.interaction-bar').exists()).toBe(true)

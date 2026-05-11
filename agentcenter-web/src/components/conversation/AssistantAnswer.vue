@@ -21,7 +21,7 @@ const props = withDefaults(defineProps<{
 
 <style scoped>
 .assistant-answer {
-  max-width: 760px;
+  max-width: 100%;
   color: var(--text-primary);
   font-size: 15px;
   line-height: 1.75;

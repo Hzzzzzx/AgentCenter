@@ -41,11 +41,36 @@ function statusLabel(status: string): string {
 
 function kindClass(kind: string): string {
   switch (kind) {
-    case 'tool': return 'step-item__index--tool'
-    case 'decision': return 'step-item__index--wait'
-    case 'error': return 'step-item__index--error'
+    case 'tool': return 'step-item__kind--tool'
+    case 'decision': return 'step-item__kind--wait'
+    case 'error': return 'step-item__kind--error'
+    case 'reasoning': return 'step-item__kind--reasoning'
     default: return ''
   }
+}
+
+function kindLabel(step: ExecutionStep): string {
+  switch (step.kind) {
+    case 'reasoning': return '深度思考'
+    case 'tool': return '工具组'
+    case 'artifact': return '产物'
+    case 'decision': return step.status === 'completed' ? '交互结果' : '交互'
+    case 'status': return '状态'
+    case 'error': return '异常'
+    case 'subtask': return '子任务'
+    default: return '过程'
+  }
+}
+
+function shouldShowStepTitle(step: ExecutionStep): boolean {
+  const normalized = step.title.trim().toLowerCase()
+  if (step.kind === 'reasoning') {
+    return !['思考', '深度思考', 'reasoning', 'thinking'].includes(normalized)
+  }
+  if (step.kind === 'decision') {
+    return !['tool', '需要你确认', 'confirmation required', 'permission required'].includes(normalized)
+  }
+  return true
 }
 
 function shouldShowToolPart(part: {
@@ -63,10 +88,12 @@ function shouldShowToolPart(part: {
 
 <template>
   <div class="step-item" :class="{ 'step-item--last': isLast }">
-    <span class="step-item__index" :class="kindClass(step.kind)">{{ order }}</span>
     <div class="step-item__main">
       <div class="step-item__head">
-        <strong class="step-item__title">{{ step.title }}</strong>
+        <div class="step-item__title-wrap">
+          <span class="step-item__kind" :class="kindClass(step.kind)">{{ kindLabel(step) }}</span>
+          <strong v-if="shouldShowStepTitle(step)" class="step-item__title">{{ step.title }}</strong>
+        </div>
         <span class="step-item__pill" :class="statusPillClass(step.status)">
           {{ statusLabel(step.status) }}
         </span>
@@ -82,7 +109,7 @@ function shouldShowToolPart(part: {
 
         <!-- reasoning summary (collapsible) -->
         <details v-else-if="part.type === 'reasoning'" class="step-item__reasoning">
-          <summary>思考</summary>
+          <summary>推理摘要</summary>
           <div class="step-item__reasoning-body">
             <MarkdownContent :content="part.summary" />
           </div>
@@ -134,54 +161,8 @@ function shouldShowToolPart(part: {
 
 <style scoped>
 .step-item {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
-  gap: 10px;
+  display: block;
   position: relative;
-}
-
-.step-item:not(.step-item--last)::after {
-  content: "";
-  position: absolute;
-  top: 30px;
-  bottom: -12px;
-  left: 13px;
-  width: 1px;
-  background: var(--border-color);
-}
-
-.step-item__index {
-  position: relative;
-  z-index: 1;
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--border-color);
-  border-radius: 999px;
-  background: var(--surface-card, var(--bg-card));
-  color: var(--text-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 12px;
-  font-weight: 950;
-}
-
-.step-item__index--tool {
-  border-color: color-mix(in srgb, var(--accent-blue) 50%, var(--border-color));
-  background: var(--brand-soft);
-  color: var(--accent-blue);
-}
-
-.step-item__index--wait {
-  border-color: color-mix(in srgb, var(--warning) 50%, var(--border-color));
-  background: color-mix(in srgb, var(--warning) 12%, var(--bg-card));
-  color: var(--warning);
-}
-
-.step-item__index--error {
-  border-color: var(--error);
-  background: var(--error-soft);
-  color: var(--error);
 }
 
 .step-item__main {
@@ -195,6 +176,46 @@ function shouldShowToolPart(part: {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+}
+
+.step-item__title-wrap {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.step-item__kind {
+  min-height: 22px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 7px;
+  border-radius: 6px;
+  background: var(--surface-card, var(--bg-card));
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.step-item__kind--reasoning {
+  background: var(--brand-soft);
+  color: var(--accent-blue);
+}
+
+.step-item__kind--tool {
+  background: color-mix(in srgb, var(--accent-blue) 10%, var(--surface-card, var(--bg-card)));
+  color: var(--accent-blue);
+}
+
+.step-item__kind--wait {
+  background: color-mix(in srgb, var(--warning) 12%, var(--bg-card));
+  color: var(--warning);
+}
+
+.step-item__kind--error {
+  background: var(--error-soft);
+  color: var(--error);
 }
 
 .step-item__title {
@@ -358,19 +379,9 @@ function shouldShowToolPart(part: {
 }
 
 @media (max-width: 760px) {
-  .step-item {
-    grid-template-columns: 24px minmax(0, 1fr);
-    gap: 8px;
-  }
-
-  .step-item__index {
-    width: 24px;
-    height: 24px;
-    font-size: 11px;
-  }
-
-  .step-item:not(.step-item--last)::after {
-    left: 11px;
+  .step-item__head {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 </style>

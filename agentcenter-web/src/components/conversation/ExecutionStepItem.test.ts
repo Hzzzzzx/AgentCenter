@@ -80,4 +80,40 @@ describe('ExecutionStepItem.vue', () => {
 
     expect(wrapper.find('.tool-invocation-stub').text()).toContain('使用 Skill hld-design')
   })
+
+  it('renders reasoning as a single deep-thinking label without repeating the title', () => {
+    const wrapper = mount(ExecutionStepItem, {
+      props: {
+        step: {
+          id: 'step-reasoning',
+          order: 1,
+          kind: 'reasoning',
+          title: '思考',
+          status: 'completed',
+          parts: [{
+            type: 'reasoning',
+            summary: '整理上下文',
+            defaultExpanded: false,
+            rawEventRef: { eventId: 'event-reasoning', eventType: 'PROCESS_TRACE' },
+          }],
+          rawEventRefs: [],
+        },
+        order: 1,
+        isLast: false,
+      },
+      global: {
+        stubs: {
+          MarkdownContent: {
+            template: '<div>{{ content }}</div>',
+            props: ['content'],
+          },
+          ToolInvocationInline: true,
+        },
+      },
+    })
+
+    expect(wrapper.find('.step-item__title-wrap').text()).toBe('深度思考')
+    expect(wrapper.text()).not.toContain('思考 思考')
+    expect(wrapper.find('.step-item__reasoning summary').text()).toBe('推理摘要')
+  })
 })

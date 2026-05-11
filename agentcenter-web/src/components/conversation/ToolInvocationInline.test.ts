@@ -46,7 +46,7 @@ describe('ToolInvocationInline', () => {
     expect(output).toContain('Found 2 match(es) in 2 file(s)\n/Users/hzz/workspace/AgentCenter/a.vue\n/Users/hzz/workspace/AgentCenter/b.vue')
   })
 
-  it('shows a quiet running state before details return', () => {
+  it('shows only a breathing running row before details return', () => {
     const wrapper = mount(ToolInvocationInline, {
       props: {
         part: makePart({
@@ -59,7 +59,10 @@ describe('ToolInvocationInline', () => {
     })
 
     expect(wrapper.find('.tool-invocation--running').exists()).toBe(true)
-    expect(wrapper.text()).toContain('正在执行，详细信息会在返回后更新。')
+    expect(wrapper.find('.tool-invocation__body').exists()).toBe(false)
+    expect(wrapper.text()).toContain('执行中')
+    expect(wrapper.text()).not.toContain('正在执行，详细信息会在返回后更新。')
+    expect(wrapper.text()).not.toContain('收起详情')
     expect(wrapper.text()).not.toContain('Runtime')
   })
 
@@ -76,6 +79,64 @@ describe('ToolInvocationInline', () => {
 
     expect(wrapper.text()).toContain('执行失败，暂无更多错误详情。')
     expect(wrapper.text()).not.toContain('暂无详细输出')
+  })
+
+  it('keeps completed tool details collapsed by default', () => {
+    const wrapper = mount(ToolInvocationInline, {
+      props: {
+        part: makePart({
+          defaultExpanded: false,
+          outputSummary: '读取完成',
+        }),
+      },
+    })
+
+    expect(wrapper.find('.tool-invocation__body').exists()).toBe(false)
+    expect(wrapper.find('.tool-invocation__summary').text()).toContain('读取完成')
+    expect(wrapper.text()).toContain('展开详情')
+  })
+
+  it('lets users expand completed tool details manually', async () => {
+    const wrapper = mount(ToolInvocationInline, {
+      props: {
+        part: makePart({
+          defaultExpanded: false,
+          outputSummary: '读取完成',
+        }),
+      },
+    })
+
+    await wrapper.find('.tool-invocation__head').trigger('click')
+
+    expect(wrapper.find('.tool-invocation__body').exists()).toBe(true)
+    expect(wrapper.find('.tool-invocation__code').text()).toContain('读取完成')
+    expect(wrapper.text()).toContain('收起详情')
+  })
+
+  it('collapses automatically after a running tool completes', async () => {
+    const wrapper = mount(ToolInvocationInline, {
+      props: {
+        part: makePart({
+          status: 'running',
+          defaultExpanded: true,
+          inputSummary: 'npm run test',
+          outputSummary: undefined,
+        }),
+      },
+    })
+
+    expect(wrapper.find('.tool-invocation__body').exists()).toBe(true)
+
+    await wrapper.setProps({
+      part: makePart({
+        status: 'completed',
+        defaultExpanded: false,
+        outputSummary: '命令执行完成',
+      }),
+    })
+
+    expect(wrapper.find('.tool-invocation__body').exists()).toBe(false)
+    expect(wrapper.find('.tool-invocation__summary').text()).toContain('命令执行完成')
   })
 
   it('replaces unicode replacement characters with readable fallback text', () => {

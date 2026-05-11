@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ConversationDisplayItem, ConversationTurnProjection, TurnStatus } from './projection/types'
+import type { ConversationDisplayItem, ConversationTurnProjection } from './projection/types'
 import AssistantAnswer from './AssistantAnswer.vue'
 import ExecutionSteps from './ExecutionSteps.vue'
 
@@ -18,29 +18,13 @@ defineEmits<{
   'resolve': [confirmationId: string, value: string, meta: { requestType?: string; interactionType?: string }]
 }>()
 
-function statusPillClass(status: TurnStatus): string {
-  switch (status) {
-    case 'completed': return 'assistant-turn__pill--completed'
-    case 'running': return 'assistant-turn__pill--running'
-    case 'waiting_input': return 'assistant-turn__pill--waiting'
-    case 'failed': return 'assistant-turn__pill--failed'
-    default: return ''
-  }
-}
-
-function statusLabel(status: TurnStatus): string {
-  switch (status) {
-    case 'completed': return '已完成'
-    case 'running': return '进行中'
-    case 'waiting_input': return '等待输入'
-    case 'failed': return '失败'
-    default: return status
-  }
-}
-
 const renderItems = computed<ConversationDisplayItem[]>(() => {
   if (props.turn.displayItems?.length) return props.turn.displayItems
   const items: ConversationDisplayItem[] = []
+  const hasActivity = props.turn.steps.length > 0 || Boolean(props.turn.currentAction)
+  const hasAnswer = Boolean(props.turn.answer.text)
+  const shouldDeferAnswer = props.turn.status === 'running' && hasActivity && hasAnswer
+
   if (props.turn.steps.length > 0 || props.turn.currentAction) {
     items.push({
       type: 'agent-activity',
@@ -48,10 +32,10 @@ const renderItems = computed<ConversationDisplayItem[]>(() => {
       steps: props.turn.steps,
       status: props.turn.status,
       currentAction: props.turn.currentAction,
-      collapsedByDefault: Boolean(props.turn.answer.text) || props.turn.status === 'running',
+      collapsedByDefault: hasAnswer && !shouldDeferAnswer,
     })
   }
-  if (props.turn.answer.text) {
+  if (props.turn.answer.text && !shouldDeferAnswer) {
     items.push({
       type: 'assistant-message',
       id: `${props.turn.turnId}:assistant`,
@@ -72,88 +56,48 @@ const renderItems = computed<ConversationDisplayItem[]>(() => {
 
 <template>
   <article class="assistant-turn">
-    <div class="assistant-turn__rail">
-      <div class="assistant-turn__avatar">A</div>
-    </div>
     <div class="assistant-turn__main">
-      <div class="assistant-turn__meta">
-        <strong class="assistant-turn__label">Agent</strong>
-        <span
-          class="assistant-turn__pill"
-          :class="statusPillClass(turn.status)"
-        >
-          {{ statusLabel(turn.status) }}
-        </span>
-      </div>
+      <TransitionGroup name="assistant-turn__item" tag="div" class="assistant-turn__items">
+        <template v-for="item in renderItems" :key="item.id">
+          <ExecutionSteps
+            v-if="item.type === 'agent-activity'"
+            :key="item.id"
+            :steps="item.steps"
+            :status="item.status"
+            :current-action="item.currentAction"
+            :has-answer="Boolean(turn.answer.text)"
+            :collapsed-by-default="item.collapsedByDefault"
+            @open-artifact="(id) => $emit('open-artifact', { artifactId: id })"
+            @resolve="(confirmationId, value, meta) => $emit('resolve', confirmationId, value, meta)"
+          />
 
-      <template v-for="item in renderItems" :key="item.id">
-        <ExecutionSteps
-          v-if="item.type === 'agent-activity'"
-          :steps="item.steps"
-          :status="item.status"
-          :current-action="item.currentAction"
-          :has-answer="Boolean(turn.answer.text)"
-          :collapsed-by-default="item.collapsedByDefault"
-          @open-artifact="(id) => $emit('open-artifact', { artifactId: id })"
-          @resolve="(confirmationId, value, meta) => $emit('resolve', confirmationId, value, meta)"
-        />
+          <AssistantAnswer
+            v-else-if="item.type === 'assistant-message'"
+            :key="item.id"
+            :text="item.answer.text"
+            :streaming="item.answer.streaming"
+          />
 
-        <AssistantAnswer
-          v-else-if="item.type === 'assistant-message'"
-          :text="item.answer.text"
-          :streaming="item.answer.streaming"
-        />
-
-        <div v-else-if="item.type === 'interaction-request'" class="assistant-turn__interaction-marker">
-          <span class="assistant-turn__interaction-dot" />
-          <span>
-            需要你处理当前交互
-            <strong>{{ item.interaction.question }}</strong>
-          </span>
-        </div>
-      </template>
+          <div
+            v-else-if="item.type === 'interaction-request'"
+            :key="item.id"
+            class="assistant-turn__interaction-marker"
+          >
+            <span class="assistant-turn__interaction-dot" />
+            <span>
+              需要你处理当前交互
+              <strong>{{ item.interaction.question }}</strong>
+            </span>
+          </div>
+        </template>
+      </TransitionGroup>
     </div>
   </article>
 </template>
 
 <style scoped>
 .assistant-turn {
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  gap: 14px;
-  align-items: start;
-}
-
-.assistant-turn__rail {
-  position: relative;
-  min-height: 100%;
-}
-
-.assistant-turn__rail::after {
-  content: '';
-  position: absolute;
-  top: 36px;
-  bottom: -20px;
-  left: 15px;
-  width: 1px;
-  background: linear-gradient(180deg, var(--success-soft), transparent);
-}
-
-.assistant-turn__avatar {
-  position: sticky;
-  top: 10px;
-  z-index: 1;
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  border-radius: 8px;
-  background: #111827;
-  color: #fff;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 12px;
-  font-weight: 900;
-  box-shadow: 0 0 0 4px var(--bg-card, var(--surface-card, #fbfdff));
+  display: block;
 }
 
 .assistant-turn__main {
@@ -161,59 +105,26 @@ const renderItems = computed<ConversationDisplayItem[]>(() => {
   padding-top: 1px;
 }
 
-.assistant-turn__meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 28px;
-  margin-bottom: 8px;
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 850;
+.assistant-turn__items {
+  display: grid;
+  gap: 0;
+  min-width: 0;
 }
 
-.assistant-turn__label {
-  color: var(--text-primary);
-  font-weight: 950;
+.assistant-turn__item-move,
+.assistant-turn__item-enter-active,
+.assistant-turn__item-leave-active {
+  transition: opacity 0.24s ease, transform 0.24s ease;
 }
 
-.assistant-turn__pill {
-  flex: 0 0 auto;
-  min-height: 22px;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 8px;
-  border: 1px solid var(--border-color);
-  border-radius: 999px;
-  background: var(--surface-card, var(--bg-card));
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 900;
-  white-space: nowrap;
+.assistant-turn__item-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
 }
 
-.assistant-turn__pill--completed {
-  background: var(--success-soft);
-  color: var(--success);
-  border-color: color-mix(in srgb, var(--success) 40%, var(--border-color));
-}
-
-.assistant-turn__pill--running {
-  background: var(--brand-soft);
-  color: var(--accent-blue);
-  border-color: color-mix(in srgb, var(--accent-blue) 40%, var(--border-color));
-}
-
-.assistant-turn__pill--waiting {
-  background: color-mix(in srgb, var(--warning) 12%, var(--bg-card));
-  color: var(--warning);
-  border-color: color-mix(in srgb, var(--warning) 50%, var(--border-color));
-}
-
-.assistant-turn__pill--failed {
-  background: var(--error-soft);
-  color: var(--error);
-  border-color: var(--error);
+.assistant-turn__item-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
 }
 
 .assistant-turn__interaction-marker {
@@ -244,17 +155,15 @@ const renderItems = computed<ConversationDisplayItem[]>(() => {
 
 @media (max-width: 760px) {
   .assistant-turn {
-    grid-template-columns: 28px minmax(0, 1fr);
-    gap: 10px;
+    display: block;
   }
+}
 
-  .assistant-turn__avatar {
-    width: 28px;
-    height: 28px;
-  }
-
-  .assistant-turn__rail::after {
-    left: 13px;
+@media (prefers-reduced-motion: reduce) {
+  .assistant-turn__item-move,
+  .assistant-turn__item-enter-active,
+  .assistant-turn__item-leave-active {
+    transition: none;
   }
 }
 </style>

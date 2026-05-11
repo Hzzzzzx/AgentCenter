@@ -350,7 +350,7 @@ describe('MessageList.vue', () => {
     expect(toolSteps.length).toBeGreaterThanOrEqual(1)
   })
 
-  it('keeps node status runtime events in execution steps', () => {
+  it('keeps node status runtime events out of execution steps', () => {
     const wrapper = mount(MessageList, {
       props: {
         messages: [makeMessage({ role: 'ASSISTANT', content: 'reply' })],
@@ -366,10 +366,10 @@ describe('MessageList.vue', () => {
     const turn = parseTurnFromMock(wrapper)
     expect(turn).not.toBeNull()
     const statusSteps = turn.steps.filter((s: { kind: string }) => s.kind === 'status')
-    expect(statusSteps.length).toBe(1)
+    expect(statusSteps.length).toBe(0)
   })
 
-  it('keeps repeated node status heartbeat events for traceability', () => {
+  it('keeps repeated node status heartbeat events out of execution steps', () => {
     const wrapper = mount(MessageList, {
       props: {
         messages: [makeMessage({ role: 'ASSISTANT', content: 'reply' })],
@@ -382,7 +382,7 @@ describe('MessageList.vue', () => {
     const turn = parseTurnFromMock(wrapper)
     expect(turn).not.toBeNull()
     const statusSteps = turn.steps.filter((s: { kind: string }) => s.kind === 'status')
-    expect(statusSteps.length).toBe(2)
+    expect(statusSteps.length).toBe(0)
   })
 
   it('keeps pending confirmation prompts out of the chat timeline', () => {

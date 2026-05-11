@@ -370,7 +370,7 @@ function systemLineParts(content: string): SystemLinePart[] {
       <span>输入问题，或点击上方场景开始和 Agent 对话。</span>
     </div>
 
-    <template v-else>
+    <TransitionGroup v-else name="message-list__item">
       <template
         v-for="item in displayItems"
         :key="item.id"
@@ -378,6 +378,7 @@ function systemLineParts(content: string): SystemLinePart[] {
         <!-- USER message -->
         <article
           v-if="item.type === 'user-message'"
+          :key="item.id"
           class="user-turn"
         >
           <div
@@ -446,6 +447,7 @@ function systemLineParts(content: string): SystemLinePart[] {
         <!-- INTERACTION response ledger -->
         <article
           v-else-if="item.type === 'interaction-response'"
+          :key="item.id"
           class="interaction-response-line"
         >
           <span class="interaction-response-line__dot">✓</span>
@@ -461,6 +463,7 @@ function systemLineParts(content: string): SystemLinePart[] {
         <!-- SYSTEM message -->
         <article
           v-else-if="item.type === 'system-message'"
+          :key="item.id"
           class="system-line"
         >
           <span class="system-dot">i</span>
@@ -490,21 +493,22 @@ function systemLineParts(content: string): SystemLinePart[] {
         <!-- ASSISTANT turn -->
         <AssistantTurn
           v-else-if="item.type === 'assistant-turn'"
+          :key="item.id"
           :turn="item.turn"
           @open-artifact="emit('open-artifact', $event)"
           @resolve="(confirmationId, value, meta) => emit('resolve-confirmation', confirmationId, value, meta)"
         />
 
       </template>
-    </template>
+    </TransitionGroup>
   </div>
 </template>
 
 <style scoped>
 .message-list {
-  width: min(920px, 100%);
+  width: 100%;
   min-width: 0;
-  margin: 0 auto;
+  margin: 0;
   padding: 18px 0 28px;
   display: flex;
   flex-direction: column;
@@ -526,6 +530,22 @@ function systemLineParts(content: string): SystemLinePart[] {
   color: var(--text-primary);
   font-size: 18px;
   font-weight: 900;
+}
+
+.message-list__item-move,
+.message-list__item-enter-active,
+.message-list__item-leave-active {
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+
+.message-list__item-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.message-list__item-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
 }
 
 .user-turn {
@@ -696,8 +716,8 @@ function systemLineParts(content: string): SystemLinePart[] {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  max-width: 760px;
-  margin: 0 auto;
+  max-width: 100%;
+  margin: 0;
   padding: 8px 10px;
   border: 1px solid var(--border-color);
   border-radius: 8px;
@@ -741,8 +761,8 @@ function systemLineParts(content: string): SystemLinePart[] {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  max-width: 760px;
-  margin: 0 auto;
+  max-width: 100%;
+  margin: 0;
   padding: 8px 10px;
   border: 1px solid var(--border-color);
   border-radius: 8px;
@@ -795,6 +815,14 @@ function systemLineParts(content: string): SystemLinePart[] {
 
   .user-bubble {
     max-width: 86%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message-list__item-move,
+  .message-list__item-enter-active,
+  .message-list__item-leave-active {
+    transition: none;
   }
 }
 </style>

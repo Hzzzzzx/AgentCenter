@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { DecisionGatePart } from './projection/types'
 
 const props = defineProps<{
@@ -15,6 +16,37 @@ function selectOption(value: string): void {
     interactionType: props.part.interactionType,
   })
 }
+
+const selectedOption = computed(() =>
+  props.part.options.find(option => option.value === props.part.recommended)
+)
+
+const selectedLabel = computed(() => {
+  if (selectedOption.value?.label) return selectedOption.value.label
+  const value = props.part.recommended?.trim()
+  if (!value) return ''
+  if (/^(once|ALLOW_ONCE)$/i.test(value)) return '允许一次'
+  if (/^(always|ALLOW_ALWAYS|SESSION)$/i.test(value)) return '本次会话允许同类请求'
+  if (/^(approve|allow|APPROVE|ALLOW)$/i.test(value)) return '允许'
+  if (/^(reject|REJECT|DENY)$/i.test(value)) return '拒绝'
+  return value
+})
+
+const resolvedTitle = computed(() => {
+  if (props.part.requestType === 'PERMISSION') {
+    return /reject|deny|拒绝/i.test(`${props.part.recommended || ''} ${selectedLabel.value}`)
+      ? '权限已拒绝'
+      : '权限已允许'
+  }
+  return '交互已处理'
+})
+
+const resolvedDetail = computed(() => {
+  const label = selectedLabel.value
+  if (!label) return props.part.question
+  if (props.part.requestType === 'PERMISSION') return label
+  return `${props.part.question}：${label}`
+})
 </script>
 
 <template>
@@ -23,8 +55,16 @@ function selectOption(value: string): void {
     :class="{
       'decision-gate--waiting': part.status === 'waiting',
       'decision-gate--resolved': part.status === 'resolved',
+      'decision-gate--compact': part.status === 'resolved',
     }"
   >
+    <template v-if="part.status === 'resolved'">
+      <span class="decision-gate__result-dot" />
+      <strong class="decision-gate__result-title">{{ resolvedTitle }}</strong>
+      <span v-if="resolvedDetail" class="decision-gate__result-detail">{{ resolvedDetail }}</span>
+    </template>
+
+    <template v-else>
     <div class="decision-gate__head">
       <strong class="decision-gate__question">{{ part.question }}</strong>
       <span class="decision-gate__pill" :class="`decision-gate__pill--${part.status}`">
@@ -57,6 +97,7 @@ function selectOption(value: string): void {
         <span v-if="option.value === part.recommended" class="decision-gate__recommend">推荐</span>
       </div>
     </div>
+    </template>
   </section>
 </template>
 
@@ -70,9 +111,43 @@ function selectOption(value: string): void {
 }
 
 .decision-gate--resolved {
-  opacity: 0.7;
-  border-color: var(--border-color);
-  background: var(--surface-card, var(--bg-card));
+  border-color: transparent;
+  background: transparent;
+}
+
+.decision-gate--compact {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  overflow: visible;
+}
+
+.decision-gate__result-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--success);
+  box-shadow: 0 0 0 4px var(--success-soft);
+}
+
+.decision-gate__result-title {
+  flex: 0 0 auto;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.decision-gate__result-detail {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .decision-gate__head {

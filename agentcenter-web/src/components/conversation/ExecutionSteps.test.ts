@@ -17,31 +17,32 @@ function makeStep(overrides: Partial<ExecutionStep> = {}): ExecutionStep {
 }
 
 describe('ExecutionSteps.vue', () => {
-  it('keeps execution details open when answer text is present', () => {
+  it('keeps execution details open while a turn is running', () => {
     const wrapper = mount(ExecutionSteps, {
       props: {
         steps: [makeStep()],
         status: 'running',
         currentAction: { label: '调用 hld-design' },
         hasAnswer: true,
+        collapsedByDefault: true,
       },
       global: {
         stubs: { ExecutionStepItem: true },
       },
     })
 
-    expect(wrapper.find('details').attributes('open')).toBeDefined()
-    expect(wrapper.text()).toContain('执行过程')
+    expect(wrapper.find('.execution-steps__body').exists()).toBe(true)
+    expect(wrapper.text()).toContain('调用 hld-design')
     expect(wrapper.text()).toContain('进行中')
-    expect(wrapper.find('.execution-steps__current').exists()).toBe(false)
   })
 
-  it('keeps the completed execution summary copy while expanded', () => {
+  it('collapses completed execution details to a summary by default', () => {
     const wrapper = mount(ExecutionSteps, {
       props: {
         steps: [makeStep({ status: 'completed' })],
         status: 'completed',
         hasAnswer: true,
+        collapsedByDefault: true,
       },
       global: {
         stubs: { ExecutionStepItem: true },
@@ -50,7 +51,7 @@ describe('ExecutionSteps.vue', () => {
 
     expect(wrapper.text()).toContain('已处理 1 个步骤')
     expect(wrapper.text()).toContain('调用 1 个工具/Skill')
-    expect(wrapper.text()).toContain('过程')
+    expect(wrapper.find('.execution-steps__body').exists()).toBe(false)
   })
 
   it('opens execution details when there is no answer text yet', () => {
@@ -66,9 +67,52 @@ describe('ExecutionSteps.vue', () => {
       },
     })
 
-    expect(wrapper.find('details').attributes('open')).toBeDefined()
-    expect(wrapper.find('.execution-steps__summary').text()).toContain('执行过程')
-    expect(wrapper.find('.execution-steps__summary').text()).not.toContain('调用 hld-design')
+    expect(wrapper.find('.execution-steps__body').exists()).toBe(true)
+    expect(wrapper.find('.execution-steps__summary').text()).toContain('调用 hld-design')
+  })
+
+  it('collapses automatically once a running turn completes', async () => {
+    const wrapper = mount(ExecutionSteps, {
+      props: {
+        steps: [makeStep()],
+        status: 'running',
+        currentAction: { label: '调用 hld-design' },
+        hasAnswer: true,
+        collapsedByDefault: true,
+      },
+      global: {
+        stubs: { ExecutionStepItem: true },
+      },
+    })
+
+    expect(wrapper.find('.execution-steps__body').exists()).toBe(true)
+
+    await wrapper.setProps({
+      steps: [makeStep({ status: 'completed' })],
+      status: 'completed',
+    })
+
+    expect(wrapper.find('.execution-steps__body').exists()).toBe(false)
+    expect(wrapper.text()).toContain('展开详情')
+  })
+
+  it('lets users reopen completed execution details manually', async () => {
+    const wrapper = mount(ExecutionSteps, {
+      props: {
+        steps: [makeStep({ status: 'completed' })],
+        status: 'completed',
+        hasAnswer: true,
+        collapsedByDefault: true,
+      },
+      global: {
+        stubs: { ExecutionStepItem: true },
+      },
+    })
+
+    await wrapper.find('.execution-steps__summary').trigger('click')
+
+    expect(wrapper.find('.execution-steps__body').exists()).toBe(true)
+    expect(wrapper.text()).toContain('收起详情')
   })
 
   it('summarizes read and search tool categories in the collapsed copy', () => {
