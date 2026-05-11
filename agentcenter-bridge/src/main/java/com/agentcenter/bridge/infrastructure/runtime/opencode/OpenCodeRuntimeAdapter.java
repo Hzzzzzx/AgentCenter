@@ -50,6 +50,7 @@ import jakarta.annotation.PreDestroy;
 public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
     private static final Logger log = LoggerFactory.getLogger(OpenCodeRuntimeAdapter.class);
+    private static final int LOG_FIELD_LIMIT = 180;
     private static final String RUNTIME_WORKSPACE_BOUNDARY = """
             运行边界：
             - 当前工作目录是 AgentCenter 为 Runtime 准备的隔离工作区；只读取、搜索和修改该工作目录内的文件。
@@ -75,6 +76,9 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
     private final RuntimeEventService runtimeEventService;
     private final String agent;
     private final int responseTimeoutSeconds;
+
+    @Value("${agentcenter.trace.conversation-log-enabled:false}")
+    private boolean conversationLogEnabled;
 
     private final Map<String, String> agentToOpencodeSession = new ConcurrentHashMap<>();
 
@@ -564,6 +568,8 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
                 agentSessionId = dispatchSessionId;
             }
             if (agentSessionId == null || agentSessionId.isBlank()) {
+                log.warn("conversation.dispatch status=missing_agent_mapping dispatchSession={} runtimeSession={}",
+                        dispatchSessionId, opencodeSessionId);
                 return;
             }
 
@@ -598,8 +604,15 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
                     payload.toString(),
                     null
             ));
+            logConversationDispatch(
+                    dispatchSessionId,
+                    agentSessionId,
+                    opencodeSessionId,
+                    requestPayload.path("parts").isArray() ? requestPayload.path("parts").size() : 0,
+                    userPrompt != null ? userPrompt.length() : 0);
         } catch (Exception e) {
-            log.debug("Failed to publish prompt debug event for opencode session {}", opencodeSessionId, e);
+            log.warn("conversation.dispatch status=publish_failed runtimeSession={} error={}",
+                    opencodeSessionId, errorMessage(e), e);
         }
     }
 
@@ -637,6 +650,8 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
     private void publishAssistantTimeout(String opencodeSessionId) {
         String agentSessionId = eventSubscriber.getAgentSessionId(opencodeSessionId);
         if (agentSessionId == null || agentSessionId.isBlank()) {
+            log.warn("conversation.timeout status=missing_agent_mapping runtimeSession={} timeoutSeconds={}",
+                    opencodeSessionId, responseTimeoutSeconds);
             return;
         }
         String message = "Agent Runtime 已接收请求，但在 " + responseTimeoutSeconds + " 秒内没有返回可用输出。";
@@ -676,9 +691,56 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
                     tracePayload.toString(),
                     null
             ));
+            log.warn("conversation.timeout status=published session={} runtimeSession={} workItem={} workflow={} node={} timeoutSeconds={} errorCode=RUNTIME_TIMEOUT recoverable=true",
+                    agentSessionId,
+                    opencodeSessionId,
+                    eventSubscriber.getWorkItemId(agentSessionId),
+                    eventSubscriber.getWorkflowInstanceId(agentSessionId),
+                    eventSubscriber.getWorkflowNodeInstanceId(agentSessionId),
+                    responseTimeoutSeconds);
         } catch (Exception e) {
-            log.debug("Failed to publish timeout event for opencode session {}", opencodeSessionId, e);
+            log.warn("conversation.timeout status=publish_failed runtimeSession={} error={}",
+                    opencodeSessionId, errorMessage(e), e);
         }
+    }
+
+    private void logConversationDispatch(String dispatchSessionId,
+                                         String agentSessionId,
+                                         String opencodeSessionId,
+                                         int partCount,
+                                         int promptChars) {
+        traceInfo("conversation.dispatch status=sent dispatchSession={} session={} runtimeSession={} agent={} parts={} promptChars={}",
+                dispatchSessionId,
+                agentSessionId,
+                opencodeSessionId,
+                agent,
+                partCount,
+                promptChars);
+    }
+
+    private void traceInfo(String message, Object... args) {
+        if (conversationLogEnabled) {
+            log.info(message, args);
+            return;
+        }
+        log.debug(message, args);
+    }
+
+    private String errorMessage(Throwable error) {
+        if (error == null) {
+            return "unknown";
+        }
+        return error.getMessage() != null && !error.getMessage().isBlank()
+                ? clipForLog(error.getMessage())
+                : error.getClass().getSimpleName();
+    }
+
+    private String clipForLog(String value) {
+        String normalized = value.replaceAll("\\s+", " ").trim();
+        if (normalized.length() <= LOG_FIELD_LIMIT) {
+            return normalized;
+        }
+        return normalized.substring(0, LOG_FIELD_LIMIT) + "...";
     }
 
     private void publishAssistantTextSnapshotDeltas(String opencodeSessionId,

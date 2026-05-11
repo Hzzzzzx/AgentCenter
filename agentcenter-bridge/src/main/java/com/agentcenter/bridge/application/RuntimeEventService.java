@@ -8,6 +8,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -20,6 +21,8 @@ import com.agentcenter.bridge.infrastructure.event.WebSocketSessionRegistry;
 import com.agentcenter.bridge.infrastructure.id.IdGenerator;
 import com.agentcenter.bridge.infrastructure.persistence.entity.RuntimeEventEntity;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.RuntimeEventMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Service
 public class RuntimeEventService {
@@ -27,12 +30,17 @@ public class RuntimeEventService {
     private static final Logger log = LoggerFactory.getLogger(RuntimeEventService.class);
     private static final int SQLITE_BUSY_MAX_RETRIES = 5;
     private static final long SQLITE_BUSY_RETRY_SLEEP_MS = 80L;
+    private static final int LOG_FIELD_LIMIT = 180;
+    private static final ObjectMapper TRACE_OBJECT_MAPPER = new ObjectMapper();
 
     private final RuntimeEventMapper eventMapper;
     private final IdGenerator idGenerator;
     private final SseEmitterRegistry emitterRegistry;
     private final WebSocketSessionRegistry webSocketSessionRegistry;
     private final Object eventWriteLock = new Object();
+
+    @Value("${agentcenter.trace.conversation-log-enabled:false}")
+    private boolean conversationLogEnabled;
 
     public RuntimeEventService(RuntimeEventMapper eventMapper,
                                IdGenerator idGenerator,
@@ -102,6 +110,7 @@ public class RuntimeEventService {
                 entity.getSeqNo(),
                 parseDateTime(entity.getCreatedAt())
         );
+        logConversationEvent(withId);
         emitterRegistry.sendToSession(event.sessionId(), withId);
         webSocketSessionRegistry.sendToSession(event.sessionId(), Map.of(
                 "type", "runtime.event",
@@ -193,6 +202,69 @@ public class RuntimeEventService {
         return error.getMessage() != null && !error.getMessage().isBlank()
                 ? error.getMessage()
                 : error.getClass().getSimpleName();
+    }
+
+    private void logConversationEvent(RuntimeEventDto event) {
+        if (!conversationLogEnabled && !log.isDebugEnabled()) {
+            return;
+        }
+        String payload = event.payloadJson();
+        String summary = firstPayloadField(payload, "summary", "errorMessage", "message", "title");
+        String logLine = "conversation.event id=%s session=%s seq=%s type=%s source=%s workItem=%s workflow=%s node=%s kind=%s status=%s errorCode=%s reason=%s recoverable=%s summary=%s"
+                .formatted(
+                        event.id(),
+                        event.sessionId(),
+                        event.seqNo(),
+                        event.eventType(),
+                        event.eventSource(),
+                        event.workItemId(),
+                        event.workflowInstanceId(),
+                        event.workflowNodeInstanceId(),
+                        firstPayloadField(payload, "kind", "type"),
+                        firstPayloadField(payload, "status", "label"),
+                        firstPayloadField(payload, "errorCode"),
+                        firstPayloadField(payload, "reason"),
+                        firstPayloadField(payload, "recoverable"),
+                        summary
+                );
+        if (conversationLogEnabled) {
+            if (RuntimeEventType.ERROR.equals(event.eventType())) {
+                log.warn(logLine);
+            } else {
+                log.info(logLine);
+            }
+            return;
+        }
+        log.debug(logLine);
+    }
+
+    private String firstPayloadField(String payloadJson, String... fields) {
+        if (payloadJson == null || payloadJson.isBlank()) {
+            return "-";
+        }
+        try {
+            JsonNode root = TRACE_OBJECT_MAPPER.readTree(payloadJson);
+            for (String field : fields) {
+                JsonNode value = root.path(field);
+                if (!value.isMissingNode() && !value.isNull()) {
+                    String text = value.isValueNode() ? value.asText() : value.toString();
+                    if (!text.isBlank()) {
+                        return clipForLog(text);
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+            return "[unparseable]";
+        }
+        return "-";
+    }
+
+    private String clipForLog(String value) {
+        String normalized = value.replaceAll("\\s+", " ").trim();
+        if (normalized.length() <= LOG_FIELD_LIMIT) {
+            return normalized;
+        }
+        return normalized.substring(0, LOG_FIELD_LIMIT) + "...";
     }
 
     private RuntimeEventDto toDto(RuntimeEventEntity e) {

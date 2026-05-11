@@ -28,6 +28,8 @@ mybatis:
     map-underscore-to-camel-case: true
 
 agentcenter:
+  trace:
+    conversation-log-enabled: true
   runtime:
     guard:
       retry-limit: 2

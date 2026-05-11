@@ -9,6 +9,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.jdbc.UncategorizedSQLException;
@@ -49,8 +52,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Service
 public class ConfirmationService {
+    private static final Logger log = LoggerFactory.getLogger(ConfirmationService.class);
     private static final int SQLITE_BUSY_MAX_RETRIES = 3;
     private static final long SQLITE_BUSY_RETRY_SLEEP_MS = 80L;
+    private static final int LOG_FIELD_LIMIT = 180;
 
     private static final DateTimeFormatter SQLITE_DATETIME =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -66,6 +71,9 @@ public class ConfirmationService {
     private final PermissionConfirmationHandler permissionConfirmationHandler;
     private final QuestionConfirmationHandler questionConfirmationHandler;
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Value("${agentcenter.trace.conversation-log-enabled:false}")
+    private boolean conversationLogEnabled;
 
     public ConfirmationService(ConfirmationMapper confirmationMapper,
                                WorkflowCommandService workflowCommandService,
@@ -171,6 +179,7 @@ public class ConfirmationService {
                     || ConfirmationActionType.REJECT.equals(actionType);
         };
         if (!validAction) {
+            logInvalidConfirmationAction(entity, requestType, actionType);
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     requestType + " confirmation does not accept " + actionType + ". "
                     + "Valid actions for " + requestType + ": " + validActionsFor(requestType));
@@ -252,6 +261,15 @@ public class ConfirmationService {
                     }
                 }
                 : null;
+        logConfirmationResolved(entity, requestType, actionType,
+                confirmationDispatchTarget(
+                        actionType,
+                        shouldDispatchWorkflow,
+                        isRuntimeSessionIntervention,
+                        isWorkflowAdvance,
+                        isDecision,
+                        isException,
+                        isSkip));
         publishResolutionEventAfterCommit(entity, actionType, actionDescription,
                 workflowDispatchAfterCommit);
 
@@ -297,6 +315,10 @@ public class ConfirmationService {
                 "用户拒绝" + (request.comment() != null ? "：" + request.comment() : "")
                         + "，工作流保持阻塞");
 
+        logConfirmationResolved(entity,
+                ConfirmationRequestType.valueOf(entity.getRequestType()),
+                ConfirmationActionType.REJECT,
+                "rejected");
         publishResolutionEventAfterCommit(entity, ConfirmationActionType.REJECT,
                 buildActionDescription(ConfirmationActionType.REJECT, request), afterCommitAction);
 
@@ -365,12 +387,14 @@ public class ConfirmationService {
 
         AgentSessionEntity session = agentSessionMapper.findById(confirmation.getAgentSessionId());
         if (session == null) {
+            logRuntimeIntervention(confirmation, actionType, "session_missing", true);
             publishRuntimeInterventionStatus(confirmation, "会话不存在，无法恢复 Runtime。", true);
             return;
         }
 
         String prompt = buildRuntimeRecoveryPrompt(confirmation, actionType, request);
         if (prompt.isBlank()) {
+            logRuntimeIntervention(confirmation, actionType, "empty_prompt", true);
             publishRuntimeInterventionStatus(confirmation, "没有可用于恢复的指令。", true);
             return;
         }
@@ -384,8 +408,11 @@ public class ConfirmationService {
                 agentSessionMapper.update(session);
             }
             runtimeGateway.sendMessage(runtimeType, runtimeSessionId, prompt);
+            logRuntimeIntervention(confirmation, actionType, "sent", false);
             publishRuntimeInterventionStatus(confirmation, "已把恢复指令发送给 Runtime。", false);
         } catch (Exception e) {
+            logRuntimeIntervention(confirmation, actionType,
+                    "send_failed:" + errorMessage(e), true);
             publishRuntimeInterventionStatus(confirmation,
                     "Runtime 恢复指令发送失败：" + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()),
                     true);
@@ -617,9 +644,8 @@ public class ConfirmationService {
         try {
             afterCommitAction.run();
         } catch (Exception e) {
-            System.getLogger(ConfirmationService.class.getName())
-                    .log(System.Logger.Level.WARNING,
-                            "afterCommit action failed for confirmation " + confirmationId, e);
+            log.warn("conversation.confirmation_after_commit status=failed confirmation={} error={}",
+                    confirmationId, errorMessage(e), e);
         }
     }
 
@@ -777,5 +803,127 @@ public class ConfirmationService {
         } catch (Exception e) {
             return OffsetDateTime.parse(value);
         }
+    }
+
+    private String confirmationDispatchTarget(ConfirmationActionType actionType,
+                                              boolean shouldDispatchWorkflow,
+                                              boolean runtimeSessionIntervention,
+                                              boolean workflowAdvance,
+                                              boolean decision,
+                                              boolean exception,
+                                              boolean skip) {
+        if (runtimeSessionIntervention) {
+            return "runtime_session_intervention";
+        }
+        if (!shouldDispatchWorkflow) {
+            return "none";
+        }
+        if (workflowAdvance) {
+            return switch (actionType) {
+                case ADVANCE -> "workflow_advance";
+                case SUPPLEMENT -> "workflow_resume";
+                case RETRY -> "workflow_retry";
+                default -> "workflow_resume";
+            };
+        }
+        if (decision) {
+            return "workflow_resume";
+        }
+        if (exception) {
+            if (ConfirmationActionType.SUPPLEMENT.equals(actionType)) {
+                return "workflow_resume";
+            }
+            if (skip) {
+                return "workflow_skip";
+            }
+            return "workflow_retry";
+        }
+        return "workflow_resume";
+    }
+
+    private void logInvalidConfirmationAction(ConfirmationRequestEntity entity,
+                                              ConfirmationRequestType requestType,
+                                              ConfirmationActionType actionType) {
+        log.warn("conversation.confirmation_invalid_action confirmation={} type={} action={} session={} workItem={} workflow={} node={} validActions={}",
+                entity.getId(),
+                requestType,
+                actionType,
+                entity.getAgentSessionId(),
+                entity.getWorkItemId(),
+                entity.getWorkflowInstanceId(),
+                entity.getWorkflowNodeInstanceId(),
+                validActionsFor(requestType));
+    }
+
+    private void logConfirmationResolved(ConfirmationRequestEntity entity,
+                                         ConfirmationRequestType requestType,
+                                         ConfirmationActionType actionType,
+                                         String dispatchTarget) {
+        traceInfo("conversation.confirmation_resolved confirmation={} type={} action={} status={} dispatch={} session={} workItem={} workflow={} node={} runtimeSession={}",
+                entity.getId(),
+                requestType,
+                actionType,
+                entity.getStatus(),
+                dispatchTarget,
+                entity.getAgentSessionId(),
+                entity.getWorkItemId(),
+                entity.getWorkflowInstanceId(),
+                entity.getWorkflowNodeInstanceId(),
+                entity.getRuntimeSessionId());
+    }
+
+    private void logRuntimeIntervention(ConfirmationRequestEntity confirmation,
+                                        ConfirmationActionType actionType,
+                                        String status,
+                                        boolean error) {
+        if (error) {
+            log.warn("conversation.runtime_intervention confirmation={} action={} status={} session={} workItem={} workflow={} node={} runtimeSession={}",
+                    confirmation.getId(),
+                    actionType,
+                    clipForLog(status),
+                    confirmation.getAgentSessionId(),
+                    confirmation.getWorkItemId(),
+                    confirmation.getWorkflowInstanceId(),
+                    confirmation.getWorkflowNodeInstanceId(),
+                    confirmation.getRuntimeSessionId());
+            return;
+        }
+        traceInfo("conversation.runtime_intervention confirmation={} action={} status={} session={} workItem={} workflow={} node={} runtimeSession={}",
+                confirmation.getId(),
+                actionType,
+                clipForLog(status),
+                confirmation.getAgentSessionId(),
+                confirmation.getWorkItemId(),
+                confirmation.getWorkflowInstanceId(),
+                confirmation.getWorkflowNodeInstanceId(),
+                confirmation.getRuntimeSessionId());
+    }
+
+    private void traceInfo(String message, Object... args) {
+        if (conversationLogEnabled) {
+            log.info(message, args);
+            return;
+        }
+        log.debug(message, args);
+    }
+
+    private String errorMessage(Throwable error) {
+        if (error == null) {
+            return "unknown";
+        }
+        return error.getMessage() != null && !error.getMessage().isBlank()
+                ? clipForLog(error.getMessage())
+                : error.getClass().getSimpleName();
+    }
+
+    private String clipForLog(String value) {
+        if (value == null || value.isBlank()) {
+            return "-";
+        }
+        String normalized = value.replaceAll("\\s+", " ").trim();
+        if (normalized.length() <= LOG_FIELD_LIMIT) {
+            return normalized;
+        }
+        return normalized.substring(0, LOG_FIELD_LIMIT) + "...";
     }
 }
