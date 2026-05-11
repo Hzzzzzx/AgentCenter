@@ -254,4 +254,26 @@ describe('AppShell.vue', () => {
     expect(wrapper.find('.app-shell__right-panel').exists()).toBe(true)
     expect(wrapper.find('.app-shell__statusbar').exists()).toBe(true)
   })
+
+  it('allows resizing the side panels from the vertical dividers', async () => {
+    const wrapper = mountShell()
+    const shell = wrapper.find('.app-shell')
+
+    expect(wrapper.find('[aria-label="调整左侧栏宽度"]').exists()).toBe(true)
+    expect(wrapper.find('[aria-label="调整右侧栏宽度"]').exists()).toBe(true)
+
+    await wrapper.find('[aria-label="调整右侧栏宽度"]').trigger('pointerdown', { clientX: 1000 })
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 960 }))
+    window.dispatchEvent(new PointerEvent('pointerup'))
+    await wrapper.vm.$nextTick()
+
+    expect(shell.attributes('style')).toContain('--right-w: 400px')
+
+    await wrapper.find('[aria-label="调整左侧栏宽度"]').trigger('pointerdown', { clientX: 280 })
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 320 }))
+    window.dispatchEvent(new PointerEvent('pointerup'))
+    await wrapper.vm.$nextTick()
+
+    expect(shell.attributes('style')).toContain('--left-w: 320px')
+  })
 })

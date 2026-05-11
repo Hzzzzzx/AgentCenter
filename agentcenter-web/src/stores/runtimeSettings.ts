@@ -6,10 +6,12 @@ const STORAGE_KEY = 'agentcenter.runtimeSettings'
 
 type StoredRuntimeSettings = {
   autoRunWorkflow?: boolean
+  promptDebugPanelEnabled?: boolean
 }
 
 export const useRuntimeSettingsStore = defineStore('runtimeSettings', () => {
   const autoRunWorkflow = ref(false)
+  const promptDebugPanelEnabled = ref(false)
 
   const workflowRunMode = computed<NonNullable<StartWorkflowRequest['mode']>>(() =>
     autoRunWorkflow.value ? 'AUTO' : 'MANUAL_CONFIRM'
@@ -20,12 +22,18 @@ export const useRuntimeSettingsStore = defineStore('runtimeSettings', () => {
     persist()
   }
 
+  function setPromptDebugPanelEnabled(value: boolean) {
+    promptDebugPanelEnabled.value = value
+    persist()
+  }
+
   function initFromStorage() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY)
       if (!raw) return
       const stored = JSON.parse(raw) as StoredRuntimeSettings
       autoRunWorkflow.value = stored.autoRunWorkflow === true
+      promptDebugPanelEnabled.value = stored.promptDebugPanelEnabled === true
     } catch {
       // Storage is optional; keep the safe default.
     }
@@ -35,6 +43,7 @@ export const useRuntimeSettingsStore = defineStore('runtimeSettings', () => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         autoRunWorkflow: autoRunWorkflow.value,
+        promptDebugPanelEnabled: promptDebugPanelEnabled.value,
       }))
     } catch {
       // Storage is optional; the in-memory setting still works for this session.
@@ -43,8 +52,10 @@ export const useRuntimeSettingsStore = defineStore('runtimeSettings', () => {
 
   return {
     autoRunWorkflow,
+    promptDebugPanelEnabled,
     workflowRunMode,
     setAutoRunWorkflow,
+    setPromptDebugPanelEnabled,
     initFromStorage,
   }
 })

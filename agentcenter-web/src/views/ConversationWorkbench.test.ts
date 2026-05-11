@@ -5,6 +5,7 @@ import { nextTick } from 'vue'
 import ConversationWorkbench from './ConversationWorkbench.vue'
 import { sessionApi } from '../api/sessions'
 import { useRuntimeStore } from '../stores/runtime'
+import { useRuntimeSettingsStore } from '../stores/runtimeSettings'
 
 const mocks = vi.hoisted(() => {
   const runningWorkItem = {
@@ -243,7 +244,7 @@ describe('ConversationWorkbench.vue', () => {
     expect(wrapper.find('.conversation-workbench__input').attributes('disabled')).toBeUndefined()
   })
 
-  it('shows current interactions above the input composer', async () => {
+  it('shows current interactions in the message flow instead of the input composer', async () => {
     const pinia = createPinia()
     setActivePinia(pinia)
     const wrapper = mount(ConversationWorkbench, {
@@ -260,11 +261,11 @@ describe('ConversationWorkbench.vue', () => {
 
     const interactionBar = wrapper.find('.interaction-bar')
     expect(interactionBar.exists()).toBe(true)
-    expect(interactionBar.text()).toContain('当前需要交互')
+    expect(interactionBar.text()).toContain('需要你确认')
     expect(interactionBar.text()).toContain('确认继续下一步')
 
     const composer = wrapper.find('.conversation-workbench__composer')
-    expect(composer.find('.interaction-bar').exists()).toBe(true)
+    expect(composer.find('.interaction-bar').exists()).toBe(false)
     expect(composer.find('.conversation-workbench__input-area').exists()).toBe(true)
   })
 
@@ -309,6 +310,7 @@ describe('ConversationWorkbench.vue', () => {
 
     const pinia = createPinia()
     setActivePinia(pinia)
+    useRuntimeSettingsStore().setPromptDebugPanelEnabled(true)
     mount(ConversationWorkbench, {
       props: {
         workItemId: 'work-1',
@@ -350,6 +352,17 @@ describe('ConversationWorkbench.vue', () => {
         payloadJson: JSON.stringify({ skillName: 'prd-design', summary: '开始执行 PRD Skill' }),
         createdAt: '2026-05-08T10:01:30Z',
       },
+      {
+        id: 'event-delta',
+        sessionId: 'session-1',
+        workItemId: 'work-1',
+        workflowInstanceId: 'wf-1',
+        workflowNodeInstanceId: 'node-1',
+        eventType: 'ASSISTANT_DELTA',
+        eventSource: 'runtime',
+        payloadJson: JSON.stringify({ delta: '增量片段' }),
+        createdAt: '2026-05-08T10:01:45Z',
+      },
     ]
     runtimeStore.streamingText = '正在流式输出'
     await nextTick()
@@ -362,14 +375,16 @@ describe('ConversationWorkbench.vue', () => {
 
     expect(document.body.querySelector('.prompt-debug-float--fullscreen')).not.toBeNull()
     expect(document.body.textContent).toContain('还原')
-    expect(document.body.textContent).toContain('System Prompt')
+    expect(document.body.textContent).toContain('系统提示词')
     expect(document.body.textContent).toContain('请生成 PRD')
-    expect(document.body.textContent).toContain('Prompt、回复与事件')
-    expect(document.body.textContent).toContain('发送给 Runtime 的 prompt_async 请求')
+    expect(document.body.textContent).toContain('本轮回合时间线')
+    expect(document.body.textContent).toContain('输入 / 运行')
     expect(document.body.textContent).toContain('Agent 完整回复')
     expect(document.body.textContent).toContain('这是 Agent 的完整回复')
     expect(document.body.textContent).toContain('开始执行 Skill')
     expect(document.body.textContent).toContain('运行时开始调用 Skill')
+    expect(document.body.textContent).toContain('Agent 增量回复')
+    expect(document.body.textContent).toContain('增量片段')
     expect(document.body.textContent).toContain('正在流式回复')
     expect(document.body.textContent).toContain('界面展示')
     expect(document.body.textContent).toContain('复制此段')

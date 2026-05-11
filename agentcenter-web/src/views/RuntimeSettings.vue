@@ -66,6 +66,27 @@ onMounted(() => {
         </button>
       </section>
 
+      <section class="runtime-settings__section">
+        <div class="runtime-settings__section-main">
+          <h2>Prompt Debug 看板</h2>
+          <p>
+            开启后，会话工作台在收到 prompt_debug 运行事件时显示可拖拽调试看板，用来核对本轮发送给 OpenCode Runtime 的 prompt_async 请求。
+            关闭后，调试事件仍保留在运行事件中，但不再显示浮层。
+          </p>
+        </div>
+        <button
+          type="button"
+          class="runtime-settings__toggle"
+          :class="{ 'runtime-settings__toggle--on': runtimeSettings.promptDebugPanelEnabled }"
+          role="switch"
+          :aria-checked="runtimeSettings.promptDebugPanelEnabled"
+          aria-label="显示 Prompt Debug 看板"
+          @click="runtimeSettings.setPromptDebugPanelEnabled(!runtimeSettings.promptDebugPanelEnabled)"
+        >
+          <span></span>
+        </button>
+      </section>
+
       <section class="runtime-settings__summary" aria-label="当前执行策略">
         <div>
           <strong>当前启动参数</strong>

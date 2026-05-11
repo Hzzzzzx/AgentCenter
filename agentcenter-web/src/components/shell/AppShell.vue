@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import TitleBar from './TitleBar.vue'
 import LeftSidebar from './LeftSidebar.vue'
 import CenterWorkbench from './CenterWorkbench.vue'
@@ -48,6 +48,22 @@ const emit = defineEmits<{
 const leftCollapsed = ref(false)
 const rightCollapsed = ref(false)
 const rightExpanded = ref(false)
+const leftWidth = ref(280)
+const rightWidth = ref(360)
+
+type ResizeTarget = 'left' | 'right'
+
+let resizeState: {
+  target: ResizeTarget
+  startX: number
+  startLeftWidth: number
+  startRightWidth: number
+} | null = null
+
+const shellStyle = computed(() => ({
+  '--left-w': `${leftWidth.value}px`,
+  '--right-w': `${rightWidth.value}px`,
+}))
 
 function handleNavigate(viewId: string) {
   emit('update:activeView', viewId)
@@ -78,6 +94,48 @@ function handleRightExpandedChange(value: boolean) {
   }
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max)
+}
+
+function handleResizeStart(target: ResizeTarget, event: PointerEvent) {
+  if (rightExpanded.value) return
+  resizeState = {
+    target,
+    startX: event.clientX,
+    startLeftWidth: leftWidth.value,
+    startRightWidth: rightWidth.value,
+  }
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+  window.addEventListener('pointermove', handleResizeMove)
+  window.addEventListener('pointerup', handleResizeEnd, { once: true })
+}
+
+function handleResizeMove(event: PointerEvent) {
+  if (!resizeState) return
+  const deltaX = event.clientX - resizeState.startX
+  if (resizeState.target === 'left') {
+    leftWidth.value = clamp(resizeState.startLeftWidth + deltaX, 220, 380)
+    return
+  }
+  rightWidth.value = clamp(resizeState.startRightWidth - deltaX, 280, 620)
+}
+
+function handleResizeEnd() {
+  resizeState = null
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+  window.removeEventListener('pointermove', handleResizeMove)
+}
+
+onBeforeUnmount(() => {
+  window.removeEventListener('pointermove', handleResizeMove)
+  window.removeEventListener('pointerup', handleResizeEnd)
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+})
+
 watch(() => props.selectedArtifact, (artifact) => {
   if (!artifact) {
     rightExpanded.value = false
@@ -88,6 +146,7 @@ watch(() => props.selectedArtifact, (artifact) => {
 <template>
   <div
     class="app-shell"
+    :style="shellStyle"
     :class="{
       'app-shell--left-collapsed': leftCollapsed,
       'app-shell--right-collapsed': rightCollapsed,
@@ -120,6 +179,15 @@ watch(() => props.selectedArtifact, (artifact) => {
       </CenterWorkbench>
     </div>
 
+    <div
+      v-if="!leftCollapsed && !(rightExpanded && !rightCollapsed)"
+      class="app-shell__resizer app-shell__resizer--left"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="调整左侧栏宽度"
+      @pointerdown.prevent="handleResizeStart('left', $event)"
+    />
+
     <div class="app-shell__right-panel">
       <RightPanel
         :collapsed="rightCollapsed"
@@ -136,6 +204,15 @@ watch(() => props.selectedArtifact, (artifact) => {
         @close-artifact="handleCloseArtifact"
       />
     </div>
+
+    <div
+      v-if="!rightCollapsed && !(rightExpanded && !rightCollapsed)"
+      class="app-shell__resizer app-shell__resizer--right"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="调整右侧栏宽度"
+      @pointerdown.prevent="handleResizeStart('right', $event)"
+    />
 
     <div class="app-shell__statusbar">
       <StatusBar
@@ -172,6 +249,11 @@ watch(() => props.selectedArtifact, (artifact) => {
   height: 100dvh;
   overflow: hidden;
   transition: grid-template-columns 180ms ease;
+}
+
+.app-shell:has(.app-shell__resizer:hover),
+.app-shell:has(.app-shell__resizer:active) {
+  transition: none;
 }
 
 .app-shell--left-collapsed {
@@ -229,6 +311,41 @@ watch(() => props.selectedArtifact, (artifact) => {
   overflow: hidden;
 }
 
+.app-shell__resizer {
+  grid-row: 2;
+  min-height: 0;
+  cursor: col-resize;
+  z-index: 6;
+  position: relative;
+  touch-action: none;
+}
+
+.app-shell__resizer::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: transparent;
+  transition: background 120ms ease, box-shadow 120ms ease;
+}
+
+.app-shell__resizer:hover::before,
+.app-shell__resizer:active::before {
+  background: var(--accent-blue);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-blue) 14%, transparent);
+}
+
+.app-shell__resizer--left {
+  grid-column: gutter-c;
+}
+
+.app-shell__resizer--right {
+  grid-column: gutter-r;
+}
+
 .app-shell--right-expanded .app-shell__center {
   visibility: hidden;
   pointer-events: none;
@@ -248,6 +365,12 @@ watch(() => props.selectedArtifact, (artifact) => {
 .app-shell--left-collapsed .app-shell__sidebar-left,
 .app-shell--right-collapsed .app-shell__right-panel {
   overflow: hidden;
+}
+
+@media (max-width: 980px) {
+  .app-shell__resizer {
+    display: none;
+  }
 }
 
 .app-shell__statusbar {
