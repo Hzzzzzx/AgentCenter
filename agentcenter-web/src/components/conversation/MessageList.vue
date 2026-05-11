@@ -5,6 +5,7 @@ import type { ProjectorInput, ConversationTurnProjection } from './projection/ty
 import { projectConversationTurns } from './projection/conversationTurnProjector'
 import MarkdownContent from './MarkdownContent.vue'
 import AssistantTurn from './AssistantTurn.vue'
+import ConversationInteractionBar from './ConversationInteractionBar.vue'
 
 const props = withDefaults(defineProps<{
   messages: AgentMessageDto[]
@@ -28,6 +29,8 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   'open-artifact': [title: string]
   'resolve-confirmation': [confirmationId: string, value: string, meta: { requestType?: string; interactionType?: string }]
+  'interaction-changed': [confirmationId: string]
+  'open-confirmation': [confirmationId: string]
 }>()
 
 // ─── Display item types ─────────────────────────────────────
@@ -56,16 +59,19 @@ type DisplayItem =
   | { type: 'user-message'; id: string; message: AgentMessageDto }
   | { type: 'system-message'; id: string; message: AgentMessageDto }
   | { type: 'assistant-turn'; id: string; turn: ConversationTurnProjection }
+  | { type: 'interaction-bar'; id: string; interactions: ConfirmationRequestDto[] }
 
 // ─── Persisted messages (filtered + sorted) ─────────────────
 
 const normalizedMessages = computed(() =>
   dedupeAssistantArtifacts(
-    props.messages
-    .map((message, index) => ({ message, index }))
-    .filter(({ message }) => Boolean(message.content?.trim()))
-    .sort((a, b) => compareMessages(a.message, b.message, a.index, b.index))
-    .map(({ message }) => message)
+    dedupeWorkflowInputMessages(
+      props.messages
+      .map((message, index) => ({ message, index }))
+      .filter(({ message }) => Boolean(message.content?.trim()))
+      .sort((a, b) => compareMessages(a.message, b.message, a.index, b.index))
+      .map(({ message }) => message)
+    )
   )
 )
 
@@ -82,17 +88,19 @@ const resolvedSessionId = computed(() =>
 )
 
 const projectorInput = computed<ProjectorInput>(() => ({
-  messages: normalizedMessages.value.map(m => ({
-    id: m.id,
-    sessionId: m.sessionId,
-    role: m.role,
-    content: m.content,
-    contentFormat: m.contentFormat,
-    status: m.status,
-    seqNo: m.seqNo,
-    createdAt: m.createdAt,
-    workflowNodeInstanceId: m.workflowNodeInstanceId,
-  })),
+  messages: normalizedMessages.value
+    .filter(m => m.role !== 'SYSTEM')
+    .map(m => ({
+      id: m.id,
+      sessionId: m.sessionId,
+      role: m.role,
+      content: m.content,
+      contentFormat: m.contentFormat,
+      status: m.status,
+      seqNo: m.seqNo,
+      createdAt: m.createdAt,
+      workflowNodeInstanceId: m.workflowNodeInstanceId,
+    })),
   runtimeEvents: (props.runtimeEvents ?? []).map(e => ({
     id: e.id,
     sessionId: e.sessionId,
@@ -124,42 +132,72 @@ const projectedTurns = computed(() =>
   projectConversationTurns(projectorInput.value)
 )
 
+const visibleInteractions = computed(() =>
+  props.confirmations.filter((item) => item.status === 'PENDING' || item.status === 'IN_CONVERSATION')
+)
+
 // ─── Display items (interleaved) ────────────────────────────
 
 const displayItems = computed<DisplayItem[]>(() => {
   const items: DisplayItem[] = []
   const sorted = persistedMessages.value
 
-  // Collect assistant turns with actual content
   const contentTurns = projectedTurns.value.filter(t =>
     t.answer.text || t.steps.length > 0 || t.status === 'running'
   )
+  const insertedTurnIds = new Set<string>()
+  const turnsByAnchor = new Map<string, ConversationTurnProjection[]>()
+  const unanchoredTurns: ConversationTurnProjection[] = []
+  let insertedInteractionBar = false
 
-  let turnIdx = 0
-  let lastWasAssistant = false
+  function appendInteractionBarIfNeeded(turn?: ConversationTurnProjection) {
+    if (insertedInteractionBar || visibleInteractions.value.length === 0) return
+    if (turn && !turn.pendingInteraction && turn.status !== 'waiting_input') return
+    items.push({
+      type: 'interaction-bar',
+      id: `interaction-bar-${visibleInteractions.value.map(item => item.id).join('-')}`,
+      interactions: visibleInteractions.value,
+    })
+    insertedInteractionBar = true
+  }
+
+  for (const turn of contentTurns) {
+    if (turn.anchorMessageId) {
+      const bucket = turnsByAnchor.get(turn.anchorMessageId) ?? []
+      bucket.push(turn)
+      turnsByAnchor.set(turn.anchorMessageId, bucket)
+    } else {
+      unanchoredTurns.push(turn)
+    }
+  }
+
+  function appendAnchoredTurns(messageId: string) {
+    const turns = turnsByAnchor.get(messageId) ?? []
+    for (const turn of turns) {
+      items.push({ type: 'assistant-turn', id: turn.turnId, turn })
+      insertedTurnIds.add(turn.turnId)
+      appendInteractionBarIfNeeded(turn)
+    }
+  }
 
   for (const msg of sorted) {
     if (msg.role === 'USER') {
       items.push({ type: 'user-message', id: msg.id, message: msg })
-      lastWasAssistant = false
+      appendAnchoredTurns(msg.id)
     } else if (msg.role === 'SYSTEM') {
       items.push({ type: 'system-message', id: msg.id, message: msg })
-      lastWasAssistant = false
     } else {
-      // ASSISTANT or TOOL — group consecutive ones into one projector turn
-      if (!lastWasAssistant && turnIdx < contentTurns.length) {
-        items.push({ type: 'assistant-turn', id: contentTurns[turnIdx].turnId, turn: contentTurns[turnIdx] })
-        turnIdx++
-        lastWasAssistant = true
-      }
+      appendAnchoredTurns(msg.id)
     }
   }
 
-  // Remaining turns (runtime events with no corresponding messages)
-  while (turnIdx < contentTurns.length) {
-    items.push({ type: 'assistant-turn', id: contentTurns[turnIdx].turnId, turn: contentTurns[turnIdx] })
-    turnIdx++
+  for (const turn of [...unanchoredTurns, ...contentTurns]) {
+    if (insertedTurnIds.has(turn.turnId)) continue
+    items.push({ type: 'assistant-turn', id: turn.turnId, turn })
+    appendInteractionBarIfNeeded(turn)
   }
+
+  appendInteractionBarIfNeeded()
 
   return items
 })
@@ -194,7 +232,7 @@ function dedupeAssistantArtifacts(messages: AgentMessageDto[]): AgentMessageDto[
       continue
     }
 
-    const key = message.content.trim()
+    const key = assistantContentDedupeKey(message.content)
     const existingIndex = assistantByContent.get(key)
     if (existingIndex === undefined) {
       assistantByContent.set(key, result.length)
@@ -209,6 +247,32 @@ function dedupeAssistantArtifacts(messages: AgentMessageDto[]): AgentMessageDto[
   }
 
   return result
+}
+
+function dedupeWorkflowInputMessages(messages: AgentMessageDto[]): AgentMessageDto[] {
+  const result: AgentMessageDto[] = []
+  const seen = new Set<string>()
+
+  for (const message of messages) {
+    if (!isWorkflowInputMessage(message) || !message.workflowNodeInstanceId) {
+      result.push(message)
+      continue
+    }
+
+    const key = `${message.sessionId}:${message.workflowNodeInstanceId}:workflow-input`
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(message)
+  }
+
+  return result
+}
+
+function assistantContentDedupeKey(content: string): string {
+  return content
+    .replace(/<!--\s*AGENTCENTER_NODE_STATE[\s\S]*?-->/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 function timestamp(value: string | null | undefined): number {
@@ -268,7 +332,7 @@ function findWorkflowTaskInfo(content: string): string {
 }
 
 function systemLineParts(content: string): SystemLinePart[] {
-  const artifactPattern = /([A-Z]+[0-9]+-[^，。\s]+(?:\s\([^)]*\))?\.md)/g
+  const artifactPattern = /((?:[0-9]+)?[A-Z][A-Z0-9]*(?:[ -][\w\u4e00-\u9fff（）()·-]+)*\.md)/g
   const parts: SystemLinePart[] = []
   let lastIndex = 0
   let match: RegExpExecArray | null
@@ -290,7 +354,7 @@ function systemLineParts(content: string): SystemLinePart[] {
   <div class="message-list" aria-live="polite">
     <div v-if="!hasContent" class="message-list__empty">
       <strong>会话已就绪</strong>
-      <span>输入问题，或点击上方场景开始和 Agent Runtime 对话。</span>
+      <span>输入问题，或点击上方场景开始和 Agent 对话。</span>
     </div>
 
     <template v-else>
@@ -402,6 +466,24 @@ function systemLineParts(content: string): SystemLinePart[] {
           @open-artifact="emit('open-artifact', $event)"
           @resolve="(confirmationId, value, meta) => emit('resolve-confirmation', confirmationId, value, meta)"
         />
+
+        <!-- ACTIVE interaction in conversation flow -->
+        <article
+          v-else-if="item.type === 'interaction-bar'"
+          class="interaction-turn"
+        >
+          <div class="interaction-turn__rail">
+            <span class="interaction-turn__avatar">?</span>
+          </div>
+          <div class="interaction-turn__main">
+            <ConversationInteractionBar
+              :interactions="item.interactions"
+              @resolved="(id) => emit('interaction-changed', id)"
+              @rejected="(id) => emit('interaction-changed', id)"
+              @open="(id) => emit('open-confirmation', id)"
+            />
+          </div>
+        </article>
       </template>
     </template>
   </div>
@@ -656,6 +738,39 @@ function systemLineParts(content: string): SystemLinePart[] {
   font-weight: 900;
 }
 
+.interaction-turn {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  min-width: 0;
+}
+
+.interaction-turn__rail {
+  min-height: 100%;
+}
+
+.interaction-turn__avatar {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--warning) 18%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--warning) 48%, var(--border-color));
+  color: var(--warning);
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.interaction-turn__main {
+  min-width: 0;
+}
+
+.interaction-turn__main :deep(.interaction-bar) {
+  margin: 0;
+}
+
 @media (max-width: 760px) {
   .message-list {
     padding-inline: 2px;
@@ -663,6 +778,16 @@ function systemLineParts(content: string): SystemLinePart[] {
 
   .user-bubble {
     max-width: 86%;
+  }
+
+  .interaction-turn {
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .interaction-turn__avatar {
+    width: 28px;
+    height: 28px;
   }
 }
 </style>

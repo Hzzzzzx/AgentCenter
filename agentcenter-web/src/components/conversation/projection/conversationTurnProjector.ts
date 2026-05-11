@@ -12,6 +12,8 @@ import type {
   InteractionProjection,
   RawEventRef,
   AnswerProjection,
+  CurrentActionProjection,
+  ConversationDisplayItem,
   TurnStatus,
   StepKind,
 } from './types'
@@ -24,6 +26,7 @@ interface ParsedPayload {
   title?: string
   summary?: string
   toolName?: string | null
+  rawToolName?: string | null
   actionType?: string
   reason?: string
   errorMessage?: string
@@ -67,7 +70,18 @@ interface EnrichedEvent {
 interface ToolLifecycle {
   toolCallId: string | null
   toolName: string
+  rawToolName: string
   events: EnrichedEvent[]
+}
+
+interface PendingInteractionCandidate {
+  interaction: InteractionProjection
+  createdAt?: string
+}
+
+interface GeneratedAnswerPart {
+  text: string
+  createdAt?: string
 }
 
 function parsePayload(payloadJson: string | null): ParsedPayload {
@@ -82,13 +96,26 @@ function parsePayload(payloadJson: string | null): ParsedPayload {
   }
 }
 
+function timestamp(value: string | null | undefined): number {
+  if (!value) return 0
+  const trimmed = value.trim()
+  if (!trimmed) return 0
+
+  const hasExplicitTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(trimmed)
+  const normalized = !hasExplicitTimezone && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(trimmed)
+    ? `${trimmed.replace(' ', 'T')}Z`
+    : trimmed
+  const parsed = Date.parse(normalized)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
 function sortEvents(a: EnrichedEvent, b: EnrichedEvent): number {
   const seqA = a.event.seqNo ?? Number.MAX_SAFE_INTEGER
   const seqB = b.event.seqNo ?? Number.MAX_SAFE_INTEGER
   if (seqA !== seqB) return seqA - seqB
 
-  const timeA = Date.parse(a.event.createdAt) || 0
-  const timeB = Date.parse(b.event.createdAt) || 0
+  const timeA = timestamp(a.event.createdAt)
+  const timeB = timestamp(b.event.createdAt)
   if (timeA !== timeB) return timeA - timeB
 
   if (a.arrivalIndex !== b.arrivalIndex) return a.arrivalIndex - b.arrivalIndex
@@ -103,6 +130,14 @@ function isToolLifecycleEvent(eventType: string, payload: ParsedPayload): boolea
     || payload.kind === 'tool_call'
 }
 
+function isNoisyToolHeartbeat(payload: ParsedPayload): boolean {
+  if (payload.kind !== 'tool_call') return false
+  const hasToolIdentity = Boolean(payload.toolCallId || payload.toolName || payload.skillName || payload.command)
+  if (hasToolIdentity) return false
+  const label = (payload.label || payload.title || payload.status || '').trim().toLowerCase()
+  return ['running', 'completed', 'done', 'idle'].includes(label) && !payload.summary
+}
+
 function isPromptDebug(payload: ParsedPayload): boolean {
   return payload.kind === 'prompt_debug'
 }
@@ -111,6 +146,17 @@ function isRuntimeStatusHeartbeat(eventType: string, payload: ParsedPayload): bo
   return eventType === 'STATUS'
     && payload.type === 'status'
     && ['running', 'idle', 'waiting_user'].includes(payload.label || '')
+}
+
+function isAssistantStreamEvent(eventType: string): boolean {
+  return eventType === 'ASSISTANT_DELTA' || eventType === 'ASSISTANT_COMPLETED'
+}
+
+function shouldPromoteContextToAnswer(ee: EnrichedEvent): boolean {
+  if (ee.event.eventType !== 'PROCESS_TRACE') return false
+  if (ee.payload.kind && !['text', 'assistant_text', 'answer'].includes(ee.payload.kind)) return false
+  const text = renderableContextText(ee.payload)
+  return Boolean(text)
 }
 
 function isConfirmationEvent(eventType: string): boolean {
@@ -128,7 +174,15 @@ function isInactiveConfirmationCreated(
 }
 
 function toolNameFromPayload(payload: ParsedPayload): string {
-  return payload.toolName || payload.skillName || payload.label || payload.command || 'tool'
+  return payload.skillName || payload.toolName || payload.label || payload.command || 'tool'
+}
+
+function rawToolNameFromPayload(payload: ParsedPayload): string {
+  return payload.toolName || payload.rawToolName || payload.skillName || payload.label || payload.command || 'tool'
+}
+
+function isWorkflowSkillPayload(payload: ParsedPayload, event: ProjectorRuntimeEvent): boolean {
+  return Boolean(payload.skillName || payload.nodeName || payload.nodeState || event.workflowNodeInstanceId)
 }
 
 function toolStatusFromPayload(eventType: string, payload: ParsedPayload): 'running' | 'completed' | 'failed' {
@@ -165,8 +219,9 @@ function buildToolPart(lifecycle: ToolLifecycle): ToolInvocationPart {
   return {
     type: 'tool',
     toolCallId: lifecycle.toolCallId || `legacy-${sorted[0].event.id}`,
-    rawName: lifecycle.toolName,
-    displayName: readableToolName(lifecycle.toolName, outputSummary),
+    rawName: lifecycle.rawToolName,
+    displayName: readableToolName(lifecycle.toolName, inputSummary, outputSummary),
+    category: toolCategory(lifecycle.toolName),
     status,
     inputSummary: inputSummary ?? undefined,
     outputSummary: outputSummary ?? undefined,
@@ -179,10 +234,46 @@ function buildToolPart(lifecycle: ToolLifecycle): ToolInvocationPart {
   }
 }
 
-function readableToolName(toolName: string, output?: string): string {
+function readableToolName(toolName: string, input?: string, output?: string): string {
   const skillName = extractLoadedSkillName(output)
   if (skillName) return `读取 Skill：${skillName}`
-  return toolName
+  const target = conciseToolTarget(input || output)
+  switch (toolCategory(toolName)) {
+    case 'read':
+      return target ? `读取文件 ${target}` : '读取文件'
+    case 'search':
+      return target ? `搜索代码 ${target}` : '搜索代码'
+    case 'list':
+      return target ? `查看目录 ${target}` : '查看目录'
+    case 'command':
+      return target ? `执行命令 ${target}` : '执行命令'
+    case 'skill':
+      return `调用 ${toolName}`
+    default:
+      return toolName
+  }
+}
+
+function toolCategory(toolName: string): ToolInvocationPart['category'] {
+  const normalized = toolName.toLowerCase().replace(/[\s-]+/g, '_')
+  if (/^(read|read_file|view|cat|open)$/.test(normalized)) return 'read'
+  if (/^(grep|rg|search|code_search|find)$/.test(normalized)) return 'search'
+  if (/^(ls|list|list_dir|glob)$/.test(normalized)) return 'list'
+  if (/^(bash|shell|exec|exec_command|run|run_command|terminal)$/.test(normalized)) return 'command'
+  if (normalized.includes('skill') || normalized.endsWith('_design') || normalized.endsWith('_desingn')) return 'skill'
+  return 'tool'
+}
+
+function conciseToolTarget(value?: string): string | undefined {
+  if (!value) return undefined
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  const pathMatch = trimmed.match(/(?:^|\s)((?:\/Users\/|\.{0,2}\/)?[\w@./-]+\.[A-Za-z0-9]+)(?:\s|$)/)
+  if (pathMatch) return pathMatch[1].split('/').slice(-3).join('/')
+  const quoted = trimmed.match(/["'`](.{1,80}?)["'`]/)
+  if (quoted) return quoted[1]
+  const firstLine = trimmed.split('\n')[0].trim()
+  return firstLine.length > 80 ? `${firstLine.slice(0, 77)}...` : firstLine
 }
 
 function extractLoadedSkillName(output?: string): string | undefined {
@@ -196,8 +287,10 @@ function isInternalSkillLoaderLifecycle(lifecycle: ToolLifecycle): boolean {
   const output = sorted
     .map(e => e.payload.output || e.payload.result)
     .find(v => v !== undefined && v !== null && v !== '')
-  const name = lifecycle.toolName.toLowerCase()
-  return name === 'skill' && Boolean(extractLoadedSkillName(output))
+  const name = lifecycle.rawToolName.toLowerCase()
+  const onlyInternalSkillToolEvents = name === 'skill'
+    && sorted.every(e => e.event.eventType === 'PROCESS_TRACE' && e.payload.kind === 'tool_call')
+  return name === 'skill' && (Boolean(extractLoadedSkillName(output)) || onlyInternalSkillToolEvents)
 }
 
 function buildArtifactPart(ee: EnrichedEvent): ArtifactEvidencePart {
@@ -269,7 +362,7 @@ function buildDecisionPart(ee: EnrichedEvent, confirmation?: ProjectorConfirmati
   return {
     type: 'decision',
     confirmationId,
-    question: p.question || confirmation?.title || 'Confirmation required',
+    question: p.question || confirmation?.title || '需要你确认',
     prompt: p.contextSummary || undefined,
     options,
     recommended: selectedValue || p.recommended || undefined,
@@ -549,6 +642,99 @@ function summarizeToolStep(toolPart: ToolInvocationPart): string | undefined {
   return firstLine.length > 120 ? `${firstLine.slice(0, 117)}...` : firstLine
 }
 
+function mergeAnswerText(persistedText: string, generatedTextParts: string[]): string {
+  const sections: string[] = []
+  const persisted = persistedText.trim()
+  if (persisted) sections.push(persisted)
+
+  for (const part of generatedTextParts) {
+    const text = part.trim()
+    if (!text) continue
+    if (sections.some(section => section.includes(text) || text.includes(section))) continue
+    sections.push(text)
+  }
+
+  return sections.join('\n\n')
+}
+
+function currentActionForTurn(
+  status: TurnStatus,
+  steps: ExecutionStep[],
+  hasStreamingText: boolean,
+  pendingInteraction?: InteractionProjection | null,
+): CurrentActionProjection | undefined {
+  if (pendingInteraction) {
+    return {
+      label: '等待你处理当前交互',
+      detail: pendingInteraction.question,
+    }
+  }
+
+  if (status !== 'running') return undefined
+
+  const runningStep = [...steps].reverse().find(step => step.status === 'running')
+  if (runningStep) {
+    if (runningStep.kind === 'tool') {
+      return {
+        label: runningStep.title.startsWith('调用') ? runningStep.title : `调用 ${runningStep.title}`,
+        detail: runningStep.summary,
+      }
+    }
+    return {
+      label: runningStep.title,
+      detail: runningStep.summary,
+    }
+  }
+
+  if (hasStreamingText) {
+    return { label: '正在生成回复', detail: '正文会持续流式更新。' }
+  }
+
+  return { label: '正在处理当前请求' }
+}
+
+function buildDisplayItems(
+  turnId: string,
+  status: TurnStatus,
+  answer: AnswerProjection,
+  steps: ExecutionStep[],
+  currentAction?: CurrentActionProjection,
+  pendingInteraction?: InteractionProjection,
+): ConversationDisplayItem[] {
+  const items: ConversationDisplayItem[] = []
+  const hasActivity = steps.length > 0 || (Boolean(currentAction) && !pendingInteraction)
+  const hasAnswer = answer.text.trim().length > 0
+
+  if (hasActivity) {
+    items.push({
+      type: 'agent-activity',
+      id: `${turnId}:activity`,
+      steps,
+      status,
+      currentAction,
+      collapsedByDefault: hasAnswer && status === 'completed',
+    })
+  }
+
+  if (hasAnswer) {
+    items.push({
+      type: 'assistant-message',
+      id: `${turnId}:assistant`,
+      answer,
+    })
+  }
+
+  if (pendingInteraction) {
+    items.push({
+      type: 'interaction-request',
+      id: `${turnId}:interaction:${pendingInteraction.confirmationId}`,
+      interaction: pendingInteraction,
+    })
+  }
+
+  return items
+}
+
 function isActiveInteractionEvent(
   ee: EnrichedEvent,
   confirmationMap: Map<string, ProjectorConfirmation>,
@@ -600,6 +786,7 @@ export function projectConversationTurns(input: ProjectorInput): ConversationTur
   const toolLifecycleIndex = new Map<string, number>()
   const nonToolEvents: EnrichedEvent[] = []
   const debugRefs: RawEventRef[] = []
+  const generatedAnswerParts: GeneratedAnswerPart[] = []
 
   for (const ee of sortedEvents) {
     if (isPromptDebug(ee.payload)) {
@@ -615,6 +802,16 @@ export function projectConversationTurns(input: ProjectorInput): ConversationTur
       continue
     }
 
+    if (isAssistantStreamEvent(ee.event.eventType)) {
+      continue
+    }
+
+    if (shouldPromoteContextToAnswer(ee)) {
+      const text = renderableContextText(ee.payload)
+      if (text) generatedAnswerParts.push({ text, createdAt: ee.event.createdAt })
+      continue
+    }
+
     if (isActiveInteractionEvent(ee, confirmationMap)) {
       continue
     }
@@ -627,9 +824,14 @@ export function projectConversationTurns(input: ProjectorInput): ConversationTur
       continue
     }
 
+    if (isNoisyToolHeartbeat(ee.payload)) {
+      continue
+    }
+
     if (isToolLifecycleEvent(ee.event.eventType, ee.payload)) {
       const callId = ee.payload.toolCallId || null
       const name = toolNameFromPayload(ee.payload)
+      const rawName = rawToolNameFromPayload(ee.payload)
 
       let matched = false
 
@@ -640,15 +842,32 @@ export function projectConversationTurns(input: ProjectorInput): ConversationTur
       }
 
       if (!matched && !callId) {
-        const lastLc = toolLifecycles[toolLifecycles.length - 1]
-        if (lastLc && !lastLc.toolCallId && lastLc.toolName === name) {
-          const hasCompletion = lastLc.events.some(
-            e => e.event.eventType === 'SKILL_COMPLETED'
-          )
-          if (!hasCompletion) {
-            lastLc.events.push(ee)
-            matched = true
-          }
+        const isTraceForExistingTool = ee.event.eventType === 'PROCESS_TRACE' && ee.payload.kind === 'tool_call'
+        const openLifecycle = [...toolLifecycles].reverse().find(candidate => {
+          const sameIdentity = !candidate.toolCallId
+            && candidate.toolName === name
+            && candidate.events.every(e => e.event.workflowNodeInstanceId === ee.event.workflowNodeInstanceId)
+          if (!sameIdentity) return false
+          if (isTraceForExistingTool) return true
+          return !candidate.events.some(e => e.event.eventType === 'SKILL_COMPLETED')
+        })
+        if (openLifecycle) {
+          openLifecycle.events.push(ee)
+          matched = true
+        }
+      }
+
+      if (!matched && callId && isWorkflowSkillPayload(ee.payload, ee.event)) {
+        const openWorkflowSkill = [...toolLifecycles].reverse().find(candidate => {
+          if (!candidate.toolCallId) return false
+          if (!candidate.toolCallId.startsWith('workflow:')) return false
+          if (candidate.events.some(e => e.event.eventType === 'SKILL_COMPLETED')) return false
+          return candidate.toolName === name
+            && candidate.events.every(e => e.event.workflowNodeInstanceId === ee.event.workflowNodeInstanceId)
+        })
+        if (openWorkflowSkill) {
+          openWorkflowSkill.events.push(ee)
+          matched = true
         }
       }
 
@@ -656,6 +875,7 @@ export function projectConversationTurns(input: ProjectorInput): ConversationTur
         const newLifecycle: ToolLifecycle = {
           toolCallId: callId,
           toolName: name,
+          rawToolName: rawName,
           events: [ee],
         }
         const idx = toolLifecycles.length
@@ -700,15 +920,16 @@ export function projectConversationTurns(input: ProjectorInput): ConversationTur
     return buildStepFromSingleEvent(item.event, index + 1, confirmation)
   })
 
-  const answerText = extractAnswerText(messages)
+  const answerText = mergeAnswerText(extractAnswerText(messages), generatedAnswerParts.map(part => part.text))
   const hasStreamingText = streamingText.trim().length > 0
 
   let turnStatus: TurnStatus = running ? 'running' : 'completed'
 
-  const pendingInteraction = findPendingInteraction(
+  const pendingInteractionCandidate = findPendingInteraction(
     sortedEvents,
     confirmationMap,
   )
+  const pendingInteraction = pendingInteractionCandidate?.interaction
 
   if (pendingInteraction) {
     turnStatus = 'waiting_input'
@@ -726,8 +947,11 @@ export function projectConversationTurns(input: ProjectorInput): ConversationTur
     activeSessionId,
     turnStatus,
     pendingInteraction ?? undefined,
+    pendingInteractionCandidate?.createdAt,
     answerText,
     hasStreamingText ? streamingText : '',
+    generatedAnswerParts,
+    currentActionForTurn(turnStatus, steps, hasStreamingText, pendingInteraction),
   )
 
   return turns
@@ -763,7 +987,7 @@ function parseOptionsFromJson(json: string): Array<{ value: string; label: strin
 function findPendingInteraction(
   events: EnrichedEvent[],
   confirmationMap: Map<string, ProjectorConfirmation>,
-): InteractionProjection | null {
+): PendingInteractionCandidate | null {
   for (let i = events.length - 1; i >= 0; i--) {
     const ee = events[i]
     if (ee.event.eventType === 'CONFIRMATION_CREATED' || ee.event.eventType === 'PERMISSION_REQUIRED') {
@@ -778,11 +1002,14 @@ function findPendingInteraction(
             : []
 
         return {
-          confirmationId: confId || ee.event.id,
-          question: ee.payload.question || confirmation.title || 'Confirmation required',
-          prompt: ee.payload.contextSummary || undefined,
-          options,
-          status: 'waiting',
+          interaction: {
+            confirmationId: confId || ee.event.id,
+            question: ee.payload.question || confirmation.title || 'Confirmation required',
+            prompt: ee.payload.contextSummary || undefined,
+            options,
+            status: 'waiting',
+          },
+          createdAt: ee.event.createdAt,
         }
       }
 
@@ -793,11 +1020,14 @@ function findPendingInteraction(
           : []
 
         return {
-          confirmationId: confId || ee.event.id,
-          question: ee.payload.question || ee.payload.title || 'Permission required',
-          prompt: ee.payload.contextSummary || undefined,
-          options,
-          status: 'waiting',
+          interaction: {
+            confirmationId: confId || ee.event.id,
+            question: ee.payload.question || ee.payload.title || 'Permission required',
+            prompt: ee.payload.contextSummary || undefined,
+            options,
+            status: 'waiting',
+          },
+          createdAt: ee.event.createdAt,
         }
       }
     }
@@ -813,11 +1043,14 @@ function buildTurnsFromMessages(
   activeSessionId: string | null,
   overallStatus: TurnStatus,
   pendingInteraction: InteractionProjection | undefined,
+  pendingInteractionCreatedAt: string | undefined,
   answerText: string,
   streamingText: string,
+  generatedAnswerParts: GeneratedAnswerPart[],
+  currentAction: CurrentActionProjection | undefined,
 ): ConversationTurnProjection[] {
   if (messages.length === 0) {
-    if (steps.length === 0 && !streamingText.trim() && !pendingInteraction) return []
+    if (steps.length === 0 && !streamingText.trim() && !answerText.trim() && !pendingInteraction) return []
 
     const hasStreamingText = streamingText.trim().length > 0
     const answer: AnswerProjection = {
@@ -830,9 +1063,19 @@ function buildTurnsFromMessages(
     return [{
       turnId: `turn-${activeSessionId || 'default'}`,
       sessionId: activeSessionId || '',
+      anchorCreatedAt: steps[0]?.startedAt,
       status: overallStatus,
       answer,
       steps,
+      displayItems: buildDisplayItems(
+        `turn-${activeSessionId || 'default'}`,
+        overallStatus,
+        answer,
+        steps,
+        currentAction,
+        pendingInteraction,
+      ),
+      currentAction,
       pendingInteraction,
       debugRefs,
     }]
@@ -840,8 +1083,8 @@ function buildTurnsFromMessages(
 
   const sortedMessages = [...messages].sort((a, b) => {
     if (a.seqNo !== b.seqNo) return a.seqNo - b.seqNo
-    const timeA = Date.parse(a.createdAt) || 0
-    const timeB = Date.parse(b.createdAt) || 0
+    const timeA = timestamp(a.createdAt)
+    const timeB = timestamp(b.createdAt)
     if (timeA !== timeB) return timeA - timeB
     return a.id.localeCompare(b.id)
   })
@@ -864,8 +1107,8 @@ function buildTurnsFromMessages(
 
   const groupBoundaryTimes = groups.map(g => {
     const times = [
-      g.userMsg ? Date.parse(g.userMsg.createdAt) || 0 : 0,
-      ...g.assistantMsgs.map(m => Date.parse(m.createdAt) || 0),
+      g.userMsg ? timestamp(g.userMsg.createdAt) : 0,
+      ...g.assistantMsgs.map(m => timestamp(m.createdAt)),
     ]
     return times.length > 0 ? Math.min(...times) : 0
   })
@@ -877,24 +1120,35 @@ function buildTurnsFromMessages(
     return 0
   }
 
+  const pendingInteractionGroupIndex = pendingInteraction
+    ? assignGroupIndex(timestamp(pendingInteractionCreatedAt))
+    : -1
+
   const stepsByGroup: ExecutionStep[][] = groups.map(() => [])
   const debugRefsByGroup: RawEventRef[][] = groups.map(() => [])
+  const generatedTextByGroup: string[][] = groups.map(() => [])
   for (const step of steps) {
-    const stepTime = Date.parse(step.startedAt ?? '') || 0
+    const stepTime = timestamp(step.startedAt)
     const gi = assignGroupIndex(stepTime)
     stepsByGroup[gi].push(step)
   }
   for (const ref of debugRefs) {
     const refEvent = enrichedEvents.find(e => e.event.id === ref.eventId)
-    const refTime = refEvent ? (Date.parse(refEvent.event.createdAt) || 0) : 0
+    const refTime = refEvent ? timestamp(refEvent.event.createdAt) : 0
     const gi = assignGroupIndex(refTime)
     debugRefsByGroup[gi].push(ref)
+  }
+  for (const part of generatedAnswerParts) {
+    const gi = assignGroupIndex(timestamp(part.createdAt))
+    generatedTextByGroup[gi].push(part.text)
   }
 
   const turns: ConversationTurnProjection[] = []
   for (let gi = 0; gi < groups.length; gi++) {
     const group = groups[gi]
     const isLast = gi === groups.length - 1
+    const isPendingInteractionGroup = gi === pendingInteractionGroupIndex
+    const anchorMessage = group.userMsg ?? group.assistantMsgs[0]
 
     const turnAnswerText = group.assistantMsgs
       .filter(m => m.content)
@@ -905,18 +1159,41 @@ function buildTurnsFromMessages(
     const groupSteps = stepsByGroup[gi]
     const answer: AnswerProjection = {
       role: 'assistant',
-      text: hasStreamingText ? streamingText : turnAnswerText,
+      text: hasStreamingText ? streamingText : mergeAnswerText(turnAnswerText, generatedTextByGroup[gi]),
       generatedByStepIds: groupSteps.map(s => s.id),
       streaming: hasStreamingText ? true : undefined,
     }
 
+    const groupStatus = isPendingInteractionGroup
+      ? 'waiting_input'
+      : isLast
+        ? overallStatus === 'waiting_input' ? 'completed' : overallStatus
+        : 'completed'
+    const groupCurrentAction = isPendingInteractionGroup
+      ? currentActionForTurn('waiting_input', groupSteps, false, pendingInteraction)
+      : isLast
+        ? currentAction
+        : undefined
+    const groupPendingInteraction = isPendingInteractionGroup ? pendingInteraction : undefined
+
     turns.push({
       turnId: `turn-${gi}-${activeSessionId || 'default'}`,
       sessionId: activeSessionId || group.userMsg?.sessionId || group.assistantMsgs[0]?.sessionId || '',
-      status: isLast ? overallStatus : 'completed',
+      anchorMessageId: anchorMessage?.id,
+      anchorCreatedAt: anchorMessage?.createdAt ?? groupSteps[0]?.startedAt,
+      status: groupStatus,
       answer,
       steps: groupSteps,
-      pendingInteraction: isLast ? pendingInteraction : undefined,
+      displayItems: buildDisplayItems(
+        `turn-${gi}-${activeSessionId || 'default'}`,
+        groupStatus,
+        answer,
+        groupSteps,
+        groupCurrentAction,
+        groupPendingInteraction,
+      ),
+      currentAction: groupCurrentAction,
+      pendingInteraction: groupPendingInteraction,
       debugRefs: debugRefsByGroup[gi],
     })
   }

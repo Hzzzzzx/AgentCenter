@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { ConversationTurnProjection, TurnStatus } from './projection/types'
+import { computed } from 'vue'
+import type { ConversationDisplayItem, ConversationTurnProjection, TurnStatus } from './projection/types'
 import AssistantAnswer from './AssistantAnswer.vue'
 import ExecutionSteps from './ExecutionSteps.vue'
 
@@ -32,6 +33,36 @@ function statusLabel(status: TurnStatus): string {
   }
 }
 
+const renderItems = computed<ConversationDisplayItem[]>(() => {
+  if (props.turn.displayItems?.length) return props.turn.displayItems
+  const items: ConversationDisplayItem[] = []
+  if (props.turn.steps.length > 0 || props.turn.currentAction) {
+    items.push({
+      type: 'agent-activity',
+      id: `${props.turn.turnId}:activity`,
+      steps: props.turn.steps,
+      status: props.turn.status,
+      currentAction: props.turn.currentAction,
+      collapsedByDefault: Boolean(props.turn.answer.text) && props.turn.status === 'completed',
+    })
+  }
+  if (props.turn.answer.text) {
+    items.push({
+      type: 'assistant-message',
+      id: `${props.turn.turnId}:assistant`,
+      answer: props.turn.answer,
+    })
+  }
+  if (props.turn.pendingInteraction) {
+    items.push({
+      type: 'interaction-request',
+      id: `${props.turn.turnId}:interaction:${props.turn.pendingInteraction.confirmationId}`,
+      interaction: props.turn.pendingInteraction,
+    })
+  }
+  return items
+})
+
 </script>
 
 <template>
@@ -50,18 +81,32 @@ function statusLabel(status: TurnStatus): string {
         </span>
       </div>
 
-      <AssistantAnswer
-        v-if="turn.answer.text"
-        :text="turn.answer.text"
-        :streaming="turn.answer.streaming"
-      />
+      <template v-for="item in renderItems" :key="item.id">
+        <ExecutionSteps
+          v-if="item.type === 'agent-activity'"
+          :steps="item.steps"
+          :status="item.status"
+          :current-action="item.currentAction"
+          :has-answer="Boolean(turn.answer.text)"
+          :collapsed-by-default="item.collapsedByDefault"
+          @open-artifact="(id) => $emit('open-artifact', id)"
+          @resolve="(confirmationId, value, meta) => $emit('resolve', confirmationId, value, meta)"
+        />
 
-      <ExecutionSteps
-        v-if="turn.steps.length > 0"
-        :steps="turn.steps"
-        @open-artifact="(id) => $emit('open-artifact', id)"
-        @resolve="(confirmationId, value, meta) => $emit('resolve', confirmationId, value, meta)"
-      />
+        <AssistantAnswer
+          v-else-if="item.type === 'assistant-message'"
+          :text="item.answer.text"
+          :streaming="item.answer.streaming"
+        />
+
+        <div v-else-if="item.type === 'interaction-request'" class="assistant-turn__interaction-marker">
+          <span class="assistant-turn__interaction-dot" />
+          <span>
+            需要你处理当前交互
+            <strong>{{ item.interaction.question }}</strong>
+          </span>
+        </div>
+      </template>
     </div>
   </article>
 </template>
@@ -164,6 +209,32 @@ function statusLabel(status: TurnStatus): string {
   background: var(--error-soft);
   color: var(--error);
   border-color: var(--error);
+}
+
+.assistant-turn__interaction-marker {
+  max-width: 620px;
+  margin: 6px 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.assistant-turn__interaction-marker strong {
+  margin-left: 4px;
+  color: var(--text-primary);
+  font-weight: 850;
+}
+
+.assistant-turn__interaction-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--warning);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--warning) 14%, transparent);
 }
 
 @media (max-width: 760px) {

@@ -121,7 +121,7 @@ async function handleApprove() {
   if (busyAction.value) return
   busyAction.value = 'approve'
   try {
-    await confirmationStore.resolveConfirmation(props.confirmation.id, { actionType: 'APPROVE' })
+    await confirmationStore.resolveConfirmation(props.confirmation.id, { actionType: 'APPROVE' }, { remove: false })
     notificationStore.push({
       anchor: 'right-panel',
       tone: 'success',
@@ -143,7 +143,7 @@ async function handleApprove() {
 }
 
 async function resolveWith(actionType: ConfirmationActionType, payload?: Record<string, unknown>, comment?: string) {
-  await confirmationStore.resolveConfirmation(props.confirmation.id, { actionType, payload, comment })
+  await confirmationStore.resolveConfirmation(props.confirmation.id, { actionType, payload, comment }, { remove: false })
   notificationStore.push({
     anchor: 'right-panel',
     tone: 'success',
@@ -237,7 +237,7 @@ async function handleReject() {
   if (busyAction.value) return
   busyAction.value = 'reject'
   try {
-    await confirmationStore.resolveConfirmation(props.confirmation.id, { actionType: 'REJECT' })
+    await confirmationStore.resolveConfirmation(props.confirmation.id, { actionType: 'REJECT' }, { remove: false })
     notificationStore.push({
       anchor: 'right-panel',
       tone: 'warning',

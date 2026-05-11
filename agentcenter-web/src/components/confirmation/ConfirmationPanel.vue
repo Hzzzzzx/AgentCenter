@@ -38,14 +38,12 @@ async function refreshAfterDecision(workItemId?: string | null) {
   ])
 }
 
-async function handleResolved(id: string) {
-  const workItemId = store.pendingConfirmations.find((item) => item.id === id)?.workItemId
+async function handleResolved(id: string, workItemId?: string | null) {
   emit('resolved', id)
   await refreshAfterDecision(workItemId)
 }
 
-async function handleRejected(id: string) {
-  const workItemId = store.pendingConfirmations.find((item) => item.id === id)?.workItemId
+async function handleRejected(id: string, workItemId?: string | null) {
   emit('rejected', id)
   await refreshAfterDecision(workItemId)
 }
@@ -78,8 +76,8 @@ watch(() => store.currentConfirmation, async (confirmation) => {
           :confirmation="item"
           :work-item="workItemFor(item.workItemId)"
           @handle="emit('handle', $event)"
-          @resolved="handleResolved"
-          @rejected="handleRejected"
+          @resolved="(id) => handleResolved(id, item.workItemId)"
+          @rejected="(id) => handleRejected(id, item.workItemId)"
         />
       </div>
     </div>

@@ -45,4 +45,21 @@ describe('ToolInvocationInline', () => {
     const output = wrapper.find('.tool-invocation__code').text()
     expect(output).toContain('Found 2 match(es) in 2 file(s)\n/Users/hzz/workspace/AgentCenter/a.vue\n/Users/hzz/workspace/AgentCenter/b.vue')
   })
+
+  it('shows a quiet running state before details return', () => {
+    const wrapper = mount(ToolInvocationInline, {
+      props: {
+        part: makePart({
+          status: 'running',
+          displayName: '读取文件 MessageList.vue',
+          inputSummary: undefined,
+          outputSummary: undefined,
+        }),
+      },
+    })
+
+    expect(wrapper.find('.tool-invocation--running').exists()).toBe(true)
+    expect(wrapper.text()).toContain('正在执行，详细信息会在返回后更新。')
+    expect(wrapper.text()).not.toContain('Runtime')
+  })
 })

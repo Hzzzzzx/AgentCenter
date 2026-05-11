@@ -1,7 +1,7 @@
 # Conversation UI Event Mapping Design
 
-> 状态：目标设计 / 待实施
-> 最近更新：2026-05-10
+> 状态：M1 已实施基线 / 持续演进
+> 最近更新：2026-05-11
 > 目标读者：AgentCenter 前端对话 UI、Runtime Translator、OpenCode/Codex Provider 实现者
 
 ---
@@ -155,6 +155,7 @@ type ToolInvocationPart = {
   toolCallId: string
   rawName: string
   displayName: string
+  category?: 'read' | 'search' | 'list' | 'command' | 'skill' | 'tool'
   status: 'running' | 'completed' | 'failed'
   inputSummary?: string
   outputSummary?: string
@@ -165,6 +166,18 @@ type ToolInvocationPart = {
 ```
 
 工具不是主层级；工具是某一步采取的动作。只有短结果、失败、权限拦截、产物生成类工具默认展开，其余默认折叠。
+
+`displayName` 必须是用户能读懂的动作摘要，而不是底层事件名。例如：
+
+| 原始工具 | 用户可见文案 |
+|----------|--------------|
+| `read` / `read_file` | `读取文件 MessageList.vue` |
+| `grep` / `rg` / `search` | `搜索代码 ASSISTANT_DELTA` |
+| `ls` / `glob` | `查看目录 components/conversation` |
+| `bash` / `exec` | `执行命令 npm run typecheck` |
+| workflow Skill | `调用 hld-design` |
+
+折叠摘要应该汇总动作类型，例如 `已处理 3 个步骤 · 读取 1 个文件 · 搜索 1 次 · 调用 1 个 Skill`。不要把 `running`、`completed`、单独 token 或同名 Skill 重复渲染成多行。
 
 ### 5.2 DecisionGatePart
 
@@ -217,6 +230,20 @@ id ASC
 3. 顺序兜底：把没有父级的事件挂到最近的 running step。
 4. 最后兜底：创建一个独立步骤，但仍保留真实位置，不移到全局桶。
 
+### 6.3 待交互归属
+
+待交互不是全局尾部卡片。`confirmationId` 对应的交互必须按创建事件的时间戳归属到触发它的 Agent 回合：
+
+```text
+Agent 输出/步骤
+  -> interaction request marker
+  -> 对话内联交互卡
+后续用户输入
+  -> 新的用户消息
+```
+
+如果后续已经有新的用户消息，未处理的交互卡仍停留在创建它的回合下方，不允许被重新移动到会话底部，也不允许压到用户输入之后导致顺序错乱。
+
 ---
 
 ## 7. OpenCode / Codex 映射
@@ -261,10 +288,11 @@ id ASC
 - 展开后按真实顺序显示编号步骤。
 - 每个步骤内部可以包含工具、产物、状态、确认项。
 - 工具输出默认折叠；失败、权限、短输出、产物摘要可以默认展开。
+- 运行中的步骤可以有轻微呼吸反馈，但不使用强烈颜色，也不展示“等待 Runtime 返回”等底层字样。
 
 ### 8.3 待交互
 
-- 待交互栏放在输入框上方。
+- 待交互卡放在触发它的 Agent 回合下方；全局输入区只保留继续补充输入能力。
 - 待交互 tab 放在标题区域，便于切换多个问题。
 - tab 文案使用 `问题 1 / 问题 2 / 问题 3` 和短标题，不重复事项编号与节点名。
 - 正文区域聚焦问题、选项、推荐理由和提交动作。
@@ -310,6 +338,10 @@ Prompt Debug 是调试器，不是主 UI：
 8. Prompt Debug 能复制每段 Agent 回复和原始 payload。
 9. 错误、权限、等待用户输入不会被隐藏在折叠工具组里。
 10. 前端组件测试覆盖 repeated same-name tool calls、out-of-order timestamp、waiting input、error event。
+11. `ASSISTANT_DELTA` / `ASSISTANT_COMPLETED` 只能进入主回答流式文本，不得变成执行步骤。
+12. read/search/list/command/skill 必须展示为可理解动作摘要，且完成后可折叠到一行摘要。
+13. 产物系统消息中的 `FE2001 详细设计 (LLD).md` 这类带空格文件名必须可点击跳转产物。
+14. 待交互卡必须保持在触发回合中，后续用户输入不得改变它的相对位置。
 
 ---
 

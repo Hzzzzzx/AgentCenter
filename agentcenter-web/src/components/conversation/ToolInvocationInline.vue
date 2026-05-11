@@ -29,7 +29,10 @@ function formatStructuredOutput(value: string | undefined): string {
 </script>
 
 <template>
-  <div class="tool-invocation">
+  <div
+    class="tool-invocation"
+    :class="{ 'tool-invocation--running': part.status === 'running' }"
+  >
     <details :open="part.defaultExpanded">
       <summary class="tool-invocation__head">
         <span class="tool-invocation__name">{{ part.displayName }}</span>
@@ -53,7 +56,7 @@ function formatStructuredOutput(value: string | undefined): string {
         </div>
 
         <div v-if="!part.inputSummary && !part.outputSummary" class="tool-invocation__empty">
-          暂无详细输出
+          {{ part.status === 'running' ? '正在执行，详细信息会在返回后更新。' : '暂无详细输出' }}
         </div>
       </div>
     </details>
@@ -110,6 +113,7 @@ function formatStructuredOutput(value: string | undefined): string {
 .tool-invocation__status--running {
   background: var(--brand-soft);
   color: var(--accent-blue);
+  animation: tool-status-breathe 1.45s ease-in-out infinite;
 }
 
 .tool-invocation__status--completed {
@@ -159,5 +163,10 @@ function formatStructuredOutput(value: string | undefined): string {
   border-top: 1px solid var(--border-color);
   color: var(--text-muted);
   font-size: 12px;
+}
+
+@keyframes tool-status-breathe {
+  0%, 100% { opacity: 0.68; }
+  50% { opacity: 1; }
 }
 </style>

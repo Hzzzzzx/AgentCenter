@@ -57,6 +57,15 @@ const activeOptions = computed<InteractionOption[]>(() =>
   activeSchema.value?.options ?? []
 )
 
+const interactionHeaderTitle = computed(() => {
+  if (!activeInteraction.value) return '需要你处理'
+  if (activeInteraction.value.requestType === 'INPUT_REQUIRED') return '需要你补充信息'
+  if (activeInteraction.value.requestType === 'DECISION') return '需要你确认选择'
+  if (activeInteraction.value.requestType === 'EXCEPTION') return '需要你处理异常'
+  if (activeInteraction.value.requestType === 'PERMISSION') return '需要你授权'
+  return '需要你确认'
+})
+
 const activeFields = computed<InteractionField[]>(() =>
   activeSchema.value?.fields ?? []
 )
@@ -353,10 +362,10 @@ function handleSecondary() {
     <div class="interaction-bar__header">
       <span class="interaction-bar__title">
         <span class="interaction-bar__dot"></span>
-        当前需要交互
+        {{ interactionHeaderTitle }}
         <span class="interaction-bar__count">{{ visibleInteractions.length }}</span>
       </span>
-      <div class="interaction-bar__tabs" role="tablist" aria-label="当前交互列表">
+      <div v-if="visibleInteractions.length > 1" class="interaction-bar__tabs" role="tablist" aria-label="当前交互列表">
         <button
           v-for="item in visibleInteractions"
           :key="item.id"

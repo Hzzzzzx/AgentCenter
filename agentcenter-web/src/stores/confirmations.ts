@@ -25,10 +25,13 @@ export const useConfirmationStore = defineStore('confirmations', () => {
     currentConfirmation.value = await confirmationApi.getById(id)
   }
 
-  async function resolveConfirmation(id: string, data: ResolveConfirmationRequest) {
+  async function resolveConfirmation(id: string, data: ResolveConfirmationRequest, options: { remove?: boolean } = {}) {
     try {
       currentConfirmation.value = await confirmationApi.resolve(id, data)
-      removeById(id)
+      if (options.remove !== false) {
+        removeById(id)
+      }
+      return currentConfirmation.value
     } catch (error) {
       throw error
     }

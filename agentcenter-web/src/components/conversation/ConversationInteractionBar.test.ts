@@ -60,7 +60,7 @@ describe('ConversationInteractionBar.vue', () => {
     })
 
     expect(wrapper.find('.interaction-bar').exists()).toBe(true)
-    expect(wrapper.text()).toContain('当前需要交互')
+    expect(wrapper.text()).toContain('需要你确认')
     expect(wrapper.text()).toContain('2')
     expect(wrapper.text()).not.toContain('FE1002 · 确认项浮层交互回归')
     expect(wrapper.text()).toContain('问题 1')
@@ -69,6 +69,25 @@ describe('ConversationInteractionBar.vue', () => {
     expect(wrapper.findAll('.interaction-bar__tab')).toHaveLength(2)
     expect(wrapper.find('.interaction-bar__tab').text()).toBe('问题 1')
     expect(wrapper.find('.interaction-bar__body .interaction-bar__tabs').exists()).toBe(false)
+  })
+
+  it('hides tabs when there is only one interaction', () => {
+    const wrapper = mount(ConversationInteractionBar, {
+      props: {
+        interactions: [
+          makeInteraction({
+            id: 'confirm-single',
+            requestType: 'DECISION',
+            title: '选择实现路线',
+            optionsJson: '["UI 优先","严格校验"]',
+          }),
+        ],
+      },
+    })
+
+    expect(wrapper.text()).toContain('需要你确认选择')
+    expect(wrapper.find('.interaction-bar__tabs').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('问题 1')
   })
 
   it('submits a selected decision option with structured payload', async () => {

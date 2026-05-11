@@ -47,6 +47,26 @@ function kindClass(kind: string): string {
     default: return ''
   }
 }
+
+function shouldShowToolPart(part: {
+  type: string
+  status?: string
+  displayName?: string
+  inputSummary?: string
+  outputSummary?: string
+}, stepTitle?: string): boolean {
+  if (part.type !== 'tool') return false
+  if (part.status === 'failed') return true
+
+  const hasDetail = Boolean(part.inputSummary?.trim()) || Boolean(part.outputSummary?.trim())
+  if (hasDetail) return true
+
+  const displayName = part.displayName?.trim()
+  const title = stepTitle?.trim()
+  const duplicatesStepTitle = Boolean(displayName && title && displayName === title)
+
+  return part.status === 'running' && !duplicatesStepTitle
+}
 </script>
 
 <template>
@@ -76,7 +96,7 @@ function kindClass(kind: string): string {
 
         <!-- tool invocation -->
         <ToolInvocationInline
-          v-else-if="part.type === 'tool'"
+          v-else-if="part.type === 'tool' && shouldShowToolPart(part, step.title)"
           :part="part"
         />
 

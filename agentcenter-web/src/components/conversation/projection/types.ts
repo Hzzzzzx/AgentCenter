@@ -21,9 +21,13 @@ export type TurnStatus = 'running' | 'waiting_input' | 'completed' | 'failed'
 export interface ConversationTurnProjection {
   turnId: string
   sessionId: string
+  anchorMessageId?: string
+  anchorCreatedAt?: string
   status: TurnStatus
   answer: AnswerProjection
   steps: ExecutionStep[]
+  displayItems: ConversationDisplayItem[]
+  currentAction?: CurrentActionProjection
   pendingInteraction?: InteractionProjection
   debugRefs: RawEventRef[]
 }
@@ -37,6 +41,39 @@ export interface AnswerProjection {
   generatedByStepIds: string[]
   /** Whether this answer is still streaming */
   streaming?: boolean
+}
+
+export interface CurrentActionProjection {
+  label: string
+  detail?: string
+}
+
+// ─── Ordered turn display items ──────────────────────────────────────
+
+export type ConversationDisplayItem =
+  | AgentActivityDisplayItem
+  | AssistantMessageDisplayItem
+  | InteractionRequestDisplayItem
+
+export interface AgentActivityDisplayItem {
+  type: 'agent-activity'
+  id: string
+  steps: ExecutionStep[]
+  status: TurnStatus
+  currentAction?: CurrentActionProjection
+  collapsedByDefault: boolean
+}
+
+export interface AssistantMessageDisplayItem {
+  type: 'assistant-message'
+  id: string
+  answer: AnswerProjection
+}
+
+export interface InteractionRequestDisplayItem {
+  type: 'interaction-request'
+  id: string
+  interaction: InteractionProjection
 }
 
 // ─── Execution step ──────────────────────────────────────────────────
@@ -101,6 +138,7 @@ export interface ToolInvocationPart {
   toolCallId: string
   rawName: string
   displayName: string
+  category?: 'read' | 'search' | 'list' | 'command' | 'skill' | 'tool'
   status: 'running' | 'completed' | 'failed'
   inputSummary?: string
   outputSummary?: string

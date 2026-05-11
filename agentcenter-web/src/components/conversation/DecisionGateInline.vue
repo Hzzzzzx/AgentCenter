@@ -32,7 +32,7 @@ function selectOption(value: string): void {
       </span>
     </div>
 
-    <p v-if="part.prompt" class="decision-gate__prompt">{{ part.prompt }}</p>
+    <p v-if="part.prompt && part.prompt !== part.question" class="decision-gate__prompt">{{ part.prompt }}</p>
 
     <div class="decision-gate__choices">
       <div

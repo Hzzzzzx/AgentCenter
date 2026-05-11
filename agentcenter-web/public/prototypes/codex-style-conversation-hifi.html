@@ -1,0 +1,1061 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AgentCenter Codex-style Conversation High Fidelity</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --page: #f4f7fb;
+      --surface: #ffffff;
+      --surface-soft: #f8fafc;
+      --surface-blue: #eef5ff;
+      --surface-green: #ecfbf5;
+      --surface-amber: #fff6e5;
+      --line: #d7e1ee;
+      --line-strong: #b9c8db;
+      --text: #142033;
+      --muted: #5d6f87;
+      --weak: #8a9bb0;
+      --blue: #246fe5;
+      --blue-dark: #1859bd;
+      --green: #078766;
+      --amber: #bd7100;
+      --shadow: 0 20px 46px rgba(18, 32, 54, 0.12);
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--page);
+      color: var(--text);
+      font-family: var(--sans);
+      letter-spacing: 0;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    button { font: inherit; }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: 58px 1fr;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 250px minmax(360px, 1fr) 300px;
+      align-items: center;
+      gap: 16px;
+      padding: 0 20px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(16px);
+      position: sticky;
+      top: 0;
+      z-index: 5;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      font-weight: 950;
+    }
+
+    .brand-mark {
+      width: 32px;
+      height: 32px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: #6f66f2;
+      color: #fff;
+      font-family: var(--mono);
+      box-shadow: 0 8px 22px rgba(111, 102, 242, 0.22);
+    }
+
+    .version {
+      min-height: 22px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 8px;
+      border-radius: 7px;
+      background: var(--surface-blue);
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .search {
+      height: 38px;
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--weak);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .operator {
+      justify-self: end;
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 750;
+    }
+
+    .avatar {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 9px;
+      background: var(--blue);
+      color: #fff;
+      font-weight: 950;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 270px minmax(640px, 1fr) 310px;
+      min-height: 0;
+    }
+
+    .sidebar,
+    .detail {
+      background: var(--surface);
+      border-right: 1px solid var(--line);
+      padding: 18px 14px;
+      min-width: 0;
+    }
+
+    .detail {
+      border-right: 0;
+      border-left: 1px solid var(--line);
+    }
+
+    .nav-title {
+      margin: 14px 8px 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .nav-item,
+    .session-item {
+      display: grid;
+      gap: 3px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 850;
+    }
+
+    .nav-item.active,
+    .session-item.active {
+      border: 1px solid #bfd5fb;
+      background: var(--surface-blue);
+      color: var(--blue-dark);
+    }
+
+    .session-item span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .stage-list {
+      display: grid;
+      gap: 16px;
+      margin-top: 20px;
+      padding-left: 4px;
+    }
+
+    .stage {
+      display: grid;
+      grid-template-columns: 16px 1fr auto;
+      gap: 8px;
+      align-items: start;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .stage-dot {
+      width: 10px;
+      height: 10px;
+      margin-top: 4px;
+      border-radius: 999px;
+      border: 2px solid #c9d5e5;
+      background: #fff;
+    }
+
+    .stage.done .stage-dot { border-color: var(--green); background: var(--green); }
+    .stage.active .stage-dot { border-color: var(--amber); background: var(--amber); }
+    .stage small { grid-column: 2 / -1; color: var(--weak); font-weight: 650; }
+
+    .workbench {
+      min-width: 0;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      background: var(--page);
+    }
+
+    .header {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 14px;
+      padding: 20px 28px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.82);
+    }
+
+    .back {
+      width: 36px;
+      height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 20px;
+      cursor: pointer;
+    }
+
+    .title h1 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.2;
+    }
+
+    .title p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 750;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 34px;
+      padding: 0 12px;
+      border-radius: 999px;
+      background: var(--surface-green);
+      color: var(--green);
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .messages {
+      min-height: 0;
+      overflow: auto;
+      padding: 24px 28px 120px;
+    }
+
+    .timeline {
+      width: min(880px, 100%);
+      margin: 0 auto;
+      display: grid;
+      gap: 18px;
+    }
+
+    .turn {
+      display: grid;
+      gap: 10px;
+    }
+
+    .user-turn {
+      justify-items: end;
+    }
+
+    .user-bubble {
+      max-width: min(620px, 78%);
+      padding: 14px 16px;
+      border-radius: 16px 16px 5px 16px;
+      background: var(--blue);
+      color: #fff;
+      box-shadow: 0 10px 24px rgba(36, 111, 229, 0.16);
+      font-size: 14px;
+      line-height: 1.55;
+      font-weight: 700;
+    }
+
+    .assistant-turn {
+      display: grid;
+      grid-template-columns: 36px minmax(0, 1fr);
+      gap: 12px;
+    }
+
+    .agent-avatar {
+      width: 32px;
+      height: 32px;
+      display: grid;
+      place-items: center;
+      border-radius: 9px;
+      background: #111827;
+      color: #fff;
+      font-weight: 950;
+    }
+
+    .assistant-main {
+      min-width: 0;
+      display: grid;
+      gap: 12px;
+    }
+
+    .assistant-copy {
+      color: var(--text);
+      font-size: 15px;
+      line-height: 1.76;
+      font-weight: 650;
+      white-space: pre-wrap;
+    }
+
+    .cursor {
+      display: inline-block;
+      width: 7px;
+      height: 1.1em;
+      margin-left: 2px;
+      border-radius: 2px;
+      background: var(--blue);
+      vertical-align: -0.18em;
+      animation: blink 0.9s steps(2, start) infinite;
+    }
+
+    @keyframes blink {
+      50% { opacity: 0; }
+    }
+
+    .activity {
+      width: min(720px, 100%);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.86);
+      overflow: hidden;
+      transition: border-color 180ms ease, box-shadow 180ms ease;
+    }
+
+    .activity.is-running {
+      border-color: #bdd3f7;
+      box-shadow: 0 10px 26px rgba(36, 111, 229, 0.09);
+    }
+
+    .activity.is-waiting {
+      border-color: #f2c676;
+      box-shadow: 0 10px 26px rgba(189, 113, 0, 0.08);
+    }
+
+    .activity-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 42px;
+      padding: 0 12px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 850;
+      cursor: pointer;
+    }
+
+    .activity-head strong {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid #bdd3f7;
+      border-top-color: var(--blue);
+      border-radius: 999px;
+      animation: spin 0.9s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .activity.is-complete .spinner {
+      border: 0;
+      background: var(--green);
+      position: relative;
+      animation: none;
+    }
+
+    .activity.is-waiting .spinner {
+      border: 0;
+      background: var(--amber);
+      animation: none;
+    }
+
+    .activity.is-complete .spinner::after {
+      content: "";
+      position: absolute;
+      width: 7px;
+      height: 4px;
+      left: 3px;
+      top: 4px;
+      border-left: 2px solid #fff;
+      border-bottom: 2px solid #fff;
+      transform: rotate(-45deg);
+    }
+
+    .chevron {
+      color: var(--weak);
+      font-size: 18px;
+      line-height: 1;
+      transform: rotate(90deg);
+      transition: transform 160ms ease;
+    }
+
+    .activity.is-collapsed .chevron {
+      transform: rotate(0deg);
+    }
+
+    .activity-body {
+      display: grid;
+      gap: 12px;
+      padding: 0 12px 14px 34px;
+    }
+
+    .activity.is-collapsed .activity-body {
+      display: none;
+    }
+
+    .activity-note {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+      font-weight: 650;
+    }
+
+    .current-action {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 28px;
+      width: fit-content;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface-soft);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 850;
+      animation: breatheText 1.8s ease-in-out infinite;
+    }
+
+    .current-action::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--blue);
+      box-shadow: 0 0 0 0 rgba(36, 111, 229, 0.24);
+      animation: breatheDot 1.8s ease-in-out infinite;
+    }
+
+    .activity.is-waiting .current-action::before {
+      background: var(--amber);
+      animation: none;
+    }
+
+    .activity.is-complete .current-action {
+      display: none;
+    }
+
+    @keyframes breatheText {
+      0%, 100% { opacity: 0.62; }
+      50% { opacity: 1; }
+    }
+
+    @keyframes breatheDot {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(36, 111, 229, 0.22); }
+      50% { box-shadow: 0 0 0 5px rgba(36, 111, 229, 0); }
+    }
+
+    .activity-row {
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr) auto;
+      align-items: start;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 750;
+    }
+
+    .row-dot {
+      width: 8px;
+      height: 8px;
+      margin-top: 6px;
+      border-radius: 999px;
+      background: #c6d3e4;
+    }
+
+    .activity-row.done .row-dot { background: var(--green); }
+    .activity-row.active .row-dot {
+      background: var(--blue);
+      box-shadow: 0 0 0 5px rgba(36, 111, 229, 0.12);
+    }
+
+    .activity-row strong {
+      display: block;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .activity-row small {
+      display: block;
+      margin-top: 3px;
+      color: var(--weak);
+      font-weight: 650;
+      line-height: 1.45;
+    }
+
+    .tag {
+      min-height: 22px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 8px;
+      border-radius: 999px;
+      background: var(--surface-soft);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .decision-card {
+      width: min(720px, 100%);
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+      border: 1px solid #bdd3f7;
+      border-radius: 10px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    .decision-card h3 {
+      margin: 0;
+      font-size: 14px;
+    }
+
+    .decision-card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+      font-weight: 650;
+    }
+
+    .option-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .option {
+      min-height: 78px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-soft);
+      text-align: left;
+      color: var(--text);
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .option small {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-weight: 650;
+      line-height: 1.35;
+    }
+
+    .option.selected {
+      border-color: var(--blue);
+      background: var(--surface-blue);
+      color: var(--blue-dark);
+    }
+
+    .artifact-line {
+      width: min(720px, 100%);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .artifact-line strong {
+      color: var(--text);
+    }
+
+    .input-bar {
+      position: sticky;
+      bottom: 0;
+      padding: 16px 28px 20px;
+      border-top: 1px solid var(--line);
+      background: rgba(244, 247, 251, 0.92);
+      backdrop-filter: blur(16px);
+    }
+
+    .composer {
+      width: min(880px, 100%);
+      min-height: 50px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 48px;
+      gap: 10px;
+    }
+
+    .composer input {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 0 16px;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .send {
+      border: 0;
+      border-radius: 10px;
+      background: var(--blue);
+      color: #fff;
+      font-size: 18px;
+      cursor: pointer;
+    }
+
+    .detail h2 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    .detail p {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+      font-weight: 650;
+    }
+
+    .debug-box {
+      margin-top: 18px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--surface-soft);
+    }
+
+    .debug-box summary {
+      padding: 12px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .debug-box pre {
+      margin: 0;
+      max-height: 180px;
+      overflow: auto;
+      padding: 12px;
+      border-top: 1px solid var(--line);
+      color: #43546a;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+
+    @media (max-width: 1100px) {
+      .layout { grid-template-columns: 230px minmax(0, 1fr); }
+      .detail { display: none; }
+      .topbar { grid-template-columns: 220px minmax(0, 1fr); }
+      .operator { display: none; }
+    }
+
+    @media (max-width: 860px) {
+      .layout { grid-template-columns: minmax(0, 1fr); }
+      .sidebar { display: none; }
+      .topbar { grid-template-columns: 1fr; }
+      .search { display: none; }
+      .header { padding: 16px; }
+      .messages { padding: 20px 16px 116px; }
+      .input-bar { padding: 14px 16px; }
+      .user-bubble { max-width: 92%; }
+      .assistant-turn { grid-template-columns: 30px minmax(0, 1fr); }
+      .agent-avatar { width: 28px; height: 28px; }
+      .option-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">✦</div>
+        <span>AI DevOps</span>
+        <span class="version">v2.0</span>
+      </div>
+      <div class="search">搜索 FE、US、Task、Work、缺陷、漏洞...</div>
+      <div class="operator">
+        <div class="avatar">张</div>
+        <div>产品负责人 A<br><span>技术负责人</span></div>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="sidebar">
+        <div class="nav-item">首页</div>
+        <div class="nav-item active">任务会话</div>
+        <div class="nav-item">任务编排</div>
+        <div class="nav-title">任务会话</div>
+        <div class="session-item active">FE · 深色模式全站适配<span>任务上下文 · 会话运行中</span></div>
+        <div class="session-item">FE · 文件上传组件升级<span>2 分钟前</span></div>
+        <div class="session-item">FE · 权限管理页面开发<span>8 分钟前</span></div>
+      </aside>
+
+      <section class="workbench">
+        <header class="header">
+          <button class="back" aria-label="返回">‹</button>
+          <div class="title">
+            <h1>FE2004 · 深色模式全站适配</h1>
+            <p>Codex-style 高保真映射：正文流式、过程摘要、完成后折叠</p>
+          </div>
+          <span class="status-pill">● 已连接</span>
+        </header>
+
+        <div class="messages">
+          <div class="timeline">
+            <article class="turn user-turn">
+              <div class="user-bubble">
+                请基于 FE2004 · 深色模式全站适配，使用 Skill lld-design 执行详细设计。重点验证：用户能看到 Agent 正在处理，而不是看到一堆 raw event。
+              </div>
+            </article>
+
+            <article class="assistant-turn">
+              <div class="agent-avatar">A</div>
+              <div class="assistant-main">
+                <div id="activity" class="activity is-running">
+                  <div class="activity-head" onclick="toggleActivity()">
+                    <strong><span class="spinner"></span><span id="activity-title">正在处理 · 详细设计 (LLD)</span></strong>
+                    <span class="chevron">›</span>
+                  </div>
+                  <div class="activity-body">
+                    <div class="activity-note" id="activity-note">Agent 正在读取上游 PRD/HLD，并准备输出 LLD。这里展示的是用户可理解的过程摘要，不是事件日志。</div>
+                    <div class="current-action" id="current-action">读取上游 PRD 与 HLD</div>
+                    <div class="activity-row active" id="tool-read">
+                      <span class="row-dot"></span>
+                      <div><strong>读取工作项与上游产物</strong><small>FE2004、PRD、HLD 正在进入上下文。</small></div>
+                      <span class="tag">read</span>
+                    </div>
+                    <div class="activity-row" id="tool-skill">
+                      <span class="row-dot"></span>
+                      <div><strong>调用 lld-design</strong><small>准备调用 Skill。</small></div>
+                      <span class="tag">skill</span>
+                    </div>
+                    <div class="activity-row" id="active-row">
+                      <span class="row-dot"></span>
+                      <div><strong>正在组织可交付结论</strong><small>正文会在下方逐字流式出现。</small></div>
+                      <span class="tag">流式</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="assistant-copy"><span id="stream"></span><span id="cursor" class="cursor"></span></div>
+
+                <div id="decision" class="decision-card" hidden>
+                  <h3>需要你确认实现路线</h3>
+                  <p>Agent 已形成 LLD 草稿。这里是当前唯一需要交互的位置，不再在步骤里重复展示所有选项。</p>
+                  <div class="option-grid">
+                    <button class="option" type="button" data-choice="UI 优先">UI 优先<small>优先覆盖流式、折叠和用户反馈展示。</small></button>
+                    <button class="option" type="button" data-choice="严格校验">严格校验<small>补充更多回归检查。</small></button>
+                    <button class="option" type="button" data-choice="快速验证">快速验证<small>只保留最小测试链路。</small></button>
+                  </div>
+                </div>
+
+                <div id="artifact" class="artifact-line" hidden>
+                  <span><strong>已生成产物：</strong>FE2004 详细设计 (LLD).md</span>
+                  <span class="tag">Markdown</span>
+                </div>
+              </div>
+            </article>
+          </div>
+        </div>
+
+        <div class="input-bar">
+          <div class="composer">
+            <input id="composer-input" value="节点运行中，正文将持续流式更新..." aria-label="输入补充信息">
+            <button class="send" aria-label="发送">⌁</button>
+          </div>
+        </div>
+      </section>
+
+      <aside class="detail">
+        <h2>深色模式全站适配</h2>
+        <p>所有页面支持暗色主题，跟随系统偏好自动切换。右侧只保留工作流状态，不承载对话细节。</p>
+        <div class="stage-list">
+          <div class="stage done"><span class="stage-dot"></span><span>开始</span><span>已完成</span></div>
+          <div class="stage done"><span class="stage-dot"></span><span>需求整理 (PRD)</span><span>已完成</span></div>
+          <div class="stage done"><span class="stage-dot"></span><span>方案设计 (HLD)</span><span>已完成</span></div>
+          <div class="stage active"><span class="stage-dot"></span><span>详细设计 (LLD)</span><span>进行中</span><small>正在生成详细设计</small></div>
+          <div class="stage"><span class="stage-dot"></span><span>完成</span><span>等待中</span></div>
+        </div>
+
+        <details class="debug-box">
+          <summary>Prompt Debug / 原始事件</summary>
+          <pre>ASSISTANT_DELTA 不进入活动摘要
+SKILL_STARTED 聚合为「已调用 lld-design」
+PROCESS_TRACE 只在 Debug 中保留
+CONFIRMATION_CREATED 只驱动当前交互卡</pre>
+        </details>
+      </aside>
+    </main>
+  </div>
+
+  <script>
+    const timeline = document.querySelector('.timeline')
+    const stream = document.querySelector('#stream')
+    const cursor = document.querySelector('#cursor')
+    const activity = document.querySelector('#activity')
+    const title = document.querySelector('#activity-title')
+    const note = document.querySelector('#activity-note')
+    const currentAction = document.querySelector('#current-action')
+    const toolRead = document.querySelector('#tool-read')
+    const toolSkill = document.querySelector('#tool-skill')
+    const activeRow = document.querySelector('#active-row')
+    const decision = document.querySelector('#decision')
+    const composerInput = document.querySelector('#composer-input')
+
+    const introText = `我先快速梳理当前工作项和上游设计。\n\n目前可以确定：深色模式应该由统一的 theme store 管理，根节点写入 data-theme，组件只消费语义色变量。这样能避免每个页面各自判断 dark mode，也能让后续新增组件自然继承主题。\n\n在输出最终 LLD 前，还需要你确认实现路线。确认后我会继续生成完整的文件范围、状态流转和验证方案。`
+
+    let collapsed = false
+    let decisionHandled = false
+    let actionTimers = []
+
+    function setRowState(row, state, smallText) {
+      row.classList.remove('active', 'done')
+      if (state) row.classList.add(state)
+      if (smallText) row.querySelector('small').textContent = smallText
+    }
+
+    function startInitialActivityTimeline() {
+      actionTimers.forEach(timer => window.clearTimeout(timer))
+      actionTimers = [
+        window.setTimeout(() => {
+          setRowState(toolRead, 'done', 'FE2004、PRD、HLD 已进入上下文。')
+          setRowState(toolSkill, 'active', 'Skill 正在生成详细设计草稿。')
+          currentAction.textContent = '调用 lld-design'
+          title.textContent = '正在处理 · 调用 Skill'
+        }, 900),
+        window.setTimeout(() => {
+          setRowState(toolSkill, 'done', 'lld-design 已返回阶段性草稿。')
+          setRowState(activeRow, 'active', '正文会在下方逐字流式出现。')
+          currentAction.textContent = '整理详细设计草稿'
+          title.textContent = '正在处理 · 组织结论'
+        }, 1900),
+        window.setTimeout(() => {
+          currentAction.textContent = '准备需要用户确认的问题'
+          activeRow.querySelector('small').textContent = '正在把路线选择整理成一个确认卡。'
+        }, 3300),
+      ]
+    }
+
+    function streamText(target, caret, text, onDone) {
+      let i = 0
+      function tick() {
+        if (i < text.length) {
+          target.textContent += text[i]
+          i += 1
+          window.setTimeout(tick, i < 24 ? 30 : 14)
+          return
+        }
+        caret.hidden = true
+        onDone?.()
+      }
+      tick()
+    }
+
+    function showDecision() {
+      actionTimers.forEach(timer => window.clearTimeout(timer))
+      activity.classList.remove('is-running')
+      activity.classList.add('is-waiting')
+      title.textContent = '等待确认 · 实现路线'
+      note.textContent = '正文已经说明为什么需要确认。现在只在对话输入区上方展示交互卡，不把选项重复映射成过程步骤。'
+      currentAction.textContent = '等待你选择实现路线'
+      activeRow.classList.remove('active')
+      activeRow.classList.add('done')
+      activeRow.querySelector('strong').textContent = '已完成路线判断'
+      activeRow.querySelector('small').textContent = '等待用户选择后继续输出最终 LLD。'
+      decision.hidden = false
+      composerInput.value = '请选择一个实现路线继续...'
+      decision.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }
+
+    function appendUserChoice(choice) {
+      timeline.insertAdjacentHTML('beforeend', `
+        <article class="turn user-turn">
+          <div class="user-bubble">用户选择：${choice}</div>
+        </article>
+      `)
+    }
+
+    function appendFinalAssistant(choice) {
+      const id = Date.now()
+      timeline.insertAdjacentHTML('beforeend', `
+        <article class="assistant-turn">
+          <div class="agent-avatar">A</div>
+          <div class="assistant-main">
+            <div id="activity-${id}" class="activity is-running">
+              <div class="activity-head" onclick="this.closest('.activity').classList.toggle('is-collapsed')">
+                <strong><span class="spinner"></span><span id="activity-title-${id}">正在处理 · 生成最终 LLD</span></strong>
+                <span class="chevron">›</span>
+              </div>
+              <div class="activity-body">
+                <div class="activity-note">已收到「${choice}」，继续生成最终产物。过程仍然是摘要，原始事件留在 Debug。</div>
+                <div class="current-action" id="final-current-action-${id}">应用用户选择</div>
+                <div class="activity-row done">
+                  <span class="row-dot"></span>
+                  <div><strong>已应用用户选择</strong><small>${choice} 已写入本轮上下文。</small></div>
+                  <span class="tag">确认</span>
+                </div>
+                <div class="activity-row active" id="final-skill-row-${id}">
+                  <span class="row-dot"></span>
+                  <div><strong>调用 lld-design 继续生成</strong><small>Skill 正在根据你的选择收敛方案。</small></div>
+                  <span class="tag">skill</span>
+                </div>
+                <div class="activity-row" id="final-row-${id}">
+                  <span class="row-dot"></span>
+                  <div><strong>整理最终结论</strong><small>正文继续逐字流式输出。</small></div>
+                  <span class="tag">流式</span>
+                </div>
+              </div>
+            </div>
+            <div class="assistant-copy"><span id="final-stream-${id}"></span><span id="final-cursor-${id}" class="cursor"></span></div>
+            <div id="final-artifact-${id}" class="artifact-line" hidden>
+              <span><strong>已生成产物：</strong>FE2004 详细设计 (LLD).md</span>
+              <span class="tag">Markdown</span>
+            </div>
+          </div>
+        </article>
+      `)
+
+      const finalActivity = document.querySelector(`#activity-${id}`)
+      const finalTitle = document.querySelector(`#activity-title-${id}`)
+      const finalCurrentAction = document.querySelector(`#final-current-action-${id}`)
+      const finalSkillRow = document.querySelector(`#final-skill-row-${id}`)
+      const finalRow = document.querySelector(`#final-row-${id}`)
+      const finalStream = document.querySelector(`#final-stream-${id}`)
+      const finalCursor = document.querySelector(`#final-cursor-${id}`)
+      const finalArtifact = document.querySelector(`#final-artifact-${id}`)
+      const finalText = `收到，按「${choice}」路线继续。\n\n最终 LLD 建议分三步落地：第一，补齐全局 CSS token，把背景、文本、边框、浮层、强调色全部切成语义变量；第二，将页面里的硬编码颜色替换为变量，并保证弹窗、右侧详情、确认卡和输入区使用同一套主题来源；第三，增加回归验证，覆盖系统偏好切换、手动切换、刷新后保持选择，以及工作流运行中流式文本和交互卡的主题一致性。\n\n结论：这条路线可以把主题能力收敛到一个稳定入口，同时避免 UI 映射再次把正文 token 当成过程步骤。`
+
+      window.setTimeout(() => {
+        finalCurrentAction.textContent = '调用 lld-design 继续生成'
+      }, 700)
+
+      window.setTimeout(() => {
+        finalSkillRow.classList.remove('active')
+        finalSkillRow.classList.add('done')
+        finalSkillRow.querySelector('small').textContent = 'lld-design 已完成最终草稿。'
+        finalRow.classList.add('active')
+        finalCurrentAction.textContent = '整理最终 LLD 产物'
+      }, 2100)
+
+      window.setTimeout(() => {
+        streamText(finalStream, finalCursor, finalText, () => {
+          finalActivity.classList.remove('is-running')
+          finalActivity.classList.add('is-complete', 'is-collapsed')
+          finalTitle.textContent = '已处理 1m 12s · 调用 1 个 Skill · 生成 1 个产物 · 1 次确认'
+          finalRow.classList.remove('active')
+          finalRow.classList.add('done')
+          finalRow.querySelector('strong').textContent = '已生成最终 LLD'
+          finalRow.querySelector('small').textContent = '细节已收起，展开后可查看过程摘要。'
+          finalArtifact.hidden = false
+          composerInput.value = '流程已生成产物，可继续补充新的要求...'
+          finalArtifact.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+        })
+      }, 420)
+    }
+
+    function handleDecision(event) {
+      const button = event.currentTarget
+      if (decisionHandled) return
+      decisionHandled = true
+      const choice = button.dataset.choice
+      document.querySelectorAll('.option').forEach(option => {
+        option.classList.toggle('selected', option === button)
+        option.disabled = true
+      })
+
+      window.setTimeout(() => {
+        decision.hidden = true
+        activity.classList.remove('is-waiting')
+        activity.classList.add('is-complete', 'is-collapsed')
+        title.textContent = '已处理 38s · 等待用户确认 1 次'
+        appendUserChoice(choice)
+        appendFinalAssistant(choice)
+      }, 350)
+    }
+
+    document.querySelectorAll('.option').forEach(option => {
+      option.addEventListener('click', handleDecision)
+    })
+
+    function toggleActivity() {
+      collapsed = !collapsed
+      activity.classList.toggle('is-collapsed', collapsed)
+    }
+
+    window.toggleActivity = toggleActivity
+    window.setTimeout(() => {
+      startInitialActivityTimeline()
+      streamText(stream, cursor, introText, showDecision)
+    }, 600)
+</script>
+</body>
+</html>

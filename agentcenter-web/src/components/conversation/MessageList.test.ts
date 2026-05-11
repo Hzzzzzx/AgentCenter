@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import MessageList from './MessageList.vue'
-import type { AgentMessageDto, RuntimeEventDto } from '../../api/types'
+import type { AgentMessageDto, ConfirmationRequestDto, RuntimeEventDto } from '../../api/types'
 
 vi.mock('./MarkdownContent.vue', () => ({
   default: {
@@ -16,6 +16,15 @@ vi.mock('./AssistantTurn.vue', () => ({
     name: 'AssistantTurn',
     props: ['turn'],
     template: '<div class="mocked-assistant-turn">{{ JSON.stringify(turn) }}</div>',
+  },
+}))
+
+vi.mock('./ConversationInteractionBar.vue', () => ({
+  default: {
+    name: 'ConversationInteractionBar',
+    props: ['interactions'],
+    emits: ['resolved', 'rejected', 'open'],
+    template: '<section class="mocked-interaction-bar">{{ interactions.length }}</section>',
   },
 }))
 
@@ -45,6 +54,31 @@ function makeRuntimeEvent(overrides: Partial<RuntimeEventDto> = {}): RuntimeEven
     eventSource: 'OPENCODE',
     payloadJson: '{"kind":"reasoning_summary","title":"test"}',
     createdAt: '2026-05-09T00:00:00Z',
+    ...overrides,
+  }
+}
+
+function makeConfirmation(overrides: Partial<ConfirmationRequestDto> = {}): ConfirmationRequestDto {
+  return {
+    id: 'conf-1',
+    workItemId: null,
+    workflowInstanceId: null,
+    workflowNodeInstanceId: null,
+    agentSessionId: 'session-1',
+    skillName: 'hld-design',
+    requestType: 'DECISION',
+    interactionType: 'WORKFLOW_ADVANCE',
+    status: 'PENDING',
+    title: '选择 HLD 方案',
+    content: '请选择方案',
+    contextSummary: null,
+    optionsJson: null,
+    priority: 'HIGH',
+    interactionSchemaJson: null,
+    createdAt: '2026-05-09T00:00:00Z',
+    workItemCode: 'FE2001',
+    workItemTitle: '用户登录页面重构',
+    workflowNodeName: '方案设计 (HLD)',
     ...overrides,
   }
 }
@@ -105,11 +139,56 @@ describe('MessageList.vue', () => {
     expect(wrapper.find('.workflow-input-card__details').attributes('open')).toBeUndefined()
   })
 
+  it('deduplicates repeated workflow input cards for the same node', () => {
+    const content = '请执行工作流节点：方案设计 (HLD)\n\n## 用户输入\n\n- 工作项编号：FE2008\n- 工作项标题：国际化多语言支持\n- 工作项状态：BACKLOG\n- 优先级：MEDIUM\n- 使用 Skill：hld-design\n\n## 任务信息\n\n```text\n接入 i18n\n```'
+    const wrapper = mount(MessageList, {
+      props: {
+        messages: [
+          makeMessage({ id: 'msg-hld-1', role: 'USER', contentFormat: 'MARKDOWN', content, workflowNodeInstanceId: 'node-hld', seqNo: 7 }),
+          makeMessage({ id: 'msg-hld-2', role: 'USER', contentFormat: 'MARKDOWN', content, workflowNodeInstanceId: 'node-hld', seqNo: 7 }),
+        ],
+      },
+    })
+
+    expect(wrapper.findAll('.workflow-input-card').length).toBe(1)
+    expect(wrapper.text().match(/请基于 FE2008/g)?.length).toBe(1)
+  })
+
   it('renders assistant messages via AssistantTurn projection', () => {
     const wrapper = mount(MessageList, {
       props: { messages: [makeMessage({ role: 'ASSISTANT', content: '# Response' })] },
     })
     expect(wrapper.find('.mocked-assistant-turn').exists()).toBe(true)
+  })
+
+  it('deduplicates assistant artifacts that only differ by hidden node-state metadata', () => {
+    const artifact = '# PRD\n\n## 验收标准\n\n- 产物可被读取。'
+    const wrapper = mount(MessageList, {
+      props: {
+        messages: [
+          makeMessage({
+            id: 'msg-runtime',
+            role: 'ASSISTANT',
+            content: `${artifact}\n\n<!-- AGENTCENTER_NODE_STATE\nstatus: READY_TO_ADVANCE\n-->`,
+            workflowNodeInstanceId: null,
+            seqNo: 1,
+          }),
+          makeMessage({
+            id: 'msg-node',
+            role: 'ASSISTANT',
+            content: artifact,
+            workflowNodeInstanceId: 'node-1',
+            seqNo: 2,
+          }),
+        ],
+      },
+    })
+
+    const turns = wrapper.findAll('.mocked-assistant-turn')
+    expect(turns.length).toBe(1)
+    const turn = JSON.parse(turns[0].text())
+    expect(turn.answer.text).toBe(artifact)
+    expect(turn.anchorMessageId).toBe('msg-node')
   })
 
   it('renders persisted messages in seqNo order even if input arrives out of order', () => {
@@ -131,6 +210,46 @@ describe('MessageList.vue', () => {
     })
     expect(wrapper.text()).toContain('节点已完成')
     expect(wrapper.find('.system-line').exists()).toBe(true)
+    expect(wrapper.find('.mocked-assistant-turn').exists()).toBe(false)
+  })
+
+  it('renders space-separated artifact names in system messages as clickable links', async () => {
+    const wrapper = mount(MessageList, {
+      props: {
+        messages: [
+          makeMessage({
+            role: 'SYSTEM',
+            content: '已完成 详细设计 (LLD)（Skill：lld-design），产物：FE2001 详细设计 (LLD).md',
+          }),
+        ],
+      },
+    })
+
+    const artifact = wrapper.find('.system-line__artifact')
+    expect(artifact.exists()).toBe(true)
+    expect(artifact.text()).toBe('FE2001 详细设计 (LLD).md')
+    await artifact.trigger('click')
+    expect(wrapper.emitted('open-artifact')?.[0]).toEqual(['FE2001 详细设计 (LLD).md'])
+  })
+
+  it('keeps numeric prefixes when linking generated artifact names in system messages', async () => {
+    const artifactTitle = '01WORKITEM0000000000000FE2002 详细设计 (LLD).md'
+    const wrapper = mount(MessageList, {
+      props: {
+        messages: [
+          makeMessage({
+            role: 'SYSTEM',
+            content: `已完成 详细设计 (LLD)（Skill：lld-design），产物：${artifactTitle}`,
+          }),
+        ],
+      },
+    })
+
+    const artifact = wrapper.find('.system-line__artifact')
+    expect(artifact.exists()).toBe(true)
+    expect(artifact.text()).toBe(artifactTitle)
+    await artifact.trigger('click')
+    expect(wrapper.emitted('open-artifact')?.[0]).toEqual([artifactTitle])
   })
 
   it('renders runtime process events as ordered execution steps', () => {
@@ -166,6 +285,19 @@ describe('MessageList.vue', () => {
     expect(turn).not.toBeNull()
     const toolSteps = turn.steps.filter((s: { kind: string }) => s.kind === 'tool')
     expect(toolSteps.length).toBe(1)
+    expect(turn.displayItems.map((item: { type: string }) => item.type)).toContain('agent-activity')
+  })
+
+  it('renders the active interaction card in the message flow', () => {
+    const wrapper = mount(MessageList, {
+      props: {
+        messages: [makeMessage({ role: 'ASSISTANT', content: '需要选择方案' })],
+        confirmations: [makeConfirmation()],
+      },
+    })
+
+    expect(wrapper.find('.mocked-interaction-bar').exists()).toBe(true)
+    expect(wrapper.find('.interaction-turn').exists()).toBe(true)
   })
 
   it('renders real tool completed output as tool invocation', () => {
@@ -360,5 +492,49 @@ describe('MessageList.vue', () => {
     expect(turn).not.toBeNull()
     const toolSteps = turn.steps.filter((s: { kind: string }) => s.kind === 'tool')
     expect(toolSteps.length).toBe(1)
+  })
+
+  it('places runtime-only assistant turns immediately after the user message that triggered them', () => {
+    const wrapper = mount(MessageList, {
+      props: {
+        messages: [
+          makeMessage({
+            id: 'msg-user-retry',
+            role: 'USER',
+            content: '继续',
+            seqNo: 17,
+            createdAt: '2026-05-10 14:58:52',
+          }),
+          makeMessage({
+            id: 'msg-system-waiting',
+            role: 'SYSTEM',
+            content: '详细设计 (LLD) 需要用户补充/确认',
+            seqNo: 18,
+            createdAt: '2026-05-10 14:59:02',
+          }),
+        ],
+        runtimeEvents: [
+          makeRuntimeEvent({
+            id: 'evt-lld-start',
+            eventType: 'SKILL_STARTED',
+            payloadJson: '{"skillName":"lld-design"}',
+            seqNo: 882,
+            createdAt: '2026-05-10T22:58:52.827047+08:00',
+          }),
+          makeRuntimeEvent({
+            id: 'evt-lld-waiting',
+            eventType: 'SKILL_COMPLETED',
+            payloadJson: '{"skillName":"lld-design","success":true,"nodeState":"NEEDS_USER_INPUT","nodeStateReason":"Waiting for one implementation constraint"}',
+            seqNo: 990,
+            createdAt: '2026-05-10T22:59:02.013335+08:00',
+          }),
+        ],
+      },
+    })
+
+    const text = wrapper.text()
+    expect(text.indexOf('继续')).toBeLessThan(text.indexOf('lld-design'))
+    expect(text.indexOf('lld-design')).toBeLessThan(text.indexOf('详细设计 (LLD) 需要用户补充/确认'))
+    expect(wrapper.findAll('.mocked-assistant-turn')).toHaveLength(1)
   })
 })

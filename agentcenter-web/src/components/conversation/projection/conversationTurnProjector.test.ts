@@ -527,6 +527,137 @@ describe('projectConversationTurns', () => {
     expect(assistantTurn!.answer.text).toContain('analyzed')
   })
 
+  it('keeps pre-confirmation skill completion out of the post-confirmation running turn when timestamp formats differ', () => {
+    const input = makeInput({
+      messages: [
+        makeMessage({
+          id: 'msg-user-hld',
+          role: 'USER',
+          content: '请执行 HLD',
+          seqNo: 1,
+          createdAt: '2026-05-10 14:42:23',
+        }),
+        makeMessage({
+          id: 'msg-assistant-question',
+          role: 'ASSISTANT',
+          content: '请选择 HLD 方案',
+          seqNo: 2,
+          createdAt: '2026-05-10 14:42:36',
+        }),
+        makeMessage({
+          id: 'msg-user-choice',
+          role: 'USER',
+          content: '用户输入：用户选择：MVP 路线（MVP）',
+          seqNo: 3,
+          createdAt: '2026-05-10 14:43:22',
+        }),
+      ],
+      runtimeEvents: [
+        makeEvent({
+          id: 'ev-hld-completed-needs-input',
+          eventType: 'SKILL_COMPLETED',
+          seqNo: 10,
+          createdAt: '2026-05-10T22:42:36.802524+08:00',
+          payloadJson: JSON.stringify({
+            skillName: 'hld-design',
+            success: true,
+            nodeState: 'NEEDS_USER_INPUT',
+            nodeStateReason: 'Waiting for one HLD path decision',
+          }),
+        }),
+        makeEvent({
+          id: 'ev-confirm-resolved',
+          eventType: 'CONFIRMATION_RESOLVED',
+          seqNo: 11,
+          createdAt: '2026-05-10T22:43:22.704158+08:00',
+          payloadJson: JSON.stringify({
+            confirmationId: 'conf-hld-path',
+            actionType: 'CHOOSE',
+            title: '选择 HLD 方案',
+          }),
+        }),
+        makeEvent({
+          id: 'ev-hld-started-after-choice',
+          eventType: 'SKILL_STARTED',
+          seqNo: 12,
+          createdAt: '2026-05-10T22:43:22.716902+08:00',
+          payloadJson: JSON.stringify({ skillName: 'hld-design' }),
+        }),
+      ],
+      running: true,
+    })
+
+    const turns = projectConversationTurns(input)
+    const postChoiceTurn = turns.at(-1)!
+    const hldToolSteps = postChoiceTurn.steps.filter(step =>
+      step.kind === 'tool' && step.title === '调用 hld-design'
+    )
+
+    expect(hldToolSteps).toHaveLength(1)
+    expect(hldToolSteps[0].status).toBe('running')
+    expect(hldToolSteps[0].rawEventRefs.map(ref => ref.eventId)).toEqual(['ev-hld-started-after-choice'])
+  })
+
+  it('merges no-toolCallId skill lifecycle even when internal skill tool events are interleaved', () => {
+    const input = makeInput({
+      runtimeEvents: [
+        makeEvent({
+          id: 'ev-hld-start',
+          eventType: 'SKILL_STARTED',
+          seqNo: 1,
+          workflowNodeInstanceId: 'node-hld',
+          payloadJson: JSON.stringify({ skillName: 'hld-design' }),
+        }),
+        makeEvent({
+          id: 'ev-internal-skill-running',
+          eventType: 'PROCESS_TRACE',
+          seqNo: 2,
+          workflowNodeInstanceId: 'node-hld',
+          payloadJson: JSON.stringify({
+            kind: 'tool_call',
+            status: 'running',
+            toolName: 'skill',
+            toolCallId: 'call-internal-skill',
+            summary: '正在调用 skill',
+          }),
+        }),
+        makeEvent({
+          id: 'ev-internal-skill-completed',
+          eventType: 'PROCESS_TRACE',
+          seqNo: 3,
+          workflowNodeInstanceId: 'node-hld',
+          payloadJson: JSON.stringify({
+            kind: 'tool_call',
+            status: 'completed',
+            toolName: 'skill',
+            toolCallId: 'call-internal-skill',
+            summary: 'skill 调用完成',
+          }),
+        }),
+        makeEvent({
+          id: 'ev-hld-completed',
+          eventType: 'SKILL_COMPLETED',
+          seqNo: 4,
+          workflowNodeInstanceId: 'node-hld',
+          payloadJson: JSON.stringify({
+            skillName: 'hld-design',
+            success: true,
+            nodeState: 'NEEDS_USER_INPUT',
+            nodeStateReason: 'Waiting for one HLD path decision',
+          }),
+        }),
+      ],
+    })
+
+    const turns = projectConversationTurns(input)
+    const steps = turns[0].steps
+
+    expect(steps).toHaveLength(1)
+    expect(steps[0].title).toBe('调用 hld-design')
+    expect(steps[0].status).toBe('completed')
+    expect(steps[0].rawEventRefs.map(ref => ref.eventId)).toEqual(['ev-hld-start', 'ev-hld-completed'])
+  })
+
   // ── 9. Streaming text ──
   it('sets answer.streaming = true when streamingText is present', () => {
     const input = makeInput({
@@ -610,6 +741,148 @@ describe('projectConversationTurns', () => {
     expect(turns).toEqual([])
   })
 
+  it('keeps assistant stream events out of execution steps', () => {
+    const turns = projectConversationTurns(makeInput({
+      messages: [
+        makeMessage({ id: 'msg-a', role: 'ASSISTANT', content: '深色模式全站适配完成' }),
+      ],
+      runtimeEvents: [
+        makeEvent({
+          id: 'ev-delta-1',
+          eventType: 'ASSISTANT_DELTA',
+          seqNo: 1,
+          payloadJson: JSON.stringify({ delta: '深', rawEventType: 'session.messages.snapshot' }),
+        }),
+        makeEvent({
+          id: 'ev-delta-2',
+          eventType: 'ASSISTANT_DELTA',
+          seqNo: 2,
+          payloadJson: JSON.stringify({ delta: '色', rawEventType: 'session.messages.snapshot' }),
+        }),
+        makeEvent({
+          id: 'ev-completed',
+          eventType: 'ASSISTANT_COMPLETED',
+          seqNo: 3,
+          payloadJson: JSON.stringify({ rawEventType: 'session.messages.snapshot' }),
+        }),
+      ],
+    }))
+
+    expect(turns).toHaveLength(1)
+    expect(turns[0].answer.text).toContain('深色模式全站适配完成')
+    expect(turns[0].steps).toHaveLength(0)
+    expect(turns[0].displayItems.map(item => item.type)).toEqual(['assistant-message'])
+  })
+
+  it('keeps agent activity before assistant message in ordered display items', () => {
+    const turns = projectConversationTurns(makeInput({
+      messages: [
+        makeMessage({ id: 'msg-a', role: 'ASSISTANT', content: '我已经生成 HLD 草稿。' }),
+      ],
+      runtimeEvents: [
+        makeEvent({
+          id: 'ev-tool',
+          eventType: 'SKILL_STARTED',
+          seqNo: 1,
+          payloadJson: JSON.stringify({ skillName: 'hld-design' }),
+        }),
+      ],
+      running: true,
+    }))
+
+    expect(turns).toHaveLength(1)
+    expect(turns[0].displayItems.map(item => item.type)).toEqual(['agent-activity', 'assistant-message'])
+  })
+
+  it('keeps pending interactions with the turn that created them even after later user input', () => {
+    const turns = projectConversationTurns(makeInput({
+      messages: [
+        makeMessage({
+          id: 'msg-u1',
+          role: 'USER',
+          content: '开始 HLD',
+          seqNo: 1,
+          createdAt: '2026-05-10T10:00:00.000Z',
+        }),
+        makeMessage({
+          id: 'msg-a1',
+          role: 'ASSISTANT',
+          content: '请选择一个方案。',
+          seqNo: 2,
+          createdAt: '2026-05-10T10:00:02.000Z',
+        }),
+        makeMessage({
+          id: 'msg-u2',
+          role: 'USER',
+          content: '继续',
+          seqNo: 3,
+          createdAt: '2026-05-10T10:01:00.000Z',
+        }),
+      ],
+      runtimeEvents: [
+        makeEvent({
+          id: 'ev-confirm',
+          eventType: 'CONFIRMATION_CREATED',
+          seqNo: 3,
+          createdAt: '2026-05-10T10:00:03.000Z',
+          payloadJson: JSON.stringify({
+            confirmationId: 'conf-1',
+            question: '选择 HLD 方案',
+          }),
+        }),
+      ],
+      confirmations: [makeConfirmation({
+        id: 'conf-1',
+        title: '选择 HLD 方案',
+        status: 'PENDING',
+      })],
+    }))
+
+    expect(turns).toHaveLength(2)
+    expect(turns[0].status).toBe('waiting_input')
+    expect(turns[0].displayItems.map(item => item.type)).toEqual(['assistant-message', 'interaction-request'])
+    expect(turns[1].status).toBe('completed')
+    expect(turns[1].pendingInteraction).toBeUndefined()
+  })
+
+  it('attaches trailing completed PROCESS_TRACE to the existing legacy skill lifecycle', () => {
+    const turns = projectConversationTurns(makeInput({
+      runtimeEvents: [
+        makeEvent({
+          id: 'ev-start',
+          eventType: 'SKILL_STARTED',
+          seqNo: 1,
+          workflowNodeInstanceId: 'node-hld',
+          payloadJson: JSON.stringify({ skillName: 'hld-design' }),
+        }),
+        makeEvent({
+          id: 'ev-done',
+          eventType: 'SKILL_COMPLETED',
+          seqNo: 2,
+          workflowNodeInstanceId: 'node-hld',
+          payloadJson: JSON.stringify({ skillName: 'hld-design', output: 'HLD done' }),
+        }),
+        makeEvent({
+          id: 'ev-trace',
+          eventType: 'PROCESS_TRACE',
+          seqNo: 3,
+          workflowNodeInstanceId: 'node-hld',
+          payloadJson: JSON.stringify({
+            kind: 'tool_call',
+            status: 'completed',
+            toolName: 'hld-design',
+            summary: 'hld-design 调用完成',
+          }),
+        }),
+      ],
+    }))
+
+    expect(turns).toHaveLength(1)
+    expect(turns[0].steps).toHaveLength(1)
+    expect(turns[0].steps[0].title).toBe('调用 hld-design')
+    expect(findToolParts(turns[0])).toHaveLength(1)
+  })
+
   it('hides OpenCode internal skill loader calls from execution steps', () => {
     const turns = projectConversationTurns(makeInput({
       runtimeEvents: [
@@ -648,10 +921,10 @@ describe('projectConversationTurns', () => {
     }))
 
     expect(turns[0].steps).toHaveLength(1)
-    expect(turns[0].steps[0].title).toBe('prd-desingn')
+    expect(turns[0].steps[0].title).toBe('调用 prd-desingn')
   })
 
-  it('projects markdown-like context output as text instead of raw JSON', () => {
+  it('projects markdown-like context output into the assistant answer instead of execution steps', () => {
     const input = makeInput({
       runtimeEvents: [
         makeEvent({
@@ -665,12 +938,10 @@ describe('projectConversationTurns', () => {
     })
 
     const turns = projectConversationTurns(input)
-    expect(turns[0].steps[0].title).toBe('HLD: FE2005 文件上传组件升级')
-    expect(turns[0].steps[0].parts[0].type).toBe('text')
-    if (turns[0].steps[0].parts[0].type === 'text') {
-      expect(turns[0].steps[0].parts[0].text).toContain('# HLD: FE2005 文件上传组件升级')
-      expect(turns[0].steps[0].parts[0].text).toContain('---')
-    }
+    expect(turns).toHaveLength(1)
+    expect(turns[0].steps).toHaveLength(0)
+    expect(turns[0].answer.text).toContain('# HLD: FE2005 文件上传组件升级')
+    expect(turns[0].answer.text).toContain('---')
   })
 
   // ── 11. Empty input ──
@@ -717,5 +988,158 @@ describe('projectConversationTurns', () => {
     expect(toolParts).toHaveLength(2)
     expect(toolParts[0].rawName).toBe('read_file')
     expect(toolParts[1].rawName).toBe('read_file')
+  })
+
+  it('classifies read and grep tool calls for concise activity summaries', () => {
+    const turns = projectConversationTurns(makeInput({
+      runtimeEvents: [
+        makeEvent({
+          id: 'ev-read',
+          eventType: 'PROCESS_TRACE',
+          seqNo: 1,
+          payloadJson: JSON.stringify({
+            kind: 'tool_call',
+            toolName: 'read',
+            toolCallId: 'call-read',
+            input: '/Users/hzz/workspace/AgentCenter/agentcenter-web/src/components/conversation/MessageList.vue',
+            output: '<script setup lang="ts">',
+          }),
+        }),
+        makeEvent({
+          id: 'ev-grep',
+          eventType: 'PROCESS_TRACE',
+          seqNo: 2,
+          payloadJson: JSON.stringify({
+            kind: 'tool_call',
+            toolName: 'grep',
+            toolCallId: 'call-grep',
+            input: 'ASSISTANT_DELTA in agentcenter-web/src',
+            output: 'Found 3 matches',
+          }),
+        }),
+      ],
+    }))
+
+    const toolParts = findToolParts(turns[0])
+    expect(toolParts).toHaveLength(2)
+    expect(toolParts[0].category).toBe('read')
+    expect(toolParts[0].displayName).toContain('读取文件')
+    expect(toolParts[0].displayName).toContain('MessageList.vue')
+    expect(toolParts[1].category).toBe('search')
+    expect(toolParts[1].displayName).toContain('搜索代码')
+  })
+
+  it('anchors promoted markdown process output to the turn where it happened', () => {
+    const turns = projectConversationTurns(makeInput({
+      messages: [
+        makeMessage({
+          id: 'msg-u1',
+          role: 'USER',
+          content: '开始 PRD',
+          seqNo: 1,
+          createdAt: '2026-05-10T10:00:00.000Z',
+        }),
+        makeMessage({
+          id: 'msg-u2',
+          role: 'USER',
+          content: '继续',
+          seqNo: 2,
+          createdAt: '2026-05-10T10:01:00.000Z',
+        }),
+      ],
+      runtimeEvents: [
+        makeEvent({
+          id: 'ev-prd-output',
+          eventType: 'PROCESS_TRACE',
+          seqNo: 1,
+          createdAt: '2026-05-10T10:00:05.000Z',
+          payloadJson: JSON.stringify({
+            kind: 'text',
+            output: '# PRD: FE2001\n\n## 验收标准\n\n- 可进入下一步。',
+          }),
+        }),
+      ],
+    }))
+
+    expect(turns).toHaveLength(2)
+    expect(turns[0].answer.text).toContain('# PRD: FE2001')
+    expect(turns[1].answer.text).not.toContain('# PRD: FE2001')
+  })
+
+  it('merges workflow skill wrapper and same-node runtime skill lifecycle into one visible step', () => {
+    const turns = projectConversationTurns(makeInput({
+      runtimeEvents: [
+        makeEvent({
+          id: 'ev-workflow-start',
+          eventType: 'SKILL_STARTED',
+          seqNo: 1,
+          workflowNodeInstanceId: 'node-hld',
+          payloadJson: JSON.stringify({
+            skillName: 'hld-design',
+            toolCallId: 'workflow:node-hld:hld-design',
+            nodeName: '方案设计 (HLD)',
+          }),
+        }),
+        makeEvent({
+          id: 'ev-runtime-start',
+          eventType: 'SKILL_STARTED',
+          seqNo: 2,
+          workflowNodeInstanceId: 'node-hld',
+          payloadJson: JSON.stringify({
+            toolName: 'hld-design',
+            skillName: 'hld-design',
+            toolCallId: 'call-runtime-hld',
+          }),
+        }),
+        makeEvent({
+          id: 'ev-workflow-done',
+          eventType: 'SKILL_COMPLETED',
+          seqNo: 3,
+          workflowNodeInstanceId: 'node-hld',
+          payloadJson: JSON.stringify({
+            skillName: 'hld-design',
+            toolCallId: 'workflow:node-hld:hld-design',
+            output: '# HLD\n\n- done',
+          }),
+        }),
+      ],
+    }))
+
+    const toolParts = findToolParts(turns[0])
+    expect(toolParts).toHaveLength(1)
+    expect(toolParts[0].displayName).toContain('调用 hld-design')
+    expect(toolParts[0].category).toBe('skill')
+  })
+
+  it('classifies workflow skills and exec commands in activity summaries', () => {
+    const turns = projectConversationTurns(makeInput({
+      runtimeEvents: [
+        makeEvent({
+          id: 'ev-skill',
+          eventType: 'SKILL_STARTED',
+          seqNo: 1,
+          payloadJson: JSON.stringify({
+            skillName: 'prd-desingn',
+            toolCallId: 'workflow:node-prd:prd-desingn',
+          }),
+        }),
+        makeEvent({
+          id: 'ev-command',
+          eventType: 'PROCESS_TRACE',
+          seqNo: 2,
+          payloadJson: JSON.stringify({
+            kind: 'tool_call',
+            toolName: 'exec_command',
+            toolCallId: 'cmd-1',
+            input: 'npm run typecheck',
+          }),
+        }),
+      ],
+    }))
+
+    const toolParts = findToolParts(turns[0])
+    expect(toolParts.map(part => part.category)).toEqual(['skill', 'command'])
+    expect(toolParts[0].displayName).toBe('调用 prd-desingn')
+    expect(toolParts[1].displayName).toBe('执行命令 npm run typecheck')
   })
 })
