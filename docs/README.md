@@ -24,6 +24,8 @@
 | [UNIFIED-DOMAIN-MODEL.md](./architecture/UNIFIED-DOMAIN-MODEL.md) | 统一对象模型 (8+3 对象) | 活跃 |
 | [AGENT-RUNTIME-BRIDGE-DEVELOPMENT-BLUEPRINT.md](./architecture/AGENT-RUNTIME-BRIDGE-DEVELOPMENT-BLUEPRINT.md) | Java Bridge、Vue 工作台、OpenCode Runtime Adapter 开发蓝图 | 活跃 |
 | [AGENT-RUNTIME-PROTOCOL-LAYER-DESIGN.md](./architecture/AGENT-RUNTIME-PROTOCOL-LAYER-DESIGN.md) | 多 Agent Runtime 统一协议层：Command/Event/Ack、Provider/Transport 分离、HTTP(S)+SSE 与 WebSocket 支持 | 活跃 |
+| [CONVERSATION-UI-EVENT-MAPPING-DESIGN.md](./architecture/CONVERSATION-UI-EVENT-MAPPING-DESIGN.md) | 对话 UI 事件映射：文本主回答、流式阶段段落、自动展开/收起、权限三态和异常可见化 | 活跃 |
+| [OPENCODE-CONVERSATION-LIVE-PROGRESS-IMPLEMENTATION-PLAN.md](./architecture/OPENCODE-CONVERSATION-LIVE-PROGRESS-IMPLEMENTATION-PLAN.md) | OpenCode 对话动态过程展示实施计划：Projector、RunStrip、PhaseStream、ToolCluster、输入区权限卡和异常防呆 | 活跃 |
 | [ADR-001-OPENCODE-BRIDGE-SSE-REST.md](./architecture/ADR-001-OPENCODE-BRIDGE-SSE-REST.md) | M1 实施决策：REST+SSE 方案 | 活跃 |
 | [AGENT-RUNTIME-BRIDGE-M1-RUNBOOK.md](./architecture/AGENT-RUNTIME-BRIDGE-M1-RUNBOOK.md) | M1 快速启动指南：环境准备、工作目录配置、启动步骤 | 活跃 |
 | [REFERENCE-PROJECTS-AND-RESEARCH.md](./architecture/REFERENCE-PROJECTS-AND-RESEARCH.md) | 开源框架、竞品调研和可引入经验登记 | 活跃 |
@@ -38,6 +40,7 @@
 |------|------|------|
 | [prototype/README.md](./prototype/README.md) | 当前首页高保真基线和归档入口 | 活跃 |
 | [prototype/homepage.html](./prototype/homepage.html) | 当前静态首页高保真原型 | 活跃 |
+| [../agentcenter-web/public/prototypes/opencode-conversation-target-hifi.html](../agentcenter-web/public/prototypes/opencode-conversation-target-hifi.html) | OpenCode 对话目标态动态原型：输入触发、流式写入、自动展开/收起、权限/异常交互 | 活跃 |
 | [prototype/THEME-SYSTEM-DESIGN.md](./prototype/THEME-SYSTEM-DESIGN.md) | Vue 工作台主题切换、配色 token 和 7 套主题方案 | 活跃 |
 | [prototype/archive/homepage-workbench-2026-04-27/](./prototype/archive/homepage-workbench-2026-04-27/README.md) | 工作台基线归档（静态原型 + React Demo 快照） | 归档 |
 | [prototype/archive/client-demo-2026-04-29/](./prototype/archive/client-demo-2026-04-29/) | 早期首页视觉探索草稿（a-version 系列） | 归档 |

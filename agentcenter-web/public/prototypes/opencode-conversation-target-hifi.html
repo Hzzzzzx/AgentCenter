@@ -1,0 +1,1637 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OpenCode Conversation Target Mapping HiFi</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --panel-soft: #f8fafc;
+      --panel-blue: #edf5ff;
+      --panel-green: #edfdf7;
+      --panel-amber: #fff8ec;
+      --panel-red: #fff1f2;
+      --panel-violet: #f4f2ff;
+      --border: #d8e1ed;
+      --border-strong: #b8c6d8;
+      --text: #172033;
+      --muted: #64748b;
+      --weak: #91a0b5;
+      --blue: #256ee8;
+      --blue-dark: #174ea6;
+      --green: #078260;
+      --amber: #bd7000;
+      --red: #d83a4a;
+      --violet: #6654d9;
+      --shadow: 0 18px 48px rgba(20, 34, 55, 0.11);
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      letter-spacing: 0;
+    }
+
+    button {
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: 58px 1fr;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 256px minmax(360px, 1fr) 350px;
+      gap: 18px;
+      align-items: center;
+      padding: 0 20px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(18px);
+      position: sticky;
+      top: 0;
+      z-index: 5;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      font-weight: 950;
+    }
+
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: #5f61f2;
+      color: #fff;
+      font-family: var(--mono);
+      font-size: 15px;
+      box-shadow: 0 10px 24px rgba(95, 97, 242, 0.27);
+    }
+
+    .version {
+      min-height: 22px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 8px;
+      border-radius: 7px;
+      background: #eaf1ff;
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 950;
+    }
+
+    .search {
+      height: 38px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--weak);
+      font-size: 13px;
+      font-weight: 700;
+      min-width: 0;
+    }
+
+    .top-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .pill-button {
+      min-height: 34px;
+      padding: 0 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 850;
+    }
+
+    .pill-button.active {
+      border-color: color-mix(in srgb, var(--blue) 48%, var(--border));
+      background: var(--panel-blue);
+      color: var(--blue-dark);
+    }
+
+    .workbench {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 252px minmax(720px, 1fr) 390px;
+    }
+
+    .sidebar,
+    .inspector {
+      min-height: 0;
+      background: var(--panel);
+    }
+
+    .sidebar {
+      border-right: 1px solid var(--border);
+      padding: 16px 12px;
+    }
+
+    .section-label {
+      margin: 4px 8px 10px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .nav-item,
+    .task-item {
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 850;
+    }
+
+    .nav-item {
+      height: 38px;
+      padding: 0 10px;
+    }
+
+    .nav-item.active {
+      background: #eaf1ff;
+      color: var(--blue);
+    }
+
+    .task-list {
+      margin-top: 24px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .task-item {
+      align-items: flex-start;
+      padding: 10px;
+      border: 1px solid transparent;
+      color: var(--muted);
+    }
+
+    .task-item.active {
+      border-color: color-mix(in srgb, var(--blue) 35%, var(--border));
+      background: #edf4ff;
+      color: var(--blue-dark);
+    }
+
+    .task-item small {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .main {
+      min-width: 0;
+      padding: 18px 18px 18px 24px;
+      overflow: auto;
+    }
+
+    .conversation-card {
+      width: 100%;
+      max-width: none;
+      margin: 0;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .conversation-head {
+      min-height: 66px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 0 18px;
+      border-bottom: 1px solid var(--border);
+      background: #fbfdff;
+    }
+
+    .title-group {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .back {
+      width: 34px;
+      height: 34px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 22px;
+      line-height: 1;
+    }
+
+    .page-title {
+      margin: 0;
+      font-size: 19px;
+      line-height: 1.2;
+      font-weight: 950;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .head-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 0 0 auto;
+    }
+
+    .status-chip {
+      min-height: 32px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 12px;
+      border-radius: 999px;
+      background: var(--panel-soft);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .status-chip .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .status-chip.running {
+      background: var(--panel-blue);
+      color: var(--blue);
+    }
+
+    .status-chip.waiting {
+      background: var(--panel-amber);
+      color: var(--amber);
+    }
+
+    .status-chip.done {
+      background: var(--panel-green);
+      color: var(--green);
+    }
+
+    .conversation-body {
+      padding: 20px 22px 18px;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    .demo-intro {
+      padding: 18px;
+      border: 1px dashed color-mix(in srgb, var(--blue) 24%, var(--border));
+      border-radius: 8px;
+      background: #fbfdff;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.65;
+      font-weight: 750;
+    }
+
+    .user-turn {
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+      margin-bottom: 16px;
+    }
+
+    .user-avatar {
+      width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: var(--blue);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 950;
+    }
+
+    .user-bubble {
+      width: fit-content;
+      max-width: min(680px, 100%);
+      padding: 10px 12px;
+      border: 1px solid color-mix(in srgb, var(--blue) 28%, var(--border));
+      border-radius: 8px;
+      background: var(--panel-blue);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.55;
+      font-weight: 780;
+      animation: revealIn 240ms ease both;
+    }
+
+    .turn {
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+    }
+
+    .avatar {
+      width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: #111827;
+      color: #fff;
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 950;
+    }
+
+    .turn-main {
+      min-width: 0;
+      display: grid;
+      gap: 14px;
+    }
+
+    .run-strip {
+      min-height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 12px;
+      border: 1px solid color-mix(in srgb, var(--blue) 20%, var(--border));
+      border-radius: 8px;
+      background: #fbfdff;
+    }
+
+    .run-strip strong {
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 950;
+    }
+
+    .run-strip span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .beacon {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--blue);
+      box-shadow: 0 0 0 0 rgba(37, 110, 232, 0.28);
+      animation: breathe 1.4s ease-in-out infinite;
+    }
+
+    .phase-stack {
+      display: grid;
+      gap: 16px;
+      padding-left: 0;
+    }
+
+    .phase {
+      display: none;
+      gap: 9px;
+    }
+
+    .phase.is-visible {
+      display: grid;
+      animation: revealIn 280ms ease both;
+    }
+
+    .phase-header {
+      min-height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .phase-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .phase-title strong {
+      font-size: 14px;
+      line-height: 1.3;
+      font-weight: 950;
+    }
+
+    .tag {
+      min-height: 22px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 7px;
+      border-radius: 6px;
+      background: var(--panel-soft);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .tag.blue { background: var(--panel-blue); color: var(--blue); }
+    .tag.green { background: var(--panel-green); color: var(--green); }
+    .tag.amber { background: var(--panel-amber); color: var(--amber); }
+    .tag.red { background: var(--panel-red); color: var(--red); }
+    .tag.violet { background: var(--panel-violet); color: var(--violet); }
+
+    .phase-note {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .thinking-card,
+    .tool-cluster,
+    .answer-card,
+    .permission-card,
+    .error-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel);
+      overflow: hidden;
+    }
+
+    .thinking-card {
+      background: #fcfdff;
+    }
+
+    .thinking-summary,
+    .cluster-head,
+    .permission-head,
+    .error-head {
+      min-height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 12px;
+    }
+
+    .thinking-summary strong,
+    .cluster-head strong,
+    .permission-head strong,
+    .error-head strong {
+      font-size: 13px;
+      font-weight: 950;
+    }
+
+    .summary-stack {
+      min-width: 0;
+      display: grid;
+      gap: 2px;
+    }
+
+    .inline-summary {
+      min-height: 18px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .fold-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      flex: 0 0 auto;
+    }
+
+    .fold-control {
+      min-height: 26px;
+      padding: 0 9px;
+      border: 1px solid color-mix(in srgb, var(--blue) 20%, var(--border));
+      border-radius: 7px;
+      background: #fff;
+      color: var(--blue-dark);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .fold-control:hover,
+    .fold-control:focus-visible {
+      border-color: color-mix(in srgb, var(--blue) 48%, var(--border));
+      background: var(--panel-blue);
+      outline: none;
+    }
+
+    .fold-panel {
+      max-height: 680px;
+      opacity: 1;
+      overflow: hidden;
+      transition:
+        max-height 220ms ease,
+        opacity 160ms ease,
+        padding-top 220ms ease,
+        padding-bottom 220ms ease,
+        border-color 220ms ease;
+    }
+
+    .foldable.is-collapsed .fold-panel {
+      max-height: 0;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .foldable.is-collapsed .thinking-body,
+    .foldable.is-collapsed .error-body {
+      padding-top: 0;
+      padding-bottom: 0;
+      border-top-color: transparent;
+    }
+
+    .foldable.is-collapsed .tool-list {
+      border-top-color: transparent;
+    }
+
+    .is-streaming::after {
+      content: "";
+      display: inline-block;
+      width: 7px;
+      height: 1em;
+      margin-left: 2px;
+      vertical-align: -0.15em;
+      border-right: 2px solid currentColor;
+      opacity: 0.72;
+      animation: caretBlink 820ms steps(2, start) infinite;
+    }
+
+    .thinking-body,
+    .answer-card,
+    .permission-body,
+    .error-body {
+      padding: 12px;
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.65;
+    }
+
+    .thinking-body {
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .tool-list {
+      display: grid;
+      border-top: 1px solid var(--border);
+    }
+
+    .tool-row {
+      min-height: 42px;
+      display: grid;
+      grid-template-columns: 26px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 0 12px;
+    }
+
+    .tool-row[data-demo-row] {
+      max-height: 0;
+      min-height: 0;
+      opacity: 0;
+      transform: translateY(6px);
+      overflow: hidden;
+      transition: max-height 260ms ease, min-height 260ms ease, opacity 220ms ease, transform 260ms ease;
+    }
+
+    .tool-row[data-demo-row].is-visible {
+      max-height: 64px;
+      min-height: 42px;
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .tool-row + .tool-row {
+      border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    }
+
+    .tool-icon {
+      width: 24px;
+      height: 24px;
+      display: grid;
+      place-items: center;
+      border-radius: 6px;
+      background: var(--panel-soft);
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 950;
+    }
+
+    .tool-row.running .tool-icon {
+      background: var(--panel-blue);
+      color: var(--blue);
+      animation: softPulse 1.45s ease-in-out infinite;
+    }
+
+    .tool-main {
+      min-width: 0;
+    }
+
+    .tool-main strong {
+      display: block;
+      min-height: 18px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .tool-main span {
+      display: block;
+      min-height: 17px;
+      margin-top: 2px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .mini-status {
+      min-height: 22px;
+      padding: 0 8px;
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      background: var(--panel-soft);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .mini-status.running {
+      background: var(--panel-blue);
+      color: var(--blue);
+    }
+
+    .mini-status.done {
+      background: var(--panel-green);
+      color: var(--green);
+    }
+
+    .mini-status.failed {
+      background: var(--panel-red);
+      color: var(--red);
+    }
+
+    .answer-card {
+      background: #ffffff;
+    }
+
+    .answer-card h2 {
+      margin: 0 0 10px;
+      min-height: 23px;
+      font-size: 18px;
+      line-height: 1.25;
+    }
+
+    .answer-card p {
+      margin: 0 0 10px;
+      min-height: 24px;
+    }
+
+    .answer-card ul {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    .artifact-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 34px;
+      margin-top: 10px;
+      padding: 0 10px;
+      border: 1px solid color-mix(in srgb, var(--blue) 38%, var(--border));
+      border-radius: 7px;
+      background: var(--panel-blue);
+      color: var(--blue-dark);
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .artifact-link:empty {
+      display: none;
+    }
+
+    .permission-card {
+      border-color: color-mix(in srgb, var(--amber) 42%, var(--border));
+      background: #fffdf8;
+    }
+
+    .permission-body {
+      border-top: 1px solid color-mix(in srgb, var(--amber) 18%, var(--border));
+    }
+
+    .path-box {
+      margin: 8px 0 12px;
+      padding: 9px 10px;
+      min-height: 54px;
+      border: 1px solid color-mix(in srgb, var(--amber) 26%, var(--border));
+      border-radius: 7px;
+      background: #fff9ee;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+    }
+
+    .permission-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 8px;
+    }
+
+    .action-btn {
+      min-height: 36px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--panel);
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .action-btn.primary {
+      border-color: var(--blue);
+      background: var(--blue);
+      color: #fff;
+    }
+
+    .action-btn.danger {
+      border-color: color-mix(in srgb, var(--red) 30%, var(--border));
+      color: var(--red);
+    }
+
+    .error-card {
+      border-color: color-mix(in srgb, var(--red) 52%, var(--border));
+      background: #fffafb;
+    }
+
+    .error-body {
+      border-top: 1px solid color-mix(in srgb, var(--red) 22%, var(--border));
+    }
+
+    .error-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .mapping-board {
+      display: none;
+      margin-top: 22px;
+      border-top: 1px solid var(--border);
+      padding-top: 18px;
+    }
+
+    .mapping-board.is-visible {
+      display: block;
+      animation: revealIn 280ms ease both;
+    }
+
+    .mapping-title {
+      margin: 0 0 12px;
+      font-size: 15px;
+      font-weight: 950;
+    }
+
+    .mapping-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .mapping-card {
+      min-height: 112px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel-soft);
+    }
+
+    .mapping-card strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 13px;
+      font-weight: 950;
+    }
+
+    .mapping-card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .inspector {
+      border-left: 1px solid var(--border);
+      padding: 18px 16px;
+      overflow: auto;
+    }
+
+    .inspector h2 {
+      margin: 0 0 14px;
+      font-size: 16px;
+      line-height: 1.3;
+    }
+
+    .contract-tree {
+      margin: 0;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fbfdff;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.65;
+      white-space: pre-wrap;
+      overflow: auto;
+    }
+
+    .composer-demo {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      padding: 14px;
+      border-top: 1px solid var(--border);
+      background: #fbfdff;
+    }
+
+    .demo-input {
+      width: 100%;
+      min-height: 42px;
+      padding: 0 13px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 760;
+    }
+
+    .demo-input:focus {
+      border-color: color-mix(in srgb, var(--blue) 55%, var(--border));
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(37, 110, 232, 0.11);
+    }
+
+    .send-demo {
+      min-width: 82px;
+      min-height: 42px;
+      border: 1px solid var(--blue);
+      border-radius: 8px;
+      background: var(--blue);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 950;
+    }
+
+    .send-demo:disabled,
+    .demo-input:disabled {
+      cursor: default;
+      opacity: 0.64;
+    }
+
+    @keyframes revealIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes caretBlink {
+      0%, 45% { opacity: 0.72; }
+      46%, 100% { opacity: 0; }
+    }
+
+    @keyframes breathe {
+      0%, 100% { transform: scale(0.86); opacity: 0.65; box-shadow: 0 0 0 0 rgba(37, 110, 232, 0.26); }
+      50% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 7px rgba(37, 110, 232, 0); }
+    }
+
+    @keyframes softPulse {
+      0%, 100% { box-shadow: inset 0 0 0 1px rgba(37, 110, 232, 0.08); }
+      50% { box-shadow: inset 0 0 0 1px rgba(37, 110, 232, 0.32); }
+    }
+
+    @media (max-width: 1180px) {
+      .topbar {
+        grid-template-columns: 220px minmax(260px, 1fr);
+      }
+
+      .top-actions {
+        display: none;
+      }
+
+      .workbench {
+        grid-template-columns: 220px minmax(0, 1fr);
+      }
+
+      .inspector {
+        display: none;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .topbar {
+        grid-template-columns: 1fr;
+        height: auto;
+        padding: 10px 14px;
+      }
+
+      .search {
+        display: none;
+      }
+
+      .workbench {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        display: none;
+      }
+
+      .main {
+        padding: 12px;
+      }
+
+      .conversation-head {
+        align-items: flex-start;
+        flex-direction: column;
+        padding: 14px;
+      }
+
+      .conversation-body {
+        padding: 16px 14px;
+      }
+
+      .turn {
+        grid-template-columns: 1fr;
+      }
+
+      .avatar {
+        display: none;
+      }
+
+      .user-turn {
+        grid-template-columns: 1fr;
+      }
+
+      .user-avatar {
+        display: none;
+      }
+
+      .mapping-grid,
+      .permission-actions,
+      .composer-demo {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body class="demo-idle">
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">A</div>
+        <span>AI DevOps</span>
+        <span class="version">v2.1 target</span>
+      </div>
+      <div class="search">搜索 FE、US、Task、Work、缺陷、漏洞...</div>
+      <div class="top-actions">
+        <button class="pill-button active">目标态对话</button>
+        <button class="pill-button">事件契约</button>
+        <button class="pill-button">异常场景</button>
+      </div>
+    </header>
+
+    <div class="workbench">
+      <aside class="sidebar">
+        <div class="section-label">工作台</div>
+        <div class="nav-item">首页</div>
+        <div class="nav-item">任务看板</div>
+        <div class="nav-item active">任务会话</div>
+
+        <div class="task-list">
+          <div class="section-label">当前测试会话</div>
+          <div class="task-item active">
+            <div>
+              FE2007 · 消息通知中心
+              <small>OpenCode Runtime · LLD 执行中</small>
+            </div>
+          </div>
+          <div class="task-item">
+            <div>
+              FE2001 · 登录页重构
+              <small>已完成 · 4 个阶段</small>
+            </div>
+          </div>
+          <div class="task-item">
+            <div>
+              FE2003 · 表格虚拟滚动
+              <small>等待权限 · 外部目录</small>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <section class="conversation-card">
+          <header class="conversation-head">
+            <div class="title-group">
+              <button class="back" aria-label="返回">‹</button>
+              <h1 class="page-title">FE2007 · 消息通知中心</h1>
+            </div>
+            <div class="head-status">
+              <span class="status-chip running"><span class="dot"></span>Agent 正在执行 LLD</span>
+              <span class="status-chip done"><span class="dot"></span>OpenCode 已连接</span>
+            </div>
+          </header>
+
+          <div class="conversation-body" id="conversationBody">
+            <div class="demo-intro" id="demoIntro">
+              在底部输入一句话并按回车，我会按目标节奏模拟 OpenCode 会话：先出现用户输入，再逐步出现运行条、思考段、工具组、结论、授权与异常处理。
+            </div>
+
+            <div class="user-turn" id="demoUserTurn" hidden>
+              <div class="user-avatar">你</div>
+              <div class="user-bubble" id="demoUserText"></div>
+            </div>
+
+            <article class="turn" id="demoAssistantTurn" hidden>
+              <div class="avatar">A</div>
+              <div class="turn-main">
+                <div class="run-strip">
+                  <div>
+                    <strong id="runTitle">Agent 正在处理当前阶段</strong>
+                    <span id="runMeta">读取 2 个文件 · 搜索 1 次 · 运行 1 条命令 · 1 个工具执行中</span>
+                  </div>
+                  <div class="beacon" aria-hidden="true"></div>
+                </div>
+
+                <div class="phase-stack">
+                  <section class="phase" data-demo-step="thinking-boundary">
+                    <div class="phase-header">
+                      <div class="phase-title">
+                        <span class="tag blue">思考</span>
+                        <strong>确定 LLD 的实现边界</strong>
+                      </div>
+                      <span class="tag">message.part.reasoning</span>
+                    </div>
+                    <div class="thinking-card foldable is-collapsed">
+                      <div class="thinking-summary">
+                        <div class="summary-stack">
+                          <strong>思考摘要</strong>
+                          <span class="inline-summary">先验证消息聚合列表、已读状态与通知入口。</span>
+                        </div>
+                        <div class="fold-actions">
+                          <span class="mini-status done" data-fold-status>已收起</span>
+                          <button class="fold-control" type="button" aria-expanded="false" aria-controls="fold-thinking-boundary" data-fold-target="fold-thinking-boundary">展开详情</button>
+                        </div>
+                      </div>
+                      <div class="thinking-body fold-panel" id="fold-thinking-boundary" aria-hidden="true">
+                        结合上游 HLD 与用户补充约束，先验证消息聚合列表、已读状态与通知入口，不展开完整企业权限模型。
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="phase" data-demo-step="tool-research">
+                    <div class="phase-header">
+                      <div class="phase-title">
+                        <span class="tag violet">工具组</span>
+                        <strong>调研当前实现与依赖</strong>
+                      </div>
+                      <span class="tag">tool lifecycle grouped</span>
+                    </div>
+                    <p class="phase-note">同一批 read / glob / grep / bash / MCP_CALL 按因果段落聚合；内部 step-start、step-finish 只驱动呼吸灯和状态，不单独占一行。</p>
+                    <div class="tool-cluster foldable">
+                      <div class="cluster-head">
+                        <div class="summary-stack">
+                          <strong>文件与代码检索</strong>
+                          <span class="inline-summary">read / grep 已完成，bash 仍在执行；折叠时只保留这句状态。</span>
+                        </div>
+                        <div class="fold-actions">
+                          <span class="mini-status done" data-fold-status>已展开</span>
+                          <button class="fold-control" type="button" aria-expanded="true" aria-controls="fold-tool-research" data-fold-target="fold-tool-research">收起详情</button>
+                        </div>
+                      </div>
+                      <div class="tool-list fold-panel" id="fold-tool-research">
+                        <div class="tool-row" data-demo-row="read">
+                          <div class="tool-icon">R</div>
+                          <div class="tool-main">
+                            <strong>读取文件 MessageList.vue</strong>
+                            <span>确认主回答、系统行、交互响应的渲染入口</span>
+                          </div>
+                          <span class="mini-status done">完成</span>
+                        </div>
+                        <div class="tool-row" data-demo-row="grep">
+                          <div class="tool-icon">G</div>
+                          <div class="tool-main">
+                            <strong>搜索代码 conversationTurnProjector</strong>
+                            <span>定位 StepKind、StepPart 与 displayItems 的投影规则</span>
+                          </div>
+                          <span class="mini-status done">完成</span>
+                        </div>
+                        <div class="tool-row running" data-demo-row="bash">
+                          <div class="tool-icon">B</div>
+                          <div class="tool-main">
+                            <strong>运行命令 npm run test -- conversation</strong>
+                            <span>命令执行中，只显示呼吸状态；输出结束后再折叠到详情</span>
+                          </div>
+                          <span class="mini-status running">执行中</span>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="phase" data-demo-step="thinking-after-tools">
+                    <div class="phase-header">
+                      <div class="phase-title">
+                        <span class="tag blue">思考</span>
+                        <strong>工具返回后的二次判断</strong>
+                      </div>
+                      <span class="tag">reasoning after tools</span>
+                    </div>
+                    <div class="thinking-card foldable is-collapsed">
+                      <div class="thinking-summary">
+                        <div class="summary-stack">
+                          <strong>调研结论</strong>
+                          <span class="inline-summary">活动条目要从事件中心改成阶段段落中心。</span>
+                        </div>
+                        <div class="fold-actions">
+                          <span class="mini-status done" data-fold-status>已收起</span>
+                          <button class="fold-control" type="button" aria-expanded="false" aria-controls="fold-thinking-after-tools" data-fold-target="fold-thinking-after-tools">展开详情</button>
+                        </div>
+                      </div>
+                      <div class="thinking-body fold-panel" id="fold-thinking-after-tools" aria-hidden="true">
+                        当前消息列表已有去重逻辑，但活动条目仍以事件为中心；应改为“阶段段落 + 工具组 + 结果陈述”。
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="phase" data-demo-step="answer">
+                    <div class="phase-header">
+                      <div class="phase-title">
+                        <span class="tag green">陈述</span>
+                        <strong>阶段性结论给用户可见</strong>
+                      </div>
+                      <span class="tag">assistant text</span>
+                    </div>
+                    <div class="answer-card">
+                      <h2>LLD 最小实现计划</h2>
+                      <p>本阶段先完成通知中心的列表数据结构、已读状态流转和入口挂载，暂不展开通知规则引擎。</p>
+                      <ul>
+                        <li>新增 NotificationCenter 组件与 Store 状态。</li>
+                        <li>Bridge 仅保留会话与 artifact 流转，不新增后端通知模型。</li>
+                        <li>验证：组件测试、类型检查、一次会话截图。</li>
+                      </ul>
+                      <div class="artifact-link">01WORKITEM0000000000000FE2007 详细设计 (LLD).md</div>
+                    </div>
+                  </section>
+
+                  <section class="phase" data-demo-step="permission">
+                    <div class="phase-header">
+                      <div class="phase-title">
+                        <span class="tag amber">授权</span>
+                        <strong>OpenCode 请求访问外部目录</strong>
+                      </div>
+                      <span class="tag">permission.asked</span>
+                    </div>
+                    <div class="permission-card">
+                      <div class="permission-head">
+                        <strong>需要授权才能继续读取测试夹具</strong>
+                        <span class="mini-status running">等待你处理</span>
+                      </div>
+                      <div class="permission-body">
+                        <div>OpenCode 要访问当前工作目录之外的路径：</div>
+                        <div class="path-box">/Users/hzz/workspace/AgentCenter/agentcenter-bridge/src/test/resources/opencode-permission-fixture/src/protected</div>
+                        <div class="permission-actions">
+                          <button class="action-btn primary">允许一次</button>
+                          <button class="action-btn">本次会话允许同类请求</button>
+                          <button class="action-btn danger">拒绝</button>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="phase" data-demo-step="error">
+                    <div class="phase-header">
+                      <div class="phase-title">
+                        <span class="tag red">异常</span>
+                        <strong>事件流连接中断</strong>
+                      </div>
+                      <span class="tag">session.error / SSE disconnect</span>
+                    </div>
+                    <div class="error-card foldable is-collapsed">
+                      <div class="error-head">
+                        <div class="summary-stack">
+                          <strong>浏览器与 Bridge 的事件流连接已中断</strong>
+                          <span class="inline-summary">默认只提示可恢复，调试细节按需展开。</span>
+                        </div>
+                        <div class="fold-actions">
+                          <span class="mini-status failed" data-fold-status>已收起</span>
+                          <button class="fold-control" type="button" aria-expanded="false" aria-controls="fold-error-disconnect" data-fold-target="fold-error-disconnect">展开详情</button>
+                        </div>
+                      </div>
+                      <div class="error-body fold-panel" id="fold-error-disconnect" aria-hidden="true">
+                        <div class="error-copy">刷新或重新进入会话后会重新订阅；已有消息、工具结果和交互状态保留在 Bridge。</div>
+                        <div class="error-actions">
+                          <button class="action-btn primary">重新连接</button>
+                          <button class="action-btn">查看调试事件</button>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+
+                <section class="mapping-board" data-demo-step="mapping">
+                  <h2 class="mapping-title">目标展示规则</h2>
+                  <div class="mapping-grid">
+                    <div class="mapping-card">
+                      <strong>给用户看的内容</strong>
+                      <p>assistant text、公开 reasoning 摘要、artifact、权限/问题交互、异常恢复提示。</p>
+                    </div>
+                    <div class="mapping-card">
+                      <strong>只做状态呼吸</strong>
+                      <p>tool running、step-start、step-finish、session.status busy、命令尚未返回时的过程。</p>
+                    </div>
+                    <div class="mapping-card">
+                      <strong>只进调试</strong>
+                      <p>prompt_debug、rawProperties、tokens、cost、snapshot hash、permission.replied 后台确认。</p>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            </article>
+          </div>
+          <form class="composer-demo" id="demoComposer">
+            <input class="demo-input" id="demoInput" autocomplete="off" placeholder="输入一句测试指令，按回车开始动态演示..." value="帮我执行 LLD，并在需要外部目录时请求 OpenCode 授权">
+            <button class="send-demo" id="demoSend" type="submit">发送</button>
+          </form>
+        </section>
+      </main>
+
+      <aside class="inspector">
+        <h2>事件到 UI 的目标映射</h2>
+        <pre class="contract-tree">OpenCode /event
+  message.part.updated
+    text
+      -> 主回答段落
+    reasoning
+      -> 思考摘要块
+      -> 非公开或过长内容默认折叠
+    tool
+      pending/running
+        -> 工具组呼吸灯
+      completed/error
+        -> 工具组条目详情
+    file / patch
+      -> 产物卡片
+    step-start / step-finish
+      -> 只更新阶段状态
+      -> 不单独显示
+    snapshot / compaction
+      -> 调试信息
+      -> 可选小提示
+    retry
+      -> 当前阶段内的重试状态
+    subtask / agent
+      -> 子任务段落
+
+  permission.asked
+    -> 输入区交互卡片
+    -> 活动区只显示“等待授权”
+
+  permission.replied
+    -> 更新交互状态
+    -> 不显示为 Agent 输出
+
+  question.asked
+    -> 输入区交互卡片
+
+  session.status busy
+    -> 顶部呼吸状态
+
+  session.idle
+    -> 阶段收束
+
+  session.error
+    -> 可恢复异常块</pre>
+      </aside>
+    </div>
+  </div>
+  <script>
+    const foldButtons = Array.from(document.querySelectorAll("[data-fold-target]"));
+    const defaultFoldState = new Map(foldButtons.map((button) => [
+      button,
+      button.getAttribute("aria-expanded") === "true",
+    ]));
+
+    function setFoldState(button, expanded) {
+      const target = document.getElementById(button.dataset.foldTarget);
+      const foldable = button.closest(".foldable");
+      const status = foldable?.querySelector("[data-fold-status]");
+      if (!target || !foldable) return;
+
+      foldable.classList.toggle("is-collapsed", !expanded);
+      button.setAttribute("aria-expanded", String(expanded));
+      target.setAttribute("aria-hidden", String(!expanded));
+      button.textContent = expanded ? "收起详情" : "展开详情";
+      if (status) status.textContent = expanded ? "已展开" : "已收起";
+    }
+
+    foldButtons.forEach((button) => {
+      setFoldState(button, defaultFoldState.get(button));
+      button.addEventListener("click", () => {
+        const expanded = button.getAttribute("aria-expanded") === "true";
+        setFoldState(button, !expanded);
+      });
+    });
+
+    if (window.location.hash === "#expanded") {
+      foldButtons.forEach((button) => setFoldState(button, true));
+    }
+
+    const demoComposer = document.getElementById("demoComposer");
+    const demoInput = document.getElementById("demoInput");
+    const demoSend = document.getElementById("demoSend");
+    const demoIntro = document.getElementById("demoIntro");
+    const demoUserTurn = document.getElementById("demoUserTurn");
+    const demoUserText = document.getElementById("demoUserText");
+    const demoAssistantTurn = document.getElementById("demoAssistantTurn");
+    const conversationBody = document.getElementById("conversationBody");
+    const runTitle = document.getElementById("runTitle");
+    const runMeta = document.getElementById("runMeta");
+    const demoSteps = Array.from(document.querySelectorAll("[data-demo-step]"));
+    const demoRows = Array.from(document.querySelectorAll("[data-demo-row]"));
+    const streamTargets = Array.from(document.querySelectorAll([
+      "[data-demo-step] .inline-summary",
+      "[data-demo-step] .thinking-body",
+      "[data-demo-step] .phase-note",
+      "[data-demo-row] .tool-main strong",
+      "[data-demo-row] .tool-main span",
+      "[data-demo-step='answer'] h2",
+      "[data-demo-step='answer'] p",
+      "[data-demo-step='answer'] li",
+      "[data-demo-step='answer'] .artifact-link",
+      "[data-demo-step='permission'] .permission-body > div:first-child",
+      "[data-demo-step='permission'] .path-box",
+      "[data-demo-step='error'] .error-copy",
+    ].join(",")));
+    let demoRunId = 0;
+
+    const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+    streamTargets.forEach((target) => {
+      target.dataset.streamText = target.textContent.trim().replace(/\s+/g, " ");
+    });
+
+    function setRunStrip(title, meta) {
+      runTitle.textContent = title;
+      runMeta.textContent = meta;
+    }
+
+    function revealStep(name) {
+      const step = demoSteps.find((item) => item.dataset.demoStep === name);
+      if (!step) return;
+      step.classList.add("is-visible");
+      step.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+
+    function revealRow(name) {
+      const row = demoRows.find((item) => item.dataset.demoRow === name);
+      if (!row) return;
+      row.classList.add("is-visible");
+    }
+
+    function targetsInside(selector) {
+      const root = typeof selector === "string" ? document.querySelector(selector) : selector;
+      if (!root) return [];
+      return streamTargets.filter((target) => root.contains(target));
+    }
+
+    async function streamText(target, runId, speed = 22) {
+      const text = target.dataset.streamText || "";
+      target.textContent = "";
+      target.classList.add("is-streaming");
+      for (const character of Array.from(text)) {
+        if (runId !== demoRunId) {
+          target.classList.remove("is-streaming");
+          return false;
+        }
+        target.textContent += character;
+        const pause = /[，。；：、.]/.test(character) ? speed * 4 : speed;
+        await sleep(pause);
+      }
+      target.classList.remove("is-streaming");
+      return true;
+    }
+
+    async function streamTargetsSequentially(targets, runId, speed = 22) {
+      for (const target of targets) {
+        const completed = await streamText(target, runId, speed);
+        if (!completed) return false;
+        await sleep(120);
+      }
+      return true;
+    }
+
+    function fillTargets(targets) {
+      targets.forEach((target) => {
+        target.textContent = target.dataset.streamText || "";
+        target.classList.remove("is-streaming");
+      });
+    }
+
+    function foldableInside(stepName) {
+      return document.querySelector(`[data-demo-step="${stepName}"] .foldable`);
+    }
+
+    function foldButtonInside(stepName) {
+      return document.querySelector(`[data-demo-step="${stepName}"] [data-fold-target]`);
+    }
+
+    function setStepFold(stepName, expanded) {
+      const button = foldButtonInside(stepName);
+      const foldable = foldableInside(stepName);
+      if (button) {
+        setFoldState(button, expanded);
+        return;
+      }
+      if (foldable) {
+        foldable.classList.toggle("is-collapsed", !expanded);
+      }
+    }
+
+    async function settleStep(stepName, runId, delay = 520) {
+      await sleep(delay);
+      if (runId !== demoRunId) return false;
+      setStepFold(stepName, false);
+      return true;
+    }
+
+    async function revealThinking(name, runId) {
+      revealStep(name);
+      setStepFold(name, true);
+      const step = demoSteps.find((item) => item.dataset.demoStep === name);
+      const visibleSummary = step?.querySelector(".inline-summary");
+      const hiddenBody = step?.querySelector(".thinking-body");
+      if (visibleSummary) {
+        await streamText(visibleSummary, runId, 24);
+      }
+      if (hiddenBody) fillTargets([hiddenBody]);
+      await settleStep(name, runId, 700);
+    }
+
+    async function revealToolRow(name, runId) {
+      revealRow(name);
+      const row = demoRows.find((item) => item.dataset.demoRow === name);
+      await streamTargetsSequentially(targetsInside(row), runId, 14);
+    }
+
+    function resetDemo() {
+      demoSteps.forEach((step) => step.classList.remove("is-visible"));
+      demoRows.forEach((row) => row.classList.remove("is-visible"));
+      streamTargets.forEach((target) => {
+        target.textContent = "";
+        target.classList.remove("is-streaming");
+      });
+      foldButtons.forEach((button) => setFoldState(button, defaultFoldState.get(button)));
+      setRunStrip("Agent 正在处理当前阶段", "等待 OpenCode Runtime 返回事件");
+    }
+
+    async function startDemo() {
+      const runId = ++demoRunId;
+      const text = demoInput.value.trim() || "帮我执行 LLD，并在需要外部目录时请求 OpenCode 授权";
+
+      demoInput.disabled = true;
+      demoSend.disabled = true;
+      demoIntro.hidden = true;
+      demoUserText.textContent = text;
+      demoUserTurn.hidden = false;
+      demoAssistantTurn.hidden = false;
+      document.body.classList.remove("demo-idle");
+      document.body.classList.add("demo-running");
+      resetDemo();
+      conversationBody.scrollIntoView({ block: "end", behavior: "smooth" });
+
+      setRunStrip("Agent 已收到输入", "正在发送到 OpenCode Runtime");
+      await sleep(700);
+      if (runId !== demoRunId) return;
+
+      setRunStrip("Agent 正在思考阶段边界", "等待 message.part.reasoning");
+      await sleep(650);
+      await revealThinking("thinking-boundary", runId);
+      await sleep(400);
+      if (runId !== demoRunId) return;
+
+      setRunStrip("Agent 正在调研当前实现", "read / grep / bash 进入同一个工具组");
+      revealStep("tool-research");
+      setStepFold("tool-research", true);
+      await streamTargetsSequentially(targetsInside("[data-demo-step='tool-research'] .phase-note"), runId, 13);
+      await streamTargetsSequentially(targetsInside("[data-demo-step='tool-research'] .cluster-head"), runId, 13);
+      await sleep(260);
+      await revealToolRow("read", runId);
+      await sleep(260);
+      await revealToolRow("grep", runId);
+      await sleep(260);
+      await revealToolRow("bash", runId);
+      await sleep(900);
+      if (runId !== demoRunId) return;
+      setStepFold("tool-research", false);
+      await sleep(420);
+
+      setRunStrip("Agent 正在合并工具结果", "工具输出收束为二次 reasoning");
+      await revealThinking("thinking-after-tools", runId);
+      await sleep(420);
+      if (runId !== demoRunId) return;
+
+      setRunStrip("Agent 正在生成阶段结论", "assistant text 会进入主回答段落");
+      revealStep("answer");
+      await streamTargetsSequentially(targetsInside("[data-demo-step='answer']"), runId, 18);
+      await sleep(520);
+      if (runId !== demoRunId) return;
+
+      setRunStrip("OpenCode 等待权限确认", "external_directory.ask · 输入区应切到授权卡片");
+      revealStep("permission");
+      await streamTargetsSequentially(targetsInside("[data-demo-step='permission'] .permission-body"), runId, 16);
+      await sleep(700);
+      if (runId !== demoRunId) return;
+
+      setRunStrip("事件流异常演示", "SSE 断开时保留已有消息并提示可恢复");
+      revealStep("error");
+      const errorSummary = document.querySelector("[data-demo-step='error'] .inline-summary");
+      if (errorSummary) await streamText(errorSummary, runId, 18);
+      fillTargets(targetsInside("[data-demo-step='error'] .error-copy"));
+      await sleep(450);
+      revealStep("mapping");
+      setRunStrip("动态演示完成", "可以继续输入，回车会重新播放这段流程");
+
+      demoInput.disabled = false;
+      demoSend.disabled = false;
+      demoInput.value = "";
+      demoInput.placeholder = "继续输入一句话，回车重放动态演示...";
+      demoInput.focus();
+    }
+
+    demoComposer.addEventListener("submit", (event) => {
+      event.preventDefault();
+      startDemo();
+    });
+
+    if (window.location.hash === "#demo") {
+      window.setTimeout(() => startDemo(), 350);
+    }
+  </script>
+</body>
+</html>
