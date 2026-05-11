@@ -47,54 +47,51 @@ public class RuntimeEnvironmentStatusService {
 
     public RuntimeEnvironmentStatusDto currentStatus() {
         String serverUrl = "http://" + hostname + ":" + port;
-        Path resolvedWorkingDirectory = RuntimeWorkspace.resolve(configuredWorkingDirectory);
-        String resolved = resolvedWorkingDirectory.toString();
+        Path workingDirectory = RuntimeWorkspace.resolve(configuredWorkingDirectory);
+        String workingDirectoryValue = workingDirectory.toString();
 
         try {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(serverUrl + "/path"))
-                    .header("x-opencode-directory", resolved)
+                    .header("x-opencode-directory", workingDirectoryValue)
                     .timeout(Duration.ofSeconds(3))
                     .GET()
                     .build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() != 200) {
-                return unavailable(serverUrl, resolved, "OpenCode /path 返回 HTTP " + response.statusCode());
+                return unavailable(serverUrl, workingDirectoryValue, "OpenCode /path 返回 HTTP " + response.statusCode());
             }
 
             JsonNode body = objectMapper.readTree(response.body());
             String serverDirectory = text(body, "directory");
             String serverWorktree = text(body, "worktree");
-            boolean isolated = Objects.equals(resolved, serverDirectory) && Objects.equals(resolved, serverWorktree);
-            String message = isolated ? "OpenCode server 正在隔离工作区内运行" : "OpenCode server 工作区与 Bridge 解析路径不一致";
+            boolean workspaceAligned = Objects.equals(workingDirectoryValue, serverDirectory)
+                    && Objects.equals(workingDirectoryValue, serverWorktree);
+            String message = workspaceAligned
+                    ? "OpenCode Server 路径已对齐"
+                    : "OpenCode Server 当前目录不一致，请重启 OpenCode Server 或检查启动目录";
 
             return new RuntimeEnvironmentStatusDto(
                     runtimeType,
                     enabled,
                     serverUrl,
-                    configuredWorkingDirectory,
-                    resolved,
                     true,
-                    serverDirectory,
-                    serverWorktree,
-                    isolated,
+                    workingDirectoryValue,
+                    workspaceAligned,
                     message
             );
         } catch (Exception e) {
-            return unavailable(serverUrl, resolved, "无法连接 OpenCode /path: " + e.getMessage());
+            return unavailable(serverUrl, workingDirectoryValue, "无法连接 OpenCode /path: " + e.getMessage());
         }
     }
 
-    private RuntimeEnvironmentStatusDto unavailable(String serverUrl, String resolvedWorkingDirectory, String message) {
+    private RuntimeEnvironmentStatusDto unavailable(String serverUrl, String workingDirectory, String message) {
         return new RuntimeEnvironmentStatusDto(
                 runtimeType,
                 enabled,
                 serverUrl,
-                configuredWorkingDirectory,
-                resolvedWorkingDirectory,
                 false,
-                null,
-                null,
+                workingDirectory,
                 false,
                 message
         );

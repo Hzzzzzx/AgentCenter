@@ -246,12 +246,9 @@ export interface RuntimeEnvironmentStatusDto {
   runtimeType: string
   enabled: boolean
   serverUrl: string
-  configuredWorkingDirectory: string
-  resolvedWorkingDirectory: string
   serverReachable: boolean
-  serverDirectory: string | null
-  serverWorktree: string | null
-  isolated: boolean
+  workingDirectory: string
+  workspaceAligned: boolean
   message: string
 }
 

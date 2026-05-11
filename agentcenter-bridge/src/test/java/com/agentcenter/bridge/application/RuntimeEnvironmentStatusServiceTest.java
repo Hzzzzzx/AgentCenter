@@ -19,7 +19,7 @@ class RuntimeEnvironmentStatusServiceTest {
     Path tempDir;
 
     @Test
-    void currentStatusReportsResolvedOpenCodeWorkspace() throws IOException {
+    void currentStatusReportsUnifiedWorkingDirectory() throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/path", exchange -> {
             String body = """
@@ -46,10 +46,8 @@ class RuntimeEnvironmentStatusServiceTest {
             var status = service.currentStatus();
 
             assertThat(status.serverReachable()).isTrue();
-            assertThat(status.resolvedWorkingDirectory()).isEqualTo(tempDir.toString());
-            assertThat(status.serverDirectory()).isEqualTo(tempDir.toString());
-            assertThat(status.serverWorktree()).isEqualTo(tempDir.toString());
-            assertThat(status.isolated()).isTrue();
+            assertThat(status.workingDirectory()).isEqualTo(tempDir.toString());
+            assertThat(status.workspaceAligned()).isTrue();
         } finally {
             server.stop(0);
         }
