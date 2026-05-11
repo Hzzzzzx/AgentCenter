@@ -284,12 +284,17 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
                 properties.path("tool").path("name").asText(permission));
         String title = properties.path("title").asText("OpenCode permission: " + permission);
         String confirmationId = PermissionConfirmationHandler.confirmationIdFor(opencodeSessionId, permissionId);
+        String targetPath = extractPermissionTargetPath(properties);
+        Map<String, Object> permissionMeta = new LinkedHashMap<>();
+        permissionMeta.put("permissionId", permissionId);
+        permissionMeta.put("confirmationId", confirmationId);
+        permissionMeta.put("title", title);
+        permissionMeta.put("permission", permission);
+        if (!targetPath.isBlank()) permissionMeta.put("filePath", targetPath);
 
         result.add(buildEnvelope(RuntimeEventTypes.PERMISSION_REQUESTED, agentSessionId,
             opencodeSessionId, payloadNode("permission_required", skillName,
-            projectionMeta("permission.asked", null, Map.of(
-                "permissionId", permissionId, "confirmationId", confirmationId,
-                "title", title)))));
+            projectionMeta("permission.asked", null, permissionMeta))));
         result.add(buildProcessTraceEnvelope(
             RuntimeEventTypes.PROCESS_TRACE, agentSessionId, opencodeSessionId,
             processTracePayload("confirmation", "waiting", "权限确认", title, skillName, permissionId,
@@ -498,6 +503,68 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
         if (!summary.isBlank() && summary.length() <= 200) return summary;
 
         return "";
+    }
+
+    private String extractPermissionTargetPath(JsonNode properties) {
+        String direct = firstNonBlank(
+                textAt(properties, "filePath"),
+                textAt(properties, "filepath"),
+                textAt(properties, "file_path"),
+                textAt(properties, "path"),
+                textAt(properties, "target"),
+                textAt(properties, "file"),
+                textAt(properties.path("tool"), "filePath"),
+                textAt(properties.path("tool"), "path"),
+                textAt(properties.path("tool"), "target")
+        );
+        if (!direct.isBlank()) return direct;
+        return firstPathLikeText(properties);
+    }
+
+    private String textAt(JsonNode node, String field) {
+        JsonNode value = node.path(field);
+        return value.isTextual() ? value.asText("") : "";
+    }
+
+    private String firstPathLikeText(JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) return "";
+        if (node.isTextual()) {
+            String text = node.asText("");
+            String matched = matchPath(text);
+            return matched == null ? "" : matched;
+        }
+        if (node.isArray()) {
+            for (JsonNode child : node) {
+                String found = firstPathLikeText(child);
+                if (!found.isBlank()) return found;
+            }
+            return "";
+        }
+        if (node.isObject()) {
+            var fields = node.fields();
+            while (fields.hasNext()) {
+                var entry = fields.next();
+                String key = entry.getKey().toLowerCase();
+                if (key.contains("path") || key.contains("file") || key.contains("target")
+                        || key.contains("arg") || key.contains("input") || key.contains("command")) {
+                    String found = firstPathLikeText(entry.getValue());
+                    if (!found.isBlank()) return found;
+                }
+            }
+        }
+        return "";
+    }
+
+    private String matchPath(String text) {
+        var windows = java.util.regex.Pattern
+                .compile("[A-Za-z]:[\\\\/][^\\s\"'`<>|]+(?:[\\\\/][^\\s\"'`<>|]+)*")
+                .matcher(text);
+        if (windows.find()) return windows.group();
+
+        var posix = java.util.regex.Pattern
+                .compile("(?:~|\\.{1,2}|/)[/\\w@.+-]+(?:/[\\w@.+-]+)*(?:\\.[A-Za-z0-9]+)?")
+                .matcher(text);
+        return posix.find() ? posix.group() : null;
     }
 
     private String truncate(String s, int maxLen) {

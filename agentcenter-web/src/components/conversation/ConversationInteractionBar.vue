@@ -188,8 +188,117 @@ function removeKnownContext(value: string, item: ConfirmationRequestDto): string
     .trim()
 }
 
+function parseJsonRecord(value: string | null | undefined): Record<string, unknown> | null {
+  if (!value) return null
+  try {
+    const parsed: unknown = JSON.parse(value)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null
+  } catch {
+    return null
+  }
+}
+
+function collectPermissionText(value: unknown, keyHint = '', depth = 0): string[] {
+  if (depth > 4 || value === null || value === undefined) return []
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed ? [trimmed] : []
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap(item => collectPermissionText(item, keyHint, depth + 1))
+  }
+  if (typeof value !== 'object') return []
+
+  const result: string[] = []
+  for (const [key, nestedValue] of Object.entries(value as Record<string, unknown>)) {
+    const normalizedKey = key.toLowerCase()
+    const nextHint = keyHint ? `${keyHint}.${normalizedKey}` : normalizedKey
+    const likelyTargetKey = /(file|path|target|name|title|description|command|input|args|argument|permission)/.test(normalizedKey)
+    if (likelyTargetKey || depth < 2) {
+      result.push(...collectPermissionText(nestedValue, nextHint, depth + 1))
+    }
+    if (/(filepath|file_path|path|target|filename|file)/.test(nextHint)) {
+      result.push(...collectPermissionText(nestedValue, nextHint, depth + 1))
+    }
+  }
+  return result
+}
+
+function extractPathFromText(value: string): string | null {
+  const windowsPath = value.match(/[A-Za-z]:[\\/][^\s"'`<>|]+(?:[\\/][^\s"'`<>|]+)*/)
+  if (windowsPath) return windowsPath[0]
+
+  const posixPath = value.match(/(?:~|\.{1,2}|\/)[/\w@.+-]+(?:\/[\w@.+-]+)*(?:\.[A-Za-z0-9]+)?/)
+  if (posixPath) return posixPath[0]
+
+  return null
+}
+
+function concisePath(value: string): string {
+  const normalized = value.replaceAll('\\', '/')
+  const segments = normalized.split('/').filter(Boolean)
+  if (segments.length <= 4) return value
+  const prefix = /^[A-Za-z]:/.test(value) ? value.slice(0, 2) + '/.../' : '.../'
+  return prefix + segments.slice(-4).join('/')
+}
+
+function permissionActionLabel(item: ConfirmationRequestDto, schema: InteractionSchema | null): string {
+  const text = [
+    item.title,
+    item.content,
+    item.contextSummary,
+    schema?.title,
+    schema?.question,
+    item.interactionSchemaJson,
+    item.interactionContextJson,
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join(' ')
+    .toLowerCase()
+
+  if (/(write|edit|update|modify|patch|delete|remove|rename|move|create|保存|写入|编辑|修改|删除|重命名|移动|创建)/.test(text)) {
+    return '编辑文件'
+  }
+  if (/(read|open|view|读取|查看)/.test(text)) return '读取文件'
+  return '执行受限操作'
+}
+
+function permissionTargetPath(item: ConfirmationRequestDto, schema: InteractionSchema | null): string | null {
+  const records = [
+    parseJsonRecord(item.interactionContextJson),
+    parseJsonRecord(item.interactionSchemaJson),
+  ].filter((record): record is Record<string, unknown> => Boolean(record))
+
+  const candidates = [
+    ...records.flatMap(record => collectPermissionText(record)),
+    schema?.question,
+    schema?.title,
+    item.title,
+    item.content,
+    item.contextSummary,
+  ].filter((value): value is string => Boolean(value))
+
+  for (const candidate of candidates) {
+    const path = extractPathFromText(candidate)
+    if (path) return concisePath(path)
+  }
+  return null
+}
+
+function permissionQuestion(item: ConfirmationRequestDto, schema: InteractionSchema | null): string | null {
+  if (item.requestType !== 'PERMISSION') return null
+  const targetPath = permissionTargetPath(item, schema)
+  if (!targetPath) return null
+  return `允许 Agent ${permissionActionLabel(item, schema)}：${targetPath}？`
+}
+
 function interactionQuestion(item: ConfirmationRequestDto): string {
   const schema = schemaFor(item)
+  const permissionCopy = permissionQuestion(item, schema)
+  if (permissionCopy) return permissionCopy
+
   const candidates = [
     item.interactionSchemaJson ? schema?.question : null,
     item.title,

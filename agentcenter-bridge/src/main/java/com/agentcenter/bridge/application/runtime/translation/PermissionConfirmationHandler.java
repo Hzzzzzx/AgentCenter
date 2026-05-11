@@ -40,7 +40,8 @@ public class PermissionConfirmationHandler {
 
     @Transactional
     public void createPermissionConfirmation(String agentSessionId, String opencodeSessionId,
-                                              String permissionId, String title, String skillName) {
+                                              String permissionId, String title, String skillName,
+                                              String interactionContextJson) {
         String confirmationId = confirmationIdFor(opencodeSessionId, permissionId);
         var existing = confirmationMapper.findById(confirmationId);
         if (existing != null) {
@@ -60,6 +61,7 @@ public class PermissionConfirmationHandler {
         entity.setSkillName(skillName);
         entity.setTitle(title);
         entity.setContent("OpenCode permission request");
+        entity.setInteractionContextJson(interactionContextJson);
         entity.setOptionsJson("[{\"value\":\"APPROVE\",\"label\":\"允许\"},{\"value\":\"REJECT\",\"label\":\"拒绝\"}]");
         entity.setPriority(Priority.HIGH.name());
         entity.setCreatedAt(now);

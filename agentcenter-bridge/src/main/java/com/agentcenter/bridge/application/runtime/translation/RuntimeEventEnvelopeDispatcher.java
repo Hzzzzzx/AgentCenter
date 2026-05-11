@@ -55,7 +55,8 @@ public class RuntimeEventEnvelopeDispatcher {
                         envelope.runtimeSessionId(),
                         extractPermissionId(envelope),
                         extractTitle(envelope),
-                        extractSkillName(envelope)
+                        extractSkillName(envelope),
+                        extractPermissionContextJson(envelope)
                     );
                 } catch (Exception e) {
                     log.warn("Failed to create permission confirmation: {}", e.getMessage());
@@ -89,6 +90,8 @@ public class RuntimeEventEnvelopeDispatcher {
             JsonNode payload = envelope.payload();
             if (payload != null) {
                 JsonNode meta = payload.path("meta");
+                if (payload.has("permissionId")) return payload.get("permissionId").asText();
+                if (payload.has("confirmationId")) return payload.get("confirmationId").asText();
                 if (meta.has("permissionId")) return meta.get("permissionId").asText();
                 if (meta.has("confirmationId")) return meta.get("confirmationId").asText();
             }
@@ -101,10 +104,23 @@ public class RuntimeEventEnvelopeDispatcher {
             JsonNode payload = envelope.payload();
             if (payload != null) {
                 JsonNode meta = payload.path("meta");
+                if (payload.has("title")) return payload.get("title").asText();
                 if (meta.has("title")) return meta.get("title").asText();
             }
         } catch (Exception ignored) {}
         return "OpenCode permission request";
+    }
+
+    private String extractPermissionContextJson(RuntimeEventEnvelope envelope) {
+        try {
+            JsonNode payload = envelope.payload();
+            if (payload != null) {
+                JsonNode meta = payload.path("meta");
+                if (meta != null && meta.isObject()) return meta.toString();
+                if (payload.isObject()) return payload.toString();
+            }
+        } catch (Exception ignored) {}
+        return null;
     }
 
     private String extractSkillName(RuntimeEventEnvelope envelope) {
@@ -112,6 +128,9 @@ public class RuntimeEventEnvelopeDispatcher {
             JsonNode payload = envelope.payload();
             if (payload != null && payload.has("skillName")) {
                 return payload.get("skillName").asText();
+            }
+            if (payload != null && payload.has("label")) {
+                return payload.get("label").asText();
             }
         } catch (Exception ignored) {}
         return null;

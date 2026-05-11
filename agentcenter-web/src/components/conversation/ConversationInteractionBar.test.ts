@@ -216,6 +216,31 @@ describe('ConversationInteractionBar.vue', () => {
     expect(wrapper.text()).toContain('请说明验收标准是什么？')
   })
 
+  it('shows the target file for Windows permission requests', () => {
+    const wrapper = mount(ConversationInteractionBar, {
+      props: {
+        interactions: [
+          makeInteraction({
+            id: 'confirm-permission',
+            requestType: 'PERMISSION',
+            title: 'Allow edit?',
+            content: 'OpenCode permission request',
+            interactionContextJson: JSON.stringify({
+              permission: 'edit',
+              tool: { name: 'Edit file' },
+              args: {
+                filePath: 'C:\\Users\\alice\\workspace\\demo\\.opencode\\skills\\planner\\SKILL.md',
+              },
+            }),
+          }),
+        ],
+      },
+    })
+
+    expect(wrapper.text()).toContain('需要你授权')
+    expect(wrapper.text()).toContain('允许 Agent 编辑文件：C:/.../.opencode/skills/planner/SKILL.md？')
+  })
+
   it('renders multi-select checkboxes for DECISION with selection: multi', async () => {
     const wrapper = mount(ConversationInteractionBar, {
       props: {

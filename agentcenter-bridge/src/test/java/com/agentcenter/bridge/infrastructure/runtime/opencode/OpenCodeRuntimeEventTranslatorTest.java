@@ -487,7 +487,8 @@ class OpenCodeRuntimeEventTranslatorTest {
             "id": "perm_1",
             "permission": "file_write",
             "tool": {"tool": "Bash", "name": "Write file"},
-            "title": "Allow file write?"
+            "title": "Allow file write?",
+            "args": {"filePath": "C:\\\\Users\\\\alice\\\\workspace\\\\demo\\\\.opencode\\\\skills\\\\planner\\\\SKILL.md"}
           }
         }
         """;
@@ -499,6 +500,8 @@ class OpenCodeRuntimeEventTranslatorTest {
         assertEquals("perm_1", result.get(0).payload().path("permissionId").asText());
         assertEquals("perm_opencode_ses_1_perm_1", result.get(0).payload().path("confirmationId").asText());
         assertEquals("Allow file write?", result.get(0).payload().path("title").asText());
+        assertEquals("C:\\Users\\alice\\workspace\\demo\\.opencode\\skills\\planner\\SKILL.md",
+                result.get(0).payload().path("filePath").asText());
         assertEquals(RuntimeEventTypes.PROCESS_TRACE, result.get(1).type());
         assertEquals("confirmation", result.get(1).payload().path("kind").asText());
     }

@@ -52,6 +52,19 @@ class RuntimeEventEnvelopeDispatcherTest {
         }
     }
 
+    private RuntimeEventEnvelope envelope(String type, String payloadJson) {
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            return new RuntimeEventEnvelope(
+                "runtime-event", type, null, null, null,
+                RuntimeType.OPENCODE, "agent_ses_1", "opencode_ses_1", null, null, null,
+                mapper.readTree(payloadJson),
+                OffsetDateTime.now());
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     private RuntimeEventDto legacyDto(String sessionId) {
         return legacyDto(sessionId, "evt_1");
     }
@@ -137,6 +150,31 @@ class RuntimeEventEnvelopeDispatcherTest {
 
         verify(questionHandler).createQuestionConfirmation(env);
         verify(projector).onEnvelope(env);
+    }
+
+    @Test
+    void permissionRequestedPassesTargetContextToConfirmation() {
+        RuntimeEventEnvelope env = envelope(RuntimeEventTypes.PERMISSION_REQUESTED, """
+            {
+              "type": "permission_required",
+              "label": "Bash",
+              "permissionId": "perm_1",
+              "confirmationId": "perm_opencode_ses_1_perm_1",
+              "title": "Allow file write?",
+              "permission": "file_write",
+              "filePath": "C:\\\\Users\\\\alice\\\\workspace\\\\demo\\\\SKILL.md"
+            }
+            """);
+
+        dispatcher.dispatch(List.of(env));
+
+        verify(permissionHandler).createPermissionConfirmation(
+                eq("agent_ses_1"),
+                eq("opencode_ses_1"),
+                eq("perm_1"),
+                eq("Allow file write?"),
+                eq("Bash"),
+                contains("C:\\\\Users\\\\alice\\\\workspace\\\\demo\\\\SKILL.md"));
     }
 
     @Test
