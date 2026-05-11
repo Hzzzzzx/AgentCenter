@@ -144,6 +144,30 @@ describe('projectConversationTurns', () => {
     expect(toolParts[0].rawName).toBe('bash')
   })
 
+  it('collapses completed tool details but expands running tool details', () => {
+    const input = makeInput({
+      runtimeEvents: [
+        makeEvent({
+          id: 'ev-completed',
+          eventType: 'SKILL_COMPLETED',
+          seqNo: 1,
+          payloadJson: JSON.stringify({ toolName: 'read', toolCallId: 'tc-completed', output: 'done' }),
+        }),
+        makeEvent({
+          id: 'ev-running',
+          eventType: 'SKILL_STARTED',
+          seqNo: 2,
+          payloadJson: JSON.stringify({ toolName: 'bash', toolCallId: 'tc-running', command: 'npm test' }),
+        }),
+      ],
+    })
+
+    const toolParts = findToolParts(projectConversationTurns(input)[0])
+
+    expect(toolParts.find(part => part.toolCallId === 'tc-completed')?.defaultExpanded).toBe(false)
+    expect(toolParts.find(part => part.toolCallId === 'tc-running')?.defaultExpanded).toBe(true)
+  })
+
   // ── 3. Same timestamp, different seqNo → ordered by seqNo ──
   it('orders events by seqNo when createdAt is identical', () => {
     const ts = '2026-05-10T10:00:00.000Z'
@@ -206,6 +230,35 @@ describe('projectConversationTurns', () => {
     expect(toolParts[0].status).toBe('failed')
     expect(toolParts[0].rawName).toBe('deploy')
     expect(toolParts[0].outputSummary).toBe('Connection refused')
+  })
+
+  it('deduplicates repeated identical runtime errors in the visible activity stream', () => {
+    const turns = projectConversationTurns(makeInput({
+      runtimeEvents: [
+        makeEvent({
+          id: 'ev-error-1',
+          eventType: 'ERROR',
+          seqNo: 1,
+          payloadJson: JSON.stringify({
+            title: '事件流连接异常',
+            errorMessage: '浏览器与 Bridge 的事件流连接已中断，刷新或重新进入会话后会重新订阅。',
+          }),
+        }),
+        makeEvent({
+          id: 'ev-error-2',
+          eventType: 'ERROR',
+          seqNo: 2,
+          payloadJson: JSON.stringify({
+            title: '事件流连接异常',
+            errorMessage: '浏览器与 Bridge 的事件流连接已中断，刷新或重新进入会话后会重新订阅。',
+          }),
+        }),
+      ],
+    }))
+
+    expect(turns).toHaveLength(1)
+    expect(turns[0].steps).toHaveLength(1)
+    expect(turns[0].steps[0].kind).toBe('error')
   })
 
   // ── 5. Waiting user input: CONFIRMATION_CREATED → InteractionProjection present ──
@@ -286,6 +339,84 @@ describe('projectConversationTurns', () => {
 
     expect(turns[0].pendingInteraction?.confirmationId).toBe('conf-exception')
     expect(turns[0].steps.map(step => step.kind)).toEqual(['tool'])
+  })
+
+  it('hides handled permission request events and keeps only the resolved permission result', () => {
+    const options = JSON.stringify([
+      { value: 'ONCE', label: '允许一次' },
+      { value: 'ALWAYS', label: '本次会话允许同类请求' },
+      { value: 'REJECT', label: '拒绝' },
+    ])
+    const turns = projectConversationTurns(makeInput({
+      runtimeEvents: [
+        makeEvent({
+          id: 'ev-permission-required',
+          eventType: 'PERMISSION_REQUIRED',
+          seqNo: 1,
+          payloadJson: JSON.stringify({
+            confirmationId: 'perm-1',
+            requestType: 'PERMISSION',
+            title: 'tool',
+            question: 'OpenCode permission request',
+            options,
+          }),
+        }),
+        makeEvent({
+          id: 'ev-permission-resolved',
+          eventType: 'CONFIRMATION_RESOLVED',
+          seqNo: 2,
+          payloadJson: JSON.stringify({
+            confirmationId: 'perm-1',
+            requestType: 'PERMISSION',
+            title: 'OpenCode permission request',
+            actionType: 'REJECT',
+            actionDescription: '用户拒绝：reject',
+            options,
+          }),
+        }),
+      ],
+      confirmations: [
+        makeConfirmation({
+          id: 'perm-1',
+          requestType: 'PERMISSION',
+          status: 'REJECTED',
+          title: 'OpenCode permission request',
+          optionsJson: options,
+        }),
+      ],
+    }))
+
+    expect(turns).toHaveLength(1)
+    expect(turns[0].status).toBe('completed')
+    expect(turns[0].steps).toHaveLength(1)
+    expect(turns[0].steps[0]).toMatchObject({
+      kind: 'decision',
+      title: '权限已拒绝',
+      status: 'completed',
+    })
+    const decisionPart = turns[0].steps[0].parts.find(part => part.type === 'decision')
+    expect(decisionPart?.type).toBe('decision')
+    if (decisionPart?.type === 'decision') {
+      expect(decisionPart.status).toBe('resolved')
+      expect(decisionPart.recommended).toBe('REJECT')
+    }
+  })
+
+  it('hides empty generic resolved confirmation history', () => {
+    const turns = projectConversationTurns(makeInput({
+      runtimeEvents: [
+        makeEvent({
+          id: 'ev-empty-confirmation',
+          eventType: 'CONFIRMATION_CREATED',
+          seqNo: 1,
+          payloadJson: JSON.stringify({
+            question: '需要你确认',
+          }),
+        }),
+      ],
+    }))
+
+    expect(turns).toHaveLength(0)
   })
 
   it('summarizes verbose tool output instead of using raw output as the step summary', () => {
@@ -721,7 +852,7 @@ describe('projectConversationTurns', () => {
     expect(turns[0].steps.length).toBeGreaterThanOrEqual(1)
   })
 
-  it('keeps node_status heartbeat events as visible status steps', () => {
+  it('keeps node_status heartbeat events out of visible steps', () => {
     const turns = projectConversationTurns(makeInput({
       runtimeEvents: [
         makeEvent({
@@ -732,13 +863,7 @@ describe('projectConversationTurns', () => {
       ],
     }))
 
-    expect(turns).toHaveLength(1)
-    expect(turns[0].steps[0].kind).toBe('status')
-    expect(turns[0].steps[0].parts[0]).toMatchObject({
-      type: 'status',
-      label: 'running',
-      detail: 'completed',
-    })
+    expect(turns).toHaveLength(0)
   })
 
   it('merges streaming reasoning events with the same OpenCode part into one step', () => {
@@ -795,7 +920,48 @@ describe('projectConversationTurns', () => {
     })
   })
 
-  it('keeps runtime STATUS heartbeat events as visible status steps', () => {
+  it('marks dangling reasoning completed once a later interaction owns the turn', () => {
+    const turns = projectConversationTurns(makeInput({
+      runtimeEvents: [
+        makeEvent({
+          id: 'ev-reasoning',
+          eventType: 'PROCESS_TRACE',
+          seqNo: 1,
+          createdAt: '2026-05-10T10:00:01.000Z',
+          payloadJson: JSON.stringify({
+            kind: 'reasoning',
+            title: '思考',
+            summary: '正在判断下一步',
+            rawPart: { messageID: 'msg-1', partID: 'part-reasoning', type: 'reasoning', text: '正在判断下一步' },
+          }),
+        }),
+        makeEvent({
+          id: 'ev-conf',
+          eventType: 'CONFIRMATION_CREATED',
+          seqNo: 2,
+          createdAt: '2026-05-10T10:00:02.000Z',
+          payloadJson: JSON.stringify({
+            confirmationId: 'conf-1',
+            question: '选择 HLD 方案',
+          }),
+        }),
+      ],
+      confirmations: [
+        makeConfirmation({
+          id: 'conf-1',
+          title: '选择 HLD 方案',
+          status: 'PENDING',
+        }),
+      ],
+    }))
+
+    expect(turns).toHaveLength(1)
+    expect(turns[0].status).toBe('waiting_input')
+    const reasoningStep = turns[0].steps.find(step => step.kind === 'reasoning')
+    expect(reasoningStep?.status).toBe('completed')
+  })
+
+  it('keeps runtime STATUS heartbeat events out of visible steps', () => {
     const turns = projectConversationTurns(makeInput({
       runtimeEvents: [
         makeEvent({
@@ -813,8 +979,49 @@ describe('projectConversationTurns', () => {
       ],
     }))
 
-    expect(turns).toHaveLength(1)
-    expect(turns[0].steps.map(step => step.kind)).toEqual(['status', 'status'])
+    expect(turns).toHaveLength(0)
+  })
+
+  it('keeps trivial runtime text such as stop and tool-calls out of visible steps', () => {
+    const turns = projectConversationTurns(makeInput({
+      runtimeEvents: [
+        makeEvent({
+          id: 'ev-stop',
+          eventType: 'PROCESS_TRACE',
+          seqNo: 1,
+          payloadJson: JSON.stringify({ label: 'stop' }),
+        }),
+        makeEvent({
+          id: 'ev-tool-calls',
+          eventType: 'PROCESS_TRACE',
+          seqNo: 2,
+          payloadJson: JSON.stringify({ output: 'tool-calls' }),
+        }),
+      ],
+    }))
+
+    expect(turns).toHaveLength(0)
+  })
+
+  it('keeps generic Agent output process traces out of visible steps', () => {
+    const turns = projectConversationTurns(makeInput({
+      runtimeEvents: [
+        makeEvent({
+          id: 'ev-agent-output-stop',
+          eventType: 'PROCESS_TRACE',
+          seqNo: 1,
+          payloadJson: JSON.stringify({ title: 'Agent 输出', output: 'stop' }),
+        }),
+        makeEvent({
+          id: 'ev-agent-output-step-start',
+          eventType: 'PROCESS_TRACE',
+          seqNo: 2,
+          payloadJson: JSON.stringify({ title: 'Agent 输出', output: '步骤开始' }),
+        }),
+      ],
+    }))
+
+    expect(turns).toHaveLength(0)
   })
 
   it('keeps assistant stream events out of execution steps', () => {
@@ -850,7 +1057,7 @@ describe('projectConversationTurns', () => {
     expect(turns[0].displayItems.map(item => item.type)).toEqual(['assistant-message'])
   })
 
-  it('keeps assistant message before agent activity so live output stays visible', () => {
+  it('defers assistant message while agent activity is still running', () => {
     const turns = projectConversationTurns(makeInput({
       messages: [
         makeMessage({ id: 'msg-a', role: 'ASSISTANT', content: '我已经生成 HLD 草稿。' }),
@@ -867,7 +1074,38 @@ describe('projectConversationTurns', () => {
     }))
 
     expect(turns).toHaveLength(1)
-    expect(turns[0].displayItems.map(item => item.type)).toEqual(['assistant-message', 'agent-activity'])
+    expect(turns[0].answer.text).toContain('我已经生成 HLD 草稿。')
+    expect(turns[0].displayItems.map(item => item.type)).toEqual(['agent-activity'])
+    const activity = turns[0].displayItems[0]
+    expect(activity.type).toBe('agent-activity')
+    if (activity.type === 'agent-activity') {
+      expect(activity.collapsedByDefault).toBe(false)
+    }
+  })
+
+  it('shows assistant message after completed activity and keeps the activity collapsed', () => {
+    const turns = projectConversationTurns(makeInput({
+      messages: [
+        makeMessage({ id: 'msg-a', role: 'ASSISTANT', content: '我已经生成 HLD 草稿。' }),
+      ],
+      runtimeEvents: [
+        makeEvent({
+          id: 'ev-tool',
+          eventType: 'SKILL_COMPLETED',
+          seqNo: 1,
+          payloadJson: JSON.stringify({ skillName: 'hld-design' }),
+        }),
+      ],
+      running: false,
+    }))
+
+    expect(turns).toHaveLength(1)
+    expect(turns[0].displayItems.map(item => item.type)).toEqual(['agent-activity', 'assistant-message'])
+    const activity = turns[0].displayItems[0]
+    expect(activity.type).toBe('agent-activity')
+    if (activity.type === 'agent-activity') {
+      expect(activity.collapsedByDefault).toBe(true)
+    }
   })
 
   it('keeps pending interactions with the turn that created them even after later user input', () => {

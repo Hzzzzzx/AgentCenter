@@ -215,6 +215,69 @@ function isNoisyToolHeartbeat(payload: ParsedPayload): boolean {
   return ['running', 'completed', 'done', 'idle'].includes(label) && !payload.summary
 }
 
+const INTERNAL_RUNTIME_TOKENS = new Set([
+  'running',
+  'completed',
+  'done',
+  'idle',
+  'stop',
+  'stopped',
+  'waiting_user',
+  'tool_calls',
+  'toolcalls',
+  'tool',
+  'status',
+  'session_status',
+  '状态',
+  '步骤开始',
+])
+
+function internalRuntimeToken(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s-]+/g, '_')
+    .replace(/[^a-z0-9_一-龥]/g, '')
+}
+
+function isInternalRuntimeText(value: string | undefined): boolean {
+  if (!value) return true
+  const trimmed = value.trim()
+  if (!trimmed) return true
+  const token = internalRuntimeToken(trimmed)
+  if (INTERNAL_RUNTIME_TOKENS.has(token)) return true
+  return /^(agent\s*)?(正在处理当前请求|本轮处理已完成)$/i.test(trimmed)
+    || /^agent\s+(is\s+)?(running|idle|completed|stopped)$/i.test(trimmed)
+}
+
+function isNoisyRuntimeHeartbeat(ee: EnrichedEvent): boolean {
+  const { event, payload } = ee
+  if (isNoisyToolHeartbeat(payload)) return true
+
+  const kind = payload.kind?.toLowerCase()
+  const type = payload.type?.toLowerCase()
+  const isStatusLike = event.eventType === 'STATUS'
+    || kind === 'node_status'
+    || kind === 'runtime_connection'
+    || type === 'status'
+    || payload.rawEventType === 'session.status'
+
+  if (isStatusLike) {
+    const label = payloadText(payload, ['title', 'label', 'status', 'type', 'kind'])
+    const detail = payloadText(payload, ['summary', 'detail'])
+    return isInternalRuntimeText(label) && isInternalRuntimeText(detail)
+  }
+
+  const isContextLikeTrace = event.eventType === 'PROCESS_TRACE'
+    && (!kind || ['text', 'assistant_text', 'answer', 'agent', 'context'].includes(kind))
+  if (isContextLikeTrace) {
+    const text = renderableContextText(payload)
+    if (text && isInternalRuntimeText(text)) return true
+  }
+
+  return false
+}
+
 function isPromptDebug(payload: ParsedPayload): boolean {
   return payload.kind === 'prompt_debug'
 }
@@ -280,9 +343,7 @@ function buildToolPart(lifecycle: ToolLifecycle): ToolInvocationPart {
     ?? payloadText(firstPayload, ['input', 'command', 'args', 'arguments'])
     ?? rawPartText(firstPayload, ['input', 'command', 'args', 'arguments'])
 
-  const defaultExpanded = status === 'failed'
-    || (outputSummary !== undefined && outputSummary.length < 200)
-    || false
+  const defaultExpanded = status === 'failed' || status === 'running'
 
   return {
     type: 'tool',
@@ -425,6 +486,9 @@ function buildDecisionPart(ee: EnrichedEvent, confirmation?: ProjectorConfirmati
     ? 'resolved'
     : 'waiting'
   const selectedValue = status === 'resolved' ? selectedDecisionValueFromAction(p, options) : undefined
+  const permissionFallbackValue = status === 'resolved' && isPermissionDecision(p, confirmation)
+    ? isRejectedDecision(p) ? 'REJECT' : 'APPROVE'
+    : undefined
 
   return {
     type: 'decision',
@@ -432,7 +496,7 @@ function buildDecisionPart(ee: EnrichedEvent, confirmation?: ProjectorConfirmati
     question: p.question || confirmation?.title || '需要你确认',
     prompt: p.contextSummary || undefined,
     options,
-    recommended: selectedValue || p.recommended || undefined,
+    recommended: selectedValue || permissionFallbackValue || p.recommended || undefined,
     status,
     requestType: confirmation?.requestType || p.requestType || undefined,
     interactionType: confirmation?.interactionType || p.interactionType || undefined,
@@ -484,6 +548,31 @@ function selectedDecisionValueFromAction(
     return options.find(option => ['PASS', 'APPROVE', 'APPROVED', 'YES'].includes(option.value.toUpperCase()))?.value
   }
   return undefined
+}
+
+function isPermissionDecision(payload: ParsedPayload, confirmation?: ProjectorConfirmation): boolean {
+  const text = [
+    payload.requestType,
+    payload.interactionType,
+    payload.title,
+    payload.question,
+    payload.summary,
+    confirmation?.requestType,
+    confirmation?.title,
+    confirmation?.content,
+  ].filter(Boolean).join(' ').toLowerCase()
+  return text.includes('permission') || text.includes('opencode') || text.includes('权限')
+}
+
+function isRejectedDecision(payload: ParsedPayload): boolean {
+  const text = [
+    payload.actionType,
+    payload.actionDescription,
+    payload.comment,
+    stringifyPayloadValue(payload.resolutionPayload),
+    parseResolutionPayloadValue(payload.resolutionPayload),
+  ].filter(Boolean).join(' ')
+  return /reject|deny|refuse|拒绝/i.test(text)
 }
 
 function determineStepKind(ee: EnrichedEvent): StepKind {
@@ -556,11 +645,14 @@ function buildStepFromSingleEvent(ee: EnrichedEvent, order: number, confirmation
   const { event, payload } = ee
   const kind = determineStepKind(ee)
   const parts: StepPart[] = []
+  let decisionStatus: 'waiting' | 'submitted' | 'resolved' | undefined
 
   if (kind === 'artifact') {
     parts.push(buildArtifactPart(ee))
   } else if (kind === 'decision') {
-    parts.push(buildDecisionPart(ee, confirmation))
+    const decisionPart = buildDecisionPart(ee, confirmation)
+    decisionStatus = decisionPart.status
+    parts.push(decisionPart)
   } else if (kind === 'error') {
     parts.push({
       type: 'error',
@@ -626,8 +718,8 @@ function buildStepFromSingleEvent(ee: EnrichedEvent, order: number, confirmation
 
   const stepStatus: 'running' | 'completed' | 'failed' | 'waiting_input' = kind === 'error' || payload.status === 'failed'
     ? 'failed'
-    : kind === 'decision' && event.eventType !== 'CONFIRMATION_RESOLVED'
-      ? 'waiting_input'
+    : kind === 'decision'
+      ? decisionStatus === 'waiting' || decisionStatus === 'submitted' ? 'waiting_input' : 'completed'
       : event.eventType === 'SKILL_STARTED' || payload.status === 'running'
         ? 'running'
         : 'completed'
@@ -636,7 +728,7 @@ function buildStepFromSingleEvent(ee: EnrichedEvent, order: number, confirmation
     id: event.id,
     order,
     kind,
-    title: keyProgressTitle(payload, event.eventType) || stepTitle(payload, event.eventType, kind),
+    title: keyProgressTitle(payload, event.eventType, confirmation) || stepTitle(payload, event.eventType, kind),
     summary: kind === 'context' ? undefined : payloadText(payload, ['summary']) || undefined,
     status: stepStatus,
     startedAt: event.createdAt,
@@ -688,7 +780,7 @@ function userFacingNodeReason(reason?: string): string {
   return reason
 }
 
-function keyProgressTitle(payload: ParsedPayload, eventType: string): string | undefined {
+function keyProgressTitle(payload: ParsedPayload, eventType: string, confirmation?: ProjectorConfirmation): string | undefined {
   if (eventType === 'SKILL_STARTED') {
     const skill = payloadText(payload, ['skillName', 'toolName', 'label'])
     return skill ? `开始执行 ${skill}` : '开始执行 Skill'
@@ -699,6 +791,9 @@ function keyProgressTitle(payload: ParsedPayload, eventType: string): string | u
     return `${payloadText(payload, ['skillName']) || 'Skill'} 执行完成`
   }
   if (eventType === 'CONFIRMATION_RESOLVED') {
+    if (isPermissionDecision(payload, confirmation)) {
+      return isRejectedDecision(payload) ? '权限已拒绝' : '权限已允许'
+    }
     return payload.actionDescription || payload.comment || payload.title || '已处理用户确认'
   }
   return undefined
@@ -734,6 +829,68 @@ function buildStepFromToolLifecycle(lifecycle: ToolLifecycle, order: number): Ex
       seqNo: ee.event.seqNo,
     })),
   }
+}
+
+function isVisibleExecutionStep(step: ExecutionStep): boolean {
+  if (step.kind === 'context' || step.kind === 'status') return false
+  if (step.parts.length === 0) return false
+  if (step.kind === 'decision') {
+    const decision = step.parts.find(part => part.type === 'decision')
+    if (
+      decision?.type === 'decision'
+      && decision.status === 'resolved'
+      && decision.options.length === 0
+      && isGenericInteractionQuestion(decision.question)
+    ) {
+      return false
+    }
+  }
+  return step.parts.some(part => part.type !== 'raw')
+}
+
+function isGenericInteractionQuestion(question: string | undefined): boolean {
+  if (!question) return true
+  return ['需要你确认', 'confirmation required', 'permission required', 'tool'].includes(question.trim().toLowerCase())
+}
+
+function completeDanglingReasoningSteps(steps: ExecutionStep[], turnStatus: TurnStatus): ExecutionStep[] {
+  return steps.map((step, index) => {
+    if (step.kind !== 'reasoning' || step.status !== 'running') return step
+
+    const hasLaterVisibleWork = steps.slice(index + 1).some(laterStep =>
+      laterStep.kind !== 'context' && laterStep.kind !== 'status'
+    )
+    if (turnStatus === 'running' && !hasLaterVisibleWork) return step
+
+    return {
+      ...step,
+      status: 'completed',
+      completedAt: step.completedAt ?? step.startedAt,
+    }
+  })
+}
+
+function decisionPartKey(step: ExecutionStep): string | undefined {
+  const decision = step.parts.find(part => part.type === 'decision')
+  if (!decision || decision.type !== 'decision' || decision.status !== 'resolved') return undefined
+  return `decision:${decision.confirmationId}:${decision.recommended || ''}`
+}
+
+function errorStepKey(step: ExecutionStep): string | undefined {
+  const error = step.parts.find(part => part.type === 'error')
+  if (!error || error.type !== 'error') return undefined
+  return `error:${step.title}:${error.message}:${error.detail || ''}`
+}
+
+function dedupeVisibleExecutionSteps(steps: ExecutionStep[]): ExecutionStep[] {
+  const seen = new Set<string>()
+  return steps.filter(step => {
+    const key = errorStepKey(step) || decisionPartKey(step)
+    if (!key) return true
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 function summarizeToolStep(toolPart: ToolInvocationPart): string | undefined {
@@ -822,14 +979,7 @@ function buildDisplayItems(
   const items: ConversationDisplayItem[] = []
   const hasActivity = steps.length > 0 || (Boolean(currentAction) && !pendingInteraction)
   const hasAnswer = answer.text.trim().length > 0
-
-  if (hasAnswer) {
-    items.push({
-      type: 'assistant-message',
-      id: `${turnId}:assistant`,
-      answer,
-    })
-  }
+  const shouldDeferAnswer = status === 'running' && hasActivity && hasAnswer
 
   if (hasActivity) {
     items.push({
@@ -838,7 +988,15 @@ function buildDisplayItems(
       steps,
       status,
       currentAction,
-      collapsedByDefault: Boolean(hasAnswer),
+      collapsedByDefault: Boolean(hasAnswer) && !shouldDeferAnswer,
+    })
+  }
+
+  if (hasAnswer && !shouldDeferAnswer) {
+    items.push({
+      type: 'assistant-message',
+      id: `${turnId}:assistant`,
+      answer,
     })
   }
 
@@ -853,7 +1011,7 @@ function buildDisplayItems(
   return items
 }
 
-function isActiveInteractionEvent(
+function shouldHideInteractionRequestEvent(
   ee: EnrichedEvent,
   confirmationMap: Map<string, ProjectorConfirmation>,
 ): boolean {
@@ -863,11 +1021,8 @@ function isActiveInteractionEvent(
 
   const confId = ee.payload.confirmationId || ee.payload.id
   const confirmation = confId ? confirmationMap.get(confId) : undefined
-  if (!confirmation) {
-    return ee.event.eventType === 'PERMISSION_REQUIRED'
-  }
-
-  return confirmation.status === 'PENDING' || confirmation.status === 'IN_CONVERSATION'
+  if (ee.event.eventType === 'PERMISSION_REQUIRED') return true
+  return Boolean(confirmation)
 }
 
 export function projectConversationTurns(input: ProjectorInput): ConversationTurnProjection[] {
@@ -926,17 +1081,17 @@ export function projectConversationTurns(input: ProjectorInput): ConversationTur
       continue
     }
 
+    if (isNoisyRuntimeHeartbeat(ee)) {
+      continue
+    }
+
     if (shouldPromoteContextToAnswer(ee)) {
       const text = renderableContextText(ee.payload)
       if (text) generatedAnswerParts.push({ text, createdAt: ee.event.createdAt })
       continue
     }
 
-    if (isActiveInteractionEvent(ee, confirmationMap)) {
-      continue
-    }
-
-    if (isNoisyToolHeartbeat(ee.payload)) {
+    if (shouldHideInteractionRequestEvent(ee, confirmationMap)) {
       continue
     }
 
@@ -1033,7 +1188,7 @@ export function projectConversationTurns(input: ProjectorInput): ConversationTur
     return sortEvents(keyA, keyB)
   })
 
-  const steps: ExecutionStep[] = allOrderedEvents.map((item, index) => {
+  const projectedSteps: ExecutionStep[] = allOrderedEvents.map((item, index) => {
     if (item.type === 'lifecycle') {
       return buildStepFromToolLifecycle(item.lifecycle, index + 1)
     }
@@ -1044,6 +1199,7 @@ export function projectConversationTurns(input: ProjectorInput): ConversationTur
     const confirmation = confId ? confirmationMap.get(confId) : undefined
     return buildStepFromSingleEvent(item.event, index + 1, confirmation)
   })
+  const steps = dedupeVisibleExecutionSteps(projectedSteps.filter(isVisibleExecutionStep))
 
   const answerText = mergeAnswerText(extractAnswerText(messages), generatedAnswerParts.map(part => part.text))
   const hasStreamingText = streamingText.trim().length > 0
@@ -1165,25 +1321,26 @@ function buildTurnsFromMessages(
     if (steps.length === 0 && !streamingText.trim() && !answerText.trim() && !pendingInteraction) return []
 
     const hasStreamingText = streamingText.trim().length > 0
+    const finalizedSteps = completeDanglingReasoningSteps(steps, overallStatus)
     const answer: AnswerProjection = {
       role: 'assistant',
       text: hasStreamingText ? streamingText : answerText,
-      generatedByStepIds: steps.map(s => s.id),
+      generatedByStepIds: finalizedSteps.map(s => s.id),
       streaming: hasStreamingText ? true : undefined,
     }
 
     return [{
       turnId: `turn-${activeSessionId || 'default'}`,
       sessionId: activeSessionId || '',
-      anchorCreatedAt: steps[0]?.startedAt,
+      anchorCreatedAt: finalizedSteps[0]?.startedAt,
       status: overallStatus,
       answer,
-      steps,
+      steps: finalizedSteps,
       displayItems: buildDisplayItems(
         `turn-${activeSessionId || 'default'}`,
         overallStatus,
         answer,
-        steps,
+        finalizedSteps,
         currentAction,
         pendingInteraction,
       ),
@@ -1269,20 +1426,21 @@ function buildTurnsFromMessages(
 
     const hasStreamingText = isLast && streamingText.trim().length > 0
     const groupSteps = stepsByGroup[gi]
-    const answer: AnswerProjection = {
-      role: 'assistant',
-      text: hasStreamingText ? streamingText : mergeAnswerText(turnAnswerText, generatedTextByGroup[gi]),
-      generatedByStepIds: groupSteps.map(s => s.id),
-      streaming: hasStreamingText ? true : undefined,
-    }
-
     const groupStatus = isPendingInteractionGroup
       ? 'waiting_input'
       : isLast
         ? overallStatus === 'waiting_input' ? 'completed' : overallStatus
         : 'completed'
+    const finalizedGroupSteps = completeDanglingReasoningSteps(groupSteps, groupStatus)
+    const answer: AnswerProjection = {
+      role: 'assistant',
+      text: hasStreamingText ? streamingText : mergeAnswerText(turnAnswerText, generatedTextByGroup[gi]),
+      generatedByStepIds: finalizedGroupSteps.map(s => s.id),
+      streaming: hasStreamingText ? true : undefined,
+    }
+
     const groupCurrentAction = isPendingInteractionGroup
-      ? currentActionForTurn('waiting_input', groupSteps, false, pendingInteraction)
+      ? currentActionForTurn('waiting_input', finalizedGroupSteps, false, pendingInteraction)
       : isLast
         ? currentAction
         : undefined
@@ -1292,15 +1450,15 @@ function buildTurnsFromMessages(
       turnId: `turn-${gi}-${activeSessionId || 'default'}`,
       sessionId: activeSessionId || group.userMsg?.sessionId || group.assistantMsgs[0]?.sessionId || '',
       anchorMessageId: anchorMessage?.id,
-      anchorCreatedAt: anchorMessage?.createdAt ?? groupSteps[0]?.startedAt,
+      anchorCreatedAt: anchorMessage?.createdAt ?? finalizedGroupSteps[0]?.startedAt,
       status: groupStatus,
       answer,
-      steps: groupSteps,
+      steps: finalizedGroupSteps,
       displayItems: buildDisplayItems(
         `turn-${gi}-${activeSessionId || 'default'}`,
         groupStatus,
         answer,
-        groupSteps,
+        finalizedGroupSteps,
         groupCurrentAction,
         groupPendingInteraction,
       ),
