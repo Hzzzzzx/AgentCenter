@@ -504,6 +504,48 @@ class OpenCodeRuntimeEventTranslatorTest {
     }
 
     @Test
+    void questionAskedCreatesQuestionRequestedEnvelope() throws Exception {
+        String json = """
+        {
+          "type": "question.asked",
+          "properties": {
+            "id": "q_1",
+            "sessionID": "opencode_ses_1",
+            "tool": {"messageID": "msg_1", "callID": "call_question"},
+            "questions": [
+              {
+                "header": "方案",
+                "question": "请选择推进方案",
+                "multiple": false,
+                "custom": true,
+                "options": [
+                  {"label": "快速验证", "description": "先走最小验证"},
+                  {"label": "严格校验", "description": "补充回归验证"}
+                ]
+              }
+            ]
+          }
+        }
+        """;
+        RuntimeRawEvent raw = rawEvent("question.asked", json);
+        List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
+
+        assertEquals(2, result.size());
+        RuntimeEventEnvelope question = result.get(0);
+        assertEquals(RuntimeEventTypes.QUESTION_REQUESTED, question.type());
+        assertRuntimeSessionId(question);
+        assertEquals("q_1", question.payload().path("requestId").asText());
+        assertEquals("question_opencode_ses_1_q_1", question.payload().path("confirmationId").asText());
+        assertEquals("call_question", question.payload().path("toolCallId").asText());
+        assertEquals("请选择推进方案", question.payload().path("questions").get(0).path("question").asText());
+
+        RuntimeEventEnvelope trace = result.get(1);
+        assertEquals(RuntimeEventTypes.PROCESS_TRACE, trace.type());
+        assertEquals("confirmation", trace.payload().path("kind").asText());
+        assertEquals("question", trace.payload().path("toolName").asText());
+    }
+
+    @Test
     void sessionError() throws Exception {
         String json = """
         {

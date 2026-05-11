@@ -23,17 +23,20 @@ public class RuntimeEventEnvelopeDispatcher {
     private final RuntimeEventService eventService;
     private final RuntimeOperationEventHandler operationHandler;
     private final PermissionConfirmationHandler permissionHandler;
+    private final QuestionConfirmationHandler questionHandler;
 
     public RuntimeEventEnvelopeDispatcher(LegacyRuntimeEventBridge legacyBridge,
                                            AssistantMessageProjector projector,
                                            RuntimeEventService eventService,
                                            RuntimeOperationEventHandler operationHandler,
-                                           PermissionConfirmationHandler permissionHandler) {
+                                           PermissionConfirmationHandler permissionHandler,
+                                           QuestionConfirmationHandler questionHandler) {
         this.legacyBridge = legacyBridge;
         this.projector = projector;
         this.eventService = eventService;
         this.operationHandler = operationHandler;
         this.permissionHandler = permissionHandler;
+        this.questionHandler = questionHandler;
     }
 
     public void dispatch(List<RuntimeEventEnvelope> envelopes) {
@@ -56,6 +59,14 @@ public class RuntimeEventEnvelopeDispatcher {
                     );
                 } catch (Exception e) {
                     log.warn("Failed to create permission confirmation: {}", e.getMessage());
+                }
+            }
+
+            if (RuntimeEventTypes.QUESTION_REQUESTED.equals(envelope.type())) {
+                try {
+                    questionHandler.createQuestionConfirmation(envelope);
+                } catch (Exception e) {
+                    log.warn("Failed to create question confirmation: {}", e.getMessage());
                 }
             }
 

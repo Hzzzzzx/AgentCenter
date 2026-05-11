@@ -13,5 +13,7 @@ public final class RuntimeCommandTypes {
     public static final String MCP_WRITE_CONFIG = "mcp.write_config";
     public static final String MCP_REFRESH = "mcp.refresh";
     public static final String PERMISSION_RESPOND = "permission.respond";
+    public static final String QUESTION_REPLY = "question.reply";
+    public static final String QUESTION_REJECT = "question.reject";
     public static final String RUNTIME_HEALTH_CHECK = "runtime.health_check";
 }

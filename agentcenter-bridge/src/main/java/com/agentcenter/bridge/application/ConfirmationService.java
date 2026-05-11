@@ -19,6 +19,7 @@ import com.agentcenter.bridge.api.dto.ConfirmationRequestDto;
 import com.agentcenter.bridge.api.dto.ResolveConfirmationRequest;
 import com.agentcenter.bridge.api.dto.RuntimeEventDto;
 import com.agentcenter.bridge.application.runtime.translation.PermissionConfirmationHandler;
+import com.agentcenter.bridge.application.runtime.translation.QuestionConfirmationHandler;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationActionType;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationRequestType;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationStatus;
@@ -51,6 +52,7 @@ public class ConfirmationService {
     private final AgentMessageMapper agentMessageMapper;
     private final RuntimeEventService runtimeEventService;
     private final PermissionConfirmationHandler permissionConfirmationHandler;
+    private final QuestionConfirmationHandler questionConfirmationHandler;
 
     public ConfirmationService(ConfirmationMapper confirmationMapper,
                                WorkflowCommandService workflowCommandService,
@@ -58,7 +60,8 @@ public class ConfirmationService {
                                WorkflowMapper workflowMapper,
                                AgentMessageMapper agentMessageMapper,
                                RuntimeEventService runtimeEventService,
-                               PermissionConfirmationHandler permissionConfirmationHandler) {
+                               PermissionConfirmationHandler permissionConfirmationHandler,
+                               QuestionConfirmationHandler questionConfirmationHandler) {
         this.confirmationMapper = confirmationMapper;
         this.workflowCommandService = workflowCommandService;
         this.workItemMapper = workItemMapper;
@@ -66,6 +69,7 @@ public class ConfirmationService {
         this.agentMessageMapper = agentMessageMapper;
         this.runtimeEventService = runtimeEventService;
         this.permissionConfirmationHandler = permissionConfirmationHandler;
+        this.questionConfirmationHandler = questionConfirmationHandler;
     }
 
     public List<ConfirmationRequestDto> listPending() {
@@ -157,6 +161,9 @@ public class ConfirmationService {
         if (ConfirmationRequestType.PERMISSION.equals(requestType)) {
             respondPermissionBeforeResolving(entity, actionType);
         }
+        if (QuestionConfirmationHandler.isQuestionConfirmation(entity)) {
+            respondQuestionBeforeResolving(entity, request, actionType);
+        }
 
         if (ConfirmationActionType.REJECT.equals(actionType)) {
             return handleReject(entity, request);
@@ -182,7 +189,9 @@ public class ConfirmationService {
         writeResolutionLedgerMessage(entity, actionDescription);
 
         var nodeInstanceId = entity.getWorkflowNodeInstanceId();
-        boolean shouldDispatchWorkflow = nodeInstanceId != null && !hasOtherBlockingForNode(entity);
+        boolean shouldDispatchWorkflow = nodeInstanceId != null
+                && !QuestionConfirmationHandler.isQuestionConfirmation(entity)
+                && !hasOtherBlockingForNode(entity);
         boolean isDecision = ConfirmationRequestType.DECISION.name().equals(entity.getRequestType());
         boolean isException = ConfirmationRequestType.EXCEPTION.name().equals(entity.getRequestType());
         boolean isSkip = ConfirmationActionType.SKIP.equals(actionType);
@@ -227,6 +236,17 @@ public class ConfirmationService {
         } catch (Exception e) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                     "Failed to respond to OpenCode permission: " + e.getMessage(), e);
+        }
+    }
+
+    private void respondQuestionBeforeResolving(ConfirmationRequestEntity entity,
+                                                ResolveConfirmationRequest request,
+                                                ConfirmationActionType actionType) {
+        try {
+            questionConfirmationHandler.respondQuestion(entity, request, actionType);
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                    "Failed to respond to OpenCode question: " + e.getMessage(), e);
         }
     }
 

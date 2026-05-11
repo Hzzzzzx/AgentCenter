@@ -477,6 +477,45 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         commandTransport.send(command);
     }
 
+    public void replyQuestion(String opencodeSessionId, String requestId, List<List<String>> answers) {
+        String baseUrl = processManager.ensureRunning();
+        Path cwd = processManager.resolveWorkingDirectory();
+
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("baseUrl", baseUrl);
+        payload.put("workingDirectory", cwd.toString());
+        payload.put("requestId", requestId);
+        ArrayNode answerGroups = payload.putArray("answers");
+        for (List<String> answerGroup : answers) {
+            ArrayNode group = answerGroups.addArray();
+            for (String answer : answerGroup) {
+                group.add(answer);
+            }
+        }
+
+        RuntimeCommandEnvelope command = RuntimeCommandEnvelope.of(
+            RuntimeCommandTypes.QUESTION_REPLY, RuntimeType.OPENCODE,
+            opencodeSessionId, payload);
+
+        commandTransport.send(command);
+    }
+
+    public void rejectQuestion(String opencodeSessionId, String requestId) {
+        String baseUrl = processManager.ensureRunning();
+        Path cwd = processManager.resolveWorkingDirectory();
+
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("baseUrl", baseUrl);
+        payload.put("workingDirectory", cwd.toString());
+        payload.put("requestId", requestId);
+
+        RuntimeCommandEnvelope command = RuntimeCommandEnvelope.of(
+            RuntimeCommandTypes.QUESTION_REJECT, RuntimeType.OPENCODE,
+            opencodeSessionId, payload);
+
+        commandTransport.send(command);
+    }
+
     private Set<String> fetchMessageIds(String baseUrl, String cwd, String opencodeSessionId) {
         Set<String> ids = new HashSet<>();
         JsonNode messages = commandTransport.fetchMessages(baseUrl, cwd, opencodeSessionId);

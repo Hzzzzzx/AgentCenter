@@ -24,6 +24,7 @@ class RuntimeEventEnvelopeDispatcherTest {
     private RuntimeEventService eventService;
     private RuntimeOperationEventHandler operationHandler;
     private PermissionConfirmationHandler permissionHandler;
+    private QuestionConfirmationHandler questionHandler;
     private RuntimeEventEnvelopeDispatcher dispatcher;
 
     @BeforeEach
@@ -33,7 +34,9 @@ class RuntimeEventEnvelopeDispatcherTest {
         eventService = mock(RuntimeEventService.class);
         operationHandler = mock(RuntimeOperationEventHandler.class);
         permissionHandler = mock(PermissionConfirmationHandler.class);
-        dispatcher = new RuntimeEventEnvelopeDispatcher(legacyBridge, projector, eventService, operationHandler, permissionHandler);
+        questionHandler = mock(QuestionConfirmationHandler.class);
+        dispatcher = new RuntimeEventEnvelopeDispatcher(legacyBridge, projector, eventService, operationHandler,
+                permissionHandler, questionHandler);
     }
 
     private RuntimeEventEnvelope envelope(String type) {
@@ -127,9 +130,20 @@ class RuntimeEventEnvelopeDispatcherTest {
     }
 
     @Test
+    void questionRequestedCreatesConfirmation() {
+        RuntimeEventEnvelope env = envelope(RuntimeEventTypes.QUESTION_REQUESTED);
+
+        dispatcher.dispatch(List.of(env));
+
+        verify(questionHandler).createQuestionConfirmation(env);
+        verify(projector).onEnvelope(env);
+    }
+
+    @Test
     void emptyEnvelopeListDoesNothing() {
         dispatcher.dispatch(List.of());
         verifyNoInteractions(projector, legacyBridge, eventService);
         verifyNoInteractions(operationHandler);
+        verifyNoInteractions(permissionHandler, questionHandler);
     }
 }

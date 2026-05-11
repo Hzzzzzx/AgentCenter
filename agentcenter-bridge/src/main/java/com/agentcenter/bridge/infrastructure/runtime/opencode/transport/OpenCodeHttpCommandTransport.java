@@ -57,6 +57,8 @@ public class OpenCodeHttpCommandTransport implements RuntimeCommandTransport {
             case RuntimeCommandTypes.CONVERSATION_MESSAGE_SEND -> handleConversationSend(command, timeout);
             case RuntimeCommandTypes.CONVERSATION_CANCEL -> buildAck(command, null);
             case RuntimeCommandTypes.PERMISSION_RESPOND -> handlePermissionRespond(command, timeout);
+            case RuntimeCommandTypes.QUESTION_REPLY -> handleQuestionReply(command, timeout);
+            case RuntimeCommandTypes.QUESTION_REJECT -> handleQuestionReject(command, timeout);
             default -> RuntimeAckEnvelope.nack(command.messageId(), RuntimeType.OPENCODE,
                     "Unsupported command type: " + command.type());
         };
@@ -129,6 +131,31 @@ public class OpenCodeHttpCommandTransport implements RuntimeCommandTransport {
         return buildAck(command, null);
     }
 
+    private RuntimeAckEnvelope handleQuestionReply(RuntimeCommandEnvelope command, Duration timeout) {
+        JsonNode payload = command.payload();
+        String baseUrl = payload.path("baseUrl").asText("");
+        String cwd = payload.path("workingDirectory").asText("");
+        String requestId = payload.path("requestId").asText("");
+
+        ObjectNode body = objectMapper.createObjectNode();
+        body.set("answers", payload.path("answers"));
+
+        HttpRequest request = buildPost(baseUrl, "/question/" + requestId + "/reply", body, cwd, timeout);
+        execute(request);
+        return buildAck(command, null);
+    }
+
+    private RuntimeAckEnvelope handleQuestionReject(RuntimeCommandEnvelope command, Duration timeout) {
+        JsonNode payload = command.payload();
+        String baseUrl = payload.path("baseUrl").asText("");
+        String cwd = payload.path("workingDirectory").asText("");
+        String requestId = payload.path("requestId").asText("");
+
+        HttpRequest request = buildPostNoBody(baseUrl, "/question/" + requestId + "/reject", cwd, timeout);
+        execute(request);
+        return buildAck(command, null);
+    }
+
     public JsonNode fetchMessages(String baseUrl, String workingDirectory, String opencodeSessionId) {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/session/" + opencodeSessionId + "/message"))
@@ -167,6 +194,16 @@ public class OpenCodeHttpCommandTransport implements RuntimeCommandTransport {
                 .header("x-opencode-directory", workingDirectory)
                 .timeout(timeout)
                 .POST(HttpRequest.BodyPublishers.ofString(json))
+                .build();
+    }
+
+    private HttpRequest buildPostNoBody(String baseUrl, String path,
+                                        String workingDirectory, Duration timeout) {
+        return HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + path))
+                .header("x-opencode-directory", workingDirectory)
+                .timeout(timeout)
+                .POST(HttpRequest.BodyPublishers.noBody())
                 .build();
     }
 

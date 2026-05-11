@@ -12,6 +12,7 @@ import com.agentcenter.bridge.application.runtime.protocol.RuntimeEventEnvelope;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeEventTypes;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeRawEvent;
 import com.agentcenter.bridge.application.runtime.translation.PermissionConfirmationHandler;
+import com.agentcenter.bridge.application.runtime.translation.QuestionConfirmationHandler;
 import com.agentcenter.bridge.application.runtime.translation.RuntimeEventTranslator;
 import com.agentcenter.bridge.application.runtime.translation.RuntimeTranslationContext;
 import com.agentcenter.bridge.application.runtime.translation.RuntimeTranslationResult;
@@ -70,6 +71,12 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
             case "permission.asked", "permission.updated" -> {
                 result.addAll(translatePermission(opencodeSessionId, agentSessionId, props, context));
             }
+            case "question.asked" -> {
+                result.addAll(translateQuestionAsked(opencodeSessionId, agentSessionId, props, context));
+            }
+            case "question.replied", "question.rejected" -> {
+                result.addAll(translateQuestionClosed(opencodeSessionId, agentSessionId, props, eventType, context));
+            }
             case "session.error" -> {
                 result.addAll(translateSessionError(opencodeSessionId, agentSessionId, props, context));
             }
@@ -77,6 +84,54 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
         }
 
         return result;
+    }
+
+    private List<RuntimeEventEnvelope> translateQuestionAsked(String opencodeSessionId, String agentSessionId,
+                                                               JsonNode properties, RuntimeTranslationContext context) {
+        List<RuntimeEventEnvelope> result = new ArrayList<>();
+        String requestId = properties.path("id").asText("");
+        JsonNode questions = properties.path("questions");
+        JsonNode firstQuestion = questions.isArray() && !questions.isEmpty()
+                ? questions.get(0)
+                : JsonNodeFactory.instance.objectNode();
+        String title = firstNonBlank(firstQuestion.path("header").asText(""),
+                firstQuestion.path("question").asText(""), "OpenCode question");
+        JsonNode tool = properties.path("tool");
+        String toolCallId = firstNonBlank(tool.path("callID").asText(""), tool.path("call_id").asText(""));
+        String messageId = firstNonBlank(tool.path("messageID").asText(""), tool.path("message_id").asText(""));
+        String confirmationId = QuestionConfirmationHandler.confirmationIdFor(opencodeSessionId, requestId);
+
+        ObjectNode payload = JsonNodeFactory.instance.objectNode();
+        payload.put("type", "question_required");
+        payload.put("label", title);
+        payload.put("requestId", requestId);
+        payload.put("confirmationId", confirmationId);
+        payload.put("rawEventType", "question.asked");
+        if (!toolCallId.isBlank()) payload.put("toolCallId", toolCallId);
+        if (!messageId.isBlank()) payload.put("messageId", messageId);
+        payload.set("questions", questions.isArray() ? questions.deepCopy() : JsonNodeFactory.instance.arrayNode());
+
+        result.add(buildContextEnvelope(RuntimeEventTypes.QUESTION_REQUESTED, agentSessionId,
+                opencodeSessionId, payload, context));
+        result.add(buildProcessTraceEnvelope(
+            RuntimeEventTypes.PROCESS_TRACE, agentSessionId, opencodeSessionId,
+            processTracePayload("confirmation", "waiting", "用户问题", title, "question", requestId,
+                "question.asked", null, Map.of("confirmationId", confirmationId)),
+            context));
+        return result;
+    }
+
+    private List<RuntimeEventEnvelope> translateQuestionClosed(String opencodeSessionId, String agentSessionId,
+                                                               JsonNode properties, String eventType,
+                                                               RuntimeTranslationContext context) {
+        String requestId = properties.path("requestID").asText(properties.path("requestId").asText(""));
+        String status = "question.rejected".equals(eventType) ? "failed" : "completed";
+        String summary = "question.rejected".equals(eventType) ? "Question 已取消" : "Question 已回答";
+        return List.of(buildProcessTraceEnvelope(
+            RuntimeEventTypes.PROCESS_TRACE, agentSessionId, opencodeSessionId,
+            processTracePayload("confirmation", status, "用户问题", summary, "question", requestId,
+                eventType, null, Map.of()),
+            context));
     }
 
     private List<RuntimeEventEnvelope> translateMessagePart(String opencodeSessionId, String agentSessionId,
@@ -416,6 +471,18 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
             payload, java.time.OffsetDateTime.now());
     }
 
+    private RuntimeEventEnvelope buildContextEnvelope(String type, String agentSessionId,
+                                                       String opencodeSessionId, JsonNode payload,
+                                                       RuntimeTranslationContext context) {
+        return new RuntimeEventEnvelope(
+            "runtime-event", type, null, null, null,
+            RuntimeType.OPENCODE, agentSessionId, opencodeSessionId,
+            context.getWorkItemId(agentSessionId),
+            context.getWorkflowInstanceId(agentSessionId),
+            context.getWorkflowNodeInstanceId(agentSessionId),
+            payload, java.time.OffsetDateTime.now());
+    }
+
     private String safeReasoningSummary(JsonNode part, String delta) {
         String visibility = part.path("visibility").asText("");
         boolean isPublicSummary = "public_summary".equals(visibility) || "public".equals(visibility);
@@ -435,6 +502,15 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
 
     private String truncate(String s, int maxLen) {
         return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...";
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value.trim();
+            }
+        }
+        return "";
     }
 
     private JsonNode processTracePayload(String kind, String status, String title, String summary,

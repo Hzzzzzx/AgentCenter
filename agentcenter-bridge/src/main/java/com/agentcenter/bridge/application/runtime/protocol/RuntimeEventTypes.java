@@ -7,6 +7,7 @@ public final class RuntimeEventTypes {
     public static final String TOOL_STARTED = "tool.started";
     public static final String TOOL_COMPLETED = "tool.completed";
     public static final String PERMISSION_REQUESTED = "permission.requested";
+    public static final String QUESTION_REQUESTED = "question.requested";
     public static final String RUNTIME_STATUS_CHANGED = "runtime.status.changed";
     public static final String RUNTIME_ERROR = "runtime.error";
     public static final String CONVERSATION_FAILED = "conversation.failed";

@@ -146,6 +146,52 @@ class OpenCodeHttpCommandTransportTest {
     }
 
     @Test
+    void questionReplyPostsAnswersToQuestionEndpoint() throws Exception {
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("baseUrl", "http://localhost:4097");
+        payload.put("workingDirectory", "/tmp/work");
+        payload.put("requestId", "question_abc");
+        ArrayNode answers = payload.putArray("answers");
+        answers.addArray().add("快速验证");
+
+        RuntimeCommandEnvelope command = RuntimeCommandEnvelope.of(
+                RuntimeCommandTypes.QUESTION_REPLY, RuntimeType.OPENCODE,
+                "ses_abc123", payload);
+
+        RuntimeAckEnvelope ack = transport.send(command);
+
+        assertTrue(ack.success());
+        ArgumentCaptor<HttpRequest> captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(httpClient).send(captor.capture(), any());
+        HttpRequest request = captor.getValue();
+        assertEquals("POST", request.method());
+        assertEquals("http://localhost:4097/question/question_abc/reply", request.uri().toString());
+        assertEquals("/tmp/work", request.headers().firstValue("x-opencode-directory").orElse(""));
+    }
+
+    @Test
+    void questionRejectPostsToRejectEndpoint() throws Exception {
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("baseUrl", "http://localhost:4097");
+        payload.put("workingDirectory", "/tmp/work");
+        payload.put("requestId", "question_abc");
+
+        RuntimeCommandEnvelope command = RuntimeCommandEnvelope.of(
+                RuntimeCommandTypes.QUESTION_REJECT, RuntimeType.OPENCODE,
+                "ses_abc123", payload);
+
+        RuntimeAckEnvelope ack = transport.send(command);
+
+        assertTrue(ack.success());
+        ArgumentCaptor<HttpRequest> captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(httpClient).send(captor.capture(), any());
+        HttpRequest request = captor.getValue();
+        assertEquals("POST", request.method());
+        assertEquals("http://localhost:4097/question/question_abc/reject", request.uri().toString());
+        assertEquals("/tmp/work", request.headers().firstValue("x-opencode-directory").orElse(""));
+    }
+
+    @Test
     void conversationCancelReturnsAckWithoutHttp() {
         RuntimeCommandEnvelope command = RuntimeCommandEnvelope.of(
                 RuntimeCommandTypes.CONVERSATION_CANCEL, RuntimeType.OPENCODE,
