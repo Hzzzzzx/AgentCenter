@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -15,6 +16,7 @@ import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.UncategorizedSQLException;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -88,6 +90,29 @@ class ConfirmationServiceTest {
         verify(permissionConfirmationHandler, never()).respondPermission(any(), any(), eq(true));
         verify(confirmationMapper).update(entity);
         verifyNoInteractions(workflowCommandService);
+    }
+
+    @Test
+    void resolveRetriesWhenSqliteBusySnapshotOccurs() {
+        ConfirmationRequestEntity entity = questionConfirmation();
+        when(confirmationMapper.findById(entity.getId())).thenReturn(entity);
+        when(agentMessageMapper.findBySessionId(entity.getAgentSessionId())).thenReturn(List.of());
+        when(confirmationMapper.update(entity))
+                .thenThrow(new UncategorizedSQLException(
+                        "update",
+                        null,
+                        new org.sqlite.SQLiteException("[SQLITE_BUSY_SNAPSHOT] database is locked", 5)))
+                .thenReturn(1);
+
+        ResolveConfirmationRequest request = new ResolveConfirmationRequest(
+                ConfirmationActionType.CHOOSE,
+                "快速验证",
+                Map.of("choice", "FAST", "choiceLabel", "快速验证"));
+
+        var result = service.resolve(entity.getId(), request);
+
+        assertThat(result.status()).isEqualTo(ConfirmationStatus.RESOLVED);
+        verify(confirmationMapper, times(2)).update(entity);
     }
 
     private ConfirmationRequestEntity questionConfirmation() {
