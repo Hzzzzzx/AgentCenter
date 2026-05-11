@@ -8,7 +8,7 @@ import { sessionApi } from '../api/sessions'
 import { confirmationApi } from '../api/confirmations'
 import { useRuntimeStore } from '../stores/runtime'
 import { useRuntimeSettingsStore } from '../stores/runtimeSettings'
-import type { ConfirmationRequestDto } from '../api/types'
+import type { AgentSessionDto, ConfirmationRequestDto } from '../api/types'
 
 const mocks = vi.hoisted(() => {
   const runningWorkItem = {
@@ -65,7 +65,7 @@ const mocks = vi.hoisted(() => {
     runtimeType: 'OPENCODE',
     status: 'ACTIVE',
     createdAt: '2026-05-08T10:00:00Z',
-  }
+  } satisfies AgentSessionDto
 
   const runningWorkflow = {
     id: 'wf-1',
@@ -130,7 +130,7 @@ const mocks = vi.hoisted(() => {
     optionsJson: null,
     priority: 'MEDIUM',
     createdAt: '2026-05-08T10:01:00Z',
-  }
+  } satisfies ConfirmationRequestDto
 
   return { runningWorkItem, runningSession, runningWorkflow, workflowDefinition, pendingConfirmation }
 })
@@ -190,6 +190,13 @@ vi.mock('../api/confirmations', () => ({
 describe('ConversationWorkbench.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(sessionApi.list).mockResolvedValue([mocks.runningSession])
+    vi.mocked(sessionApi.getById).mockResolvedValue(mocks.runningSession)
+    vi.mocked(sessionApi.getMessages).mockResolvedValue([])
+    vi.mocked(confirmationApi.list).mockImplementation((status?: string) =>
+      Promise.resolve(status === 'PENDING' ? [mocks.pendingConfirmation] : [])
+    )
+    vi.mocked(confirmationApi.resolve).mockResolvedValue(mocks.pendingConfirmation)
   })
 
   afterEach(() => {
@@ -270,6 +277,32 @@ describe('ConversationWorkbench.vue', () => {
     const composer = wrapper.find('.conversation-workbench__composer')
     expect(composer.find('.interaction-bar').exists()).toBe(false)
     expect(composer.find('.conversation-workbench__input-area').exists()).toBe(true)
+  })
+
+  it('does not show interactions that belong to another session on the same work item', async () => {
+    const otherSession = {
+      ...mocks.runningSession,
+      id: 'session-2',
+    }
+    vi.mocked(sessionApi.list).mockResolvedValueOnce([mocks.runningSession, otherSession])
+    vi.mocked(sessionApi.getById).mockResolvedValueOnce(otherSession)
+
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(ConversationWorkbench, {
+      props: {
+        workItemId: 'work-1',
+        targetSessionId: 'session-2',
+      },
+      global: {
+        plugins: [pinia],
+      },
+    })
+
+    await flushPromises()
+
+    expect(wrapper.find('.interaction-bar').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('确认继续下一步')
   })
 
   it('does not show the workflow advance control while an interaction is active', async () => {

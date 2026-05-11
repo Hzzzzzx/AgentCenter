@@ -47,7 +47,10 @@ export const useRuntimeStore = defineStore('runtime', () => {
     finalSyncAttempts = 0
     lastUserSeqNo = latestUserSeqNo()
 
-    activeSse.value = eventApi.streamSessionEvents(sessionId, (event: RuntimeEventDto) => {
+    const subscribedSessionId = sessionId
+    activeSse.value = eventApi.streamSessionEvents(subscribedSessionId, (event: RuntimeEventDto) => {
+      if (activeSessionId.value !== subscribedSessionId) return
+      if (event.sessionId && event.sessionId !== subscribedSessionId) return
       if (hasSeenEvent(event)) return
       events.value.push(event)
       applyRuntimeEvent(event)
@@ -127,6 +130,7 @@ export const useRuntimeStore = defineStore('runtime', () => {
 
     if (event.eventType === 'SKILL_COMPLETED') {
       flushPendingStreamingText()
+      markIdle()
       const payload = parsePayload(event.payloadJson)
       const ns = textField(payload, ['nodeState'])
       lastNodeState.value = ns || null

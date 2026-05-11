@@ -288,16 +288,16 @@ const agentStateLabel = computed<{ dot: string; text: string; reason: string } |
 
 const currentInteractions = computed(() => {
   const session = sessionStore.activeSession
-  const workItemId = props.workItemId ?? session?.workItemId ?? null
   const workflowInstanceId = session?.workflowInstanceId ?? currentWorkflowInstance.value?.id ?? null
   const nodeId = nodeStateInfo.value.nodeId ?? null
 
   return confirmationStore.pendingConfirmations.filter((item) => {
     if (item.status !== 'PENDING' && item.status !== 'IN_CONVERSATION') return false
+    if (!session?.id) return false
+    if (item.agentSessionId) return item.agentSessionId === session.id
+
     return Boolean(
-      (session?.id && item.agentSessionId === session.id)
-      || (workItemId && item.workItemId === workItemId)
-      || (workflowInstanceId && item.workflowInstanceId === workflowInstanceId)
+      (workflowInstanceId && item.workflowInstanceId === workflowInstanceId)
       || (nodeId && item.workflowNodeInstanceId === nodeId)
     )
   })

@@ -7,11 +7,13 @@ import { useSessionStore } from './sessions'
 import type { AgentMessageDto, RuntimeEventDto } from '../api/types'
 
 let capturedOnEvent: ((event: RuntimeEventDto) => void) | null = null
+let capturedOnEvents: Array<(event: RuntimeEventDto) => void> = []
 
 vi.mock('../api/events', () => ({
   eventApi: {
     streamSessionEvents: vi.fn().mockImplementation((_sessionId: string, onEvent: (event: RuntimeEventDto) => void) => {
       capturedOnEvent = onEvent
+      capturedOnEvents.push(onEvent)
       return { close: vi.fn() }
     }),
   },
@@ -81,6 +83,7 @@ describe('useRuntimeStore — SSE event handlers', () => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
     capturedOnEvent = null
+    capturedOnEvents = []
   })
 
   afterEach(() => {
@@ -287,6 +290,38 @@ describe('useRuntimeStore — SSE event handlers', () => {
 
     vi.advanceTimersByTime(40)
     expect(runtimeStore.streamingText).toBe('你好，AgentCenter')
+  })
+
+  it('ignores late SSE events from a previous session after switching sessions', () => {
+    vi.useFakeTimers()
+    const runtimeStore = useRuntimeStore()
+
+    runtimeStore.connectSSE('sess-1')
+    const previousSessionCallback = capturedOnEvent
+    runtimeStore.connectSSE('sess-2')
+
+    previousSessionCallback!(makeEvent({
+      eventType: 'ASSISTANT_DELTA',
+      id: 'evt-late-sess-1',
+      sessionId: 'sess-1',
+      payloadJson: JSON.stringify({ delta: '旧会话晚到文本' }),
+    }))
+
+    vi.advanceTimersByTime(40)
+    expect(runtimeStore.events).toHaveLength(0)
+    expect(runtimeStore.streamingText).toBe('')
+    expect(runtimeStore.busy).toBe(false)
+
+    capturedOnEvent!(makeEvent({
+      eventType: 'ASSISTANT_DELTA',
+      id: 'evt-current-sess-2',
+      sessionId: 'sess-2',
+      payloadJson: JSON.stringify({ delta: '当前会话文本' }),
+    }))
+
+    vi.advanceTimersByTime(40)
+    expect(runtimeStore.streamingText).toBe('当前会话文本')
+    expect(capturedOnEvents).toHaveLength(2)
   })
 
   it('syncs persisted assistant message when assistant completed event arrives', async () => {
