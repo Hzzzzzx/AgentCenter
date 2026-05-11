@@ -18,7 +18,6 @@ defineEmits<{
 
 const shouldOpen = computed(() =>
   props.status === 'failed'
-  || props.status === 'running'
   || props.status === 'waiting_input'
   || !props.collapsedByDefault
 )
@@ -48,9 +47,9 @@ const interactionCount = computed(() => props.steps.reduce((count, step) =>
 
 const summaryText = computed(() => {
   if (props.status === 'running') {
-    return shouldOpen.value
-      ? '执行过程'
-      : conciseActionLabel(props.currentAction?.label) ?? '正在处理当前请求'
+    return toolCategorySummary()
+      || conciseActionLabel(props.currentAction?.label)
+      || '正在处理当前请求'
   }
   if (props.status === 'waiting_input') {
     const detail = props.currentAction?.detail

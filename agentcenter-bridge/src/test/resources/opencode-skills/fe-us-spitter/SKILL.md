@@ -1,6 +1,6 @@
 ---
 name: fe-us-spitter
-description: Permission smoke fixture. Reads a protected test directory, then asks for one tiny FE/US split decision.
+description: Permission smoke fixture. Reads an external protected test directory to trigger OpenCode authorization.
 triggers:
   - fe-us-spitter
   - permission-smoke
@@ -13,34 +13,22 @@ Use this Skill only to verify AgentCenter permission-confirmation UI.
 
 ## Runtime rules
 
-- First, inspect `agentcenter-bridge/src/test/resources/opencode-permission-fixture/src/protected`.
-- If OpenCode asks for permission, stop and wait for the user's decision.
-- After the directory can be read, summarize only the file names and ask one short decision interaction.
-- Keep the artifact small; this is not a real implementation design.
-- End every response with exactly one `AGENTCENTER_NODE_STATE` block.
+- First, inspect `/Users/hzz/workspace/AgentCenter/agentcenter-bridge/src/test/resources/opencode-permission-fixture/src/protected`.
+- This path is intentionally outside the OpenCode runtime worktree; do not use any copy under `runtime-workspace`.
+- If OpenCode asks for permission, stop and wait for the user's decision before continuing.
+- After the directory can be read, summarize only the file names.
+- Do not ask a FE/US split question, do not emit DECISION interactions, and do not request business confirmation.
+- Keep the artifact small; this is only an OpenCode authorization smoke test.
+- End every response with exactly one `AGENTCENTER_NODE_STATE` block that marks this node complete.
 
 ## Response after reading the fixture
 
 ```markdown
-FE/US 拆分授权冒烟测试已读取受限测试目录。
+OpenCode 外部目录授权冒烟测试已读取受限测试目录。
 
 <!-- AGENTCENTER_NODE_STATE
-status: NEEDS_USER_INPUT
-reason: Waiting for FE US split decision
-interactions:
-  - id: FE-US-SPLIT-ROUTE
-    type: DECISION
-    title: 选择 FE/US 拆分方式
-    question: 请选择本次授权测试后的拆分路线。
-    selection: single
-    options:
-      - id: FE_FIRST
-        label: FE 优先
-        description: 先拆前端上传交互，再补用户故事。
-      - id: US_FIRST
-        label: US 优先
-        description: 先拆用户故事，再映射前端组件。
-    allow_custom: false
-    required: true
+status: READY_TO_ADVANCE
+reason: External directory authorization smoke completed
+interactions: []
 -->
 ```

@@ -219,6 +219,10 @@ function isPromptDebug(payload: ParsedPayload): boolean {
   return payload.kind === 'prompt_debug'
 }
 
+function isConfirmationTraceEvent(ee: EnrichedEvent): boolean {
+  return ee.event.eventType === 'PROCESS_TRACE' && ee.payload.kind === 'confirmation'
+}
+
 function isAssistantStreamEvent(eventType: string): boolean {
   return eventType === 'ASSISTANT_DELTA' || eventType === 'ASSISTANT_COMPLETED'
 }
@@ -819,6 +823,14 @@ function buildDisplayItems(
   const hasActivity = steps.length > 0 || (Boolean(currentAction) && !pendingInteraction)
   const hasAnswer = answer.text.trim().length > 0
 
+  if (hasAnswer) {
+    items.push({
+      type: 'assistant-message',
+      id: `${turnId}:assistant`,
+      answer,
+    })
+  }
+
   if (hasActivity) {
     items.push({
       type: 'agent-activity',
@@ -826,15 +838,7 @@ function buildDisplayItems(
       steps,
       status,
       currentAction,
-      collapsedByDefault: false,
-    })
-  }
-
-  if (hasAnswer) {
-    items.push({
-      type: 'assistant-message',
-      id: `${turnId}:assistant`,
-      answer,
+      collapsedByDefault: Boolean(hasAnswer),
     })
   }
 
@@ -915,6 +919,10 @@ export function projectConversationTurns(input: ProjectorInput): ConversationTur
     }
 
     if (isAssistantStreamEvent(ee.event.eventType)) {
+      continue
+    }
+
+    if (isConfirmationTraceEvent(ee)) {
       continue
     }
 

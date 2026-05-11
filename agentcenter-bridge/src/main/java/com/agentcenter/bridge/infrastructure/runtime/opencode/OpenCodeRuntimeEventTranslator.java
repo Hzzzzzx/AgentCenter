@@ -334,15 +334,23 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
         String permission = properties.path("permission").asText(properties.path("type").asText("opencode_permission"));
         String skillName = properties.path("tool").path("tool").asText(
                 properties.path("tool").path("name").asText(permission));
-        String title = properties.path("title").asText("OpenCode permission: " + permission);
+        String title = properties.path("title").asText(defaultPermissionTitle(permission));
         String confirmationId = PermissionConfirmationHandler.confirmationIdFor(opencodeSessionId, permissionId);
         String targetPath = extractPermissionTargetPath(properties);
+        String parentDir = firstNonBlank(
+                textAt(properties.path("metadata"), "parentDir"),
+                textAt(properties.path("metadata"), "parent_dir"));
         Map<String, Object> permissionMeta = new LinkedHashMap<>();
         permissionMeta.put("permissionId", permissionId);
         permissionMeta.put("confirmationId", confirmationId);
         permissionMeta.put("title", title);
         permissionMeta.put("permission", permission);
         if (!targetPath.isBlank()) permissionMeta.put("filePath", targetPath);
+        if (!parentDir.isBlank()) permissionMeta.put("parentDir", parentDir);
+        String patterns = joinTextArray(properties.path("patterns"));
+        String always = joinTextArray(properties.path("always"));
+        if (!patterns.isBlank()) permissionMeta.put("patterns", patterns);
+        if (!always.isBlank()) permissionMeta.put("always", always);
 
         result.add(buildEnvelope(RuntimeEventTypes.PERMISSION_REQUESTED, agentSessionId,
             opencodeSessionId, payloadNode("permission_required", skillName,
@@ -649,6 +657,10 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
                 textAt(properties, "filePath"),
                 textAt(properties, "filepath"),
                 textAt(properties, "file_path"),
+                textAt(properties.path("metadata"), "filepath"),
+                textAt(properties.path("metadata"), "filePath"),
+                textAt(properties.path("metadata"), "parentDir"),
+                textAt(properties.path("metadata"), "parent_dir"),
                 textAt(properties, "path"),
                 textAt(properties, "target"),
                 textAt(properties, "file"),
@@ -658,6 +670,22 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
         );
         if (!direct.isBlank()) return direct;
         return firstPathLikeText(properties);
+    }
+
+    private String defaultPermissionTitle(String permission) {
+        if ("external_directory".equals(permission)) return "OpenCode 请求访问外部目录";
+        return "OpenCode permission: " + permission;
+    }
+
+    private String joinTextArray(JsonNode node) {
+        if (node == null || !node.isArray()) return "";
+        List<String> values = new ArrayList<>();
+        for (JsonNode child : node) {
+            if (child.isTextual() && !child.asText("").isBlank()) {
+                values.add(child.asText());
+            }
+        }
+        return String.join(", ", values);
     }
 
     private String textAt(JsonNode node, String field) {

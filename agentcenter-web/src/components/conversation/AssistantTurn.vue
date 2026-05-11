@@ -48,7 +48,7 @@ const renderItems = computed<ConversationDisplayItem[]>(() => {
       steps: props.turn.steps,
       status: props.turn.status,
       currentAction: props.turn.currentAction,
-      collapsedByDefault: Boolean(props.turn.answer.text) && props.turn.status === 'completed',
+      collapsedByDefault: Boolean(props.turn.answer.text) || props.turn.status === 'running',
     })
   }
   if (props.turn.answer.text) {

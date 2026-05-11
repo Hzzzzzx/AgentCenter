@@ -157,10 +157,8 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         sessionPayload.put("workingDirectory", processManager.resolveWorkingDirectory().toString());
         sessionPayload.put("title", title);
         ArrayNode permissions = sessionPayload.putArray("permission");
-        ObjectNode perm = permissions.addObject();
-        perm.put("permission", "edit");
-        perm.put("pattern", "*");
-        perm.put("action", "ask");
+        addPermissionRule(permissions, "edit", "*", "ask");
+        addPermissionRule(permissions, "external_directory", "*", "ask");
 
         RuntimeCommandEnvelope command = RuntimeCommandEnvelope.of(
                 RuntimeCommandTypes.SESSION_ENSURE, RuntimeType.OPENCODE, null, sessionPayload);
@@ -186,6 +184,13 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
         log.info("Created opencode session {} → agent session {}", opencodeSessionId, agentSid);
         return opencodeSessionId;
+    }
+
+    private void addPermissionRule(ArrayNode permissions, String permission, String pattern, String action) {
+        ObjectNode rule = permissions.addObject();
+        rule.put("permission", permission);
+        rule.put("pattern", pattern);
+        rule.put("action", action);
     }
 
     @Override

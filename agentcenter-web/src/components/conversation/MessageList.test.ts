@@ -242,7 +242,6 @@ describe('MessageList.vue', () => {
     })
     expect(wrapper.text()).toContain('节点已完成')
     expect(wrapper.find('.system-line').exists()).toBe(true)
-    expect(wrapper.find('.mocked-assistant-turn').exists()).toBe(false)
   })
 
   it('renders space-separated artifact names in system messages as clickable links', async () => {
@@ -467,7 +466,7 @@ describe('MessageList.vue', () => {
     expect(wrapper.text()).toContain('会话已就绪')
   })
 
-  it('renders tool_call process trace as execution step', () => {
+  it('renders tool_call process trace as collapsed execution activity', () => {
     const wrapper = mount(MessageList, {
       props: {
         messages: [makeMessage({ id: 'msg-a', role: 'ASSISTANT', content: '# Output', workflowNodeInstanceId: 'node-1' })],
@@ -496,7 +495,7 @@ describe('MessageList.vue', () => {
     expect(wrapper.text()).not.toContain('debug user prompt')
   })
 
-  it('renders MCP call details as tool step', () => {
+  it('renders MCP call details as collapsed execution activity', () => {
     const wrapper = mount(MessageList, {
       props: {
         messages: [makeMessage({ role: 'USER', content: '查一下文件' })],
@@ -511,7 +510,7 @@ describe('MessageList.vue', () => {
     expect(toolSteps.length).toBe(1)
   })
 
-  it('renders running tool calls via projection', () => {
+  it('renders running tool calls via collapsed projection', () => {
     const wrapper = mount(MessageList, {
       props: {
         messages: [makeMessage({ role: 'USER', content: '开始工作流' })],

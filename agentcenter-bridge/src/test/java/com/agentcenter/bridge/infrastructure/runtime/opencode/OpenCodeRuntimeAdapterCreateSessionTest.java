@@ -84,6 +84,31 @@ class OpenCodeRuntimeAdapterCreateSessionTest {
     }
 
     @Test
+    void createSessionPayloadAsksForExternalDirectoryPermission() {
+        ObjectNode ackPayload = objectMapper.createObjectNode();
+        ackPayload.put("sessionId", "ses_permissions");
+        RuntimeAckEnvelope ack = new RuntimeAckEnvelope(
+                null, "agentcenter.runtime.v1", null,
+                "ack-msg-id", "corr-id", null,
+                RuntimeType.OPENCODE, null, "ses_permissions",
+                true, null, ackPayload, null);
+
+        ArgumentCaptor<RuntimeCommandEnvelope> envelopeCaptor =
+                ArgumentCaptor.forClass(RuntimeCommandEnvelope.class);
+        when(commandTransport.send(envelopeCaptor.capture())).thenReturn(ack);
+
+        adapter.createSession("work-item-perm", "agent-ses-perm");
+
+        JsonNode permissions = envelopeCaptor.getValue().payload().path("permission");
+        assertTrue(permissions.isArray());
+        assertEquals("edit", permissions.get(0).path("permission").asText());
+        assertEquals("ask", permissions.get(0).path("action").asText());
+        assertEquals("external_directory", permissions.get(1).path("permission").asText());
+        assertEquals("*", permissions.get(1).path("pattern").asText());
+        assertEquals("ask", permissions.get(1).path("action").asText());
+    }
+
+    @Test
     void createSessionPayloadContainsTitle() {
         ObjectNode ackPayload = objectMapper.createObjectNode();
         ackPayload.put("sessionId", "ses_test456");

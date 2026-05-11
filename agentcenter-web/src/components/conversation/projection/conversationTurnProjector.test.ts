@@ -850,7 +850,7 @@ describe('projectConversationTurns', () => {
     expect(turns[0].displayItems.map(item => item.type)).toEqual(['assistant-message'])
   })
 
-  it('keeps agent activity before assistant message in ordered display items', () => {
+  it('keeps assistant message before agent activity so live output stays visible', () => {
     const turns = projectConversationTurns(makeInput({
       messages: [
         makeMessage({ id: 'msg-a', role: 'ASSISTANT', content: '我已经生成 HLD 草稿。' }),
@@ -867,7 +867,7 @@ describe('projectConversationTurns', () => {
     }))
 
     expect(turns).toHaveLength(1)
-    expect(turns[0].displayItems.map(item => item.type)).toEqual(['agent-activity', 'assistant-message'])
+    expect(turns[0].displayItems.map(item => item.type)).toEqual(['assistant-message', 'agent-activity'])
   })
 
   it('keeps pending interactions with the turn that created them even after later user input', () => {
@@ -1240,5 +1240,28 @@ describe('projectConversationTurns', () => {
     const toolPart = findToolParts(turns[0])[0]
     expect(toolPart.category).toBe('read')
     expect(toolPart.displayName).toBe('读取文件 skills/example/SKILL.md')
+  })
+
+  it('keeps OpenCode permission trace events out of the visible agent timeline', () => {
+    const turns = projectConversationTurns(makeInput({
+      runtimeEvents: [
+        makeEvent({
+          id: 'ev-permission-replied',
+          eventType: 'PROCESS_TRACE',
+          seqNo: 1,
+          payloadJson: JSON.stringify({
+            kind: 'confirmation',
+            status: 'completed',
+            title: '权限确认',
+            summary: '权限请求已处理：once',
+            rawEventType: 'permission.replied',
+            confirmationId: 'perm-1',
+            reply: 'once',
+          }),
+        }),
+      ],
+    }))
+
+    expect(turns).toHaveLength(0)
   })
 })

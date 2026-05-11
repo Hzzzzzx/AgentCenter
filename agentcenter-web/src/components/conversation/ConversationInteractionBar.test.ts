@@ -60,8 +60,7 @@ describe('ConversationInteractionBar.vue', () => {
     })
 
     expect(wrapper.find('.interaction-bar').exists()).toBe(true)
-    expect(wrapper.text()).toContain('需要你确认')
-    expect(wrapper.text()).toContain('2')
+    expect(wrapper.text()).not.toContain('需要你确认')
     expect(wrapper.text()).not.toContain('FE1002 · 确认项浮层交互回归')
     expect(wrapper.text()).toContain('问题 1')
     expect(wrapper.text()).toContain('问题 2')
@@ -117,7 +116,7 @@ describe('ConversationInteractionBar.vue', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('需要你确认选择')
+    expect(wrapper.text()).not.toContain('需要你确认选择')
     expect(wrapper.find('.interaction-bar__tabs').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('问题 1')
   })
@@ -288,11 +287,35 @@ describe('ConversationInteractionBar.vue', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('需要你授权')
+    expect(wrapper.text()).not.toContain('需要你授权')
     expect(wrapper.text()).toContain('允许 Agent 编辑文件：C:/.../.opencode/skills/planner/SKILL.md？')
     expect(wrapper.text()).toContain('允许一次')
-    expect(wrapper.text()).toContain('始终允许')
+    expect(wrapper.text()).toContain('本次会话允许同类请求')
     expect(wrapper.text()).toContain('拒绝')
+  })
+
+  it('shows OpenCode external directory permission scope', () => {
+    const wrapper = mount(ConversationInteractionBar, {
+      props: {
+        interactions: [
+          makeInteraction({
+            id: 'confirm-external-dir',
+            requestType: 'PERMISSION',
+            title: 'OpenCode 请求访问外部目录',
+            content: 'OpenCode permission request',
+            interactionContextJson: JSON.stringify({
+              permission: 'external_directory',
+              filePath: '/Users/hzz/workspace/AgentCenter/agentcenter-bridge/src/test/resources/opencode-permission-fixture/src/protected',
+              always: '/Users/hzz/workspace/AgentCenter/agentcenter-bridge/src/test/resources/opencode-permission-fixture/src/protected/*',
+            }),
+          }),
+        ],
+      },
+    })
+
+    expect(wrapper.text()).toContain('允许 Agent 访问外部目录：.../resources/opencode-permission-fixture/src/protected？')
+    expect(wrapper.text()).toContain('这是 OpenCode 原生工具授权')
+    expect(wrapper.text()).toContain('同类请求范围：/Users/hzz/workspace/AgentCenter/agentcenter-bridge/src/test/resources/opencode-permission-fixture/src/protected/*')
   })
 
   it('submits always for OpenCode permission requests', async () => {
@@ -309,7 +332,7 @@ describe('ConversationInteractionBar.vue', () => {
       },
     })
 
-    const alwaysButton = wrapper.findAll('button').find(button => button.text() === '始终允许')
+    const alwaysButton = wrapper.findAll('button').find(button => button.text() === '本次会话允许同类请求')
     expect(alwaysButton).toBeTruthy()
     await alwaysButton!.trigger('click')
     await flushPromises()

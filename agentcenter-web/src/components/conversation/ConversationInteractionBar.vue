@@ -21,7 +21,6 @@ const emit = defineEmits<{
 
 const confirmationStore = useConfirmationStore()
 const notificationStore = useNotificationStore()
-const expanded = ref(true)
 const activeId = ref<string | null>(null)
 const REVIEW_TAB_ID = '__review__'
 const busyAction = ref<string | null>(null)
@@ -62,16 +61,6 @@ const activeSchema = computed<InteractionSchema | null>(() =>
 const activeOptions = computed<InteractionOption[]>(() =>
   activeSchema.value?.options ?? []
 )
-
-const interactionHeaderTitle = computed(() => {
-  if (reviewMode.value) return '确认交互'
-  if (!activeInteraction.value) return '需要你处理'
-  if (activeInteraction.value.requestType === 'INPUT_REQUIRED') return '需要你补充信息'
-  if (activeInteraction.value.requestType === 'DECISION') return '需要你确认选择'
-  if (activeInteraction.value.requestType === 'EXCEPTION') return '需要你处理异常'
-  if (activeInteraction.value.requestType === 'PERMISSION') return '需要你授权'
-  return '需要你确认'
-})
 
 const activeFields = computed<InteractionField[]>(() =>
   activeSchema.value?.fields ?? []
@@ -161,7 +150,6 @@ watch(
     }
     if (!activeId.value || (activeId.value !== REVIEW_TAB_ID && !items.some((item) => item.id === activeId.value))) {
       activeId.value = items[0].id
-      expanded.value = true
     }
   },
   { immediate: true }
@@ -265,6 +253,7 @@ function permissionActionLabel(item: ConfirmationRequestDto, schema: Interaction
     .join(' ')
     .toLowerCase()
 
+  if (text.includes('external_directory')) return '访问外部目录'
   if (/(write|edit|update|modify|patch|delete|remove|rename|move|create|保存|写入|编辑|修改|删除|重命名|移动|创建)/.test(text)) {
     return '编辑文件'
   }
@@ -290,6 +279,19 @@ function permissionTargetPath(item: ConfirmationRequestDto, schema: InteractionS
   for (const candidate of candidates) {
     const path = extractPathFromText(candidate)
     if (path) return concisePath(path)
+  }
+  return null
+}
+
+function permissionScopeText(item: ConfirmationRequestDto): string | null {
+  const records = [
+    parseJsonRecord(item.interactionContextJson),
+    parseJsonRecord(item.interactionSchemaJson),
+  ].filter((record): record is Record<string, unknown> => Boolean(record))
+
+  for (const record of records) {
+    const scope = record.always ?? record.patterns
+    if (typeof scope === 'string' && scope.trim()) return scope.trim()
   }
   return null
 }
@@ -357,7 +359,7 @@ function secondaryActionLabel(item: ConfirmationRequestDto): string {
 
 function previewValueFor(item: ConfirmationRequestDto): string {
   const schema = schemaFor(item)
-  if (item.requestType === 'PERMISSION') return '待选择：允许一次 / 始终允许 / 拒绝'
+  if (item.requestType === 'PERMISSION') return '待选择：允许一次 / 本次会话允许同类请求 / 拒绝'
   if (item.requestType === 'INPUT_REQUIRED') {
     const fields = schema?.fields ?? []
     if (fields.length) {
@@ -388,9 +390,9 @@ function previewValueFor(item: ConfirmationRequestDto): string {
 }
 
 function permissionBusyLabel(reply: 'once' | 'always' | 'reject'): string {
-  if (reply === 'always') return '正在始终允许...'
+  if (reply === 'always') return '正在允许本次会话...'
   if (reply === 'reject') return '正在拒绝...'
-  return '正在允许...'
+  return '正在允许一次...'
 }
 
 function errorMessage(error: unknown) {
@@ -438,7 +440,7 @@ async function handlePermissionDecision(reply: 'once' | 'always' | 'reject') {
       anchor: 'right-panel',
       tone: reply === 'reject' ? 'warning' : 'success',
       title: reply === 'reject' ? '权限已拒绝' : '权限已允许',
-      message: reply === 'always' ? 'OpenCode 后续同类请求会自动允许' : `${interaction.title} 已收到处理结果`,
+      message: reply === 'always' ? 'OpenCode 本次会话内的同类请求会自动允许' : `${interaction.title} 已收到处理结果`,
     })
     if (reply === 'reject') emit('rejected', interaction.id)
     else emit('resolved', interaction.id)
@@ -572,14 +574,9 @@ function handleSecondary() {
 </script>
 
 <template>
-  <section v-if="visibleInteractions.length" class="interaction-bar" :class="{ 'interaction-bar--collapsed': !expanded }">
-    <div class="interaction-bar__header">
-      <span class="interaction-bar__title">
-        <span class="interaction-bar__dot"></span>
-        {{ interactionHeaderTitle }}
-        <span class="interaction-bar__count">{{ visibleInteractions.length }}</span>
-      </span>
-      <div v-if="visibleInteractions.length > 1" class="interaction-bar__tabs" role="tablist" aria-label="当前交互列表">
+  <section v-if="visibleInteractions.length" class="interaction-bar">
+    <div v-if="visibleInteractions.length > 1" class="interaction-bar__header">
+      <div class="interaction-bar__tabs" role="tablist" aria-label="当前交互列表">
         <button
           v-for="item in visibleInteractions"
           :key="item.id"
@@ -599,18 +596,9 @@ function handleSecondary() {
           <span>确认</span>
         </button>
       </div>
-      <button
-        type="button"
-        class="interaction-bar__chevron-button"
-        :aria-expanded="expanded"
-        :aria-label="expanded ? '收起当前交互' : '展开当前交互'"
-        @click="expanded = !expanded"
-      >
-        <span class="interaction-bar__chevron" :class="{ 'interaction-bar__chevron--open': expanded }">v</span>
-      </button>
     </div>
 
-    <div v-if="expanded && reviewMode" class="interaction-bar__body">
+    <div v-if="reviewMode" class="interaction-bar__body">
       <div class="interaction-bar__review">
         <div class="interaction-bar__copy">
           <span class="interaction-bar__type">预览</span>
@@ -637,7 +625,7 @@ function handleSecondary() {
       </div>
     </div>
 
-    <div v-else-if="expanded && activeInteraction" class="interaction-bar__body">
+    <div v-else-if="activeInteraction" class="interaction-bar__body">
       <div class="interaction-bar__main">
         <div class="interaction-bar__copy">
           <span class="interaction-bar__type">{{ typeLabels[activeInteraction.requestType] }}</span>
@@ -725,6 +713,11 @@ function handleSecondary() {
           ></textarea>
         </div>
 
+        <div v-else-if="activeInteraction.requestType === 'PERMISSION'" class="interaction-bar__hint interaction-bar__permission-hint">
+          <span>这是 OpenCode 原生工具授权，处理后才会继续执行当前工具。</span>
+          <span v-if="permissionScopeText(activeInteraction)">同类请求范围：{{ permissionScopeText(activeInteraction) }}</span>
+        </div>
+
         <div v-else-if="activeInteraction.requestType === 'APPROVAL' || activeInteraction.requestType === 'CONFIRM'" class="interaction-bar__hint">
           审批当前节点产物或结论。
         </div>
@@ -742,22 +735,25 @@ function handleSecondary() {
           处理后 Agent 会继续推进当前节点。
         </div>
 
-        <div class="interaction-bar__actions">
-          <button type="button" class="interaction-bar__ghost" :disabled="!!busyAction" @click="emit('open', activeInteraction.id)">
-            详情
-          </button>
+        <div class="interaction-bar__actions" :class="{ 'interaction-bar__actions--permission': activeInteraction.requestType === 'PERMISSION' }">
           <template v-if="activeInteraction.requestType === 'PERMISSION'">
-            <button type="button" class="interaction-bar__ghost" :disabled="!!busyAction" @click="handlePermissionDecision('reject')">
-              {{ busyAction?.includes(':reject') ? permissionBusyLabel('reject') : '拒绝' }}
-            </button>
-            <button type="button" class="interaction-bar__ghost" :disabled="!!busyAction" @click="handlePermissionDecision('always')">
-              {{ busyAction?.includes(':always') ? permissionBusyLabel('always') : '始终允许' }}
-            </button>
             <button type="button" class="interaction-bar__primary" :disabled="!!busyAction" @click="handlePermissionDecision('once')">
               {{ busyAction?.includes(':once') ? permissionBusyLabel('once') : '允许一次' }}
             </button>
+            <button type="button" class="interaction-bar__ghost" :disabled="!!busyAction" @click="handlePermissionDecision('always')">
+              {{ busyAction?.includes(':always') ? permissionBusyLabel('always') : '本次会话允许同类请求' }}
+            </button>
+            <button type="button" class="interaction-bar__ghost" :disabled="!!busyAction" @click="handlePermissionDecision('reject')">
+              {{ busyAction?.includes(':reject') ? permissionBusyLabel('reject') : '拒绝' }}
+            </button>
+            <button type="button" class="interaction-bar__ghost" :disabled="!!busyAction" @click="emit('open', activeInteraction.id)">
+              详情
+            </button>
           </template>
           <template v-else>
+            <button type="button" class="interaction-bar__ghost" :disabled="!!busyAction" @click="emit('open', activeInteraction.id)">
+              详情
+            </button>
             <button type="button" class="interaction-bar__ghost" :disabled="!!busyAction" @click="handleSecondary">
               {{ secondaryActionLabel(activeInteraction) }}
             </button>
@@ -789,11 +785,9 @@ function handleSecondary() {
 
 .interaction-bar__header {
   width: 100%;
-  min-height: 42px;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 40px;
+  display: flex;
   align-items: center;
-  gap: 12px;
   padding: 0 12px;
   background: color-mix(in srgb, var(--brand-soft) 55%, var(--bg-card));
   color: var(--text-primary);
@@ -834,37 +828,13 @@ function handleSecondary() {
   font-weight: 900;
 }
 
-.interaction-bar__chevron-button {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  cursor: pointer;
-}
-
-.interaction-bar__chevron-button:hover {
-  background: var(--surface-hover);
-}
-
-.interaction-bar__chevron {
-  color: var(--text-secondary);
-  font-size: 18px;
-  line-height: 1;
-  transform: rotate(-90deg);
-  transition: transform 0.16s ease;
-}
-
-.interaction-bar__chevron--open {
-  transform: rotate(0deg);
-}
-
 .interaction-bar__body {
   display: grid;
   gap: 12px;
   padding: 12px;
+}
+
+.interaction-bar__header + .interaction-bar__body {
   border-top: 1px solid var(--border-color);
 }
 
@@ -872,6 +842,7 @@ function handleSecondary() {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
   min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
@@ -949,6 +920,11 @@ function handleSecondary() {
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.5;
+}
+
+.interaction-bar__permission-hint {
+  display: grid;
+  gap: 4px;
 }
 
 .interaction-bar__context {
@@ -1171,6 +1147,11 @@ function handleSecondary() {
   padding-top: 2px;
 }
 
+.interaction-bar__actions--permission {
+  flex-direction: column;
+  align-items: stretch;
+}
+
 .interaction-bar__ghost,
 .interaction-bar__primary {
   padding: 0 13px;
@@ -1228,11 +1209,6 @@ function handleSecondary() {
 }
 
 @media (max-width: 760px) {
-  .interaction-bar__header {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    gap: 8px;
-  }
-
   .interaction-bar__body {
     grid-template-columns: 1fr;
   }

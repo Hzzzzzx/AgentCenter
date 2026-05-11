@@ -507,6 +507,39 @@ class OpenCodeRuntimeEventTranslatorTest {
     }
 
     @Test
+    void externalDirectoryPermissionUsesOpenCodeMetadata() throws Exception {
+        String json = """
+        {
+          "type": "permission.asked",
+          "properties": {
+            "id": "perm_external_1",
+            "permission": "external_directory",
+            "patterns": ["/Users/hzz/workspace/AgentCenter/agentcenter-bridge/src/test/resources/opencode-permission-fixture/src/protected/*"],
+            "always": ["/Users/hzz/workspace/AgentCenter/agentcenter-bridge/src/test/resources/opencode-permission-fixture/src/protected/*"],
+            "metadata": {
+              "filepath": "/Users/hzz/workspace/AgentCenter/agentcenter-bridge/src/test/resources/opencode-permission-fixture/src/protected",
+              "parentDir": "/Users/hzz/workspace/AgentCenter/agentcenter-bridge/src/test/resources/opencode-permission-fixture/src/protected"
+            }
+          }
+        }
+        """;
+        RuntimeRawEvent raw = rawEvent("permission.asked", json);
+        List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
+
+        assertEquals(2, result.size());
+        JsonNode payload = result.get(0).payload();
+        assertEquals(RuntimeEventTypes.PERMISSION_REQUESTED, result.get(0).type());
+        assertEquals("OpenCode 请求访问外部目录", payload.path("title").asText());
+        assertEquals("external_directory", payload.path("permission").asText());
+        assertEquals("/Users/hzz/workspace/AgentCenter/agentcenter-bridge/src/test/resources/opencode-permission-fixture/src/protected",
+                payload.path("filePath").asText());
+        assertEquals("/Users/hzz/workspace/AgentCenter/agentcenter-bridge/src/test/resources/opencode-permission-fixture/src/protected",
+                payload.path("parentDir").asText());
+        assertEquals("/Users/hzz/workspace/AgentCenter/agentcenter-bridge/src/test/resources/opencode-permission-fixture/src/protected/*",
+                payload.path("always").asText());
+    }
+
+    @Test
     void questionAskedCreatesQuestionRequestedEnvelope() throws Exception {
         String json = """
         {
