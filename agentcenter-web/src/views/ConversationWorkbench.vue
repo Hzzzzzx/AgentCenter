@@ -792,8 +792,8 @@ async function handleOpenArtifact(ref: ArtifactOpenRef | string) {
     try {
       emit('open-artifact', await artifactApi.get(target.artifactId))
       return
-    } catch {
-      // Keep the old title-based path available for historical messages.
+    } catch (error) {
+      console.debug('Failed to open artifact by id, falling back to title lookup', error)
     }
   }
 

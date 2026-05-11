@@ -55,6 +55,17 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
             - 当前工作目录是 AgentCenter 为 Runtime 准备的隔离工作区；只读取、搜索和修改该工作目录内的文件。
             - 不要访问、搜索或引用 AgentCenter 源码目录、父目录、用户主目录或其他绝对路径，除非输入上下文明确把某个文件内容作为资料提供。
             - 如果任务需要工作目录之外的信息，请先说明缺失信息，并向 AgentCenter 请求补充，不要自行扩大读取范围。""";
+    private static final String CONVERSATION_ARTIFACT_CAPTURE_INSTRUCTION = """
+
+            AgentCenter 产物保存规则：
+            - 普通问答、解释、排查过程不要输出产物协议。
+            - 当用户明确要求生成 PRD、设计文档、报告、方案、补丁说明等可沉淀交付物时，请把最终交付物包在以下隐藏协议中，系统会保存为可预览产物：
+            <!-- AGENTCENTER_ARTIFACT_BEGIN
+            title: 简短产物标题.md
+            type: MARKDOWN
+            -->
+            这里放最终产物正文。
+            <!-- AGENTCENTER_ARTIFACT_END -->""";
     private final OpenCodeProcessManager processManager;
     private final OpenCodeEventSubscriber eventSubscriber;
     private final ObjectMapper objectMapper;
@@ -234,7 +245,7 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
     @Override
     public void sendMessage(String sessionId, String userMessage) {
-        dispatchPrompt(sessionId, userMessage);
+        dispatchPrompt(sessionId, userMessage, true);
     }
 
     private String buildSkillPrompt(String skillName, String inputContext) {
@@ -304,7 +315,7 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
     }
 
     private String dispatchPromptAndWait(String sessionId, String userMessage, boolean allowToolOutputFallback) {
-        DispatchContext context = dispatchPrompt(sessionId, userMessage);
+        DispatchContext context = dispatchPrompt(sessionId, userMessage, false);
         return waitForAssistantText(
                 context.baseUrl(),
                 context.cwd(),
@@ -323,7 +334,7 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
                 false);
     }
 
-    private DispatchContext dispatchPrompt(String sessionId, String userMessage) {
+    private DispatchContext dispatchPrompt(String sessionId, String userMessage, boolean includeArtifactInstruction) {
         if (sessionId == null || sessionId.isBlank()) {
             throw new IllegalArgumentException("Agent session id is required before dispatching to opencode");
         }
@@ -347,7 +358,7 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         ArrayNode parts = sendPayload.putArray("parts");
         ObjectNode textPart = parts.addObject();
         textPart.put("type", "text");
-        textPart.put("text", userMessage);
+        textPart.put("text", includeArtifactInstruction ? withConversationArtifactInstruction(userMessage) : userMessage);
 
         RuntimeCommandEnvelope command = RuntimeCommandEnvelope.of(
                 RuntimeCommandTypes.CONVERSATION_MESSAGE_SEND, RuntimeType.OPENCODE,
@@ -362,6 +373,13 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
         log.debug("Sent message to opencode session {} (agent session {})", opencodeSessionId, sessionId);
         return new DispatchContext(baseUrl, cwd.toString(), opencodeSessionId, knownMessageIds);
+    }
+
+    private String withConversationArtifactInstruction(String userMessage) {
+        if (userMessage == null || userMessage.isBlank()) {
+            return CONVERSATION_ARTIFACT_CAPTURE_INSTRUCTION.trim();
+        }
+        return userMessage + "\n\n" + CONVERSATION_ARTIFACT_CAPTURE_INSTRUCTION.trim();
     }
 
     private DispatchContext dispatchMultiPartPrompt(String sessionId, ArrayNode parts, String skillName) {

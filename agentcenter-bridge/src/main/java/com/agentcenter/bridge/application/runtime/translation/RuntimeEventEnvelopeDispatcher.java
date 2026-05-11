@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 
 import com.agentcenter.bridge.api.dto.RuntimeEventDto;
 import com.agentcenter.bridge.application.RuntimeEventService;
+import com.agentcenter.bridge.application.artifact.ArtifactCaptureService;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeEventEnvelope;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeEventTypes;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -24,19 +25,22 @@ public class RuntimeEventEnvelopeDispatcher {
     private final RuntimeOperationEventHandler operationHandler;
     private final PermissionConfirmationHandler permissionHandler;
     private final QuestionConfirmationHandler questionHandler;
+    private final ArtifactCaptureService artifactCaptureService;
 
     public RuntimeEventEnvelopeDispatcher(LegacyRuntimeEventBridge legacyBridge,
                                            AssistantMessageProjector projector,
                                            RuntimeEventService eventService,
                                            RuntimeOperationEventHandler operationHandler,
                                            PermissionConfirmationHandler permissionHandler,
-                                           QuestionConfirmationHandler questionHandler) {
+                                           QuestionConfirmationHandler questionHandler,
+                                           ArtifactCaptureService artifactCaptureService) {
         this.legacyBridge = legacyBridge;
         this.projector = projector;
         this.eventService = eventService;
         this.operationHandler = operationHandler;
         this.permissionHandler = permissionHandler;
         this.questionHandler = questionHandler;
+        this.artifactCaptureService = artifactCaptureService;
     }
 
     public void dispatch(List<RuntimeEventEnvelope> envelopes) {
@@ -72,6 +76,13 @@ public class RuntimeEventEnvelopeDispatcher {
             }
 
             projector.onEnvelope(envelope);
+
+            try {
+                artifactCaptureService.captureFromRuntimeArtifact(envelope);
+            } catch (Exception e) {
+                log.warn("Failed to capture runtime artifact for event {}: {}",
+                        envelope.type(), e.getMessage());
+            }
 
             RuntimeEventDto legacyEvent = legacyBridge.toLegacyEvent(envelope);
             if (legacyEvent != null) {

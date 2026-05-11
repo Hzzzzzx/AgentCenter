@@ -229,7 +229,7 @@ describe('MessageList.vue', () => {
     expect(artifact.exists()).toBe(true)
     expect(artifact.text()).toBe('FE2001 详细设计 (LLD).md')
     await artifact.trigger('click')
-    expect(wrapper.emitted('open-artifact')?.[0]).toEqual(['FE2001 详细设计 (LLD).md'])
+    expect(wrapper.emitted('open-artifact')?.[0]).toEqual([{ title: 'FE2001 详细设计 (LLD).md' }])
   })
 
   it('keeps numeric prefixes when linking generated artifact names in system messages', async () => {
@@ -249,7 +249,7 @@ describe('MessageList.vue', () => {
     expect(artifact.exists()).toBe(true)
     expect(artifact.text()).toBe(artifactTitle)
     await artifact.trigger('click')
-    expect(wrapper.emitted('open-artifact')?.[0]).toEqual([artifactTitle])
+    expect(wrapper.emitted('open-artifact')?.[0]).toEqual([{ title: artifactTitle }])
   })
 
   it('renders runtime process events as ordered execution steps', () => {
