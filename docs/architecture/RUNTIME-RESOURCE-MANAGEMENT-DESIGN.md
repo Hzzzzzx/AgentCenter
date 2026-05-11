@@ -88,11 +88,11 @@ Skill 列表字段：
 
 | 字段 | 示例 | 说明 |
 |------|------|------|
-| 名称 | `prd-desingn` | Skill 唯一名，同名上传视为更新 |
+| 名称 | `prd-design` | Skill 唯一名，同名上传视为更新 |
 | 版本 | `1.0.3` | 从 manifest 或 SKILL.md front matter 读取；缺省为 `0.0.0` |
 | 状态 | 启用 / 停用 / 校验失败 / 更新中 | 前端状态标签 |
 | 来源 | 上传 / 本地扫描 / 内置 | 便于区分治理来源 |
-| 安装路径 | `.opencode/skills/prd-desingn` | 只展示相对路径 |
+| 安装路径 | `.opencode/skills/prd-design` | 只展示相对路径 |
 | 引用 | 3 个工作流节点 | 工作流依赖检查 |
 | 更新时间 | `2026-05-06 23:20` | 最近安装或刷新时间 |
 | 操作 | 更新、停用、删除、查看 | 行级操作 |
@@ -451,7 +451,7 @@ GET    /api/projects/{projectId}/runtime/skills/{skillId}/audits
 {
   "skill": {
     "id": "skill_001",
-    "name": "prd-desingn",
+    "name": "prd-design",
     "version": "1.0.3",
     "status": "ENABLED",
     "validationStatus": "VALID"
@@ -598,9 +598,9 @@ MCP_TOOLS_REFRESHED
   "projectId": "agentcenter",
   "resourceType": "SKILL",
   "resourceId": "skill_001",
-  "resourceName": "prd-desingn",
+  "resourceName": "prd-design",
   "status": "SUCCESS",
-  "summary": "Skill prd-desingn updated to 1.0.3",
+  "summary": "Skill prd-design updated to 1.0.3",
   "skillCount": 12,
   "mcpToolCount": 27
 }
@@ -652,7 +652,7 @@ M1 建议权限分级：
 
 ## 12. 与工作流和会话的关系
 
-工作流节点引用 Skill 名称，例如 `prd-desingn`、`hld-design`、`lld-design`。
+工作流节点引用 Skill 名称，例如 `prd-design`、`hld-design`、`lld-design`。
 
 执行前校验：
 
@@ -665,7 +665,7 @@ M1 建议权限分级：
 ```text
 已加载运行资源
 
-- Skill: prd-desingn@1.0.3, hld-design@1.0.1
+- Skill: prd-design@1.0.3, hld-design@1.0.1
 - MCP: gitlab-internal(12 tools), wiki-search(5 tools)
 - 刷新时间: 2026-05-06 23:30
 ```

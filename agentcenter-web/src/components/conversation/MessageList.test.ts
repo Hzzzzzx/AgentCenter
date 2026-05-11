@@ -127,7 +127,7 @@ describe('MessageList.vue', () => {
         messages: [makeMessage({
           role: 'USER',
           contentFormat: 'MARKDOWN',
-          content: '请执行工作流节点：需求整理 (PRD)\n\n## 用户输入\n\n- 工作项编号：FE1234\n- 工作项标题：用户登录优化\n- 工作项状态：BACKLOG\n- 优先级：HIGH\n- 使用 Skill：prd-desingn\n\n## 任务信息\n\n```text\n用户输入：作为产品负责人，我要验证工作流上下文。\n```',
+          content: '请执行工作流节点：需求整理 (PRD)\n\n## 用户输入\n\n- 工作项编号：FE1234\n- 工作项标题：用户登录优化\n- 工作项状态：BACKLOG\n- 优先级：HIGH\n- 使用 Skill：prd-design\n\n## 任务信息\n\n```text\n用户输入：作为产品负责人，我要验证工作流上下文。\n```',
         })],
       },
     })

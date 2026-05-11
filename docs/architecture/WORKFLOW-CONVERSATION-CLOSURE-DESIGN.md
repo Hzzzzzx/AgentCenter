@@ -236,7 +236,7 @@ GET /api/work-items
     "status": "RUNNING",
     "currentNodeInstanceId": "wni_002",
     "nodes": [
-      { "id": "wni_001", "definitionName": "需求转设计 (PRD)", "skillName": "prd-desingn", "status": "COMPLETED" },
+      { "id": "wni_001", "definitionName": "需求转设计 (PRD)", "skillName": "prd-design", "status": "COMPLETED" },
       { "id": "wni_002", "definitionName": "方案设计 (HLD)", "skillName": "hld-design", "status": "RUNNING" },
       { "id": "wni_003", "definitionName": "详细设计 (LLD)", "skillName": "lld-design", "status": "PENDING" }
     ]

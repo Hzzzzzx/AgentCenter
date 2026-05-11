@@ -180,7 +180,7 @@ class OpenCodeRuntimeAdapterCreateSessionTest {
                         ]
                         """));
 
-        SkillRunResult result = adapter.runSkill("ses_stream", "prd-desingn", "ctx");
+        SkillRunResult result = adapter.runSkill("ses_stream", "prd-design", "ctx");
 
         assertTrue(result.success());
         assertEquals("第一段第二段", result.outputContent());

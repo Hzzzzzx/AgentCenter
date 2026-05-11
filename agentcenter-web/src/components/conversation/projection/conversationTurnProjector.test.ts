@@ -908,20 +908,20 @@ describe('projectConversationTurns', () => {
             rawPartType: 'tool',
             toolName: 'skill',
             toolCallId: 'call-skill',
-            output: '## Skill: prd-desingn\n\n**Base directory**: /runtime-workspace/.opencode/skills/prd-desingn',
+            output: '## Skill: prd-design\n\n**Base directory**: /runtime-workspace/.opencode/skills/prd-design',
           }),
         }),
         makeEvent({
           id: 'ev-node-start',
           eventType: 'SKILL_STARTED',
           seqNo: 3,
-          payloadJson: JSON.stringify({ skillName: 'prd-desingn' }),
+          payloadJson: JSON.stringify({ skillName: 'prd-design' }),
         }),
       ],
     }))
 
     expect(turns[0].steps).toHaveLength(1)
-    expect(turns[0].steps[0].title).toBe('调用 prd-desingn')
+    expect(turns[0].steps[0].title).toBe('调用 prd-design')
   })
 
   it('projects markdown-like context output into the assistant answer instead of execution steps', () => {
@@ -1119,8 +1119,8 @@ describe('projectConversationTurns', () => {
           eventType: 'SKILL_STARTED',
           seqNo: 1,
           payloadJson: JSON.stringify({
-            skillName: 'prd-desingn',
-            toolCallId: 'workflow:node-prd:prd-desingn',
+            skillName: 'prd-design',
+            toolCallId: 'workflow:node-prd:prd-design',
           }),
         }),
         makeEvent({
@@ -1139,7 +1139,30 @@ describe('projectConversationTurns', () => {
 
     const toolParts = findToolParts(turns[0])
     expect(toolParts.map(part => part.category)).toEqual(['skill', 'command'])
-    expect(toolParts[0].displayName).toBe('调用 prd-desingn')
+    expect(toolParts[0].displayName).toBe('调用 prd-design')
     expect(toolParts[1].displayName).toBe('执行命令 npm run typecheck')
+  })
+
+  it('keeps read tool display as file read even when output contains a Skill markdown header', () => {
+    const turns = projectConversationTurns(makeInput({
+      runtimeEvents: [
+        makeEvent({
+          id: 'ev-read-skill-md',
+          eventType: 'SKILL_COMPLETED',
+          seqNo: 1,
+          payloadJson: JSON.stringify({
+            label: 'read',
+            toolName: 'read',
+            toolCallId: 'read-1',
+            input: '/Users/hzz/.codex/skills/example/SKILL.md',
+            output: '## Skill: example\n\nUse this skill for examples.',
+          }),
+        }),
+      ],
+    }))
+
+    const toolPart = findToolParts(turns[0])[0]
+    expect(toolPart.category).toBe('read')
+    expect(toolPart.displayName).toBe('读取文件 skills/example/SKILL.md')
   })
 })

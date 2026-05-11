@@ -86,7 +86,7 @@ class WorkflowConversationInteractionTest {
 
         var json = objectMapper.readTree(result.getResponse().getContentAsString());
 
-        // Find the first node (requirement_refine / prd-desingn) — READY_TO_ADVANCE sets WAITING_CONFIRMATION
+        // Find the first node (requirement_refine / prd-design) — READY_TO_ADVANCE sets WAITING_CONFIRMATION
         var firstNode = json.at("/workflowInstance/nodes/0");
         assertThat(firstNode.get("status").asText()).isEqualTo("WAITING_CONFIRMATION");
         String sessionId = firstNode.get("agentSessionId").asText();

@@ -57,7 +57,7 @@ const mockItems: WorkItemDto[] = [
       status: 'RUNNING',
       currentNodeInstanceId: 'node-2',
       nodes: [
-        { id: 'n1', definitionName: 'PRD', skillName: 'prd-desingn', status: 'COMPLETED' },
+        { id: 'n1', definitionName: 'PRD', skillName: 'prd-design', status: 'COMPLETED' },
         { id: 'n2', definitionName: 'HLD', skillName: 'hld-design', status: 'RUNNING' },
         { id: 'n3', definitionName: 'LLD', skillName: 'lld-design', status: 'PENDING' },
       ],
@@ -83,7 +83,7 @@ const mockItems: WorkItemDto[] = [
       status: 'COMPLETED',
       currentNodeInstanceId: null,
       nodes: [
-        { id: 'n4', definitionName: 'PRD', skillName: 'prd-desingn', status: 'COMPLETED' },
+        { id: 'n4', definitionName: 'PRD', skillName: 'prd-design', status: 'COMPLETED' },
         { id: 'n5', definitionName: 'HLD', skillName: 'hld-design', status: 'COMPLETED' },
         { id: 'n6', definitionName: 'LLD', skillName: 'lld-design', status: 'COMPLETED' },
       ],

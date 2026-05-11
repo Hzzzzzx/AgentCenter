@@ -43,13 +43,13 @@ class WorkflowControllerTest {
                     {
                       "nodeKey": "custom_prd",
                       "name": "自定义需求",
-                      "skillName": "prd-desingn",
+                      "skillName": "prd-design",
                       "inputPolicy": "WORK_ITEM_ONLY",
                       "outputArtifactType": "MARKDOWN",
                       "requiredConfirmation": false,
                       "stageKey": "custom_prd",
                       "stageGoal": "整理需求",
-                      "recommendedSkillNames": ["prd-desingn"],
+                      "recommendedSkillNames": ["prd-design"],
                       "allowDynamicActions": true
                     },
                     {

@@ -18,6 +18,10 @@ import com.agentcenter.bridge.domain.runtime.RuntimeType;
 @TestConfiguration
 public class TestWorkflowExecutorConfig {
 
+    public static final String PRD_SKILL_NAME = "prd-design";
+    public static final String HLD_SKILL_NAME = "hld-design";
+    public static final String LLD_SKILL_NAME = "lld-design";
+
     public static final List<String> CAPTURED_SKILL_NAMES = new CopyOnWriteArrayList<>();
     public static final List<String> CAPTURED_INPUT_CONTEXTS = new CopyOnWriteArrayList<>();
     private static final AtomicReference<String> CUSTOM_SKILL_OUTPUT = new AtomicReference<>();
@@ -136,7 +140,7 @@ public class TestWorkflowExecutorConfig {
                 }
 
                 String output = switch (skillName) {
-                    case "fe.requirement.refine", "prd-desingn" -> """
+                    case "fe.requirement.refine", PRD_SKILL_NAME -> """
                             # PRD
 
                             测试 PRD 输出
@@ -147,7 +151,7 @@ public class TestWorkflowExecutorConfig {
                             artifact_title: FE1234-需求整理 (PRD).md
                             -->
                             """.trim();
-                    case "fe.solution.design", "hld-design" -> """
+                    case "fe.solution.design", HLD_SKILL_NAME -> """
                             # HLD
 
                             测试 HLD 输出
@@ -169,7 +173,7 @@ public class TestWorkflowExecutorConfig {
                                     label: 完整方案
                             -->
                             """.trim();
-                    case "fe.implementation.plan", "lld-design" -> """
+                    case "fe.implementation.plan", LLD_SKILL_NAME -> """
                             # LLD
 
                             测试 LLD 输出
@@ -220,11 +224,11 @@ public class TestWorkflowExecutorConfig {
                 java.time.OffsetDateTime now = java.time.OffsetDateTime.now();
                 return java.util.List.of(
                         new com.agentcenter.bridge.api.dto.RuntimeSkillDto(
-                                "prd-desingn", "PRD test skill", ".opencode/skills/prd-desingn", "test-prd", now),
+                                PRD_SKILL_NAME, "PRD test skill", ".opencode/skills/" + PRD_SKILL_NAME, "test-prd", now),
                         new com.agentcenter.bridge.api.dto.RuntimeSkillDto(
-                                "hld-design", "HLD test skill", ".opencode/skills/hld-design", "test-hld", now),
+                                HLD_SKILL_NAME, "HLD test skill", ".opencode/skills/" + HLD_SKILL_NAME, "test-hld", now),
                         new com.agentcenter.bridge.api.dto.RuntimeSkillDto(
-                                "lld-design", "LLD test skill", ".opencode/skills/lld-design", "test-lld", now),
+                                LLD_SKILL_NAME, "LLD test skill", ".opencode/skills/" + LLD_SKILL_NAME, "test-lld", now),
                         new com.agentcenter.bridge.api.dto.RuntimeSkillDto(
                                 "fe.requirement.refine", "Legacy PRD test skill", ".opencode/skills/fe.requirement.refine", "test-fe-prd", now),
                         new com.agentcenter.bridge.api.dto.RuntimeSkillDto(

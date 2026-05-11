@@ -20,7 +20,7 @@ const mocks = vi.hoisted(() => ({
         nodeKey: 'prd',
         name: '需求整理',
         orderNo: 1,
-        skillName: 'prd-desingn',
+        skillName: 'prd-design',
         inputPolicy: 'WORK_ITEM_ONLY',
         outputArtifactType: 'MARKDOWN',
         requiredConfirmation: false,
@@ -54,7 +54,7 @@ vi.mock('../api/workflows', () => ({
 vi.mock('../api/runtimeResources', () => ({
   skillApi: {
     catalog: vi.fn().mockResolvedValue([
-      { id: 'skill-1', name: 'prd-desingn', status: 'ENABLED', validationStatus: 'VALID' },
+      { id: 'skill-1', name: 'prd-design', status: 'ENABLED', validationStatus: 'VALID' },
       { id: 'skill-2', name: 'hld-design', status: 'ENABLED', validationStatus: 'VALID' },
     ]),
   },
@@ -139,13 +139,13 @@ describe('WorkflowConfig.vue', () => {
     const prdSkill: RuntimeSkillDetailDto = {
       id: 'skill-1',
       projectId: '01DEFAULTPROJECT0000000000001',
-      name: 'prd-desingn',
+      name: 'prd-design',
       displayName: null,
       description: null,
       currentVersionId: null,
       status: 'ENABLED',
       source: 'LOCAL_SCAN',
-      relativePath: '.opencode/skills/prd-desingn',
+      relativePath: '.opencode/skills/prd-design',
       checksum: 'checksum-prd',
       validationStatus: 'VALID',
       validationMessage: null,

@@ -50,7 +50,7 @@ INSERT INTO workflow_definition (id, work_item_type, name, version_no, status, i
 INSERT INTO workflow_node_definition (id, workflow_definition_id, node_key, name, order_no, skill_name,
     input_policy, output_artifact_type, output_name_template, required_confirmation, timeout_seconds, retry_limit) VALUES
     ('01FENODDEF000000000000000011', '01FEDEFAULTWFDEF00000000000002',
-        'requirement_refine', '需求整理 (PRD)', 1, 'prd-desingn',
+        'requirement_refine', '需求整理 (PRD)', 1, 'prd-design',
         'WORK_ITEM_ONLY', 'MARKDOWN', '01-requirement.md', 0, 300, 3),
 
     ('01FENODDEF000000000000000012', '01FEDEFAULTWFDEF00000000000002',

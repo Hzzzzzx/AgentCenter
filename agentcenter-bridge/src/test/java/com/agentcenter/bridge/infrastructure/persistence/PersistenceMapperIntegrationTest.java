@@ -62,7 +62,7 @@ class PersistenceMapperIntegrationTest {
                 workflowMapper.findNodeDefinitionsByWorkflowDefinitionId(feDefault.getId());
         assertThat(nodes).hasSize(3);
         assertThat(nodes.stream().map(WorkflowNodeDefinitionEntity::getSkillName))
-                .containsExactly("prd-desingn", "hld-design", "lld-design");
+                .containsExactly("prd-design", "hld-design", "lld-design");
     }
 
     @Test

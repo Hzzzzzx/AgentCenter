@@ -99,7 +99,7 @@ class M1WorkflowStartIntegrationTest {
                 .contains("优先级")
                 .contains("## 当前节点")
                 .contains("Skill")
-                .contains("prd-desingn");
+                .contains("prd-design");
 
         String firstNodeSessionId = firstNode.get("agentSessionId").asText();
         var userInputs = jdbcTemplate.queryForList(
@@ -111,7 +111,7 @@ class M1WorkflowStartIntegrationTest {
                 .contains("请执行工作流节点")
                 .contains("工作项编号：FE1234")
                 .contains("工作项标题：用户登录优化")
-                .contains("使用 Skill：prd-desingn")
+                .contains("使用 Skill：prd-design")
                 .contains("## 任务信息")
                 .contains("## 节点上下文");
 
@@ -170,7 +170,7 @@ class M1WorkflowStartIntegrationTest {
         assertThat(json.at("/workflowInstance/nodes/1/status").asText()).isEqualTo("WAITING_CONFIRMATION");
         assertThat(json.at("/workflowInstance/nodes/2/status").asText()).isEqualTo("PENDING");
         assertThat(TestWorkflowExecutorConfig.CAPTURED_SKILL_NAMES)
-                .contains("prd-desingn", "hld-design");
+                .contains("prd-design", "hld-design");
 
         String executionMode = jdbcTemplate.queryForObject(
                 "SELECT execution_mode FROM workflow_instance WHERE id = ?",
@@ -333,7 +333,7 @@ class M1WorkflowStartIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.workflowInstance.nodes[0].status").value("WAITING_CONFIRMATION"));
 
-        assertThat(TestWorkflowExecutorConfig.CAPTURED_SKILL_NAMES).contains("prd-desingn");
+        assertThat(TestWorkflowExecutorConfig.CAPTURED_SKILL_NAMES).contains("prd-design");
         String runtimeSessionId = jdbcTemplate.queryForObject(
                 "SELECT runtime_session_id FROM workflow_node_instance WHERE id = ?",
                 String.class, nodeId);
