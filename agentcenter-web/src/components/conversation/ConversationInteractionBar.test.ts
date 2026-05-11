@@ -172,6 +172,50 @@ describe('ConversationInteractionBar.vue', () => {
     expect(wrapper.emitted('resolved')?.[0]).toEqual(['confirm-3'])
   })
 
+  it('keeps multi-question prompts visible while editing answers', async () => {
+    const wrapper = mount(ConversationInteractionBar, {
+      props: {
+        interactions: [
+          makeInteraction({
+            id: 'confirm-questions',
+            requestType: 'INPUT_REQUIRED',
+            title: '需要你回答 2 个问题',
+            content: '请按问题分别补充答案',
+            interactionSchemaJson: JSON.stringify({
+              question: '请按问题分别补充答案',
+              fields: [
+                {
+                  id: 'q0',
+                  label: '问题 1',
+                  type: 'textarea',
+                  required: true,
+                  placeholder: '请确认目标用户是谁？',
+                },
+                {
+                  id: 'q1',
+                  label: '问题 2',
+                  type: 'textarea',
+                  required: true,
+                  placeholder: '请说明验收标准是什么？',
+                },
+              ],
+            }),
+          }),
+        ],
+      },
+    })
+
+    const textareas = wrapper.findAll('textarea')
+    expect(wrapper.text()).toContain('请确认目标用户是谁？')
+    expect(wrapper.text()).toContain('请说明验收标准是什么？')
+    expect(textareas[0].attributes('placeholder')).toBe('输入你的回答...')
+
+    await textareas[0].setValue('企业项目经理')
+
+    expect(wrapper.text()).toContain('请确认目标用户是谁？')
+    expect(wrapper.text()).toContain('请说明验收标准是什么？')
+  })
+
   it('renders multi-select checkboxes for DECISION with selection: multi', async () => {
     const wrapper = mount(ConversationInteractionBar, {
       props: {

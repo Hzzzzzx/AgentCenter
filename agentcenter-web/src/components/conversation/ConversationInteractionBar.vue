@@ -209,6 +209,16 @@ function interactionTabTitle(item: ConfirmationRequestDto): string {
   return `问题 ${interactionIndex(item)}`
 }
 
+function fieldQuestion(field: InteractionField): string | null {
+  const placeholder = field.placeholder?.trim()
+  if (!placeholder || placeholder === field.label.trim()) return null
+  return placeholder
+}
+
+function fieldPlaceholder(field: InteractionField): string {
+  return field.type === 'textarea' ? '输入你的回答...' : '输入答案...'
+}
+
 function primaryActionLabel(item: ConfirmationRequestDto): string {
   if (item.requestType === 'INPUT_REQUIRED') return '提交补充'
   if (item.requestType === 'DECISION') return '提交选择'
@@ -443,12 +453,15 @@ function handleSecondary() {
                   {{ field.label }}
                   <span v-if="field.required" class="interaction-bar__field-required">*</span>
                 </label>
+                <p v-if="fieldQuestion(field)" class="interaction-bar__field-question">
+                  {{ fieldQuestion(field) }}
+                </p>
                 <textarea
                   v-if="field.type === 'textarea'"
                   :id="'field-' + field.id"
                   :value="activeFieldValues[field.id] ?? ''"
                   class="interaction-bar__textarea interaction-bar__field-input"
-                  :placeholder="field.placeholder ?? ''"
+                  :placeholder="fieldPlaceholder(field)"
                   rows="2"
                   @input="(e: Event) => setFieldValue(field.id, (e.target as HTMLTextAreaElement).value)"
                 ></textarea>
@@ -458,7 +471,7 @@ function handleSecondary() {
                   :value="activeFieldValues[field.id] ?? ''"
                   class="interaction-bar__input interaction-bar__field-input"
                   :type="field.type === 'number' ? 'number' : 'text'"
-                  :placeholder="field.placeholder ?? ''"
+                  :placeholder="fieldPlaceholder(field)"
                   @input="(e: Event) => setFieldValue(field.id, (e.target as HTMLInputElement).value)"
                 >
               </div>
@@ -875,6 +888,13 @@ function handleSecondary() {
   font-size: 12px;
   font-weight: 700;
   color: var(--text-secondary);
+}
+
+.interaction-bar__field-question {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-primary);
 }
 
 .interaction-bar__field-required {
