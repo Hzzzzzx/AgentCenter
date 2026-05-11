@@ -235,10 +235,9 @@ function buildToolPart(lifecycle: ToolLifecycle): ToolInvocationPart {
 }
 
 function readableToolName(toolName: string, input?: string, output?: string): string {
-  const skillName = extractLoadedSkillName(output)
-  if (skillName) return `读取 Skill：${skillName}`
+  const category = toolCategory(toolName)
   const target = conciseToolTarget(input || output)
-  switch (toolCategory(toolName)) {
+  switch (category) {
     case 'read':
       return target ? `读取文件 ${target}` : '读取文件'
     case 'search':
@@ -247,8 +246,11 @@ function readableToolName(toolName: string, input?: string, output?: string): st
       return target ? `查看目录 ${target}` : '查看目录'
     case 'command':
       return target ? `执行命令 ${target}` : '执行命令'
-    case 'skill':
+    case 'skill': {
+      const skillName = extractLoadedSkillName(output)
+      if (skillName) return `读取 Skill：${skillName}`
       return `调用 ${toolName}`
+    }
     default:
       return toolName
   }
