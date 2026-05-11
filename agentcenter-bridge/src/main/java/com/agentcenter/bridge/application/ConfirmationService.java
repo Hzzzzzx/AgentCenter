@@ -7,9 +7,11 @@ import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.jdbc.UncategorizedSQLException;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -41,6 +43,8 @@ import com.agentcenter.bridge.infrastructure.persistence.mapper.WorkflowMapper;
 
 @Service
 public class ConfirmationService {
+    private static final int SQLITE_BUSY_MAX_RETRIES = 3;
+    private static final long SQLITE_BUSY_RETRY_SLEEP_MS = 80L;
 
     private static final DateTimeFormatter SQLITE_DATETIME =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -109,7 +113,7 @@ public class ConfirmationService {
         }
         entity.setStatus(ConfirmationStatus.IN_CONVERSATION.name());
         entity.setUpdatedAt(LocalDateTime.now().format(SQLITE_DATETIME));
-        confirmationMapper.update(entity);
+        updateConfirmationWithRetry(entity);
         return toDto(entity);
     }
 
@@ -183,7 +187,7 @@ public class ConfirmationService {
             } catch (Exception ignored) {
             }
         }
-        confirmationMapper.update(entity);
+        updateConfirmationWithRetry(entity);
 
         String actionDescription = buildActionDescription(actionType, request);
         writeResolutionLedgerMessage(entity, actionDescription);
@@ -258,7 +262,7 @@ public class ConfirmationService {
         entity.setResolvedAt(now);
         entity.setResolutionComment(request.comment());
         entity.setUpdatedAt(now);
-        confirmationMapper.update(entity);
+        updateConfirmationWithRetry(entity);
 
         writeResolutionLedgerMessage(entity,
                 "用户拒绝" + (request.comment() != null ? "：" + request.comment() : "")
@@ -496,8 +500,42 @@ public class ConfirmationService {
         entity.setResolvedAt(now);
         entity.setResolutionComment(comment);
         entity.setUpdatedAt(now);
-        confirmationMapper.update(entity);
+        updateConfirmationWithRetry(entity);
         return toDto(entity);
+    }
+
+    private void updateConfirmationWithRetry(ConfirmationRequestEntity entity) {
+        for (int attempt = 1; ; attempt++) {
+            try {
+                confirmationMapper.update(entity);
+                return;
+            } catch (UncategorizedSQLException e) {
+                if (!isSqliteBusySnapshot(e) || attempt >= SQLITE_BUSY_MAX_RETRIES) {
+                    throw e;
+                }
+                sleepBeforeRetry(attempt);
+            }
+        }
+    }
+
+    private boolean isSqliteBusySnapshot(UncategorizedSQLException e) {
+        Throwable cause = e.getCause();
+        if (!(cause instanceof org.sqlite.SQLiteException sqliteException)) {
+            return false;
+        }
+        String message = sqliteException.getMessage();
+        return sqliteException.getErrorCode() == 5
+                && message != null
+                && message.contains("SQLITE_BUSY_SNAPSHOT");
+    }
+
+    private void sleepBeforeRetry(int attempt) {
+        long sleepMillis = SQLITE_BUSY_RETRY_SLEEP_MS * attempt;
+        try {
+            TimeUnit.MILLISECONDS.sleep(sleepMillis);
+        } catch (InterruptedException interruptedException) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private boolean hasOtherBlockingForNode(ConfirmationRequestEntity current) {
