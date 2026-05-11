@@ -282,6 +282,8 @@ class WorkflowPromptComposerTest {
             String instruction = instructionComposer.composeProtocolInstruction();
 
             assertTrue(instruction.contains("如果你不输出状态块，系统默认视为 IN_PROGRESS"), "should explain default");
+            assertTrue(instruction.contains("优先使用 OpenCode 原生 Question 交互"), "should prefer OpenCode question");
+            assertTrue(instruction.contains("AgentCenter Bridge 会将 Question 翻译为平台待确认"), "should explain question bridge");
             assertTrue(instruction.contains("只有 READY_TO_ADVANCE 才会保存"), "should explain advance rule");
             assertTrue(instruction.contains("NEEDS_USER_INPUT 下用户回答后"), "should explain feedback loop");
         }

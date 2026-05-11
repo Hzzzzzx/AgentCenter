@@ -1407,7 +1407,8 @@ public class WorkflowCommandService {
         sb.append("## 执行方式\n");
         sb.append("- 请按 Skill 自身说明处理上述输入。\n");
         sb.append("- 工作流只提供调用顺序、当前输入和上游输出，不替代 Skill 的判断。\n");
-        sb.append("- 如果还需要用户澄清，请直接提出问题或给出可选方案。\n");
+        sb.append("- 如果还需要用户澄清、选择、确认或授权，优先使用 OpenCode 原生 Question 交互；AgentCenter Bridge 会将 Question 翻译为平台待确认。\n");
+        sb.append("- 如果当前 Runtime 不能使用 Question，再在输出末尾按 AgentCenter 节点状态协议声明 NEEDS_USER_INPUT。\n");
         sb.append("- 如果信息已经足够，请输出当前 Skill 的最终 Markdown 结果。\n");
         return sb.toString();
     }

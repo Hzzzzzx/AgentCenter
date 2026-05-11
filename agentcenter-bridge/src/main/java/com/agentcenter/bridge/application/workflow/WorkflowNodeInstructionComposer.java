@@ -62,6 +62,8 @@ public class WorkflowNodeInstructionComposer {
             交互类型：ASK_USER / INPUT / DECISION / APPROVAL / ARTIFACT_REVIEW / PERMISSION / CUSTOM_FORM / RANKING / SCALE / BLOCKER
             
             **重要**：
+            - 在 OpenCode Runtime 中，需要用户澄清、选择、确认或授权时，优先使用 OpenCode 原生 Question 交互；AgentCenter Bridge 会将 Question 翻译为平台待确认。
+            - 当不能使用 OpenCode Question，或需要明确声明节点完成/阻塞状态时，再使用本 `AGENTCENTER_NODE_STATE` 协议。
             - 如果你不输出状态块，系统默认视为 IN_PROGRESS，不会推进。
             - 只有 READY_TO_ADVANCE 才会保存最终 artifact 并允许进入下一节点。
             - NEEDS_USER_INPUT 下用户回答后，系统会将回答作为新输入回灌给你继续执行。
