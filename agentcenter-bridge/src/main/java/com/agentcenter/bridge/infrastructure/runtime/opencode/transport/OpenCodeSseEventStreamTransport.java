@@ -1,5 +1,7 @@
 package com.agentcenter.bridge.infrastructure.runtime.opencode.transport;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -8,7 +10,6 @@ import java.time.Duration;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,6 +20,7 @@ import com.agentcenter.bridge.application.runtime.transport.RuntimeEventStreamTr
 import com.agentcenter.bridge.application.runtime.transport.RuntimeTransportException;
 import com.agentcenter.bridge.application.runtime.transport.SubscriptionHandle;
 import com.agentcenter.bridge.domain.runtime.RuntimeType;
+import com.agentcenter.bridge.infrastructure.runtime.opencode.OpenCodeTextEncoding;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -102,8 +104,8 @@ public class OpenCodeSseEventStreamTransport implements RuntimeEventStreamTransp
                 .GET()
                 .build();
 
-        HttpResponse<Stream<String>> response = httpClient.send(
-                request, HttpResponse.BodyHandlers.ofLines());
+        HttpResponse<java.io.InputStream> response = httpClient.send(
+                request, HttpResponse.BodyHandlers.ofInputStream());
 
         if (response.statusCode() != 200) {
             throw new RuntimeException("opencode SSE returned HTTP " + response.statusCode());
@@ -112,7 +114,7 @@ public class OpenCodeSseEventStreamTransport implements RuntimeEventStreamTransp
         log.info("Connected to opencode serve SSE at {}/event", baseUrl);
 
         StringBuilder eventBuffer = new StringBuilder();
-        try (var lines = response.body()) {
+        try (var lines = new BufferedReader(new InputStreamReader(response.body(), OpenCodeTextEncoding.WIRE_CHARSET)).lines()) {
             lines.forEach(line -> {
                 if (!running.get()) return;
 

@@ -21,6 +21,7 @@ const formattedOutputSummary = computed(() => formatStructuredOutput(props.part.
 function formatStructuredOutput(value: string | undefined): string {
   if (!value) return ''
   return value
+    .replace(/\uFFFD+/g, '[无法解码字符]')
     .replace(/><(?=\/?\w)/g, '>\n<')
     .replace(/\s+(?=\/Users\/)/g, '\n')
     .replace(/\s+(?=\/[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+)/g, '\n')
@@ -90,7 +91,7 @@ function formatStructuredOutput(value: string | undefined): string {
 }
 
 .tool-invocation__name {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Segoe UI Emoji", "Segoe UI Symbol", "Apple Color Emoji", "Noto Color Emoji", monospace;
   font-size: 12px;
   font-weight: 950;
   overflow: hidden;
@@ -151,7 +152,7 @@ function formatStructuredOutput(value: string | undefined): string {
   margin: 0;
   padding: 6px 10px 8px;
   color: var(--text-primary);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Segoe UI Emoji", "Segoe UI Symbol", "Apple Color Emoji", "Noto Color Emoji", monospace;
   font-size: 11px;
   line-height: 1.55;
   white-space: pre-wrap;

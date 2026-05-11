@@ -206,6 +206,7 @@ public class OpenCodeProcessManager {
         )).directory(cwd.toFile());
 
         pb.environment().put("PATH", System.getenv("PATH"));
+        OpenCodeTextEncoding.configureUtf8Environment(pb.environment(), isWindows());
         pb.redirectErrorStream(true);
 
         try {
@@ -324,11 +325,27 @@ public class OpenCodeProcessManager {
         if (windows && isWindowsCommandShim(resolvedCommand)) {
             commandLine.add("cmd.exe");
             commandLine.add("/d");
+            commandLine.add("/s");
             commandLine.add("/c");
+            commandLine.add(buildWindowsUtf8Command(resolvedCommand, args));
+            return commandLine;
         }
         commandLine.add(resolvedCommand);
         commandLine.addAll(args);
         return commandLine;
+    }
+
+    private static String buildWindowsUtf8Command(String resolvedCommand, List<String> args) {
+        List<String> parts = new ArrayList<>();
+        parts.add(quoteForCmd(resolvedCommand));
+        for (String arg : args) {
+            parts.add(quoteForCmd(arg));
+        }
+        return "chcp 65001 >NUL && " + String.join(" ", parts);
+    }
+
+    private static String quoteForCmd(String value) {
+        return "\"" + value.replace("\"", "\\\"") + "\"";
     }
 
     private static List<Path> commandCandidates(Path base, boolean windows, String pathExtEnv) {

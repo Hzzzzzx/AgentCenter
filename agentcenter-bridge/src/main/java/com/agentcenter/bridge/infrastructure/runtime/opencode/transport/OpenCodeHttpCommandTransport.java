@@ -20,6 +20,7 @@ import com.agentcenter.bridge.application.runtime.protocol.RuntimeProtocolVersio
 import com.agentcenter.bridge.application.runtime.transport.RuntimeCommandTransport;
 import com.agentcenter.bridge.application.runtime.transport.RuntimeTransportException;
 import com.agentcenter.bridge.domain.runtime.RuntimeType;
+import com.agentcenter.bridge.infrastructure.runtime.opencode.OpenCodeTextEncoding;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -165,7 +166,7 @@ public class OpenCodeHttpCommandTransport implements RuntimeCommandTransport {
                 .build();
         HttpResponse<String> response;
         try {
-            response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(OpenCodeTextEncoding.WIRE_CHARSET));
         } catch (IOException e) {
             log.warn("Failed to fetch messages for {}: {}", opencodeSessionId, e.getMessage());
             return null;
@@ -190,10 +191,10 @@ public class OpenCodeHttpCommandTransport implements RuntimeCommandTransport {
         }
         return HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + path))
-                .header("Content-Type", "application/json")
+                .header("Content-Type", "application/json; charset=utf-8")
                 .header("x-opencode-directory", workingDirectory)
                 .timeout(timeout)
-                .POST(HttpRequest.BodyPublishers.ofString(json))
+                .POST(HttpRequest.BodyPublishers.ofString(json, OpenCodeTextEncoding.WIRE_CHARSET))
                 .build();
     }
 
@@ -210,7 +211,7 @@ public class OpenCodeHttpCommandTransport implements RuntimeCommandTransport {
     private HttpResponse<String> execute(HttpRequest request) {
         HttpResponse<String> response;
         try {
-            response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(OpenCodeTextEncoding.WIRE_CHARSET));
         } catch (IOException e) {
             throw new RuntimeTransportException(
                     "HTTP request to opencode serve failed: " + e.getMessage(), e, true);

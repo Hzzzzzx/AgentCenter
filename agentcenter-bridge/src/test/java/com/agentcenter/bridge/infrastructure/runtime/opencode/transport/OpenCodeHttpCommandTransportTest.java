@@ -107,6 +107,32 @@ class OpenCodeHttpCommandTransportTest {
     }
 
     @Test
+    void conversationSendUsesUtf8JsonContentType() throws Exception {
+        when(httpResponse.statusCode()).thenReturn(200);
+
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("baseUrl", "http://localhost:4097");
+        payload.put("workingDirectory", "/tmp/work");
+        payload.put("agent", "build");
+        ArrayNode parts = payload.putArray("parts");
+        ObjectNode textPart = parts.addObject();
+        textPart.put("type", "text");
+        textPart.put("text", "查找类文件");
+
+        RuntimeCommandEnvelope command = RuntimeCommandEnvelope.of(
+                RuntimeCommandTypes.CONVERSATION_MESSAGE_SEND, RuntimeType.OPENCODE,
+                "ses_abc123", payload);
+
+        RuntimeAckEnvelope ack = transport.send(command);
+
+        assertTrue(ack.success());
+        ArgumentCaptor<HttpRequest> captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(httpClient).send(captor.capture(), any());
+        assertEquals("application/json; charset=utf-8",
+                captor.getValue().headers().firstValue("Content-Type").orElse(""));
+    }
+
+    @Test
     void conversationSendReturnsNackWithoutSessionId() {
         ObjectNode payload = objectMapper.createObjectNode();
         payload.put("baseUrl", "http://localhost:4097");

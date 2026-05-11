@@ -2,8 +2,6 @@ package com.agentcenter.bridge.infrastructure.runtime.opencode;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -42,10 +40,11 @@ public class OpenCodeCliClient {
         List<String> args = buildCommand(runtimeSessionId, userMessage);
         Process process;
         try {
-            process = new ProcessBuilder(args)
+            ProcessBuilder pb = new ProcessBuilder(args)
                     .directory(resolveWorkingDirectory().toFile())
-                    .redirectErrorStream(true)
-                    .start();
+                    .redirectErrorStream(true);
+            OpenCodeTextEncoding.configureUtf8Environment(pb.environment(), isWindows());
+            process = pb.start();
         } catch (IOException e) {
             return OpenCodeChatResult.failure(runtimeSessionId,
                     "OpenCode 启动失败：" + e.getMessage());
@@ -111,10 +110,14 @@ public class OpenCodeCliClient {
 
     private String readAll(InputStream inputStream) {
         try (inputStream) {
-            return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+            return OpenCodeTextEncoding.decodeProcessOutput(inputStream.readAllBytes());
         } catch (IOException e) {
             return "";
         }
+    }
+
+    private static boolean isWindows() {
+        return System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("win");
     }
 
     private ParsedOpenCodeOutput parseOutput(String output) {

@@ -62,4 +62,18 @@ describe('ToolInvocationInline', () => {
     expect(wrapper.text()).toContain('正在执行，详细信息会在返回后更新。')
     expect(wrapper.text()).not.toContain('Runtime')
   })
+
+  it('replaces unicode replacement characters with readable fallback text', () => {
+    const wrapper = mount(ToolInvocationInline, {
+      props: {
+        part: makePart({
+          outputSummary: '读取结果：��� class UserService',
+        }),
+      },
+    })
+
+    const output = wrapper.find('.tool-invocation__code').text()
+    expect(output).toContain('读取结果：[无法解码字符] class UserService')
+    expect(output).not.toContain('�')
+  })
 })

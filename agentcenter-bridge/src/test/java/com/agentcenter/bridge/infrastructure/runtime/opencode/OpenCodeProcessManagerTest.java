@@ -70,7 +70,8 @@ class OpenCodeProcessManagerTest {
                 true);
 
         assertIterableEquals(
-                List.of("cmd.exe", "/d", "/c", "C:\\tools\\opencode.cmd", "serve", "--port", "4097"),
+                List.of("cmd.exe", "/d", "/s", "/c",
+                        "chcp 65001 >NUL && \"C:\\tools\\opencode.cmd\" \"serve\" \"--port\" \"4097\""),
                 commandLine);
     }
 
