@@ -7,12 +7,14 @@ spring:
       enabled: false
   datasource:
     driver-class-name: org.sqlite.JDBC
-    url: jdbc:sqlite:file:./data/agentcenter.db?busy_timeout=10000&journal_mode=WAL&synchronous=NORMAL
+    url: jdbc:sqlite:file:./data/agentcenter.db?busy_timeout=30000&journal_mode=WAL&synchronous=NORMAL
     hikari:
       pool-name: AgentCenterSqlitePool
-      maximum-pool-size: 1
+      maximum-pool-size: 5
       minimum-idle: 1
-      connection-timeout: 30000
+      connection-timeout: 10000
+      idle-timeout: 600000
+      max-lifetime: 1800000
   flyway:
     enabled: true
     locations: classpath:db/migration
