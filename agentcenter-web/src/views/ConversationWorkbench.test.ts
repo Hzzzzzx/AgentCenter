@@ -253,6 +253,7 @@ describe('ConversationWorkbench.vue', () => {
   })
 
   it('shows pause action while the workflow node is running', async () => {
+    vi.mocked(confirmationApi.list).mockResolvedValue([])
     const pinia = createPinia()
     setActivePinia(pinia)
     const wrapper = mount(ConversationWorkbench, {
@@ -348,6 +349,7 @@ describe('ConversationWorkbench.vue', () => {
   })
 
   it('cancels the active session and releases the input when pause is clicked', async () => {
+    vi.mocked(confirmationApi.list).mockResolvedValue([])
     const pinia = createPinia()
     setActivePinia(pinia)
     const wrapper = mount(ConversationWorkbench, {
@@ -462,7 +464,7 @@ describe('ConversationWorkbench.vue', () => {
     )
   })
 
-  it('shows current interactions in the message flow instead of the input composer', async () => {
+  it('uses the composer slot for current interactions instead of the text input', async () => {
     const pinia = createPinia()
     setActivePinia(pinia)
     const wrapper = mount(ConversationWorkbench, {
@@ -483,8 +485,8 @@ describe('ConversationWorkbench.vue', () => {
     expect(interactionBar.text()).toContain('确认继续下一步')
 
     const composer = wrapper.find('.conversation-workbench__composer')
-    expect(composer.find('.interaction-bar').exists()).toBe(false)
-    expect(composer.find('.conversation-workbench__input-area').exists()).toBe(true)
+    expect(composer.find('.interaction-bar').exists()).toBe(true)
+    expect(composer.find('.conversation-workbench__input-area').exists()).toBe(false)
   })
 
   it('does not show interactions that belong to another session on the same work item', async () => {
@@ -604,16 +606,12 @@ describe('ConversationWorkbench.vue', () => {
 
     await flushPromises()
 
-    const input = wrapper.find<HTMLInputElement>('.conversation-workbench__input')
-    expect(input.attributes('disabled')).toBeUndefined()
-    expect(input.attributes('placeholder')).toBe('补充异常处理信息后继续当前节点...')
+    expect(wrapper.find('.conversation-workbench__input-area').exists()).toBe(false)
+    expect(wrapper.find('.interaction-bar').exists()).toBe(true)
 
-    const sendButton = wrapper.find('.conversation-workbench__send')
-    expect(sendButton.classes()).not.toContain('conversation-workbench__send--pause')
-    expect(sendButton.attributes('aria-label')).toBe('发送消息')
-
-    await input.setValue('请继续，但先限制在只读检查范围内')
-    await wrapper.find('form.conversation-workbench__input-area').trigger('submit')
+    const textarea = wrapper.find<HTMLTextAreaElement>('.interaction-bar__textarea')
+    await textarea.setValue('请继续，但先限制在只读检查范围内')
+    await wrapper.find('.interaction-bar__primary').trigger('click')
     await flushPromises()
 
     expect(confirmationApi.resolve).toHaveBeenCalledWith(

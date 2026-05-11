@@ -19,15 +19,6 @@ vi.mock('./AssistantTurn.vue', () => ({
   },
 }))
 
-vi.mock('./ConversationInteractionBar.vue', () => ({
-  default: {
-    name: 'ConversationInteractionBar',
-    props: ['interactions'],
-    emits: ['resolved', 'rejected', 'open'],
-    template: '<section class="mocked-interaction-bar">{{ interactions.length }}</section>',
-  },
-}))
-
 function makeMessage(overrides: Partial<AgentMessageDto> = {}): AgentMessageDto {
   return {
     id: 'msg-1',
@@ -329,7 +320,7 @@ describe('MessageList.vue', () => {
     expect(turn.displayItems.map((item: { type: string }) => item.type)).toContain('agent-activity')
   })
 
-  it('renders the active interaction card in the message flow', () => {
+  it('does not render the active interaction card in the message flow', () => {
     const wrapper = mount(MessageList, {
       props: {
         messages: [makeMessage({ role: 'ASSISTANT', content: '需要选择方案' })],
@@ -337,8 +328,8 @@ describe('MessageList.vue', () => {
       },
     })
 
-    expect(wrapper.find('.mocked-interaction-bar').exists()).toBe(true)
-    expect(wrapper.find('.interaction-turn').exists()).toBe(true)
+    expect(wrapper.find('.interaction-bar').exists()).toBe(false)
+    expect(wrapper.find('.interaction-turn').exists()).toBe(false)
   })
 
   it('renders real tool completed output as tool invocation', () => {

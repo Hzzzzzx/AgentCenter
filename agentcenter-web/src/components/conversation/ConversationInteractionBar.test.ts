@@ -65,10 +65,42 @@ describe('ConversationInteractionBar.vue', () => {
     expect(wrapper.text()).not.toContain('FE1002 · 确认项浮层交互回归')
     expect(wrapper.text()).toContain('问题 1')
     expect(wrapper.text()).toContain('问题 2')
+    expect(wrapper.text()).toContain('确认')
     expect(wrapper.text()).toContain('确认继续下一步')
-    expect(wrapper.findAll('.interaction-bar__tab')).toHaveLength(2)
+    expect(wrapper.findAll('.interaction-bar__tab')).toHaveLength(3)
     expect(wrapper.find('.interaction-bar__tab').text()).toBe('问题 1')
     expect(wrapper.find('.interaction-bar__body .interaction-bar__tabs').exists()).toBe(false)
+  })
+
+  it('previews multiple pending interactions in the confirmation tab', async () => {
+    const wrapper = mount(ConversationInteractionBar, {
+      props: {
+        interactions: [
+          makeInteraction({
+            id: 'confirm-1',
+            requestType: 'DECISION',
+            title: '选择路线',
+            optionsJson: JSON.stringify([
+              { value: 'MVP', label: 'MVP 路线' },
+              { value: 'FULL', label: '完整路线' },
+            ]),
+          }),
+          makeInteraction({
+            id: 'confirm-2',
+            requestType: 'INPUT_REQUIRED',
+            title: '补充说明',
+          }),
+        ],
+      },
+    })
+
+    const tabs = wrapper.findAll('.interaction-bar__tab')
+    await tabs[2].trigger('click')
+
+    expect(wrapper.find('.interaction-bar__review').exists()).toBe(true)
+    expect(wrapper.text()).toContain('请确认本轮交互的待提交选择')
+    expect(wrapper.text()).toContain('MVP 路线')
+    expect(wrapper.text()).toContain('尚未填写')
   })
 
   it('hides tabs when there is only one interaction', () => {
@@ -88,6 +120,25 @@ describe('ConversationInteractionBar.vue', () => {
     expect(wrapper.text()).toContain('需要你确认选择')
     expect(wrapper.find('.interaction-bar__tabs').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('问题 1')
+  })
+
+  it('stacks decision options vertically', () => {
+    const wrapper = mount(ConversationInteractionBar, {
+      props: {
+        interactions: [
+          makeInteraction({
+            id: 'confirm-stack',
+            requestType: 'DECISION',
+            title: '选择实现路线',
+            optionsJson: '["MVP","完整","风险优先"]',
+          }),
+        ],
+      },
+    })
+
+    const options = wrapper.find('.interaction-bar__control--options')
+    expect(options.exists()).toBe(true)
+    expect(options.classes()).toContain('interaction-bar__control--options')
   })
 
   it('submits a selected decision option with structured payload', async () => {

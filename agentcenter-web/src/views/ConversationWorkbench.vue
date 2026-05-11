@@ -10,6 +10,7 @@ import { useWorkItemWorkflowProjectionStore } from '../stores/workItemWorkflowPr
 import { useNotificationStore } from '../stores/notifications'
 import MessageList from '../components/conversation/MessageList.vue'
 import WorkflowNodeControlBar from '../components/conversation/WorkflowNodeControlBar.vue'
+import ConversationInteractionBar from '../components/conversation/ConversationInteractionBar.vue'
 import { runtimeResourceApi } from '../api/runtimeResources'
 import { artifactApi } from '../api/artifacts'
 import type {
@@ -1369,21 +1370,28 @@ function timestamp(value: string | null | undefined): number {
             :running="isConversationRunning"
             @open-artifact="handleOpenArtifact"
             @resolve-confirmation="handleResolveConfirmation"
-            @interaction-changed="handleInteractionChanged"
-            @open-confirmation="emit('show-confirmation', $event)"
           />
         </template>
       </div>
 
       <div class="conversation-workbench__composer">
-        <WorkflowNodeControlBar
-          v-if="shouldShowWorkflowNodeControl"
-          :node-state="workflowNodeState"
-          :node-instance-id="currentWorkflowNodeInstanceId"
-          @action="handleWorkflowAction"
+        <ConversationInteractionBar
+          v-if="currentInteractions.length"
+          class="conversation-workbench__interaction-composer"
+          :interactions="currentInteractions"
+          @resolved="handleInteractionChanged"
+          @rejected="handleInteractionChanged"
+          @open="emit('show-confirmation', $event)"
         />
+        <template v-else>
+          <WorkflowNodeControlBar
+            v-if="shouldShowWorkflowNodeControl"
+            :node-state="workflowNodeState"
+            :node-instance-id="currentWorkflowNodeInstanceId"
+            @action="handleWorkflowAction"
+          />
 
-        <form class="conversation-workbench__input-area" @submit.prevent="handleSend">
+          <form class="conversation-workbench__input-area" @submit.prevent="handleSend">
           <input
             ref="inputRef"
             v-model="inputText"
@@ -1410,7 +1418,8 @@ function timestamp(value: string | null | undefined): number {
               <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </button>
-        </form>
+          </form>
+        </template>
       </div>
     </section>
   </div>
@@ -1626,6 +1635,10 @@ function timestamp(value: string | null | undefined): number {
   padding: 12px;
   border-top: 1px solid var(--border-color);
   background: var(--bg-card);
+}
+
+.conversation-workbench__interaction-composer {
+  margin-bottom: 0;
 }
 
 .prompt-debug-float {

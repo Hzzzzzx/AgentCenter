@@ -5,7 +5,6 @@ import type { ProjectorInput, ConversationTurnProjection } from './projection/ty
 import { projectConversationTurns } from './projection/conversationTurnProjector'
 import MarkdownContent from './MarkdownContent.vue'
 import AssistantTurn from './AssistantTurn.vue'
-import ConversationInteractionBar from './ConversationInteractionBar.vue'
 
 const props = withDefaults(defineProps<{
   messages: AgentMessageDto[]
@@ -36,8 +35,6 @@ type ArtifactOpenRef = {
 const emit = defineEmits<{
   'open-artifact': [ref: ArtifactOpenRef]
   'resolve-confirmation': [confirmationId: string, value: string, meta: { requestType?: string; interactionType?: string }]
-  'interaction-changed': [confirmationId: string]
-  'open-confirmation': [confirmationId: string]
 }>()
 
 type SystemLinePart = {
@@ -65,7 +62,6 @@ type DisplayItem =
   | { type: 'system-message'; id: string; message: AgentMessageDto }
   | { type: 'interaction-response'; id: string; message: AgentMessageDto }
   | { type: 'assistant-turn'; id: string; turn: ConversationTurnProjection }
-  | { type: 'interaction-bar'; id: string; interactions: ConfirmationRequestDto[] }
 
 // ─── Persisted messages (filtered + sorted) ─────────────────
 
@@ -144,10 +140,6 @@ const projectedTurns = computed(() =>
   projectConversationTurns(projectorInput.value)
 )
 
-const visibleInteractions = computed(() =>
-  props.confirmations.filter((item) => item.status === 'PENDING' || item.status === 'IN_CONVERSATION')
-)
-
 // ─── Display items (interleaved) ────────────────────────────
 
 const displayItems = computed<DisplayItem[]>(() => {
@@ -160,18 +152,6 @@ const displayItems = computed<DisplayItem[]>(() => {
   const insertedTurnIds = new Set<string>()
   const turnsByAnchor = new Map<string, ConversationTurnProjection[]>()
   const unanchoredTurns: ConversationTurnProjection[] = []
-  let insertedInteractionBar = false
-
-  function appendInteractionBarIfNeeded(turn?: ConversationTurnProjection) {
-    if (insertedInteractionBar || visibleInteractions.value.length === 0) return
-    if (turn && !turn.pendingInteraction && turn.status !== 'waiting_input') return
-    items.push({
-      type: 'interaction-bar',
-      id: `interaction-bar-${visibleInteractions.value.map(item => item.id).join('-')}`,
-      interactions: visibleInteractions.value,
-    })
-    insertedInteractionBar = true
-  }
 
   for (const turn of contentTurns) {
     if (turn.anchorMessageId) {
@@ -188,7 +168,6 @@ const displayItems = computed<DisplayItem[]>(() => {
     for (const turn of turns) {
       items.push({ type: 'assistant-turn', id: turn.turnId, turn })
       insertedTurnIds.add(turn.turnId)
-      appendInteractionBarIfNeeded(turn)
     }
   }
 
@@ -208,10 +187,7 @@ const displayItems = computed<DisplayItem[]>(() => {
   for (const turn of [...unanchoredTurns, ...contentTurns]) {
     if (insertedTurnIds.has(turn.turnId)) continue
     items.push({ type: 'assistant-turn', id: turn.turnId, turn })
-    appendInteractionBarIfNeeded(turn)
   }
-
-  appendInteractionBarIfNeeded()
 
   return items
 })
@@ -519,23 +495,6 @@ function systemLineParts(content: string): SystemLinePart[] {
           @resolve="(confirmationId, value, meta) => emit('resolve-confirmation', confirmationId, value, meta)"
         />
 
-        <!-- ACTIVE interaction in conversation flow -->
-        <article
-          v-else-if="item.type === 'interaction-bar'"
-          class="interaction-turn"
-        >
-          <div class="interaction-turn__rail">
-            <span class="interaction-turn__avatar">?</span>
-          </div>
-          <div class="interaction-turn__main">
-            <ConversationInteractionBar
-              :interactions="item.interactions"
-              @resolved="(id) => emit('interaction-changed', id)"
-              @rejected="(id) => emit('interaction-changed', id)"
-              @open="(id) => emit('open-confirmation', id)"
-            />
-          </div>
-        </article>
       </template>
     </template>
   </div>
@@ -829,39 +788,6 @@ function systemLineParts(content: string): SystemLinePart[] {
   font-weight: 900;
 }
 
-.interaction-turn {
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  gap: 14px;
-  align-items: start;
-  min-width: 0;
-}
-
-.interaction-turn__rail {
-  min-height: 100%;
-}
-
-.interaction-turn__avatar {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--warning) 18%, var(--bg-card));
-  border: 1px solid color-mix(in srgb, var(--warning) 48%, var(--border-color));
-  color: var(--warning);
-  font-size: 14px;
-  font-weight: 950;
-}
-
-.interaction-turn__main {
-  min-width: 0;
-}
-
-.interaction-turn__main :deep(.interaction-bar) {
-  margin: 0;
-}
-
 @media (max-width: 760px) {
   .message-list {
     padding-inline: 2px;
@@ -869,16 +795,6 @@ function systemLineParts(content: string): SystemLinePart[] {
 
   .user-bubble {
     max-width: 86%;
-  }
-
-  .interaction-turn {
-    grid-template-columns: 28px minmax(0, 1fr);
-    gap: 10px;
-  }
-
-  .interaction-turn__avatar {
-    width: 28px;
-    height: 28px;
   }
 }
 </style>

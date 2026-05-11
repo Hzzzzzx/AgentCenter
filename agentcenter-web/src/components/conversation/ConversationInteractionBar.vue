@@ -23,6 +23,7 @@ const confirmationStore = useConfirmationStore()
 const notificationStore = useNotificationStore()
 const expanded = ref(true)
 const activeId = ref<string | null>(null)
+const REVIEW_TAB_ID = '__review__'
 const busyAction = ref<string | null>(null)
 const selectedOptions = ref<Record<string, string>>({})
 const inputValues = ref<Record<string, string>>({})
@@ -43,10 +44,15 @@ const visibleInteractions = computed(() =>
   props.interactions.filter((item) => item.status === 'PENDING' || item.status === 'IN_CONVERSATION')
 )
 
-const activeInteraction = computed(() =>
-  visibleInteractions.value.find((item) => item.id === activeId.value)
-  ?? visibleInteractions.value[0]
-  ?? null
+const activeInteraction = computed(() => {
+  if (activeId.value === REVIEW_TAB_ID) return null
+  return visibleInteractions.value.find((item) => item.id === activeId.value)
+    ?? visibleInteractions.value[0]
+    ?? null
+})
+
+const reviewMode = computed(() =>
+  activeId.value === REVIEW_TAB_ID && visibleInteractions.value.length > 1
 )
 
 const activeSchema = computed<InteractionSchema | null>(() =>
@@ -58,6 +64,7 @@ const activeOptions = computed<InteractionOption[]>(() =>
 )
 
 const interactionHeaderTitle = computed(() => {
+  if (reviewMode.value) return '确认交互'
   if (!activeInteraction.value) return '需要你处理'
   if (activeInteraction.value.requestType === 'INPUT_REQUIRED') return '需要你补充信息'
   if (activeInteraction.value.requestType === 'DECISION') return '需要你确认选择'
@@ -152,7 +159,7 @@ watch(
       activeId.value = null
       return
     }
-    if (!activeId.value || !items.some((item) => item.id === activeId.value)) {
+    if (!activeId.value || (activeId.value !== REVIEW_TAB_ID && !items.some((item) => item.id === activeId.value))) {
       activeId.value = items[0].id
       expanded.value = true
     }
@@ -318,6 +325,11 @@ function interactionTabTitle(item: ConfirmationRequestDto): string {
   return `问题 ${interactionIndex(item)}`
 }
 
+function activeTabTitle(item: ConfirmationRequestDto): string {
+  const schema = schemaFor(item)
+  return schema?.title?.trim() || item.title?.trim() || interactionTabTitle(item)
+}
+
 function fieldQuestion(field: InteractionField): string | null {
   const placeholder = field.placeholder?.trim()
   if (!placeholder || placeholder === field.label.trim()) return null
@@ -341,6 +353,38 @@ function secondaryActionLabel(item: ConfirmationRequestDto): string {
   if (item.requestType === 'DECISION') return '稍后'
   if (item.requestType === 'PERMISSION') return '拒绝'
   return '退回'
+}
+
+function previewValueFor(item: ConfirmationRequestDto): string {
+  const schema = schemaFor(item)
+  if (item.requestType === 'PERMISSION') return '待选择：允许一次 / 始终允许 / 拒绝'
+  if (item.requestType === 'INPUT_REQUIRED') {
+    const fields = schema?.fields ?? []
+    if (fields.length) {
+      const values = fieldValues.value[item.id] ?? {}
+      const answered = fields
+        .map(field => values[field.id]?.trim())
+        .filter((value): value is string => Boolean(value))
+      return answered.length ? answered.join('；') : '尚未填写'
+    }
+    return inputValues.value[item.id]?.trim() || '尚未填写'
+  }
+  if (item.requestType === 'DECISION') {
+    const options = schema?.options ?? []
+    if (schema?.selection === 'multi') {
+      const chosen = Array.from(selectedChoices.value[item.id] ?? [])
+      const labels = chosen.map(id => options.find(option => option.id === id)?.label ?? id)
+      const custom = customInput.value[item.id]?.trim()
+      const values = custom ? [...labels, custom] : labels
+      return values.length ? values.join('，') : '尚未选择'
+    }
+    const custom = customInput.value[item.id]?.trim()
+    if (schema?.allowCustom && custom) return custom
+    const choice = selectedOptions.value[item.id] ?? options[0]?.id ?? ''
+    const selected = options.find(option => option.id === choice || option.label === choice)
+    return selected?.label ?? (choice || inputValues.value[item.id]?.trim() || '尚未选择')
+  }
+  return '待确认'
 }
 
 function permissionBusyLabel(reply: 'once' | 'always' | 'reject'): string {
@@ -479,6 +523,11 @@ function handlePrimary() {
     return
   }
   if (interaction.requestType === 'EXCEPTION') {
+    const input = activeInput.value.trim()
+    if (input) {
+      void resolveActive('SUPPLEMENT', { input }, input)
+      return
+    }
     void resolveActive('RETRY')
     return
   }
@@ -541,6 +590,14 @@ function handleSecondary() {
         >
           <span>{{ interactionTabTitle(item) }}</span>
         </button>
+        <button
+          type="button"
+          class="interaction-bar__tab"
+          :class="{ 'interaction-bar__tab--active': reviewMode }"
+          @click="activeId = REVIEW_TAB_ID"
+        >
+          <span>确认</span>
+        </button>
       </div>
       <button
         type="button"
@@ -553,7 +610,34 @@ function handleSecondary() {
       </button>
     </div>
 
-    <div v-if="expanded && activeInteraction" class="interaction-bar__body">
+    <div v-if="expanded && reviewMode" class="interaction-bar__body">
+      <div class="interaction-bar__review">
+        <div class="interaction-bar__copy">
+          <span class="interaction-bar__type">预览</span>
+          <strong>请确认本轮交互的待提交选择。</strong>
+        </div>
+        <div class="interaction-bar__review-list">
+          <button
+            v-for="item in visibleInteractions"
+            :key="item.id"
+            type="button"
+            class="interaction-bar__review-item"
+            @click="activeId = item.id"
+          >
+            <span>{{ interactionTabTitle(item) }}</span>
+            <strong>{{ activeTabTitle(item) }}</strong>
+            <em>{{ previewValueFor(item) }}</em>
+          </button>
+        </div>
+        <div class="interaction-bar__actions">
+          <button type="button" class="interaction-bar__ghost" @click="activeId = visibleInteractions[0]?.id ?? null">
+            返回修改
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-else-if="expanded && activeInteraction" class="interaction-bar__body">
       <div class="interaction-bar__main">
         <div class="interaction-bar__copy">
           <span class="interaction-bar__type">{{ typeLabels[activeInteraction.requestType] }}</span>
@@ -645,6 +729,15 @@ function handleSecondary() {
           审批当前节点产物或结论。
         </div>
 
+        <div v-else-if="activeInteraction.requestType === 'EXCEPTION'" class="interaction-bar__control">
+          <textarea
+            v-model="activeInput"
+            class="interaction-bar__textarea"
+            placeholder="补充异常处理信息后继续当前节点..."
+            rows="3"
+          ></textarea>
+        </div>
+
         <div v-else class="interaction-bar__hint">
           处理后 Agent 会继续推进当前节点。
         </div>
@@ -674,7 +767,7 @@ function handleSecondary() {
               :disabled="!!busyAction || (activeInteraction.requestType === 'INPUT_REQUIRED' && !canSubmitInput) || (activeInteraction.requestType === 'DECISION' && !canSubmitChoice)"
               @click="handlePrimary"
             >
-              {{ busyAction ? '提交中...' : primaryActionLabel(activeInteraction) }}
+              {{ busyAction ? '提交中...' : (activeInteraction.requestType === 'EXCEPTION' && activeInput.trim() ? '提交补充' : primaryActionLabel(activeInteraction)) }}
             </button>
           </template>
         </div>
@@ -877,8 +970,8 @@ function handleSecondary() {
 }
 
 .interaction-bar__control--options {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 8px;
 }
 
@@ -897,7 +990,7 @@ function handleSecondary() {
   grid-template-columns: 22px minmax(0, 1fr);
   align-items: flex-start;
   gap: 8px;
-  min-height: 64px;
+  min-height: 58px;
   padding: 10px;
   border: 1px solid var(--border-color);
   background: var(--surface-overlay);
@@ -965,9 +1058,70 @@ function handleSecondary() {
 
 .interaction-bar__custom-choice {
   display: grid;
-  grid-column: 1 / -1;
   gap: 5px;
   min-width: 0;
+}
+
+.interaction-bar__review {
+  display: grid;
+  gap: 12px;
+}
+
+.interaction-bar__review-list {
+  display: grid;
+  gap: 8px;
+}
+
+.interaction-bar__review-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  background: var(--surface-overlay);
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.interaction-bar__review-item:hover {
+  border-color: var(--brand-border);
+  background: var(--surface-hover);
+}
+
+.interaction-bar__review-item > span {
+  grid-row: span 2;
+  align-self: start;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--accent-blue);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.interaction-bar__review-item > strong,
+.interaction-bar__review-item > em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.interaction-bar__review-item > strong {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.interaction-bar__review-item > em {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 650;
 }
 
 .interaction-bar__custom-choice > span {
