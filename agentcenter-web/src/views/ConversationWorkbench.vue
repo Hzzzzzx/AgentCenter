@@ -104,7 +104,7 @@ const messagesRef = ref<HTMLElement | null>(null)
 const skillRefreshStatus = ref('')
 const refreshingSkills = ref(false)
 const loadingSession = ref(false)
-const cancellingReply = ref(false)
+const cancellingSessionId = ref<string | null>(null)
 const pausedRunningNodeId = ref<string | null>(null)
 const promptDebugOpen = ref(false)
 const promptDebugFullscreen = ref(false)
@@ -114,6 +114,7 @@ const promptDebugDragging = ref(false)
 const promptDebugDragOffset = ref({ x: 0, y: 0 })
 const promptDebugSize = ref({ width: 0, height: 0 })
 const promptDebugCopiedId = ref<string | null>(null)
+let ensureActiveSessionSeq = 0
 
 const currentWorkflowNodeInstanceId = computed(() => {
   return nodeStateInfo.value.nodeId ?? null
@@ -173,6 +174,8 @@ const activeTitle = computed(() => {
 const currentWorkflowInstance = computed(() => {
   const activeInstance = workflowStore.activeWorkflowInstance
   const sessionWorkflowInstanceId = sessionStore.activeSession?.workflowInstanceId ?? null
+  if (!props.workItemId && !sessionWorkflowInstanceId) return null
+
   const workItemInstance = props.workItemId
     ? workflowStore.instancesByWorkItemId[props.workItemId] ?? null
     : null
@@ -265,6 +268,13 @@ const isPausedCurrentNode = computed(() =>
   && nodeStateInfo.value.nodeId === pausedRunningNodeId.value
 )
 
+const isCancellingCurrentReply = computed(() =>
+  Boolean(
+    sessionStore.activeSession?.id
+    && cancellingSessionId.value === sessionStore.activeSession.id
+  )
+)
+
 const isActiveWorkflowNodeOwnedByCurrentSession = computed(() =>
   Boolean(
     sessionStore.activeSession?.id
@@ -279,6 +289,18 @@ const hasActiveSessionRuntimeOutput = computed(() =>
     runtimeStore.busy
     || Boolean(runtimeStore.streamingText.trim())
   )
+)
+
+const currentRuntimeEvents = computed(() => {
+  const sessionId = sessionStore.activeSession?.id
+  if (!sessionId) return []
+  return runtimeStore.events.filter((event) => event.sessionId === sessionId)
+})
+
+const currentStreamingText = computed(() =>
+  runtimeStore.activeSessionId === sessionStore.activeSession?.id
+    ? runtimeStore.streamingText
+    : ''
 )
 
 const isConversationRunning = computed(() =>
@@ -362,7 +384,7 @@ const shouldShowWorkflowNodeControl = computed(() =>
 )
 
 const promptDebugItems = computed<PromptDebugItem[]>(() =>
-  runtimeStore.events
+  currentRuntimeEvents.value
     .filter((event) => event.eventType === 'PROCESS_TRACE')
     .map((event) => ({ event, payload: parsePromptDebugPayload(event.payloadJson) }))
     .filter((item) => item.payload.kind === 'prompt_debug')
@@ -402,7 +424,7 @@ const promptDebugTimelineItems = computed<PromptDebugTimelineItem[]>(() => {
     .filter((message) => timestamp(message.createdAt) >= roundStart)
     .map(messageToPromptDebugItem)
 
-  const runtimeEvents = runtimeStore.events
+  const runtimeEvents = currentRuntimeEvents.value
     .filter((event) => timestamp(event.createdAt) >= roundStart)
     .filter((event) => {
       const payload = parseRuntimePayload(event.payloadJson)
@@ -412,7 +434,8 @@ const promptDebugTimelineItems = computed<PromptDebugTimelineItem[]>(() => {
     .slice(-PROMPT_DEBUG_RUNTIME_EVENT_LIMIT)
     .map(eventToPromptDebugItem)
 
-  const streamingItem: PromptDebugTimelineItem[] = runtimeStore.streamingText.trim()
+  const streamingText = currentStreamingText.value.trim()
+  const streamingItem: PromptDebugTimelineItem[] = streamingText
     ? [{
         id: 'streaming-assistant',
         createdAt: new Date().toISOString(),
@@ -422,14 +445,14 @@ const promptDebugTimelineItems = computed<PromptDebugTimelineItem[]>(() => {
         badge: 'ASSISTANT_DELTA',
         note: 'Agent 正在增量输出，还没有落成完整消息。',
         uiDisplay: '显示为对话区最底部的实时流式回复。',
-        preview: summarizeDebugContent(runtimeStore.streamingText.trim()),
-        content: runtimeStore.streamingText.trim(),
+        preview: summarizeDebugContent(streamingText),
+        content: streamingText,
         copyText: buildPromptDebugCopyText({
           title: '正在流式回复',
           badge: 'ASSISTANT_DELTA',
           note: 'Agent 正在增量输出，还没有落成完整消息。',
           uiDisplay: '显示为对话区最底部的实时流式回复。',
-          content: runtimeStore.streamingText.trim(),
+          content: streamingText,
         }),
       }]
     : []
@@ -519,24 +542,42 @@ watch(
 )
 
 async function ensureActiveSession(): Promise<AgentSessionDto | null> {
+  const seq = ++ensureActiveSessionSeq
+  const requestedWorkItemId = props.workItemId
+  const requestedTargetSessionId = props.targetSessionId ?? null
+  const isCurrentRequest = () =>
+    seq === ensureActiveSessionSeq
+    && props.workItemId === requestedWorkItemId
+    && (props.targetSessionId ?? null) === requestedTargetSessionId
+
   loadingSession.value = true
   try {
     if (workItemStore.items.length === 0) {
       await workItemStore.loadItems()
+      if (!isCurrentRequest()) return null
     }
-    if (props.workItemId) {
-      await workflowProjectionStore.syncWorkItem(props.workItemId)
-      const workflowInstanceId = selectedWorkItem.value?.currentWorkflowInstanceId
+
+    let selectedItem = requestedWorkItemId
+      ? workItemStore.items.find((item) => item.id === requestedWorkItemId) ?? null
+      : null
+
+    if (requestedWorkItemId) {
+      await workflowProjectionStore.syncWorkItem(requestedWorkItemId)
+      if (!isCurrentRequest()) return null
+      selectedItem = workItemStore.items.find((item) => item.id === requestedWorkItemId) ?? selectedItem
+      const workflowInstanceId = selectedItem?.currentWorkflowInstanceId
       if (workflowInstanceId) {
         await workflowStore.loadInstance(workflowInstanceId)
+        if (!isCurrentRequest()) return null
       }
     }
     await sessionStore.loadSessions()
+    if (!isCurrentRequest()) return null
 
     let session: AgentSessionDto | undefined
 
-    if (props.targetSessionId) {
-      session = sessionStore.sessions.find((item) => item.id === props.targetSessionId)
+    if (requestedTargetSessionId) {
+      session = sessionStore.sessions.find((item) => item.id === requestedTargetSessionId)
     }
 
     if (!session) {
@@ -545,13 +586,15 @@ async function ensureActiveSession(): Promise<AgentSessionDto | null> {
         session = sessionStore.sessions.find((item) => item.id === workflowSessionId)
         if (!session) {
           await sessionStore.selectSession(workflowSessionId)
+          if (!isCurrentRequest()) return null
+          if (sessionStore.activeSession?.id !== workflowSessionId) return null
           session = sessionStore.activeSession ?? undefined
         }
       }
     }
 
-    if (!session && props.workItemId) {
-      const workflowInstanceId = currentWorkflowInstance.value?.id ?? selectedWorkItem.value?.currentWorkflowInstanceId
+    if (!session && requestedWorkItemId) {
+      const workflowInstanceId = currentWorkflowInstance.value?.id ?? selectedItem?.currentWorkflowInstanceId
       if (workflowInstanceId) {
         session = sessionStore.sessions.find(
           (item) => item.workflowInstanceId === workflowInstanceId && item.status === 'ACTIVE'
@@ -559,20 +602,20 @@ async function ensureActiveSession(): Promise<AgentSessionDto | null> {
       }
     }
 
-    if (!session && props.workItemId && !currentWorkflowInstance.value && !selectedWorkItem.value?.currentWorkflowInstanceId) {
+    if (!session && requestedWorkItemId && !currentWorkflowInstance.value && !selectedItem?.currentWorkflowInstanceId) {
       session = sessionStore.sessions.find(
-        (item) => item.workItemId === props.workItemId && item.status === 'ACTIVE'
+        (item) => item.workItemId === requestedWorkItemId && item.status === 'ACTIVE'
       )
     }
 
-    if (!session && props.workItemId && !currentWorkflowInstance.value && !selectedWorkItem.value?.currentWorkflowInstanceId) {
-      const item = selectedWorkItem.value
+    if (!session && requestedWorkItemId && !currentWorkflowInstance.value && !selectedItem?.currentWorkflowInstanceId) {
       session = await sessionStore.createSession({
         sessionType: 'WORK_ITEM',
-        title: item ? `${item.code} · ${item.title}` : '任务会话',
-        workItemId: props.workItemId,
+        title: selectedItem ? `${selectedItem.code} · ${selectedItem.title}` : '任务会话',
+        workItemId: requestedWorkItemId,
         runtimeType: 'OPENCODE',
       })
+      if (!isCurrentRequest()) return null
     }
 
     if (!session) {
@@ -580,20 +623,26 @@ async function ensureActiveSession(): Promise<AgentSessionDto | null> {
     }
 
     await sessionStore.selectSession(session.id)
+    if (!isCurrentRequest() || sessionStore.activeSession?.id !== session.id) return null
     runtimeStore.connectSSE(session.id)
 
     if (session.workflowInstanceId) {
       await workflowStore.loadInstance(session.workflowInstanceId)
+      if (!isCurrentRequest()) return null
     }
-    if (props.workItemId) {
-      await workflowProjectionStore.syncWorkItem(props.workItemId)
+    if (requestedWorkItemId) {
+      await workflowProjectionStore.syncWorkItem(requestedWorkItemId)
+      if (!isCurrentRequest()) return null
     }
 
     await nextTick()
+    if (!isCurrentRequest()) return null
     inputRef.value?.focus()
     return session
   } finally {
-    loadingSession.value = false
+    if (seq === ensureActiveSessionSeq) {
+      loadingSession.value = false
+    }
   }
 }
 
@@ -612,8 +661,8 @@ function scrollToBottom() {
 }
 
 watch(() => sessionStore.messages.length, scrollToBottom)
-watch(() => runtimeStore.streamingText, scrollToBottom)
-watch(() => runtimeStore.events.length, scrollToBottom)
+watch(() => currentStreamingText.value, scrollToBottom)
+watch(() => currentRuntimeEvents.value.length, scrollToBottom)
 watch(
   () => runtimeSettingsStore.promptDebugPanelEnabled,
   (enabled) => {
@@ -683,18 +732,20 @@ async function resolveComposerRecoveryInteraction(confirmationId: string, text: 
 }
 
 async function handleCancelReply() {
-  if (!sessionStore.activeSession || cancellingReply.value) return
+  if (!sessionStore.activeSession || isCancellingCurrentReply.value) return
   const sessionId = sessionStore.activeSession.id
   const runningNodeId = nodeStateInfo.value.type === 'RUNNING'
     ? nodeStateInfo.value.nodeId ?? null
     : null
-  cancellingReply.value = true
+  cancellingSessionId.value = sessionId
   try {
     await sessionStore.cancelActiveSession()
+    if (sessionStore.activeSession?.id !== sessionId) return
     pausedRunningNodeId.value = runningNodeId
     runtimeStore.resetStreamingOutput()
     runtimeStore.markIdle()
     await sessionStore.selectSession(sessionId)
+    if (sessionStore.activeSession?.id !== sessionId) return
     if (sessionStore.activeSession.workflowInstanceId) {
       await workflowStore.refreshInstance(sessionStore.activeSession.workflowInstanceId)
     }
@@ -702,7 +753,9 @@ async function handleCancelReply() {
       await workflowProjectionStore.syncWorkItem(sessionStore.activeSession.workItemId)
     }
   } finally {
-    cancellingReply.value = false
+    if (cancellingSessionId.value === sessionId) {
+      cancellingSessionId.value = null
+    }
   }
 }
 
@@ -1311,8 +1364,8 @@ function timestamp(value: string | null | undefined): number {
         <template v-else>
           <MessageList
             :messages="sessionStore.messages"
-            :streaming-text="runtimeStore.streamingText"
-            :runtime-events="runtimeStore.events"
+            :streaming-text="currentStreamingText"
+            :runtime-events="currentRuntimeEvents"
             :active-node-id="nodeStateInfo.nodeId ?? null"
             :active-node-state="nodeStateInfo.type"
             :active-session-id="sessionStore.activeSession?.id ?? null"
@@ -1346,7 +1399,7 @@ function timestamp(value: string | null | undefined): number {
           <button
             class="conversation-workbench__send"
             :class="{ 'conversation-workbench__send--pause': isConversationRunning }"
-            :disabled="isConversationRunning ? cancellingReply : (!inputText.trim() || loadingSession)"
+            :disabled="isConversationRunning ? isCancellingCurrentReply : (!inputText.trim() || loadingSession)"
             :type="isConversationRunning ? 'button' : 'submit'"
             :aria-label="isConversationRunning ? '暂停当前回复' : '发送消息'"
             :title="isConversationRunning ? '暂停当前回复' : '发送消息'"

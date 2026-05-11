@@ -177,16 +177,16 @@ public class ConfirmationService {
         }
 
         boolean isQuestionConfirmation = QuestionConfirmationHandler.isQuestionConfirmation(entity);
-        Runnable questionResponseAfterCommit = isQuestionConfirmation
-                ? () -> respondQuestionBeforeResolving(entity, request, actionType)
-                : null;
+        if (isQuestionConfirmation) {
+            respondQuestionBeforeResolving(entity, request, actionType);
+        }
 
         if (ConfirmationRequestType.PERMISSION.equals(requestType)) {
             respondPermissionBeforeResolving(entity, actionType);
         }
 
         if (ConfirmationActionType.REJECT.equals(actionType)) {
-            return handleReject(entity, request, questionResponseAfterCommit);
+            return handleReject(entity, request, null);
         }
 
         String now = LocalDateTime.now().format(SQLITE_DATETIME);
@@ -253,7 +253,7 @@ public class ConfirmationService {
                 }
                 : null;
         publishResolutionEventAfterCommit(entity, actionType, actionDescription,
-                combineAfterCommitActions(questionResponseAfterCommit, workflowDispatchAfterCommit));
+                workflowDispatchAfterCommit);
 
         return toDto(entity);
     }
@@ -301,15 +301,6 @@ public class ConfirmationService {
                 buildActionDescription(ConfirmationActionType.REJECT, request), afterCommitAction);
 
         return toDto(entity);
-    }
-
-    private Runnable combineAfterCommitActions(Runnable first, Runnable second) {
-        if (first == null) return second;
-        if (second == null) return first;
-        return () -> {
-            first.run();
-            second.run();
-        };
     }
 
     private String validActionsFor(ConfirmationRequestType requestType) {
@@ -598,7 +589,7 @@ public class ConfirmationService {
                     runAfterCommitAction(capturedId, afterCommitAction);
                 }
                 // dispatch must run first — CONFIRMATION_RESOLVED signals "state already updated"
-                runtimeEventService.publishEvent(new RuntimeEventDto(
+                runtimeEventService.publishCommittedEvent(new RuntimeEventDto(
                         null,
                         sessionId,
                         capturedWorkItemId,

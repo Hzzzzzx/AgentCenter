@@ -3,10 +3,14 @@ package com.agentcenter.bridge.application;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.agentcenter.bridge.api.dto.RuntimeEventDto;
 import com.agentcenter.bridge.domain.runtime.RuntimeEventSource;
@@ -21,11 +25,14 @@ import com.agentcenter.bridge.infrastructure.persistence.mapper.RuntimeEventMapp
 public class RuntimeEventService {
 
     private static final Logger log = LoggerFactory.getLogger(RuntimeEventService.class);
+    private static final int SQLITE_BUSY_MAX_RETRIES = 5;
+    private static final long SQLITE_BUSY_RETRY_SLEEP_MS = 80L;
 
     private final RuntimeEventMapper eventMapper;
     private final IdGenerator idGenerator;
     private final SseEmitterRegistry emitterRegistry;
     private final WebSocketSessionRegistry webSocketSessionRegistry;
+    private final Object eventWriteLock = new Object();
 
     public RuntimeEventService(RuntimeEventMapper eventMapper,
                                IdGenerator idGenerator,
@@ -43,9 +50,91 @@ public class RuntimeEventService {
                 .toList();
     }
 
-    public synchronized void publishEvent(RuntimeEventDto event) {
+    public void publishEvent(RuntimeEventDto event) {
+        if (event == null) {
+            return;
+        }
+        if (isActualTransactionActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    publishImmediately(event);
+                }
+            });
+            return;
+        }
+        publishImmediately(event);
+    }
+
+    public void publishCommittedEvent(RuntimeEventDto event) {
+        if (event == null) {
+            return;
+        }
+        publishImmediately(event);
+    }
+
+    private boolean isActualTransactionActive() {
+        return TransactionSynchronizationManager.isSynchronizationActive()
+                && TransactionSynchronizationManager.isActualTransactionActive();
+    }
+
+    private void publishImmediately(RuntimeEventDto event) {
+        persistAndBroadcast(event);
+    }
+
+    private void persistAndBroadcast(RuntimeEventDto event) {
+        RuntimeEventEntity entity;
+        synchronized (eventWriteLock) {
+            entity = persistWithRetry(event);
+        }
+        if (event.sessionId() == null) {
+            return;
+        }
+        RuntimeEventDto withId = new RuntimeEventDto(
+                entity.getId(),
+                event.sessionId(),
+                event.workItemId(),
+                event.workflowInstanceId(),
+                event.workflowNodeInstanceId(),
+                event.eventType(),
+                event.eventSource(),
+                event.payloadJson(),
+                entity.getSeqNo(),
+                parseDateTime(entity.getCreatedAt())
+        );
+        emitterRegistry.sendToSession(event.sessionId(), withId);
+        webSocketSessionRegistry.sendToSession(event.sessionId(), Map.of(
+                "type", "runtime.event",
+                "payload", withId
+        ));
+    }
+
+    private RuntimeEventEntity persistWithRetry(RuntimeEventDto event) {
+        String eventId = event.id() != null ? event.id() : idGenerator.nextId();
+        String createdAt = formatDateTime(event.createdAt() != null ? event.createdAt() : OffsetDateTime.now());
+        RuntimeEventEntity entity = null;
+        for (int attempt = 1; ; attempt++) {
+            try {
+                entity = buildEntity(event, eventId, createdAt);
+                eventMapper.insert(entity);
+                return entity;
+            } catch (Exception e) {
+                if (entity == null) {
+                    entity = buildEntityWithoutSeqNo(event, eventId, createdAt);
+                }
+                if (!isSqliteBusy(e) || attempt >= SQLITE_BUSY_MAX_RETRIES) {
+                    log.warn("Runtime event persistence failed; streaming event without DB record: {}",
+                            errorMessage(e));
+                    return entity;
+                }
+                sleepBeforeRetry(attempt);
+            }
+        }
+    }
+
+    private RuntimeEventEntity buildEntity(RuntimeEventDto event, String eventId, String createdAt) {
         RuntimeEventEntity entity = new RuntimeEventEntity();
-        entity.setId(event.id() != null ? event.id() : idGenerator.nextId());
+        entity.setId(eventId);
         entity.setSessionId(event.sessionId());
         entity.setWorkItemId(event.workItemId());
         entity.setWorkflowInstanceId(event.workflowInstanceId());
@@ -54,34 +143,56 @@ public class RuntimeEventService {
         entity.setEventSource(event.eventSource().name());
         entity.setPayloadJson(event.payloadJson());
         entity.setSeqNo(event.seqNo() != null ? event.seqNo() : nextSeqNo(event.sessionId()));
-        entity.setCreatedAt(formatDateTime(event.createdAt() != null ? event.createdAt() : OffsetDateTime.now()));
-        boolean persisted = true;
-        try {
-            eventMapper.insert(entity);
-        } catch (Exception e) {
-            persisted = false;
-            log.warn("Runtime event persistence failed; streaming event without DB record: {}", e.getMessage());
-        }
+        entity.setCreatedAt(createdAt);
+        return entity;
+    }
 
-        if (event.sessionId() != null) {
-            RuntimeEventDto withId = new RuntimeEventDto(
-                    entity.getId(),
-                    event.sessionId(),
-                    event.workItemId(),
-                    event.workflowInstanceId(),
-                    event.workflowNodeInstanceId(),
-                    event.eventType(),
-                    event.eventSource(),
-                    event.payloadJson(),
-                    entity.getSeqNo(),
-                    parseDateTime(entity.getCreatedAt())
-            );
-            emitterRegistry.sendToSession(event.sessionId(), withId);
-            webSocketSessionRegistry.sendToSession(event.sessionId(), java.util.Map.of(
-                    "type", "runtime.event",
-                    "payload", withId
-            ));
+    private RuntimeEventEntity buildEntityWithoutSeqNo(RuntimeEventDto event, String eventId, String createdAt) {
+        RuntimeEventEntity entity = new RuntimeEventEntity();
+        entity.setId(eventId);
+        entity.setSessionId(event.sessionId());
+        entity.setWorkItemId(event.workItemId());
+        entity.setWorkflowInstanceId(event.workflowInstanceId());
+        entity.setWorkflowNodeInstanceId(event.workflowNodeInstanceId());
+        entity.setEventType(event.eventType().name());
+        entity.setEventSource(event.eventSource().name());
+        entity.setPayloadJson(event.payloadJson());
+        entity.setSeqNo(event.seqNo());
+        entity.setCreatedAt(createdAt);
+        return entity;
+    }
+
+    private boolean isSqliteBusy(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            String message = current.getMessage();
+            if (message != null
+                    && (message.contains("SQLITE_BUSY")
+                    || message.contains("database is locked")
+                    || message.contains("database table is locked"))) {
+                return true;
+            }
+            current = current.getCause();
         }
+        return false;
+    }
+
+    private void sleepBeforeRetry(int attempt) {
+        long sleepMillis = SQLITE_BUSY_RETRY_SLEEP_MS * attempt;
+        try {
+            TimeUnit.MILLISECONDS.sleep(sleepMillis);
+        } catch (InterruptedException interruptedException) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private String errorMessage(Throwable error) {
+        if (error == null) {
+            return "unknown";
+        }
+        return error.getMessage() != null && !error.getMessage().isBlank()
+                ? error.getMessage()
+                : error.getClass().getSimpleName();
     }
 
     private RuntimeEventDto toDto(RuntimeEventEntity e) {

@@ -1,10 +1,12 @@
 package com.agentcenter.bridge.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.never;
@@ -84,7 +86,7 @@ class ConfirmationServiceTest {
     }
 
     @Test
-    void resolveQuestionConfirmationRepliesToOpenCodeAfterCommitWithoutResumingWorkflowNode() {
+    void resolveQuestionConfirmationRepliesToOpenCodeBeforeMarkingResolved() {
         ConfirmationRequestEntity entity = questionConfirmation();
         when(confirmationMapper.findById(entity.getId())).thenReturn(entity);
         when(agentMessageMapper.findBySessionId(entity.getAgentSessionId())).thenReturn(List.of());
@@ -96,16 +98,36 @@ class ConfirmationServiceTest {
 
         var result = service.resolve(entity.getId(), request);
 
-        verifyNoInteractions(questionConfirmationHandler);
-        verify(confirmationMapper).update(entity);
+        var inOrder = inOrder(questionConfirmationHandler, confirmationMapper);
+        inOrder.verify(questionConfirmationHandler)
+                .respondQuestion(eq(entity), eq(request), eq(ConfirmationActionType.CHOOSE));
+        inOrder.verify(confirmationMapper).update(entity);
 
         TransactionSynchronizationManager.getSynchronizations()
                 .forEach(TransactionSynchronization::afterCommit);
 
         assertThat(result.status()).isEqualTo(ConfirmationStatus.RESOLVED);
-        verify(questionConfirmationHandler).respondQuestion(eq(entity), eq(request), eq(ConfirmationActionType.CHOOSE));
         verify(permissionConfirmationHandler, never()).respondPermission(any(), any(), eq(true));
         verifyNoInteractions(workflowCommandService);
+    }
+
+    @Test
+    void resolveQuestionRuntimeFailureKeepsConfirmationPending() {
+        ConfirmationRequestEntity entity = questionConfirmation();
+        when(confirmationMapper.findById(entity.getId())).thenReturn(entity);
+        ResolveConfirmationRequest request = new ResolveConfirmationRequest(
+                ConfirmationActionType.CHOOSE,
+                "快速验证",
+                Map.of("choice", "FAST", "choiceLabel", "快速验证"));
+        doThrow(new IllegalStateException("question endpoint failed"))
+                .when(questionConfirmationHandler)
+                .respondQuestion(eq(entity), eq(request), eq(ConfirmationActionType.CHOOSE));
+
+        assertThatThrownBy(() -> service.resolve(entity.getId(), request))
+                .hasMessageContaining("Failed to respond to OpenCode question");
+
+        assertThat(entity.getStatus()).isEqualTo(ConfirmationStatus.PENDING.name());
+        verify(confirmationMapper, never()).update(entity);
     }
 
     @Test

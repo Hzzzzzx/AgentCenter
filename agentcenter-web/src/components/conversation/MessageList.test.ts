@@ -204,6 +204,47 @@ describe('MessageList.vue', () => {
     expect(text.indexOf('前面的提问')).toBeLessThan(text.indexOf('后面的回复'))
   })
 
+  it('filters persisted messages to the active session when provided', () => {
+    const wrapper = mount(MessageList, {
+      props: {
+        activeSessionId: 'session-current',
+        messages: [
+          makeMessage({ id: 'msg-old', sessionId: 'session-old', content: '其他会话回复' }),
+          makeMessage({ id: 'msg-current', sessionId: 'session-current', content: '当前会话回复' }),
+        ],
+      },
+    })
+
+    expect(wrapper.text()).toContain('当前会话回复')
+    expect(wrapper.text()).not.toContain('其他会话回复')
+  })
+
+  it('filters runtime events to the active session when provided', () => {
+    const wrapper = mount(MessageList, {
+      props: {
+        activeSessionId: 'session-current',
+        messages: [makeMessage({ id: 'msg-current', sessionId: 'session-current', content: '当前会话' })],
+        runtimeEvents: [
+          makeRuntimeEvent({
+            id: 'evt-old',
+            sessionId: 'session-old',
+            eventType: 'SKILL_STARTED',
+            payloadJson: '{"label":"旧会话 Skill"}',
+          }),
+          makeRuntimeEvent({
+            id: 'evt-current',
+            sessionId: 'session-current',
+            eventType: 'SKILL_STARTED',
+            payloadJson: '{"label":"当前会话 Skill"}',
+          }),
+        ],
+      },
+    })
+
+    expect(wrapper.text()).toContain('当前会话 Skill')
+    expect(wrapper.text()).not.toContain('旧会话 Skill')
+  })
+
   it('renders system messages correctly', () => {
     const wrapper = mount(MessageList, {
       props: { messages: [makeMessage({ role: 'SYSTEM', content: '节点已完成' })] },

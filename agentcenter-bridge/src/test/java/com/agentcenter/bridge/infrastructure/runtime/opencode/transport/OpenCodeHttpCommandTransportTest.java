@@ -6,9 +6,12 @@ import static org.mockito.Mockito.*;
 
 import java.io.IOException;
 import java.net.http.HttpClient;
+import java.net.http.HttpHeaders;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -149,11 +152,11 @@ class OpenCodeHttpCommandTransportTest {
     }
 
     @Test
-    void permissionRespondPostsDecisionToRuntimeSession() throws Exception {
+    void permissionRespondPostsDecisionToPermissionReplyEndpoint() throws Exception {
         ObjectNode payload = objectMapper.createObjectNode();
         payload.put("baseUrl", "http://localhost:4097");
         payload.put("workingDirectory", "/tmp/work");
-        payload.put("permissionId", "perm_abc");
+        payload.put("permissionId", "per_abc");
         payload.put("approved", true);
 
         RuntimeCommandEnvelope command = RuntimeCommandEnvelope.of(
@@ -167,8 +170,25 @@ class OpenCodeHttpCommandTransportTest {
         verify(httpClient).send(captor.capture(), any());
         HttpRequest request = captor.getValue();
         assertEquals("POST", request.method());
-        assertEquals("http://localhost:4097/session/ses_abc123/permission", request.uri().toString());
+        assertEquals("http://localhost:4097/permission/per_abc/reply", request.uri().toString());
         assertEquals("/tmp/work", request.headers().firstValue("x-opencode-directory").orElse(""));
+    }
+
+    @Test
+    void permissionRespondReturnsNackWithoutPermissionId() {
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("baseUrl", "http://localhost:4097");
+        payload.put("workingDirectory", "/tmp/work");
+        payload.put("approved", true);
+
+        RuntimeCommandEnvelope command = RuntimeCommandEnvelope.of(
+                RuntimeCommandTypes.PERMISSION_RESPOND, RuntimeType.OPENCODE,
+                "ses_abc123", payload);
+
+        RuntimeAckEnvelope ack = transport.send(command);
+
+        assertFalse(ack.success());
+        assertTrue(ack.message().contains("permissionId is required"));
     }
 
     @Test
@@ -265,6 +285,27 @@ class OpenCodeHttpCommandTransportTest {
         RuntimeTransportException ex = assertThrows(RuntimeTransportException.class,
                 () -> transport.send(command));
         assertFalse(ex.isRecoverable());
+    }
+
+    @Test
+    void htmlFallbackThrowsNonRecoverable() throws Exception {
+        when(httpResponse.statusCode()).thenReturn(200);
+        when(httpResponse.body()).thenReturn("<!doctype html><html></html>");
+        when(httpResponse.headers()).thenReturn(HttpHeaders.of(
+                Map.of("Content-Type", List.of("text/html; charset=utf-8")),
+                (name, value) -> true));
+
+        RuntimeCommandEnvelope command = RuntimeCommandEnvelope.of(
+                RuntimeCommandTypes.CONVERSATION_MESSAGE_SEND, RuntimeType.OPENCODE,
+                "ses_abc123", objectMapper.createObjectNode()
+                        .put("baseUrl", "http://localhost:4097")
+                        .put("workingDirectory", "/tmp/work"));
+
+        RuntimeTransportException ex = assertThrows(RuntimeTransportException.class,
+                () -> transport.send(command));
+
+        assertFalse(ex.isRecoverable());
+        assertTrue(ex.getMessage().contains("returned HTML"));
     }
 
     @Test
