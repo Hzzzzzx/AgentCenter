@@ -243,14 +243,15 @@ function addNode() {
 function appendSkillAsStage(skillName: string) {
   if (!draft.value) return
   const order = draft.value.nodes.length + 1
+  const stageKey = uniqueStageKey(stageKeyForSkill(skillName, order), draft.value.nodes.map((node) => node.stageKey || node.nodeKey))
   draft.value.nodes.push({
-    nodeKey: stageKeyForSkill(skillName, order),
+    nodeKey: stageKey,
     name: stageNameForSkill(skillName, order),
     skillName,
     inputPolicy: order === 1 ? 'WORK_ITEM_ONLY' : 'PREVIOUS_ARTIFACT',
     outputArtifactType: 'MARKDOWN',
     requiredConfirmation: false,
-    stageKey: stageKeyForSkill(skillName, order),
+    stageKey,
     allowDynamicActions: true,
     confirmationPolicy: 'EVENT_DRIVEN',
   })
@@ -276,30 +277,53 @@ function moveNode(index: number, direction: -1 | 1) {
 
 function generateDraftPlan() {
   if (!draft.value) return
-  draft.value.nodes = [...draft.value.nodes]
-    .sort((left, right) => skillSortWeight(left.skillName) - skillSortWeight(right.skillName))
-    .map((node, index) => ({
-      ...node,
-      name: node.name.trim() || stageNameForSkill(node.skillName, index + 1),
-      inputPolicy: index === 0 ? 'WORK_ITEM_ONLY' : 'PREVIOUS_ARTIFACT',
-      outputArtifactType: 'MARKDOWN',
-      requiredConfirmation: false,
-      stageKey: node.stageKey.trim() || stageKeyForSkill(node.skillName, index + 1),
-      allowDynamicActions: true,
-      confirmationPolicy: 'EVENT_DRIVEN',
-    }))
+  draft.value.nodes = normalizeDraftNodes(draft.value.nodes)
   agentFlowMermaid.value = buildAgentFlowMermaid(draft.value)
   savedMessage.value = '已根据当前 Skill 和编排意图生成阶段草案，保存后会成为新版编排'
 }
 
-function skillSortWeight(skillName: string): number {
-  const normalized = skillName.toLowerCase()
-  if (normalized.includes('prd') || normalized.includes('requirement')) return 10
-  if (normalized.includes('hld') || normalized.includes('solution')) return 20
-  if (normalized.includes('lld') || normalized.includes('implementation')) return 30
-  if (normalized.includes('review') || normalized.includes('verification')) return 40
-  if (normalized.includes('archive') || normalized.includes('finalize')) return 50
-  return 100
+function normalizeDraftNodes(nodes: NodeDraft[]): NodeDraft[] {
+  const usedKeys: string[] = []
+  return nodes.map((node, index) => {
+    const fallbackKey = stageKeyForSkill(node.skillName, index + 1)
+    const currentKey = node.stageKey.trim() || node.nodeKey.trim()
+    const baseKey = isGeneratedStageKey(currentKey) ? fallbackKey : currentKey || fallbackKey
+    const stageKey = uniqueStageKey(baseKey, usedKeys)
+    usedKeys.push(stageKey)
+    return {
+      ...node,
+      nodeKey: stageKey,
+      name: node.name.trim() || stageNameForSkill(node.skillName, index + 1),
+      inputPolicy: index === 0 ? 'WORK_ITEM_ONLY' : 'PREVIOUS_ARTIFACT',
+      outputArtifactType: 'MARKDOWN',
+      requiredConfirmation: false,
+      stageKey,
+      allowDynamicActions: true,
+      confirmationPolicy: 'EVENT_DRIVEN',
+    }
+  })
+}
+
+function isGeneratedStageKey(value: string): boolean {
+  return /^stage_\d+$/i.test(value.trim())
+}
+
+function uniqueStageKey(value: string, usedKeys: string[]): string {
+  const base = normalizeStageKey(value) || 'stage'
+  const used = new Set(usedKeys.map((key) => normalizeStageKey(key)).filter(Boolean))
+  if (!used.has(base)) return base
+  let index = 2
+  while (used.has(`${base}_${index}`)) index++
+  return `${base}_${index}`
+}
+
+function normalizeStageKey(value: string): string {
+  const normalized = value
+    .normalize('NFKD')
+    .replace(/[^\w]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toLowerCase()
+  return normalized || ''
 }
 
 function stageNameForSkill(skillName: string, order: number): string {
@@ -307,6 +331,7 @@ function stageNameForSkill(skillName: string, order: number): string {
   if (normalized.includes('prd') || normalized.includes('requirement')) return '需求整理 (PRD)'
   if (normalized.includes('hld') || normalized.includes('solution')) return '方案设计 (HLD)'
   if (normalized.includes('lld') || normalized.includes('implementation')) return '详细设计 (LLD)'
+  if (normalized.includes('fe-us-spitter') || normalized.includes('fe-us-splitter')) return 'FE/US 拆分授权测试'
   if (normalized.includes('review') || normalized.includes('verification')) return '验证与评审'
   if (normalized.includes('archive') || normalized.includes('finalize')) return '归档完成'
   return `阶段 ${order}`
@@ -317,6 +342,7 @@ function stageKeyForSkill(skillName: string, order: number): string {
   if (normalized.includes('prd') || normalized.includes('requirement')) return 'requirement_refine'
   if (normalized.includes('hld') || normalized.includes('solution')) return 'solution_design'
   if (normalized.includes('lld') || normalized.includes('implementation')) return 'implementation_plan'
+  if (normalized.includes('fe-us-spitter') || normalized.includes('fe-us-splitter')) return 'fe_us_splitter'
   if (normalized.includes('review') || normalized.includes('verification')) return 'verification_review'
   if (normalized.includes('archive') || normalized.includes('finalize')) return 'finalize_archive'
   return `stage_${order}`
@@ -396,6 +422,8 @@ async function saveDraft() {
     error.value = `Skill "${unavailableNode.skillName}" 当前未在 Skill 管理中启用，刷新或重新选择后再保存`
     return
   }
+  draft.value.nodes = normalizeDraftNodes(draft.value.nodes)
+  agentFlowMermaid.value = buildAgentFlowMermaid(draft.value)
 
   const request: UpdateWorkflowDefinitionRequest = {
     name: draft.value.name.trim(),

@@ -56,6 +56,7 @@ vi.mock('../api/runtimeResources', () => ({
     catalog: vi.fn().mockResolvedValue([
       { id: 'skill-1', name: 'prd-design', status: 'ENABLED', validationStatus: 'VALID' },
       { id: 'skill-2', name: 'hld-design', status: 'ENABLED', validationStatus: 'VALID' },
+      { id: 'skill-3', name: 'fe-us-spitter', status: 'ENABLED', validationStatus: 'VALID' },
     ]),
   },
 }))
@@ -133,6 +134,51 @@ describe('WorkflowConfig.vue', () => {
     const saveButton = wrapper.findAll('button').find((button) => button.text() === '无改动')
     expect(saveButton?.attributes('disabled')).toBeDefined()
     expect(workflowApi.updateDefinition).not.toHaveBeenCalled()
+  })
+
+  it('preserves user stage order when generating a draft and saving', async () => {
+    const wrapper = await mountWorkflowConfig()
+
+    await wrapper.find('button.workflow-config__button--primary').trigger('click')
+    await wrapper.find('button[aria-label="把 fe-us-spitter 加入阶段"]').trigger('click')
+
+    const stageCardsAfterAdd = wrapper.findAll('.workflow-editor__stage-card')
+    expect(stageCardsAfterAdd).toHaveLength(3)
+    expect(stageCardsAfterAdd[2].text()).toContain('fe-us-spitter')
+    expect((stageCardsAfterAdd[2].find('input[aria-label="阶段名称"]').element as HTMLInputElement).value)
+      .toBe('FE/US 拆分授权测试')
+
+    await stageCardsAfterAdd[2].findAll('button').find((button) => button.text() === '上移')?.trigger('click')
+    const movedCards = wrapper.findAll('.workflow-editor__stage-card')
+    expect(movedCards[1].text()).toContain('fe-us-spitter')
+
+    await wrapper.findAll('button').find((button) => button.text() === '生成阶段草案')?.trigger('click')
+
+    const generatedCards = wrapper.findAll('.workflow-editor__stage-card')
+    expect(generatedCards[0].text()).toContain('prd-design')
+    expect(generatedCards[1].text()).toContain('fe-us-spitter')
+    expect(generatedCards[2].text()).toContain('hld-design')
+
+    const nameInput = wrapper.find('input[type="text"]')
+    await nameInput.setValue('FE 插入授权测试编排')
+    await wrapper.findAll('button').find((button) => button.text() === '保存新版')?.trigger('click')
+    await flushPromises()
+
+    expect(workflowApi.updateDefinition).toHaveBeenCalledWith(
+      'wf-fe-v1',
+      expect.objectContaining({
+        nodes: [
+          expect.objectContaining({ skillName: 'prd-design', inputPolicy: 'WORK_ITEM_ONLY' }),
+          expect.objectContaining({
+            skillName: 'fe-us-spitter',
+            nodeKey: 'fe_us_splitter',
+            stageKey: 'fe_us_splitter',
+            inputPolicy: 'PREVIOUS_ARTIFACT',
+          }),
+          expect.objectContaining({ skillName: 'hld-design', inputPolicy: 'PREVIOUS_ARTIFACT' }),
+        ],
+      })
+    )
   })
 
   it('flags workflow skills missing from the realtime project skill catalog', async () => {
