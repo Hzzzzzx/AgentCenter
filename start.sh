@@ -18,6 +18,7 @@ BRIDGE_DIR="$SCRIPT_DIR/agentcenter-bridge"
 WEB_DIR="$SCRIPT_DIR/agentcenter-web"
 LOG_DIR="$SCRIPT_DIR/.logs"
 RUNTIME_WS="$SCRIPT_DIR/runtime-workspace"
+DB_PATH="$BRIDGE_DIR/data/agentcenter.db"
 
 OPENCODE_PORT=4097
 BRIDGE_PORT=8080
@@ -157,9 +158,48 @@ wait_for_port() {
     local port=$1 name=$2 timeout=${3:-30}
     local i=0
     while ! is_port_listening "$port"; do
-        ((i++))
+        ((i += 1))
         if [[ $i -ge $timeout ]]; then
             fail "$name 未在 ${timeout}s 内启动 (port $port)"
+            return 1
+        fi
+        sleep 1
+    done
+}
+
+wait_for_port_to_close() {
+    local port=$1 name=$2 timeout=${3:-15}
+    local i=0
+    while is_port_listening "$port"; do
+        ((i += 1))
+        if [[ $i -ge $timeout ]]; then
+            fail "$name 未在 ${timeout}s 内停止 (port $port)"
+            return 1
+        fi
+        sleep 1
+    done
+}
+
+kill_port_listeners() {
+    local port=$1
+    local pids
+    pids=$(lsof -ti ":$port" -sTCP:LISTEN 2>/dev/null || true)
+    if [[ -n "$pids" ]]; then
+        kill $pids 2>/dev/null || true
+    fi
+}
+
+wait_for_db_release() {
+    local timeout=${1:-20}
+    local i=0
+    if [[ ! -f "$DB_PATH" ]]; then
+        return 0
+    fi
+    while lsof "$DB_PATH" &>/dev/null; do
+        ((i += 1))
+        if [[ $i -ge $timeout ]]; then
+            fail "SQLite DB 仍被进程占用: $DB_PATH"
+            lsof "$DB_PATH" 2>/dev/null || true
             return 1
         fi
         sleep 1
@@ -174,10 +214,19 @@ stop_all() {
         tmux kill-session -t "$DEV_TMUX_PREFIX-bridge" 2>/dev/null || true
         tmux kill-session -t "$DEV_TMUX_PREFIX-web" 2>/dev/null || true
     fi
-    lsof -ti :$WEB_PORT     2>/dev/null | xargs kill 2>/dev/null || true
-    lsof -ti :$BRIDGE_PORT  2>/dev/null | xargs kill 2>/dev/null || true
+    kill_port_listeners "$WEB_PORT"
+    kill_port_listeners "$BRIDGE_PORT"
     pkill -f "opencode serve" 2>/dev/null || true
-    sleep 1
+
+    local rc=0
+    wait_for_port_to_close "$WEB_PORT" "Vue 前端" 15 || rc=1
+    wait_for_port_to_close "$BRIDGE_PORT" "Java Bridge" 20 || rc=1
+    wait_for_port_to_close "$OPENCODE_PORT" "opencode serve" 15 || rc=1
+    wait_for_db_release 20 || rc=1
+    if [[ $rc -ne 0 ]]; then
+        fail "服务未完全停止。请先处理残留进程后再启动，避免 SQLite locked。"
+        return $rc
+    fi
     ok "所有服务已停止"
 }
 

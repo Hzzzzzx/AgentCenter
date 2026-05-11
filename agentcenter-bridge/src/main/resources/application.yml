@@ -2,9 +2,17 @@ server:
   port: 8080
 
 spring:
+  devtools:
+    restart:
+      enabled: false
   datasource:
     driver-class-name: org.sqlite.JDBC
-    url: jdbc:sqlite:./data/agentcenter.db
+    url: jdbc:sqlite:file:./data/agentcenter.db?busy_timeout=10000&journal_mode=WAL&synchronous=NORMAL
+    hikari:
+      pool-name: AgentCenterSqlitePool
+      maximum-pool-size: 1
+      minimum-idle: 1
+      connection-timeout: 30000
   flyway:
     enabled: true
     locations: classpath:db/migration

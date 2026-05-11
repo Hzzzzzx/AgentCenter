@@ -25,6 +25,8 @@ runtime-workspace/
 # Logs
 *.log
 npm-debug.log*
+.logs/
+.vite/
 
 # Environment
 .env
@@ -57,6 +59,8 @@ target/
 
 # SQLite database
 *.db
+*.db-wal
+*.db-shm
 
 # Maven
 .mvn/wrapper/maven-wrapper.jar
