@@ -181,6 +181,37 @@ class WorkflowMidSessionInputRoutingIntegrationTest {
         assertThat(instanceStatusAfter).isEqualTo("BLOCKED");
     }
 
+    @Test
+    void continueCurrent_sendsRuntimeContinueWithoutReplayingNodePrompt() throws Exception {
+        StartedWorkflow wf = startWorkflowAndWait("FE1234");
+        jdbcTemplate.update("DELETE FROM confirmation_request WHERE id = ?", wf.confirmationId());
+        jdbcTemplate.update("""
+                UPDATE workflow_node_instance
+                SET status = 'RUNNING', agent_state = 'IN_PROGRESS'
+                WHERE id = ?
+                """, wf.nodeInstanceId());
+        jdbcTemplate.update("""
+                UPDATE workflow_instance
+                SET status = 'BLOCKED', current_node_instance_id = ?
+                WHERE id = ?
+                """, wf.nodeInstanceId(), wf.instanceId());
+
+        int skillCountBefore = TestWorkflowExecutorConfig.CAPTURED_SKILL_NAMES.size();
+
+        mockMvc.perform(post("/api/agent-sessions/" + wf.sessionId() + "/messages")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"请继续当前节点，不要重新开始节点\","
+                                + "\"workflowUserAction\":\"CONTINUE_CURRENT\","
+                                + "\"workflowNodeInstanceId\":\"" + wf.nodeInstanceId() + "\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.role").value("USER"));
+
+        String instanceStatusAfter = jdbcTemplate.queryForObject(
+                "SELECT status FROM workflow_instance WHERE id = ?", String.class, wf.instanceId());
+        assertThat(instanceStatusAfter).isEqualTo("RUNNING");
+        assertThat(TestWorkflowExecutorConfig.CAPTURED_SKILL_NAMES).hasSize(skillCountBefore);
+    }
+
     private long countNodesWithStatus(com.fasterxml.jackson.databind.JsonNode wfJson, String targetStatus) {
         var nodes = wfJson.at("/nodes");
         return java.util.stream.StreamSupport.stream(nodes.spliterator(), false)
