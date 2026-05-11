@@ -326,52 +326,6 @@ describe('ConversationWorkbench.vue', () => {
     expect(vi.mocked(eventApi.streamSessionEvents).mock.calls.map(([sessionId]) => sessionId)).toEqual(['session-current'])
   })
 
-  it('does not let a late cancel response switch back to the cancelled session', async () => {
-    const currentSession = {
-      ...mocks.runningSession,
-      id: 'session-current',
-      sessionType: 'GENERAL',
-      title: '当前会话',
-      workItemId: null,
-      workflowInstanceId: null,
-    } satisfies AgentSessionDto
-    const cancelResult = deferred<void>()
-
-    vi.mocked(sessionApi.list).mockResolvedValue([mocks.runningSession, currentSession])
-    vi.mocked(sessionApi.getById).mockImplementation((id: string) =>
-      Promise.resolve(id === 'session-current' ? currentSession : mocks.runningSession)
-    )
-    vi.mocked(sessionApi.cancel).mockReturnValue(cancelResult.promise)
-
-    const pinia = createPinia()
-    setActivePinia(pinia)
-    const wrapper = mount(ConversationWorkbench, {
-      props: {
-        workItemId: 'work-1',
-        targetSessionId: 'session-1',
-      },
-      global: {
-        plugins: [pinia],
-      },
-    })
-
-    await flushPromises()
-
-    await wrapper.find('.conversation-workbench__send--pause').trigger('click')
-    await wrapper.setProps({ workItemId: undefined, targetSessionId: 'session-current' })
-    await flushPromises()
-
-    cancelResult.resolve()
-    await flushPromises()
-
-    const runtimeStore = useRuntimeStore()
-    expect(runtimeStore.activeSessionId).toBe('session-current')
-    expect(vi.mocked(eventApi.streamSessionEvents).mock.calls.map(([sessionId]) => sessionId)).toEqual([
-      'session-1',
-      'session-current',
-    ])
-  })
-
   it('opens captured artifacts by artifactId from conversation evidence', async () => {
     const pinia = createPinia()
     setActivePinia(pinia)

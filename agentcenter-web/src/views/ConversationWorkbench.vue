@@ -732,20 +732,18 @@ async function resolveComposerRecoveryInteraction(confirmationId: string, text: 
 }
 
 async function handleCancelReply() {
-  if (!sessionStore.activeSession || isCancellingCurrentReply.value) return
+  if (!sessionStore.activeSession || cancellingReply.value) return
   const sessionId = sessionStore.activeSession.id
   const runningNodeId = nodeStateInfo.value.type === 'RUNNING'
     ? nodeStateInfo.value.nodeId ?? null
     : null
-  cancellingSessionId.value = sessionId
+  cancellingReply.value = true
   try {
     await sessionStore.cancelActiveSession()
-    if (sessionStore.activeSession?.id !== sessionId) return
     pausedRunningNodeId.value = runningNodeId
     runtimeStore.resetStreamingOutput()
     runtimeStore.markIdle()
     await sessionStore.selectSession(sessionId)
-    if (sessionStore.activeSession?.id !== sessionId) return
     if (sessionStore.activeSession.workflowInstanceId) {
       await workflowStore.refreshInstance(sessionStore.activeSession.workflowInstanceId)
     }
@@ -753,9 +751,7 @@ async function handleCancelReply() {
       await workflowProjectionStore.syncWorkItem(sessionStore.activeSession.workItemId)
     }
   } finally {
-    if (cancellingSessionId.value === sessionId) {
-      cancellingSessionId.value = null
-    }
+    cancellingReply.value = false
   }
 }
 
@@ -1399,7 +1395,7 @@ function timestamp(value: string | null | undefined): number {
           <button
             class="conversation-workbench__send"
             :class="{ 'conversation-workbench__send--pause': isConversationRunning }"
-            :disabled="isConversationRunning ? isCancellingCurrentReply : (!inputText.trim() || loadingSession)"
+            :disabled="isConversationRunning ? cancellingReply : (!inputText.trim() || loadingSession)"
             :type="isConversationRunning ? 'button' : 'submit'"
             :aria-label="isConversationRunning ? '暂停当前回复' : '发送消息'"
             :title="isConversationRunning ? '暂停当前回复' : '发送消息'"
