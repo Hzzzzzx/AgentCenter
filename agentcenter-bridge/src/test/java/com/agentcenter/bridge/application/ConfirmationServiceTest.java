@@ -24,12 +24,16 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.agentcenter.bridge.api.dto.ResolveConfirmationRequest;
+import com.agentcenter.bridge.application.runtime.RuntimeGateway;
 import com.agentcenter.bridge.application.runtime.translation.PermissionConfirmationHandler;
 import com.agentcenter.bridge.application.runtime.translation.QuestionConfirmationHandler;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationActionType;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationRequestType;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationStatus;
+import com.agentcenter.bridge.domain.runtime.RuntimeType;
+import com.agentcenter.bridge.infrastructure.persistence.entity.AgentSessionEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.ConfirmationRequestEntity;
+import com.agentcenter.bridge.infrastructure.persistence.mapper.AgentSessionMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.AgentMessageMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.ConfirmationMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.WorkItemMapper;
@@ -39,7 +43,9 @@ class ConfirmationServiceTest {
 
     private ConfirmationMapper confirmationMapper;
     private WorkflowCommandService workflowCommandService;
+    private AgentSessionMapper agentSessionMapper;
     private AgentMessageMapper agentMessageMapper;
+    private RuntimeGateway runtimeGateway;
     private PermissionConfirmationHandler permissionConfirmationHandler;
     private QuestionConfirmationHandler questionConfirmationHandler;
     private ConfirmationService service;
@@ -50,8 +56,10 @@ class ConfirmationServiceTest {
         workflowCommandService = mock(WorkflowCommandService.class);
         WorkItemMapper workItemMapper = mock(WorkItemMapper.class);
         WorkflowMapper workflowMapper = mock(WorkflowMapper.class);
+        agentSessionMapper = mock(AgentSessionMapper.class);
         agentMessageMapper = mock(AgentMessageMapper.class);
         RuntimeEventService runtimeEventService = mock(RuntimeEventService.class);
+        runtimeGateway = mock(RuntimeGateway.class);
         permissionConfirmationHandler = mock(PermissionConfirmationHandler.class);
         questionConfirmationHandler = mock(QuestionConfirmationHandler.class);
         service = new ConfirmationService(
@@ -59,8 +67,10 @@ class ConfirmationServiceTest {
                 workflowCommandService,
                 workItemMapper,
                 workflowMapper,
+                agentSessionMapper,
                 agentMessageMapper,
                 runtimeEventService,
+                runtimeGateway,
                 permissionConfirmationHandler,
                 questionConfirmationHandler);
         TransactionSynchronizationManager.initSynchronization();
@@ -74,7 +84,7 @@ class ConfirmationServiceTest {
     }
 
     @Test
-    void resolveQuestionConfirmationRepliesToOpenCodeWithoutResumingWorkflowNode() {
+    void resolveQuestionConfirmationRepliesToOpenCodeAfterCommitWithoutResumingWorkflowNode() {
         ConfirmationRequestEntity entity = questionConfirmation();
         when(confirmationMapper.findById(entity.getId())).thenReturn(entity);
         when(agentMessageMapper.findBySessionId(entity.getAgentSessionId())).thenReturn(List.of());
@@ -85,13 +95,16 @@ class ConfirmationServiceTest {
                 Map.of("choice", "FAST", "choiceLabel", "快速验证"));
 
         var result = service.resolve(entity.getId(), request);
+
+        verifyNoInteractions(questionConfirmationHandler);
+        verify(confirmationMapper).update(entity);
+
         TransactionSynchronizationManager.getSynchronizations()
                 .forEach(TransactionSynchronization::afterCommit);
 
         assertThat(result.status()).isEqualTo(ConfirmationStatus.RESOLVED);
         verify(questionConfirmationHandler).respondQuestion(eq(entity), eq(request), eq(ConfirmationActionType.CHOOSE));
         verify(permissionConfirmationHandler, never()).respondPermission(any(), any(), eq(true));
-        verify(confirmationMapper).update(entity);
         verifyNoInteractions(workflowCommandService);
     }
 
@@ -140,6 +153,55 @@ class ConfirmationServiceTest {
         verify(workflowCommandService, never()).skipNode("node-1");
     }
 
+    @Test
+    void resolveRuntimeExceptionSupplementSendsRecoveryPromptToSession() {
+        ConfirmationRequestEntity entity = runtimeExceptionConfirmation();
+        AgentSessionEntity session = agentSession("agent-session-1", "ses-old");
+        when(confirmationMapper.findById(entity.getId())).thenReturn(entity);
+        when(agentMessageMapper.findBySessionId(entity.getAgentSessionId())).thenReturn(List.of());
+        when(agentSessionMapper.findById("agent-session-1")).thenReturn(session);
+        when(runtimeGateway.ensureSession(RuntimeType.OPENCODE, null, "agent-session-1", "ses-old"))
+                .thenReturn("ses-old");
+
+        ResolveConfirmationRequest request = new ResolveConfirmationRequest(
+                ConfirmationActionType.SUPPLEMENT,
+                "继续，但先确认状态",
+                Map.of("input", "继续，但先确认状态"));
+
+        var result = service.resolve(entity.getId(), request);
+        TransactionSynchronizationManager.getSynchronizations()
+                .forEach(TransactionSynchronization::afterCommit);
+
+        assertThat(result.status()).isEqualTo(ConfirmationStatus.RESOLVED);
+        verify(runtimeGateway).sendMessage(eq(RuntimeType.OPENCODE), eq("ses-old"),
+                org.mockito.ArgumentMatchers.contains("继续，但先确认状态"));
+        verifyNoInteractions(workflowCommandService);
+    }
+
+    @Test
+    void resolveRuntimeExceptionRetryUsesOriginalUserMessage() {
+        ConfirmationRequestEntity entity = runtimeExceptionConfirmation();
+        AgentSessionEntity session = agentSession("agent-session-1", "ses-old");
+        when(confirmationMapper.findById(entity.getId())).thenReturn(entity);
+        when(agentMessageMapper.findBySessionId(entity.getAgentSessionId())).thenReturn(List.of());
+        when(agentSessionMapper.findById("agent-session-1")).thenReturn(session);
+        when(runtimeGateway.ensureSession(RuntimeType.OPENCODE, null, "agent-session-1", "ses-old"))
+                .thenReturn("ses-new");
+
+        ResolveConfirmationRequest request = new ResolveConfirmationRequest(
+                ConfirmationActionType.RETRY,
+                "重试",
+                Map.of());
+
+        service.resolve(entity.getId(), request);
+        TransactionSynchronizationManager.getSynchronizations()
+                .forEach(TransactionSynchronization::afterCommit);
+
+        verify(agentSessionMapper).update(session);
+        verify(runtimeGateway).sendMessage(eq(RuntimeType.OPENCODE), eq("ses-new"),
+                org.mockito.ArgumentMatchers.contains("原始用户请求"));
+    }
+
     private ConfirmationRequestEntity questionConfirmation() {
         ConfirmationRequestEntity entity = new ConfirmationRequestEntity();
         entity.setId("question_rt_session_q_1");
@@ -175,5 +237,33 @@ class ConfirmationServiceTest {
         entity.setCreatedAt("2026-05-11 12:00:00");
         entity.setUpdatedAt("2026-05-11 12:00:00");
         return entity;
+    }
+
+    private ConfirmationRequestEntity runtimeExceptionConfirmation() {
+        ConfirmationRequestEntity entity = new ConfirmationRequestEntity();
+        entity.setId("runtime_exception_1");
+        entity.setRequestType(ConfirmationRequestType.EXCEPTION.name());
+        entity.setStatus(ConfirmationStatus.PENDING.name());
+        entity.setAgentSessionId("agent-session-1");
+        entity.setRuntimeType("OPENCODE");
+        entity.setRuntimeSessionId("ses-old");
+        entity.setTitle("Runtime 执行中断");
+        entity.setContent("Runtime sendMessage failed");
+        entity.setPriority("HIGH");
+        entity.setInteractionType("RUNTIME_EXCEPTION");
+        entity.setInteractionContextJson("""
+                {"originalUserMessage":"原始用户请求","errorMessage":"Connection refused"}
+                """);
+        entity.setCreatedAt("2026-05-11 12:00:00");
+        entity.setUpdatedAt("2026-05-11 12:00:00");
+        return entity;
+    }
+
+    private AgentSessionEntity agentSession(String id, String runtimeSessionId) {
+        AgentSessionEntity session = new AgentSessionEntity();
+        session.setId(id);
+        session.setRuntimeType("OPENCODE");
+        session.setRuntimeSessionId(runtimeSessionId);
+        return session;
     }
 }

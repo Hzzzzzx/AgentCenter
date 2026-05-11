@@ -108,6 +108,30 @@ class QuestionConfirmationHandlerTest {
     }
 
     @Test
+    void respondQuestionSendsStructuredFieldAnswersInSchemaOrder() {
+        ConfirmationRequestEntity entity = questionEntity(ConfirmationRequestType.INPUT_REQUIRED.name());
+        entity.setInteractionSchemaJson("""
+                {
+                  "fields": [
+                    {"id": "q0", "label": "问题 1"},
+                    {"id": "q1", "label": "问题 2"}
+                  ]
+                }
+                """);
+        ResolveConfirmationRequest request = new ResolveConfirmationRequest(
+                ConfirmationActionType.SUPPLEMENT,
+                null,
+                Map.of("fields", Map.of(
+                        "q1", "验收标准覆盖登录失败",
+                        "q0", "企业项目经理")));
+
+        handler.respondQuestion(entity, request, ConfirmationActionType.SUPPLEMENT);
+
+        verify(adapter).replyQuestion("ses_1", "q_1",
+                List.of(List.of("企业项目经理"), List.of("验收标准覆盖登录失败")));
+    }
+
+    @Test
     void respondQuestionRejectsQuestionInOpenCode() {
         ConfirmationRequestEntity entity = questionEntity(ConfirmationRequestType.INPUT_REQUIRED.name());
         ResolveConfirmationRequest request = new ResolveConfirmationRequest(

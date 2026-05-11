@@ -448,6 +448,10 @@ describe('ConversationWorkbench.vue', () => {
 
     expect(wrapper.find('.interaction-bar').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('确认继续下一步')
+
+    const sendButton = wrapper.find('.conversation-workbench__send')
+    expect(sendButton.classes()).not.toContain('conversation-workbench__send--pause')
+    expect(sendButton.attributes('aria-label')).toBe('发送消息')
   })
 
   it('submits exception recovery from the composer with SUPPLEMENT', async () => {

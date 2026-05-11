@@ -20,6 +20,7 @@ import org.springframework.web.server.ResponseStatusException;
 import com.agentcenter.bridge.api.dto.ConfirmationRequestDto;
 import com.agentcenter.bridge.api.dto.ResolveConfirmationRequest;
 import com.agentcenter.bridge.api.dto.RuntimeEventDto;
+import com.agentcenter.bridge.application.runtime.RuntimeGateway;
 import com.agentcenter.bridge.application.runtime.translation.PermissionConfirmationHandler;
 import com.agentcenter.bridge.application.runtime.translation.QuestionConfirmationHandler;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationActionType;
@@ -27,19 +28,24 @@ import com.agentcenter.bridge.domain.confirmation.ConfirmationRequestType;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationStatus;
 import com.agentcenter.bridge.domain.runtime.RuntimeEventSource;
 import com.agentcenter.bridge.domain.runtime.RuntimeEventType;
+import com.agentcenter.bridge.domain.runtime.RuntimeType;
 import com.agentcenter.bridge.domain.session.ContentFormat;
 import com.agentcenter.bridge.domain.session.MessageRole;
 import com.agentcenter.bridge.domain.session.MessageStatus;
 import com.agentcenter.bridge.domain.workitem.Priority;
 import com.agentcenter.bridge.domain.workitem.WorkItemType;
 import com.agentcenter.bridge.infrastructure.persistence.entity.AgentMessageEntity;
+import com.agentcenter.bridge.infrastructure.persistence.entity.AgentSessionEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.ConfirmationRequestEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.WorkItemEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowNodeDefinitionEntity;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.AgentMessageMapper;
+import com.agentcenter.bridge.infrastructure.persistence.mapper.AgentSessionMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.ConfirmationMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.WorkItemMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.WorkflowMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Service
 public class ConfirmationService {
@@ -53,25 +59,32 @@ public class ConfirmationService {
     private final WorkflowCommandService workflowCommandService;
     private final WorkItemMapper workItemMapper;
     private final WorkflowMapper workflowMapper;
+    private final AgentSessionMapper agentSessionMapper;
     private final AgentMessageMapper agentMessageMapper;
     private final RuntimeEventService runtimeEventService;
+    private final RuntimeGateway runtimeGateway;
     private final PermissionConfirmationHandler permissionConfirmationHandler;
     private final QuestionConfirmationHandler questionConfirmationHandler;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public ConfirmationService(ConfirmationMapper confirmationMapper,
                                WorkflowCommandService workflowCommandService,
                                WorkItemMapper workItemMapper,
                                WorkflowMapper workflowMapper,
+                               AgentSessionMapper agentSessionMapper,
                                AgentMessageMapper agentMessageMapper,
                                RuntimeEventService runtimeEventService,
+                               RuntimeGateway runtimeGateway,
                                PermissionConfirmationHandler permissionConfirmationHandler,
                                QuestionConfirmationHandler questionConfirmationHandler) {
         this.confirmationMapper = confirmationMapper;
         this.workflowCommandService = workflowCommandService;
         this.workItemMapper = workItemMapper;
         this.workflowMapper = workflowMapper;
+        this.agentSessionMapper = agentSessionMapper;
         this.agentMessageMapper = agentMessageMapper;
         this.runtimeEventService = runtimeEventService;
+        this.runtimeGateway = runtimeGateway;
         this.permissionConfirmationHandler = permissionConfirmationHandler;
         this.questionConfirmationHandler = questionConfirmationHandler;
     }
@@ -163,15 +176,17 @@ public class ConfirmationService {
                     + "Valid actions for " + requestType + ": " + validActionsFor(requestType));
         }
 
+        boolean isQuestionConfirmation = QuestionConfirmationHandler.isQuestionConfirmation(entity);
+        Runnable questionResponseAfterCommit = isQuestionConfirmation
+                ? () -> respondQuestionBeforeResolving(entity, request, actionType)
+                : null;
+
         if (ConfirmationRequestType.PERMISSION.equals(requestType)) {
             respondPermissionBeforeResolving(entity, actionType);
         }
-        if (QuestionConfirmationHandler.isQuestionConfirmation(entity)) {
-            respondQuestionBeforeResolving(entity, request, actionType);
-        }
 
         if (ConfirmationActionType.REJECT.equals(actionType)) {
-            return handleReject(entity, request);
+            return handleReject(entity, request, questionResponseAfterCommit);
         }
 
         String now = LocalDateTime.now().format(SQLITE_DATETIME);
@@ -195,40 +210,50 @@ public class ConfirmationService {
 
         var nodeInstanceId = entity.getWorkflowNodeInstanceId();
         boolean shouldDispatchWorkflow = nodeInstanceId != null
-                && !QuestionConfirmationHandler.isQuestionConfirmation(entity)
+                && !isQuestionConfirmation
                 && !hasOtherBlockingForNode(entity);
         boolean isDecision = ConfirmationRequestType.DECISION.name().equals(entity.getRequestType());
         boolean isException = ConfirmationRequestType.EXCEPTION.name().equals(entity.getRequestType());
         boolean isSkip = ConfirmationActionType.SKIP.equals(actionType);
+        boolean isRuntimeSessionIntervention = isException
+                && nodeInstanceId == null
+                && entity.getAgentSessionId() != null
+                && !entity.getAgentSessionId().isBlank();
         // Only route DECISION as system action for WORKFLOW_ADVANCE confirmations
         boolean isWorkflowAdvance = isDecision
                 && "WORKFLOW_ADVANCE".equals(entity.getInteractionType());
 
-        publishResolutionEventAfterCommit(entity, actionType, actionDescription, () -> {
-            if (shouldDispatchWorkflow) {
-                if (isWorkflowAdvance) {
-                    switch (actionType) {
-                        case ADVANCE -> workflowCommandService.completeNodeAndScheduleAdvance(nodeInstanceId);
-                        case SUPPLEMENT -> workflowCommandService.resumeNodeAfterInteraction(nodeInstanceId);
-                        case RETRY -> workflowCommandService.retryNode(nodeInstanceId);
-                        default -> workflowCommandService.resumeNodeAfterInteraction(nodeInstanceId);
-                    }
-                } else if (isDecision) {
-                    // Non-WORKFLOW_ADVANCE DECISION: treat as normal confirmation
-                    workflowCommandService.resumeNodeAfterInteraction(nodeInstanceId);
-                } else if (isException) {
-                    if (ConfirmationActionType.SUPPLEMENT.equals(actionType)) {
-                        workflowCommandService.resumeNodeAfterInteraction(nodeInstanceId);
-                    } else if (isSkip) {
-                        workflowCommandService.skipNode(nodeInstanceId);
+        Runnable workflowDispatchAfterCommit = (shouldDispatchWorkflow || isRuntimeSessionIntervention)
+                ? () -> {
+                    if (shouldDispatchWorkflow) {
+                        if (isWorkflowAdvance) {
+                            switch (actionType) {
+                                case ADVANCE -> workflowCommandService.completeNodeAndScheduleAdvance(nodeInstanceId);
+                                case SUPPLEMENT -> workflowCommandService.resumeNodeAfterInteraction(nodeInstanceId);
+                                case RETRY -> workflowCommandService.retryNode(nodeInstanceId);
+                                default -> workflowCommandService.resumeNodeAfterInteraction(nodeInstanceId);
+                            }
+                        } else if (isDecision) {
+                            // Non-WORKFLOW_ADVANCE DECISION: treat as normal confirmation
+                            workflowCommandService.resumeNodeAfterInteraction(nodeInstanceId);
+                        } else if (isException) {
+                            if (ConfirmationActionType.SUPPLEMENT.equals(actionType)) {
+                                workflowCommandService.resumeNodeAfterInteraction(nodeInstanceId);
+                            } else if (isSkip) {
+                                workflowCommandService.skipNode(nodeInstanceId);
+                            } else {
+                                workflowCommandService.retryNode(nodeInstanceId);
+                            }
+                        } else {
+                            workflowCommandService.resumeNodeAfterInteraction(nodeInstanceId);
+                        }
                     } else {
-                        workflowCommandService.retryNode(nodeInstanceId);
+                        dispatchRuntimeSessionIntervention(entity, actionType, request);
                     }
-                } else {
-                    workflowCommandService.resumeNodeAfterInteraction(nodeInstanceId);
                 }
-            }
-        });
+                : null;
+        publishResolutionEventAfterCommit(entity, actionType, actionDescription,
+                combineAfterCommitActions(questionResponseAfterCommit, workflowDispatchAfterCommit));
 
         return toDto(entity);
     }
@@ -258,7 +283,8 @@ public class ConfirmationService {
     }
 
     private ConfirmationRequestDto handleReject(ConfirmationRequestEntity entity,
-                                                 ResolveConfirmationRequest request) {
+                                                 ResolveConfirmationRequest request,
+                                                 Runnable afterCommitAction) {
         String now = LocalDateTime.now().format(SQLITE_DATETIME);
         entity.setStatus(ConfirmationStatus.REJECTED.name());
         entity.setResolvedBy("admin");
@@ -272,9 +298,18 @@ public class ConfirmationService {
                         + "，工作流保持阻塞");
 
         publishResolutionEventAfterCommit(entity, ConfirmationActionType.REJECT,
-                buildActionDescription(ConfirmationActionType.REJECT, request), null);
+                buildActionDescription(ConfirmationActionType.REJECT, request), afterCommitAction);
 
         return toDto(entity);
+    }
+
+    private Runnable combineAfterCommitActions(Runnable first, Runnable second) {
+        if (first == null) return second;
+        if (second == null) return first;
+        return () -> {
+            first.run();
+            second.run();
+        };
     }
 
     private String validActionsFor(ConfirmationRequestType requestType) {
@@ -318,6 +353,130 @@ public class ConfirmationService {
             case REJECT -> "用户拒绝" + (request.comment() != null ? "：" + request.comment() : "");
             default -> "用户操作：" + actionType.name();
         };
+    }
+
+    private void dispatchRuntimeSessionIntervention(ConfirmationRequestEntity confirmation,
+                                                    ConfirmationActionType actionType,
+                                                    ResolveConfirmationRequest request) {
+        if (ConfirmationActionType.SKIP.equals(actionType) || ConfirmationActionType.REJECT.equals(actionType)) {
+            publishRuntimeInterventionStatus(confirmation, "用户已取消 Runtime 恢复。", false);
+            return;
+        }
+
+        AgentSessionEntity session = agentSessionMapper.findById(confirmation.getAgentSessionId());
+        if (session == null) {
+            publishRuntimeInterventionStatus(confirmation, "会话不存在，无法恢复 Runtime。", true);
+            return;
+        }
+
+        String prompt = buildRuntimeRecoveryPrompt(confirmation, actionType, request);
+        if (prompt.isBlank()) {
+            publishRuntimeInterventionStatus(confirmation, "没有可用于恢复的指令。", true);
+            return;
+        }
+
+        try {
+            RuntimeType runtimeType = RuntimeType.valueOf(session.getRuntimeType());
+            String runtimeSessionId = runtimeGateway.ensureSession(
+                    runtimeType, session.getWorkItemId(), session.getId(), session.getRuntimeSessionId());
+            if (runtimeSessionId != null && !runtimeSessionId.equals(session.getRuntimeSessionId())) {
+                session.setRuntimeSessionId(runtimeSessionId);
+                agentSessionMapper.update(session);
+            }
+            runtimeGateway.sendMessage(runtimeType, runtimeSessionId, prompt);
+            publishRuntimeInterventionStatus(confirmation, "已把恢复指令发送给 Runtime。", false);
+        } catch (Exception e) {
+            publishRuntimeInterventionStatus(confirmation,
+                    "Runtime 恢复指令发送失败：" + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()),
+                    true);
+        }
+    }
+
+    private String buildRuntimeRecoveryPrompt(ConfirmationRequestEntity confirmation,
+                                              ConfirmationActionType actionType,
+                                              ResolveConfirmationRequest request) {
+        String originalUserMessage = extractInteractionContextField(confirmation, "originalUserMessage");
+        String errorMessage = extractInteractionContextField(confirmation, "errorMessage");
+        String userInput = firstNonBlank(extractPayloadField(request, "input"), request.comment());
+
+        if (ConfirmationActionType.RETRY.equals(actionType)) {
+            String retryPrompt = firstNonBlank(originalUserMessage, userInput);
+            if (retryPrompt == null || retryPrompt.isBlank()) {
+                return "请基于当前会话上下文重试上一轮失败的 Runtime 请求。";
+            }
+            return """
+                    上一轮 Runtime 调用失败，现在执行一次防呆重试。
+
+                    失败原因：%s
+
+                    请重试下面的用户请求；如果你判断可能重复执行有副作用操作，请先说明风险并请求用户确认。
+
+                    用户请求：
+                    %s
+                    """.formatted(firstNonBlank(errorMessage, "未知错误"), retryPrompt).trim();
+        }
+
+        return """
+                上一轮 Runtime 调用出现异常，用户已经介入并补充了恢复指令。
+
+                失败原因：%s
+
+                用户补充：
+                %s
+
+                请基于当前会话上下文继续处理，不要重复已经完成的步骤；如果存在重复执行风险，请先向用户说明并请求确认。
+                """.formatted(firstNonBlank(errorMessage, "未知错误"), firstNonBlank(userInput, "请继续恢复当前任务。")).trim();
+    }
+
+    private String extractInteractionContextField(ConfirmationRequestEntity confirmation, String field) {
+        String context = confirmation.getInteractionContextJson();
+        if (context == null || context.isBlank()) {
+            return null;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(context);
+            JsonNode value = root.path(field);
+            return value.isMissingNode() || value.isNull() ? null : value.asText();
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private String firstNonBlank(String primary, String fallback) {
+        if (primary != null && !primary.isBlank()) {
+            return primary;
+        }
+        return fallback != null && !fallback.isBlank() ? fallback : null;
+    }
+
+    private void publishRuntimeInterventionStatus(ConfirmationRequestEntity confirmation,
+                                                  String message,
+                                                  boolean error) {
+        if (confirmation.getAgentSessionId() == null || confirmation.getAgentSessionId().isBlank()) {
+            return;
+        }
+        String payloadJson;
+        try {
+            payloadJson = objectMapper.writeValueAsString(Map.of(
+                    "kind", "runtime_intervention",
+                    "status", error ? "failed" : "completed",
+                    "message", message,
+                    "confirmationId", confirmation.getId()
+            ));
+        } catch (Exception e) {
+            payloadJson = "{\"message\":\"" + message.replace("\"", "\\\"") + "\"}";
+        }
+        runtimeEventService.publishEvent(new RuntimeEventDto(
+                null,
+                confirmation.getAgentSessionId(),
+                confirmation.getWorkItemId(),
+                confirmation.getWorkflowInstanceId(),
+                confirmation.getWorkflowNodeInstanceId(),
+                error ? RuntimeEventType.ERROR : RuntimeEventType.STATUS,
+                RuntimeEventSource.BRIDGE,
+                payloadJson,
+                null
+        ));
     }
 
     @SuppressWarnings("unchecked")
@@ -376,20 +535,20 @@ public class ConfirmationService {
                                                     ConfirmationActionType actionType,
                                                     String actionDescription,
                                                     Runnable afterCommitAction) {
+        String capturedId = entity.getId();
         String sessionId = entity.getAgentSessionId();
         if (sessionId == null) {
             if (afterCommitAction != null) {
                 TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                     @Override
                     public void afterCommit() {
-                        afterCommitAction.run();
+                        runAfterCommitAction(capturedId, afterCommitAction);
                     }
                 });
             }
             return;
         }
 
-        String capturedId = entity.getId();
         String capturedRequestType = entity.getRequestType();
         String capturedWorkItemId = entity.getWorkItemId();
         String capturedWorkflowInstanceId = entity.getWorkflowInstanceId();
@@ -436,13 +595,7 @@ public class ConfirmationService {
             @Override
             public void afterCommit() {
                 if (afterCommitAction != null) {
-                    try {
-                        afterCommitAction.run();
-                    } catch (Exception e) {
-                        System.getLogger(ConfirmationService.class.getName())
-                                .log(System.Logger.Level.WARNING,
-                                        "afterCommit workflow dispatch failed for confirmation " + capturedId, e);
-                    }
+                    runAfterCommitAction(capturedId, afterCommitAction);
                 }
                 // dispatch must run first — CONFIRMATION_RESOLVED signals "state already updated"
                 runtimeEventService.publishEvent(new RuntimeEventDto(
@@ -458,6 +611,16 @@ public class ConfirmationService {
                 ));
             }
         });
+    }
+
+    private void runAfterCommitAction(String confirmationId, Runnable afterCommitAction) {
+        try {
+            afterCommitAction.run();
+        } catch (Exception e) {
+            System.getLogger(ConfirmationService.class.getName())
+                    .log(System.Logger.Level.WARNING,
+                            "afterCommit action failed for confirmation " + confirmationId, e);
+        }
     }
 
     private void publishResolutionEvent(ConfirmationRequestEntity entity,

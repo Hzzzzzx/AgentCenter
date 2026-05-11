@@ -29,6 +29,9 @@ mybatis:
 
 agentcenter:
   runtime:
+    guard:
+      retry-limit: 2
+      retry-backoff-ms: 700
     opencode:
       serve:
         enabled: true
