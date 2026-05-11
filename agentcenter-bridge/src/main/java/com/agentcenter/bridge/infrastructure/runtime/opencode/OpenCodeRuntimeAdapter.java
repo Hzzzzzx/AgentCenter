@@ -250,17 +250,14 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
     private String buildSkillPrompt(String skillName, String inputContext) {
         return """
-                请按 AgentCenter 已内联提供的 Skill `%s` 处理下面的用户输入。
+                请使用当前 Agent Runtime 中的 Skill `%s` 处理下面的用户输入。
 
                 工作方式：
                 - 优先遵循 Skill 自身说明和当前会话上下文。
-                - AgentCenter 已在本 prompt 内提供 SKILL.md 内容；不要调用 Runtime 的 skill 加载工具重复读取这个 Skill。
                 - AgentCenter 工作流只提供调用顺序、工作项信息、上游产物和用户交互回答，不替代 Skill 的判断。
                 - 如果需要用户继续澄清、选择、确认或授权，优先使用 OpenCode 原生 Question 交互；AgentCenter Bridge 会将 Question 翻译为平台待确认。
                 - 如果当前 Runtime 不能使用 Question，再在输出末尾按 AgentCenter 节点状态协议声明 NEEDS_USER_INPUT。
                 - 如果信息已经足够，请输出当前 Skill 的最终结果。
-
-                %s
 
                 %s
 
@@ -269,8 +266,7 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
                 ```text
                 %s
                 ```
-                """.formatted(skillName, RUNTIME_WORKSPACE_BOUNDARY,
-                buildManagedSkillInstruction(skillName), inputContext).trim();
+                """.formatted(skillName, RUNTIME_WORKSPACE_BOUNDARY, inputContext).trim();
     }
 
     /**
@@ -287,20 +283,16 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
         // Part 1: Skill invocation instruction
         String part1Text = """
-                请按 AgentCenter 已内联提供的 Skill `%s` 处理下面的用户输入。
+                请使用当前 Agent Runtime 中的 Skill `%s` 处理下面的用户输入。
 
                 工作方式：
                 - 优先遵循 Skill 自身说明和当前会话上下文。
-                - AgentCenter 已在本 prompt 内提供 SKILL.md 内容；不要调用 Runtime 的 skill 加载工具重复读取这个 Skill。
                 - AgentCenter 工作流只提供调用顺序、工作项信息、上游产物和用户交互回答，不替代 Skill 的判断。
                 - 如果需要用户继续澄清、选择、确认或授权，优先使用 OpenCode 原生 Question 交互；AgentCenter Bridge 会将 Question 翻译为平台待确认。
                 - 如果当前 Runtime 不能使用 Question，再在输出末尾按 AgentCenter 节点状态协议声明 NEEDS_USER_INPUT。
                 - 如果信息已经足够，请输出当前 Skill 的最终结果。
 
-                %s
-
-                %s""".formatted(request.skillName(), RUNTIME_WORKSPACE_BOUNDARY,
-                buildManagedSkillInstruction(request.skillName())).trim();
+                %s""".formatted(request.skillName(), RUNTIME_WORKSPACE_BOUNDARY).trim();
 
         ObjectNode part1 = parts.addObject();
         part1.put("type", "text");
@@ -320,21 +312,6 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         }
 
         return parts;
-    }
-
-    private String buildManagedSkillInstruction(String skillName) {
-        String content = skillFileService.readSkillContent(skillName);
-        if (content == null || content.isBlank()) {
-            return "AgentCenter 未在托管 Skill 目录中找到 `" + skillName
-                    + "` 的 SKILL.md；如 Runtime 已有同名 Skill，请按该 Skill 处理。";
-        }
-        return """
-                AgentCenter 已读取到 Skill `%s` 的 SKILL.md。下面内容是本次执行规则，优先级高于普通输入上下文；不要把这段规则原样作为最终回复输出。
-
-                <AGENTCENTER_SKILL_FILE name="%s">
-                %s
-                </AGENTCENTER_SKILL_FILE>
-                """.formatted(skillName, skillName, content.trim()).trim();
     }
 
     private String dispatchPromptAndWait(String sessionId, String userMessage, boolean allowToolOutputFallback) {

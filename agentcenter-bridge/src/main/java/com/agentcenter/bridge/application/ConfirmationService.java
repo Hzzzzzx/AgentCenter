@@ -303,6 +303,15 @@ public class ConfirmationService {
         return toDto(entity);
     }
 
+    private Runnable combineAfterCommitActions(Runnable first, Runnable second) {
+        if (first == null) return second;
+        if (second == null) return first;
+        return () -> {
+            first.run();
+            second.run();
+        };
+    }
+
     private String validActionsFor(ConfirmationRequestType requestType) {
         return switch (requestType) {
             case EXCEPTION -> "RETRY, SUPPLEMENT, SKIP, REJECT";
