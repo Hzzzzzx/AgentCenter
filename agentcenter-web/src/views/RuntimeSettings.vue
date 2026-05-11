@@ -135,18 +135,30 @@ onMounted(() => {
           <div class="runtime-settings__runtime-row runtime-settings__runtime-row--wide">
             <span>Bridge 解析工作路径</span>
             <code>{{ runtimeStatus.resolvedWorkingDirectory }}</code>
+            <p>Bridge 最终采用的项目运行目录，也是 AgentCenter 读写 Skill、MCP 配置和运行资源的基准目录。</p>
           </div>
           <div class="runtime-settings__runtime-row runtime-settings__runtime-row--wide">
             <span>OpenCode directory</span>
             <code>{{ runtimeStatus.serverDirectory || '未返回' }}</code>
+            <p>OpenCode Server 通过 <code>/path</code> 返回的当前 directory；应与 Bridge 解析工作路径一致，否则说明 server 跑在别的目录。</p>
           </div>
           <div class="runtime-settings__runtime-row runtime-settings__runtime-row--wide">
             <span>OpenCode worktree</span>
             <code>{{ runtimeStatus.serverWorktree || '未返回' }}</code>
+            <p>OpenCode Server 识别到的当前 Git worktree；应与 Bridge 解析工作路径一致，用来确认命令和代码修改不会落到错误仓库。</p>
           </div>
           <div class="runtime-settings__runtime-row runtime-settings__runtime-row--wide">
             <span>配置工作路径</span>
             <code>{{ runtimeStatus.configuredWorkingDirectory }}</code>
+            <p>配置文件里的原始工作路径值。Bridge 会先解析它；如果该路径不可用，会回退到项目根目录下的 <code>runtime-workspace</code>。</p>
+          </div>
+          <div class="runtime-settings__runtime-resource runtime-settings__runtime-row--wide">
+            <span>资源读取说明</span>
+            <p>
+              Skill 读取 <code>{{ runtimeStatus.resolvedWorkingDirectory }}/.opencode/skills</code>。
+              MCP 优先读取/写入 <code>{{ runtimeStatus.resolvedWorkingDirectory }}/opencode.json</code>，
+              旧版 <code>.opencode/mcp.json</code> 和 <code>.opencode/mcp.agentcenter.json</code> 仅作为导入兜底。
+            </p>
           </div>
         </div>
 
@@ -381,12 +393,39 @@ onMounted(() => {
   font-weight: 700;
 }
 
+.runtime-settings__runtime-row p,
+.runtime-settings__runtime-resource p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
 .runtime-settings__runtime-row strong,
-.runtime-settings__runtime-row code {
+.runtime-settings__runtime-row code,
+.runtime-settings__runtime-resource code {
   min-width: 0;
   overflow-wrap: anywhere;
   color: var(--text-primary);
   font-size: 13px;
+  font-weight: 800;
+}
+
+.runtime-settings__runtime-resource {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 24%, var(--border-color));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--accent-blue) 8%, var(--surface-hover));
+}
+
+.runtime-settings__runtime-resource span {
+  color: var(--accent-blue);
+  font-size: 12px;
   font-weight: 800;
 }
 
