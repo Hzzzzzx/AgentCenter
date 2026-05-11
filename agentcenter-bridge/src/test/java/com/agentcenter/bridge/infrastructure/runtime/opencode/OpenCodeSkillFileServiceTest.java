@@ -44,7 +44,7 @@ class OpenCodeSkillFileServiceTest {
         assertThat(skills).hasSize(1);
         assertThat(skills.get(0).name()).isEqualTo("my-skill");
         assertThat(skills.get(0).description()).isEqualTo("A test skill");
-        assertThat(skills.get(0).relativePath()).contains("my-skill");
+        assertThat(skills.get(0).relativePath()).isEqualTo(".opencode/skills/my-skill");
     }
 
     @Test
@@ -169,6 +169,17 @@ class OpenCodeSkillFileServiceTest {
     }
 
     @Test
+    void deletesByWindowsStylePersistedRelativePath() throws IOException {
+        Path skillDir = tempDir.resolve(".opencode").resolve("skills").resolve("to-delete");
+        Files.createDirectories(skillDir);
+        Files.writeString(skillDir.resolve("SKILL.md"), "bye");
+
+        service.deleteSkillFiles(".opencode\\skills\\to-delete", null);
+
+        assertThat(skillDir).doesNotExist();
+    }
+
+    @Test
     void refusesToDeleteOutsideSkillsDirectory() {
         assertThatThrownBy(() -> service.deleteSkillFiles("../../dangerous", null))
                 .isInstanceOf(IllegalStateException.class)
@@ -180,7 +191,7 @@ class OpenCodeSkillFileServiceTest {
     @Test
     void returnsAbsoluteSkillsRootPath() {
         String path = service.getSkillsRootPath();
-        assertThat(path).endsWith(".opencode/skills");
+        assertThat(path.replace('\\', '/')).endsWith(".opencode/skills");
         assertThat(Path.of(path)).isAbsolute();
     }
 }

@@ -90,7 +90,7 @@ public class OpenCodeSkillFileService {
                     Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
                 }
             }
-            String relativePath = ".opencode/skills/" + skillName;
+            String relativePath = OpenCodeSkillPaths.installedSkillRelativePath(skillName);
             log.info("Installed skill '{}' to {}", skillName, targetDir);
             return relativePath;
         } catch (IOException e) {
@@ -106,7 +106,7 @@ public class OpenCodeSkillFileService {
         Path workspace = resolveWorkingDirectory(projectWorkdir);
         Path targetDir;
         if (relativePath != null && !relativePath.isBlank()) {
-            targetDir = workspace.resolve(relativePath).normalize();
+            targetDir = OpenCodeSkillPaths.resolvePortableRelativePath(workspace, relativePath);
         } else {
             targetDir = skillsRoot(workspace).resolve(skillName).normalize();
         }
@@ -135,7 +135,7 @@ public class OpenCodeSkillFileService {
     }
 
     private Path skillsRoot(Path workingDir) {
-        return workingDir.resolve(".opencode").resolve("skills").normalize();
+        return OpenCodeSkillPaths.managedProjectSkillsRoot(workingDir);
     }
 
     private List<RuntimeSkillDto> readSkill(Path workspace, Path skillDir) {
@@ -159,7 +159,7 @@ public class OpenCodeSkillFileService {
             return List.of(new RuntimeSkillDto(
                     name,
                     description,
-                    workspace.relativize(skillDir).toString(),
+                    OpenCodeSkillPaths.portableRelativePath(workspace, skillDir),
                     checksum,
                     updatedAt
             ));
@@ -223,17 +223,4 @@ public class OpenCodeSkillFileService {
         }
     }
 
-    private void deleteRecursively(Path dir) {
-        try (Stream<Path> walk = Files.walk(dir)) {
-            walk.sorted(Comparator.reverseOrder())
-                    .forEach(p -> {
-                        try { Files.deleteIfExists(p); }
-                        catch (IOException e) {
-                            log.warn("Failed to delete {}: {}", p, e.getMessage());
-                        }
-                    });
-        } catch (IOException e) {
-            log.warn("Failed to walk directory for deletion {}: {}", dir, e.getMessage());
-        }
-    }
 }
