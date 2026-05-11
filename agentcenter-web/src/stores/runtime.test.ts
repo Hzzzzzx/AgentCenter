@@ -220,6 +220,46 @@ describe('useRuntimeStore — SSE event handlers', () => {
     expect(confirmationApi.list).toHaveBeenCalledWith('PENDING')
   })
 
+  it('CONFIRMATION_CREATED with partial OpenCode question payload refreshes pending confirmations', async () => {
+    const { confirmationApi } = await import('../api/confirmations')
+    const runtimeStore = useRuntimeStore()
+
+    runtimeStore.connectSSE('sess-1')
+
+    capturedOnEvent!(makeEvent({
+      eventType: 'CONFIRMATION_CREATED',
+      payloadJson: JSON.stringify({
+        confirmationId: 'question-session-tool',
+        requestType: 'DECISION',
+        interactionType: 'OPENCODE_QUESTION',
+        title: '选择 FE/US 拆分方式',
+        question: '请选择本次授权测试后的拆分路线。',
+        options: '[{"id":"FE","label":"FE 优先"}]',
+      }),
+    }))
+
+    await vi.dynamicImportSettled()
+
+    expect(confirmationApi.list).toHaveBeenCalledWith('PENDING')
+  })
+
+  it('PERMISSION_REQUIRED refreshes pending confirmations', async () => {
+    const { confirmationApi } = await import('../api/confirmations')
+    const runtimeStore = useRuntimeStore()
+
+    runtimeStore.connectSSE('sess-1')
+
+    capturedOnEvent!(makeEvent({
+      eventType: 'PERMISSION_REQUIRED',
+      workflowInstanceId: 'inst-42',
+      payloadJson: JSON.stringify({ permissionId: 'perm-1', title: 'Allow read?' }),
+    }))
+
+    await vi.dynamicImportSettled()
+
+    expect(confirmationApi.list).toHaveBeenCalledWith('PENDING')
+  })
+
   it('CONFIRMATION_CREATED does not refresh workflow (that is CONFIRMATION_RESOLVED)', async () => {
     const { workflowApi } = await import('../api/workflows')
     const runtimeStore = useRuntimeStore()

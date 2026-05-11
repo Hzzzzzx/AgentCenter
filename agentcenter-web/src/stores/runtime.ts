@@ -128,6 +128,8 @@ export const useRuntimeStore = defineStore('runtime', () => {
     }
 
     if (event.eventType === 'PERMISSION_REQUIRED') {
+      const confirmationStore = useConfirmationStore()
+      confirmationStore.loadPending()
       if (event.workflowInstanceId) {
         void syncWorkflowAndWorkItem(event)
       }

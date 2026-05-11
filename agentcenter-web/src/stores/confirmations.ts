@@ -50,6 +50,10 @@ export const useConfirmationStore = defineStore('confirmations', () => {
       const payload = event.payloadJson ? JSON.parse(event.payloadJson) : {}
       const id = payload.id || payload.confirmationId
       if (id && payload.requestType) {
+        if (!isCompleteConfirmationPayload(payload)) {
+          loadPending()
+          return
+        }
         if (!pendingConfirmations.value.some((c) => c.id === id)) {
           pendingConfirmations.value.push({ ...payload, id } as ConfirmationRequestDto)
         }
@@ -59,6 +63,15 @@ export const useConfirmationStore = defineStore('confirmations', () => {
     } catch {
       loadPending()
     }
+  }
+
+  function isCompleteConfirmationPayload(payload: Record<string, unknown>): boolean {
+    return typeof payload.status === 'string'
+      && typeof payload.title === 'string'
+      && 'agentSessionId' in payload
+      && 'workflowInstanceId' in payload
+      && 'workflowNodeInstanceId' in payload
+      && ('optionsJson' in payload || 'interactionSchemaJson' in payload)
   }
 
   function removeFromPending(event: RuntimeEventDto) {
