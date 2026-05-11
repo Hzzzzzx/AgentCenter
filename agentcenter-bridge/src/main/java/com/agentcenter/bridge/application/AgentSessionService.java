@@ -48,6 +48,10 @@ public class AgentSessionService {
 
     private static final Logger log = LoggerFactory.getLogger(AgentSessionService.class);
     private static final AtomicInteger MESSAGE_THREAD_COUNTER = new AtomicInteger(1);
+    private static final DateTimeFormatter SQLITE_DATETIME =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final String CONTINUE_CURRENT_RUNTIME_PROMPT =
+            "请继续当前节点未完成的回答，不要重新开始节点，也不要重复发送或复述工作流节点提示词。";
 
     private final AgentSessionMapper sessionMapper;
     private final AgentMessageMapper messageMapper;
@@ -189,13 +193,12 @@ public class AgentSessionService {
         if (request.workflowUserAction() != null && !request.workflowUserAction().isBlank()) {
             WorkflowUserAction action = WorkflowUserAction.valueOf(request.workflowUserAction());
             switch (action) {
-                case CONTINUE_CURRENT -> workflowCommandService.resumeNodeAfterInteraction(nodeInstanceId);
+                case CONTINUE_CURRENT -> continueCurrentRuntime(session, instance, nodeInstanceId, request.content());
                 case ADVANCE_NEXT -> workflowCommandService.completeNodeAndScheduleAdvance(nodeInstanceId);
                 case RERUN_NODE -> workflowCommandService.retryNode(nodeInstanceId);
                 case SKIP_NODE -> workflowCommandService.skipNode(nodeInstanceId);
                 case PAUSE_WORKFLOW -> {
-                    String now = java.time.LocalDateTime.now()
-                            .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+                    String now = java.time.LocalDateTime.now().format(SQLITE_DATETIME);
                     instance.setStatus(WorkflowStatus.BLOCKED.name());
                     instance.setUpdatedAt(now);
                     workflowMapper.updateInstance(instance);
@@ -215,6 +218,29 @@ public class AgentSessionService {
             return request.workflowNodeInstanceId();
         }
         return instance.getCurrentNodeInstanceId();
+    }
+
+    private void continueCurrentRuntime(AgentSessionEntity session,
+                                        WorkflowInstanceEntity instance,
+                                        String nodeInstanceId,
+                                        String requestedPrompt) {
+        String now = java.time.LocalDateTime.now().format(SQLITE_DATETIME);
+        instance.setStatus(WorkflowStatus.RUNNING.name());
+        instance.setUpdatedAt(now);
+        workflowMapper.updateInstance(instance);
+
+        RuntimeType runtimeType = RuntimeType.valueOf(session.getRuntimeType());
+        runtimeGateway.registerWorkflowNodeContext(
+                runtimeType, session.getId(), instance.getWorkItemId(), instance.getId(), nodeInstanceId);
+        String prompt = continueCurrentPrompt(requestedPrompt);
+        messageExecutor.submit(() -> dispatchToRuntime(session.getId(), prompt));
+    }
+
+    private String continueCurrentPrompt(String requestedPrompt) {
+        if (requestedPrompt == null || requestedPrompt.isBlank() || "[CONTINUE_CURRENT]".equals(requestedPrompt)) {
+            return CONTINUE_CURRENT_RUNTIME_PROMPT;
+        }
+        return requestedPrompt;
     }
 
     public void cancelRuntime(String sessionId) {

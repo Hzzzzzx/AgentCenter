@@ -278,6 +278,91 @@ describe('ConversationWorkbench.vue', () => {
     expect(wrapper.find('.conversation-workbench__input').attributes('disabled')).toBeUndefined()
   })
 
+  it('continues a paused node with a lightweight runtime message', async () => {
+    vi.mocked(confirmationApi.list).mockResolvedValue([])
+
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(ConversationWorkbench, {
+      props: {
+        workItemId: 'work-1',
+        targetSessionId: 'session-1',
+      },
+      global: {
+        plugins: [pinia],
+      },
+    })
+
+    await flushPromises()
+
+    const runtimeStore = useRuntimeStore()
+    runtimeStore.lastNodeState = 'IN_PROGRESS'
+    runtimeStore.streamingText = '正在回复'
+    await nextTick()
+
+    await wrapper.find('.conversation-workbench__send').trigger('click')
+    await flushPromises()
+
+    const continueButton = wrapper.findAll('.wf-control__btn')
+      .find((button) => button.text() === '继续当前')
+    if (!continueButton) {
+      throw new Error('Continue current button not found')
+    }
+
+    await continueButton.trigger('click')
+    await flushPromises()
+
+    expect(sessionApi.sendMessage).toHaveBeenLastCalledWith(
+      'session-1',
+      expect.objectContaining({
+        content: expect.stringContaining('不要重新开始节点'),
+        workflowUserAction: 'CONTINUE_CURRENT',
+        workflowNodeInstanceId: 'node-1',
+      }),
+    )
+    expect(vi.mocked(sessionApi.sendMessage).mock.calls.at(-1)?.[1].content).not.toBe('[CONTINUE_CURRENT]')
+  })
+
+  it('routes typed input after pause as lightweight continue current action', async () => {
+    vi.mocked(confirmationApi.list).mockResolvedValue([])
+
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(ConversationWorkbench, {
+      props: {
+        workItemId: 'work-1',
+        targetSessionId: 'session-1',
+      },
+      global: {
+        plugins: [pinia],
+      },
+    })
+
+    await flushPromises()
+
+    const runtimeStore = useRuntimeStore()
+    runtimeStore.lastNodeState = 'IN_PROGRESS'
+    runtimeStore.streamingText = '正在回复'
+    await nextTick()
+
+    await wrapper.find('.conversation-workbench__send').trigger('click')
+    await flushPromises()
+
+    const input = wrapper.find<HTMLInputElement>('.conversation-workbench__input')
+    await input.setValue('继续完善剩余内容')
+    await wrapper.find('form.conversation-workbench__input-area').trigger('submit')
+    await flushPromises()
+
+    expect(sessionApi.sendMessage).toHaveBeenLastCalledWith(
+      'session-1',
+      expect.objectContaining({
+        content: '继续完善剩余内容',
+        workflowUserAction: 'CONTINUE_CURRENT',
+        workflowNodeInstanceId: 'node-1',
+      }),
+    )
+  })
+
   it('shows current interactions in the message flow instead of the input composer', async () => {
     const pinia = createPinia()
     setActivePinia(pinia)

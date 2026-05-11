@@ -68,9 +68,15 @@ interface PromptDebugTimelineItem {
   copyText: string
 }
 
+interface ArtifactOpenRef {
+  artifactId?: string
+  title?: string
+}
+
 const PROMPT_DEBUG_ENABLED = true
 const PROMPT_DEBUG_EDGE_GAP = 16
 const PROMPT_DEBUG_RUNTIME_EVENT_LIMIT = 24
+const CONTINUE_CURRENT_MESSAGE = '请继续当前节点未完成的回答，不要重新开始节点，也不要重复发送或复述工作流节点提示词。'
 
 const props = defineProps<{
   workItemId?: string
@@ -245,6 +251,12 @@ const nodeStateInfo = computed<NodeStateInfo>(() => {
   }
 })
 
+const isPausedCurrentNode = computed(() =>
+  nodeStateInfo.value.type === 'RUNNING'
+  && Boolean(nodeStateInfo.value.nodeId)
+  && nodeStateInfo.value.nodeId === pausedRunningNodeId.value
+)
+
 const isConversationRunning = computed(() =>
   !composerRecoveryInteraction.value
   && nodeStateInfo.value.type !== 'FAILED'
@@ -253,7 +265,7 @@ const isConversationRunning = computed(() =>
     || Boolean(runtimeStore.streamingText.trim())
     || (
       nodeStateInfo.value.type === 'RUNNING'
-      && nodeStateInfo.value.nodeId !== pausedRunningNodeId.value
+      && !isPausedCurrentNode.value
     )
   )
 )
@@ -611,6 +623,11 @@ async function handleSend() {
     return
   }
 
+  if (isPausedCurrentNode.value && currentWorkflowNodeInstanceId.value) {
+    await sendContinueCurrentMessage(currentWorkflowNodeInstanceId.value, text)
+    return
+  }
+
   const session = await ensureActiveSession()
   if (!session) return
 
@@ -667,12 +684,27 @@ async function handleCancelReply() {
 
 async function handleWorkflowAction(action: string, nodeInstanceId: string) {
   if (!sessionStore.activeSession) return
+  if (action === 'CONTINUE_CURRENT') {
+    await sendContinueCurrentMessage(nodeInstanceId, CONTINUE_CURRENT_MESSAGE)
+    return
+  }
   runtimeStore.markBusy()
   await sessionStore.sendMessage({
     content: `[${action}]`,
     workflowUserAction: action,
     workflowNodeInstanceId: nodeInstanceId,
   })
+}
+
+async function sendContinueCurrentMessage(nodeInstanceId: string, content: string) {
+  runtimeStore.markBusy()
+  await sessionStore.sendMessage({
+    content,
+    workflowUserAction: 'CONTINUE_CURRENT',
+    workflowNodeInstanceId: nodeInstanceId,
+  })
+  inputText.value = ''
+  pausedRunningNodeId.value = null
 }
 
 async function handleInteractionChanged(_confirmationId?: string) {
@@ -754,11 +786,21 @@ async function refreshSkills() {
   }
 }
 
-async function handleOpenArtifact(title: string) {
+async function handleOpenArtifact(ref: ArtifactOpenRef | string) {
+  const target = typeof ref === 'string' ? { title: ref } : ref
+  if (target.artifactId) {
+    try {
+      emit('open-artifact', await artifactApi.get(target.artifactId))
+      return
+    } catch {
+      // Keep the old title-based path available for historical messages.
+    }
+  }
+
   const workItem = selectedWorkItem.value
-  if (!workItem) return
+  if (!workItem || !target.title) return
   const artifacts = await artifactApi.listByWorkItem(workItem.id)
-  const artifact = artifacts.find((item) => item.title === title)
+  const artifact = artifacts.find((item) => item.title === target.title)
   if (artifact) {
     emit('open-artifact', artifact)
   }
