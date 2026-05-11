@@ -183,6 +183,39 @@ class PersistenceMapperIntegrationTest {
     }
 
     @Test
+    void canFindAndUpdatePendingRuntimeExceptionIntervention() {
+        ConfirmationRequestEntity conf = new ConfirmationRequestEntity();
+        conf.setId(idGenerator.nextId());
+        conf.setRequestType("EXCEPTION");
+        conf.setStatus("PENDING");
+        conf.setAgentSessionId("agent-session-runtime-1");
+        conf.setRuntimeType("OPENCODE");
+        conf.setRuntimeSessionId("ses-old");
+        conf.setTitle("Runtime 执行中断");
+        conf.setContent("old error");
+        conf.setOptionsJson("[{\"value\":\"RETRY\",\"label\":\"重试\"}]");
+        conf.setPriority("HIGH");
+        conf.setInteractionType("RUNTIME_EXCEPTION");
+        conf.setInteractionRequired(1);
+        conf.setInteractionContextJson("{\"errorMessage\":\"old\"}");
+        confirmationMapper.insert(conf);
+
+        ConfirmationRequestEntity pending = confirmationMapper.findPendingRuntimeExceptionBySessionId("agent-session-runtime-1");
+        assertThat(pending).isNotNull();
+        assertThat(pending.getId()).isEqualTo(conf.getId());
+
+        pending.setRuntimeSessionId("ses-new");
+        pending.setContent("new error");
+        pending.setInteractionContextJson("{\"errorMessage\":\"new\"}");
+        confirmationMapper.updateRuntimeIntervention(pending);
+
+        ConfirmationRequestEntity updated = confirmationMapper.findById(conf.getId());
+        assertThat(updated.getRuntimeSessionId()).isEqualTo("ses-new");
+        assertThat(updated.getContent()).isEqualTo("new error");
+        assertThat(updated.getInteractionContextJson()).contains("new");
+    }
+
+    @Test
     void canInsertRuntimeEvent() {
         RuntimeEventEntity evt = new RuntimeEventEntity();
         evt.setId(idGenerator.nextId());
