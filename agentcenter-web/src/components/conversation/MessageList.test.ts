@@ -579,4 +579,21 @@ describe('MessageList.vue', () => {
     expect(text.indexOf('lld-design')).toBeLessThan(text.indexOf('详细设计 (LLD) 需要用户补充/确认'))
     expect(wrapper.findAll('.mocked-assistant-turn')).toHaveLength(1)
   })
+
+  it('dedupes repeated system waiting messages with the same content', () => {
+    const repeatedContent = '详细设计 (LLD)（Skill：lld-design）需要用户补充/确认；处理后会回到当前 Skill 继续执行。'
+    const wrapper = mount(MessageList, {
+      props: {
+        messages: [
+          makeMessage({ id: 'msg-user', role: 'USER', content: '开始 LLD', seqNo: 1 }),
+          makeMessage({ id: 'msg-system-1', role: 'SYSTEM', content: repeatedContent, seqNo: 2, workflowNodeInstanceId: 'node-lld' }),
+          makeMessage({ id: 'msg-system-2', role: 'SYSTEM', content: repeatedContent, seqNo: 3, workflowNodeInstanceId: 'node-lld' }),
+          makeMessage({ id: 'msg-system-3', role: 'SYSTEM', content: repeatedContent, seqNo: 4, workflowNodeInstanceId: 'node-lld' }),
+        ],
+      },
+    })
+
+    expect(wrapper.findAll('.system-line')).toHaveLength(1)
+    expect(wrapper.text().match(/需要用户补充\/确认/g)).toHaveLength(1)
+  })
 })

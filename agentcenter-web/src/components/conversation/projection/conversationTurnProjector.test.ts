@@ -741,6 +741,60 @@ describe('projectConversationTurns', () => {
     })
   })
 
+  it('merges streaming reasoning events with the same OpenCode part into one step', () => {
+    const turns = projectConversationTurns(makeInput({
+      runtimeEvents: [
+        makeEvent({
+          id: 'ev-reasoning-1',
+          eventType: 'PROCESS_TRACE',
+          seqNo: 1,
+          payloadJson: JSON.stringify({
+            kind: 'reasoning',
+            title: '思考',
+            summary: 'when',
+            rawPart: { messageID: 'msg-1', partID: 'part-reasoning', type: 'reasoning', text: 'when' },
+          }),
+        }),
+        makeEvent({
+          id: 'ev-reasoning-2',
+          eventType: 'PROCESS_TRACE',
+          seqNo: 2,
+          payloadJson: JSON.stringify({
+            kind: 'reasoning',
+            title: '思考',
+            summary: 'all',
+            rawPart: { messageID: 'msg-1', partID: 'part-reasoning', type: 'reasoning', text: 'all' },
+          }),
+        }),
+        makeEvent({
+          id: 'ev-reasoning-3',
+          eventType: 'PROCESS_TRACE',
+          seqNo: 3,
+          payloadJson: JSON.stringify({
+            kind: 'reasoning',
+            title: '思考',
+            summary: 'three',
+            status: 'completed',
+            rawPart: { messageID: 'msg-1', partID: 'part-reasoning', type: 'reasoning', text: 'three' },
+          }),
+        }),
+      ],
+    }))
+
+    expect(turns).toHaveLength(1)
+    const reasoningSteps = turns[0].steps.filter(step => step.kind === 'reasoning')
+    expect(reasoningSteps).toHaveLength(1)
+    expect(reasoningSteps[0].rawEventRefs.map(ref => ref.eventId)).toEqual([
+      'ev-reasoning-1',
+      'ev-reasoning-2',
+      'ev-reasoning-3',
+    ])
+    expect(reasoningSteps[0].parts[0]).toMatchObject({
+      type: 'reasoning',
+      summary: 'when\n\nall\n\nthree',
+    })
+  })
+
   it('keeps runtime STATUS heartbeat events as visible status steps', () => {
     const turns = projectConversationTurns(makeInput({
       runtimeEvents: [

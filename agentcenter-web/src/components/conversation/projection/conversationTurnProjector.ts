@@ -78,6 +78,16 @@ interface ToolLifecycle {
   events: EnrichedEvent[]
 }
 
+interface ReasoningLifecycle {
+  key: string
+  events: EnrichedEvent[]
+}
+
+type OrderedRuntimeEvent =
+  | { type: 'lifecycle'; lifecycle: ToolLifecycle; sortKey: EnrichedEvent }
+  | { type: 'reasoning'; lifecycle: ReasoningLifecycle; sortKey: EnrichedEvent }
+  | { type: 'single'; event: EnrichedEvent }
+
 interface PendingInteractionCandidate {
   interaction: InteractionProjection
   createdAt?: string
@@ -146,6 +156,21 @@ function rawPartText(payload: ParsedPayload, keys: string[], stateKeys: string[]
     if (value) return value
   }
   return undefined
+}
+
+function rawPartIdentity(payload: ParsedPayload): string | undefined {
+  const raw = isRecord(payload.rawPart) ? payload.rawPart : undefined
+  if (!raw) return undefined
+  const candidates = [
+    raw.id,
+    raw.partID,
+    raw.partId,
+    raw.messageID && raw.partID ? `${raw.messageID}:${raw.partID}` : undefined,
+    raw.messageId && raw.partId ? `${raw.messageId}:${raw.partId}` : undefined,
+  ]
+  return candidates
+    .map(value => stringifyPayloadValue(value))
+    .find(Boolean)
 }
 
 function timestamp(value: string | null | undefined): number {
@@ -467,6 +492,60 @@ function determineStepKind(ee: EnrichedEvent): StepKind {
   if (payload.kind === 'node_status' || event.eventType === 'STATUS' || payload.kind === 'runtime_connection') return 'status'
   if (payload.kind === 'subtask' || payload.kind === 'agent') return 'subtask'
   return 'context'
+}
+
+function isReasoningEvent(ee: EnrichedEvent): boolean {
+  return determineStepKind(ee) === 'reasoning'
+}
+
+function reasoningLifecycleKey(ee: EnrichedEvent): string {
+  const rawIdentity = rawPartIdentity(ee.payload)
+  if (rawIdentity) return `raw:${rawIdentity}`
+  const node = ee.event.workflowNodeInstanceId ?? 'session'
+  return `${ee.event.sessionId}:${node}:reasoning`
+}
+
+function buildStepFromReasoningLifecycle(lifecycle: ReasoningLifecycle, order: number): ExecutionStep {
+  const events = [...lifecycle.events].sort(sortEvents)
+  const first = events[0]
+  const last = events.at(-1) ?? first
+  const summaries = events
+    .map(ee => payloadText(ee.payload, ['summary', 'label', 'output', 'result', 'detail']) || rawPartText(ee.payload, ['text', 'summary']))
+    .filter((value): value is string => Boolean(value))
+  const summary = mergeAnswerText('', summaries) || 'Reasoning'
+  const completed = events.some(ee => ee.payload.status === 'completed') || last.payload.status === 'completed'
+
+  return {
+    id: `reasoning-${lifecycle.key}`,
+    order,
+    kind: 'reasoning',
+    title: payloadText(first.payload, ['title', 'label']) || '思考',
+    summary,
+    status: completed ? 'completed' : 'running',
+    startedAt: first.event.createdAt,
+    completedAt: completed ? last.event.createdAt : undefined,
+    parts: [{
+      type: 'reasoning',
+      summary,
+      messageId: undefined,
+      partId: rawPartIdentity(first.payload),
+      defaultExpanded: false,
+      rawEventRef: {
+        eventId: first.event.id,
+        eventType: first.event.eventType,
+        seqNo: first.event.seqNo,
+      },
+    }],
+    rawEventRefs: events.map(ee => ({
+      eventId: ee.event.id,
+      eventType: ee.event.eventType,
+      seqNo: ee.event.seqNo,
+    })),
+  }
+}
+
+function orderedRuntimeSortKey(item: OrderedRuntimeEvent): EnrichedEvent {
+  return item.type === 'single' ? item.event : item.sortKey
 }
 
 function buildStepFromSingleEvent(ee: EnrichedEvent, order: number, confirmation?: ProjectorConfirmation): ExecutionStep {
@@ -819,6 +898,8 @@ export function projectConversationTurns(input: ProjectorInput): ConversationTur
 
   const toolLifecycles: ToolLifecycle[] = []
   const toolLifecycleIndex = new Map<string, number>()
+  const reasoningLifecycles: ReasoningLifecycle[] = []
+  const reasoningLifecycleIndex = new Map<string, number>()
   const nonToolEvents: EnrichedEvent[] = []
   const debugRefs: RawEventRef[] = []
   const generatedAnswerParts: GeneratedAnswerPart[] = []
@@ -851,7 +932,16 @@ export function projectConversationTurns(input: ProjectorInput): ConversationTur
       continue
     }
 
-    if (isToolLifecycleEvent(ee.event.eventType, ee.payload)) {
+    if (isReasoningEvent(ee)) {
+      const key = reasoningLifecycleKey(ee)
+      const idx = reasoningLifecycleIndex.get(key)
+      if (idx === undefined) {
+        reasoningLifecycleIndex.set(key, reasoningLifecycles.length)
+        reasoningLifecycles.push({ key, events: [ee] })
+      } else {
+        reasoningLifecycles[idx].events.push(ee)
+      }
+    } else if (isToolLifecycleEvent(ee.event.eventType, ee.payload)) {
       const callId = ee.payload.toolCallId || null
       const name = toolNameFromPayload(ee.payload)
       const rawName = rawToolNameFromPayload(ee.payload)
@@ -912,10 +1002,7 @@ export function projectConversationTurns(input: ProjectorInput): ConversationTur
     }
   }
 
-  const allOrderedEvents: Array<
-    | { type: 'lifecycle'; lifecycle: ToolLifecycle; sortKey: EnrichedEvent }
-    | { type: 'single'; event: EnrichedEvent }
-  > = []
+  const allOrderedEvents: OrderedRuntimeEvent[] = []
 
   for (const lc of toolLifecycles) {
     if (isInternalSkillLoaderLifecycle(lc)) {
@@ -924,19 +1011,26 @@ export function projectConversationTurns(input: ProjectorInput): ConversationTur
     const sorted = [...lc.events].sort(sortEvents)
     allOrderedEvents.push({ type: 'lifecycle', lifecycle: lc, sortKey: sorted[0] })
   }
+  for (const lc of reasoningLifecycles) {
+    const sorted = [...lc.events].sort(sortEvents)
+    allOrderedEvents.push({ type: 'reasoning', lifecycle: lc, sortKey: sorted[0] })
+  }
   for (const ee of nonToolEvents) {
     allOrderedEvents.push({ type: 'single', event: ee })
   }
 
   allOrderedEvents.sort((a, b) => {
-    const keyA = a.type === 'lifecycle' ? a.sortKey : a.event
-    const keyB = b.type === 'lifecycle' ? b.sortKey : b.event
+    const keyA = orderedRuntimeSortKey(a)
+    const keyB = orderedRuntimeSortKey(b)
     return sortEvents(keyA, keyB)
   })
 
   const steps: ExecutionStep[] = allOrderedEvents.map((item, index) => {
     if (item.type === 'lifecycle') {
       return buildStepFromToolLifecycle(item.lifecycle, index + 1)
+    }
+    if (item.type === 'reasoning') {
+      return buildStepFromReasoningLifecycle(item.lifecycle, index + 1)
     }
     const confId = item.event.payload.confirmationId
     const confirmation = confId ? confirmationMap.get(confId) : undefined

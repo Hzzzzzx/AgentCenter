@@ -72,12 +72,14 @@ type DisplayItem =
 const normalizedMessages = computed(() =>
   dedupeAssistantArtifacts(
     dedupeWorkflowInputMessages(
-      props.messages
-      .map((message, index) => ({ message, index }))
-      .filter(({ message }) => !props.activeSessionId || message.sessionId === props.activeSessionId)
-      .filter(({ message }) => Boolean(message.content?.trim()))
-      .sort((a, b) => compareMessages(a.message, b.message, a.index, b.index))
-      .map(({ message }) => message)
+      dedupeSystemMessages(
+        props.messages
+        .map((message, index) => ({ message, index }))
+        .filter(({ message }) => !props.activeSessionId || message.sessionId === props.activeSessionId)
+        .filter(({ message }) => Boolean(message.content?.trim()))
+        .sort((a, b) => compareMessages(a.message, b.message, a.index, b.index))
+        .map(({ message }) => message)
+      )
     )
   )
 )
@@ -278,6 +280,29 @@ function dedupeWorkflowInputMessages(messages: AgentMessageDto[]): AgentMessageD
   }
 
   return result
+}
+
+function dedupeSystemMessages(messages: AgentMessageDto[]): AgentMessageDto[] {
+  const result: AgentMessageDto[] = []
+  const seen = new Set<string>()
+
+  for (const message of messages) {
+    if (message.role !== 'SYSTEM') {
+      result.push(message)
+      continue
+    }
+
+    const key = `${message.sessionId}:${message.workflowNodeInstanceId ?? ''}:${systemContentDedupeKey(message.content ?? '')}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(message)
+  }
+
+  return result
+}
+
+function systemContentDedupeKey(content: string): string {
+  return content.replace(/\s+/g, ' ').trim()
 }
 
 function assistantContentDedupeKey(content: string): string {
