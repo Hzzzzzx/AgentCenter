@@ -129,12 +129,18 @@ class PersistenceMapperIntegrationTest {
         artifact.setTitle("Test Artifact");
         artifact.setContent("# Hello World");
         artifact.setVersionNo(1);
+        artifact.setSourceType("MESSAGE");
+        artifact.setSourceMessageId("msg-source-1");
+        artifact.setFilePath("docs/test-artifact.md");
         artifactMapper.insert(artifact);
 
         ArtifactEntity found = artifactMapper.findById(artifact.getId());
         assertThat(found).isNotNull();
         assertThat(found.getContent()).isEqualTo("# Hello World");
         assertThat(found.getTitle()).isEqualTo("Test Artifact");
+        assertThat(found.getSourceType()).isEqualTo("MESSAGE");
+        assertThat(found.getSourceMessageId()).isEqualTo("msg-source-1");
+        assertThat(found.getFilePath()).isEqualTo("docs/test-artifact.md");
     }
 
     @Test

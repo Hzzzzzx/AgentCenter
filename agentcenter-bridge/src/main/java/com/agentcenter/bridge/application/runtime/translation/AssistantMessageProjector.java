@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import com.agentcenter.bridge.application.artifact.ArtifactCaptureService;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeEventEnvelope;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeEventTypes;
 import com.agentcenter.bridge.domain.session.ContentFormat;
@@ -26,11 +27,15 @@ public class AssistantMessageProjector {
 
     private final AgentMessageMapper agentMessageMapper;
     private final IdGenerator idGenerator;
+    private final ArtifactCaptureService artifactCaptureService;
     private final ConcurrentHashMap<String, StringBuilder> buffers = new ConcurrentHashMap<>();
 
-    public AssistantMessageProjector(AgentMessageMapper agentMessageMapper, IdGenerator idGenerator) {
+    public AssistantMessageProjector(AgentMessageMapper agentMessageMapper,
+                                     IdGenerator idGenerator,
+                                     ArtifactCaptureService artifactCaptureService) {
         this.agentMessageMapper = agentMessageMapper;
         this.idGenerator = idGenerator;
+        this.artifactCaptureService = artifactCaptureService;
     }
 
     public void onEnvelope(RuntimeEventEnvelope envelope) {
@@ -87,6 +92,12 @@ public class AssistantMessageProjector {
             message.setCreatedBy("runtime-projector");
             message.setCreatedAt(LocalDateTime.now().format(SQLITE_DATETIME));
             agentMessageMapper.insert(message);
+            try {
+                artifactCaptureService.captureFromAssistantMessage(message);
+            } catch (Exception artifactError) {
+                log.warn("Failed to capture artifacts from assistant message {}: {}",
+                        message.getId(), artifactError.getMessage());
+            }
         } catch (Exception e) {
             log.warn("Failed to persist streamed assistant message for session {}: {}", agentSessionId, e.getMessage());
             synchronized (buffer) {

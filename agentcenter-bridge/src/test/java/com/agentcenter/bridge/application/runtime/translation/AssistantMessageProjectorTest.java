@@ -10,6 +10,7 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.agentcenter.bridge.application.artifact.ArtifactCaptureService;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeEventEnvelope;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeEventTypes;
 import com.agentcenter.bridge.domain.runtime.RuntimeType;
@@ -23,6 +24,7 @@ class AssistantMessageProjectorTest {
 
     private AgentMessageMapper mapper;
     private IdGenerator idGenerator;
+    private ArtifactCaptureService artifactCaptureService;
     private AssistantMessageProjector projector;
     private static final String SESSION_ID = "agent_ses_1";
 
@@ -30,9 +32,10 @@ class AssistantMessageProjectorTest {
     void setUp() {
         mapper = mock(AgentMessageMapper.class);
         idGenerator = mock(IdGenerator.class);
+        artifactCaptureService = mock(ArtifactCaptureService.class);
         when(idGenerator.nextId()).thenReturn("msg_1");
         when(mapper.findBySessionId(SESSION_ID)).thenReturn(List.of());
-        projector = new AssistantMessageProjector(mapper, idGenerator);
+        projector = new AssistantMessageProjector(mapper, idGenerator, artifactCaptureService);
     }
 
     private RuntimeEventEnvelope deltaEnvelope(String text) {
@@ -68,6 +71,7 @@ class AssistantMessageProjectorTest {
             && "Hello World".equals(msg.getContent())
             && "runtime-projector".equals(msg.getCreatedBy())
         ));
+        verify(artifactCaptureService).captureFromAssistantMessage(any(AgentMessageEntity.class));
         verify(idGenerator).nextId();
     }
 

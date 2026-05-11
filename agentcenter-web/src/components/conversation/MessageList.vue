@@ -26,14 +26,19 @@ const props = withDefaults(defineProps<{
   running: false,
 })
 
+// ─── Display item types ─────────────────────────────────────
+
+type ArtifactOpenRef = {
+  artifactId?: string
+  title?: string
+}
+
 const emit = defineEmits<{
-  'open-artifact': [title: string]
+  'open-artifact': [ref: ArtifactOpenRef]
   'resolve-confirmation': [confirmationId: string, value: string, meta: { requestType?: string; interactionType?: string }]
   'interaction-changed': [confirmationId: string]
   'open-confirmation': [confirmationId: string]
 }>()
-
-// ─── Display item types ─────────────────────────────────────
 
 type SystemLinePart = {
   kind: 'text' | 'artifact'
@@ -450,7 +455,7 @@ function systemLineParts(content: string): SystemLinePart[] {
                 v-if="part.kind === 'artifact'"
                 type="button"
                 class="system-line__artifact"
-                @click="emit('open-artifact', part.text)"
+                @click="emit('open-artifact', { title: part.text })"
               >
                 {{ part.text }}
               </button>

@@ -11,6 +11,10 @@ public class ArtifactEntity {
     private String content;
     private String storageUri;
     private Integer versionNo;
+    private String sourceType;
+    private String sourceMessageId;
+    private String sourceEventId;
+    private String filePath;
     private String createdBy;
     private String createdAt;
 
@@ -36,6 +40,14 @@ public class ArtifactEntity {
     public void setStorageUri(String storageUri) { this.storageUri = storageUri; }
     public Integer getVersionNo() { return versionNo; }
     public void setVersionNo(Integer versionNo) { this.versionNo = versionNo; }
+    public String getSourceType() { return sourceType; }
+    public void setSourceType(String sourceType) { this.sourceType = sourceType; }
+    public String getSourceMessageId() { return sourceMessageId; }
+    public void setSourceMessageId(String sourceMessageId) { this.sourceMessageId = sourceMessageId; }
+    public String getSourceEventId() { return sourceEventId; }
+    public void setSourceEventId(String sourceEventId) { this.sourceEventId = sourceEventId; }
+    public String getFilePath() { return filePath; }
+    public void setFilePath(String filePath) { this.filePath = filePath; }
     public String getCreatedBy() { return createdBy; }
     public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
     public String getCreatedAt() { return createdAt; }

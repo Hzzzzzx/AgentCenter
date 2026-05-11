@@ -4,12 +4,17 @@ import type { ConversationDisplayItem, ConversationTurnProjection, TurnStatus } 
 import AssistantAnswer from './AssistantAnswer.vue'
 import ExecutionSteps from './ExecutionSteps.vue'
 
+type ArtifactOpenRef = {
+  artifactId?: string
+  title?: string
+}
+
 const props = defineProps<{
   turn: ConversationTurnProjection
 }>()
 
 defineEmits<{
-  'open-artifact': [artifactId: string]
+  'open-artifact': [ref: ArtifactOpenRef]
   'resolve': [confirmationId: string, value: string, meta: { requestType?: string; interactionType?: string }]
 }>()
 
@@ -89,7 +94,7 @@ const renderItems = computed<ConversationDisplayItem[]>(() => {
           :current-action="item.currentAction"
           :has-answer="Boolean(turn.answer.text)"
           :collapsed-by-default="item.collapsedByDefault"
-          @open-artifact="(id) => $emit('open-artifact', id)"
+          @open-artifact="(id) => $emit('open-artifact', { artifactId: id })"
           @resolve="(confirmationId, value, meta) => $emit('resolve', confirmationId, value, meta)"
         />
 

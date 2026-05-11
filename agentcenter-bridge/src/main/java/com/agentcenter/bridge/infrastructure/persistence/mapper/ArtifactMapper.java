@@ -9,6 +9,8 @@ import java.util.List;
 @Mapper
 public interface ArtifactMapper {
     ArtifactEntity findById(@Param("id") String id);
+    List<ArtifactEntity> findBySourceMessageId(@Param("sourceMessageId") String sourceMessageId);
+    List<ArtifactEntity> findBySourceEventId(@Param("sourceEventId") String sourceEventId);
     List<ArtifactEntity> findByWorkItemId(@Param("workItemId") String workItemId);
     List<ArtifactEntity> findByWorkflowNodeInstanceId(@Param("nodeInstanceId") String nodeInstanceId);
     void insert(ArtifactEntity entity);

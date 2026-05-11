@@ -301,7 +301,7 @@ function buildArtifactPart(ee: EnrichedEvent): ArtifactEvidencePart {
     type: 'artifact',
     artifactId: p.artifactId,
     filePath: p.filePath,
-    title: p.title || 'Artifact',
+    title: artifactTitleFromPayload(p),
     summary: p.summary,
     diffAvailable: p.diffAvailable,
     rawEventRef: {
@@ -310,6 +310,15 @@ function buildArtifactPart(ee: EnrichedEvent): ArtifactEvidencePart {
       seqNo: ee.event.seqNo,
     },
   }
+}
+
+function artifactTitleFromPayload(payload: ParsedPayload): string {
+  if (payload.title && payload.title !== '产物变更') return payload.title
+  if (payload.filePath) {
+    const segments = payload.filePath.split(/[\\/]/).filter(Boolean)
+    return segments.at(-1) || payload.filePath
+  }
+  return payload.summary || 'Artifact'
 }
 
 function buildDecisionPart(ee: EnrichedEvent, confirmation?: ProjectorConfirmation): DecisionGatePart {

@@ -6,10 +6,11 @@ import ConversationWorkbench from './ConversationWorkbench.vue'
 import MessageList from '../components/conversation/MessageList.vue'
 import { sessionApi } from '../api/sessions'
 import { workflowApi } from '../api/workflows'
+import { artifactApi } from '../api/artifacts'
 import { confirmationApi } from '../api/confirmations'
 import { useRuntimeStore } from '../stores/runtime'
 import { useRuntimeSettingsStore } from '../stores/runtimeSettings'
-import type { AgentSessionDto, ConfirmationRequestDto, WorkflowInstanceDto } from '../api/types'
+import type { AgentSessionDto, ArtifactDto, ConfirmationRequestDto, WorkflowInstanceDto } from '../api/types'
 
 const mocks = vi.hoisted(() => {
   const runningWorkItem = {
@@ -133,7 +134,18 @@ const mocks = vi.hoisted(() => {
     createdAt: '2026-05-08T10:01:00Z',
   } satisfies ConfirmationRequestDto
 
-  return { runningWorkItem, runningSession, runningWorkflow, workflowDefinition, pendingConfirmation }
+  const capturedArtifact = {
+    id: 'art-1',
+    workItemId: 'work-1',
+    workflowInstanceId: 'wf-1',
+    workflowNodeInstanceId: 'node-1',
+    artifactType: 'MARKDOWN',
+    title: 'FE0003 详细设计.md',
+    content: '# 详细设计',
+    createdAt: '2026-05-08T10:03:00Z',
+  } satisfies ArtifactDto
+
+  return { runningWorkItem, runningSession, runningWorkflow, workflowDefinition, pendingConfirmation, capturedArtifact }
 })
 
 vi.mock('../api/workItems', () => ({
@@ -185,6 +197,7 @@ vi.mock('../api/runtimeResources', () => ({
 
 vi.mock('../api/artifacts', () => ({
   artifactApi: {
+    get: vi.fn(),
     listByWorkItem: vi.fn().mockResolvedValue([]),
   },
 }))
@@ -205,6 +218,8 @@ describe('ConversationWorkbench.vue', () => {
     vi.mocked(sessionApi.list).mockResolvedValue([mocks.runningSession])
     vi.mocked(sessionApi.getById).mockResolvedValue(mocks.runningSession)
     vi.mocked(sessionApi.getMessages).mockResolvedValue([])
+    vi.mocked(artifactApi.get).mockResolvedValue(mocks.capturedArtifact)
+    vi.mocked(artifactApi.listByWorkItem).mockResolvedValue([])
     vi.mocked(sessionApi.sendMessage).mockResolvedValue({
       id: 'msg-user-1',
       sessionId: 'session-1',
@@ -246,6 +261,27 @@ describe('ConversationWorkbench.vue', () => {
     expect(sendButton.classes()).toContain('conversation-workbench__send--pause')
     expect(sendButton.attributes('aria-label')).toBe('暂停当前回复')
     expect(wrapper.find('.node-state-area--running').exists()).toBe(false)
+  })
+
+  it('opens captured artifacts by artifactId from conversation evidence', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(ConversationWorkbench, {
+      props: {
+        workItemId: 'work-1',
+        targetSessionId: 'session-1',
+      },
+      global: {
+        plugins: [pinia],
+      },
+    })
+
+    await flushPromises()
+    wrapper.findComponent(MessageList).vm.$emit('open-artifact', { artifactId: 'art-1' })
+    await flushPromises()
+
+    expect(artifactApi.get).toHaveBeenCalledWith('art-1')
+    expect(wrapper.emitted('open-artifact')?.[0]).toEqual([mocks.capturedArtifact])
   })
 
   it('cancels the active session and releases the input when pause is clicked', async () => {

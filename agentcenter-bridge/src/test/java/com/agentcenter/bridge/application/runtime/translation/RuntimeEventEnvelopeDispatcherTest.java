@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import com.agentcenter.bridge.api.dto.RuntimeEventDto;
 import com.agentcenter.bridge.application.RuntimeEventService;
+import com.agentcenter.bridge.application.artifact.ArtifactCaptureService;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeEventEnvelope;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeEventTypes;
 import com.agentcenter.bridge.domain.runtime.RuntimeEventSource;
@@ -25,6 +26,7 @@ class RuntimeEventEnvelopeDispatcherTest {
     private RuntimeOperationEventHandler operationHandler;
     private PermissionConfirmationHandler permissionHandler;
     private QuestionConfirmationHandler questionHandler;
+    private ArtifactCaptureService artifactCaptureService;
     private RuntimeEventEnvelopeDispatcher dispatcher;
 
     @BeforeEach
@@ -35,8 +37,9 @@ class RuntimeEventEnvelopeDispatcherTest {
         operationHandler = mock(RuntimeOperationEventHandler.class);
         permissionHandler = mock(PermissionConfirmationHandler.class);
         questionHandler = mock(QuestionConfirmationHandler.class);
+        artifactCaptureService = mock(ArtifactCaptureService.class);
         dispatcher = new RuntimeEventEnvelopeDispatcher(legacyBridge, projector, eventService, operationHandler,
-                permissionHandler, questionHandler);
+                permissionHandler, questionHandler, artifactCaptureService);
     }
 
     private RuntimeEventEnvelope envelope(String type) {
@@ -89,6 +92,7 @@ class RuntimeEventEnvelopeDispatcherTest {
         dispatcher.dispatch(List.of(env1, env2));
 
         verify(projector, times(2)).onEnvelope(any(RuntimeEventEnvelope.class));
+        verify(artifactCaptureService, times(2)).captureFromRuntimeArtifact(any(RuntimeEventEnvelope.class));
         verify(legacyBridge, times(2)).toLegacyEvent(any(RuntimeEventEnvelope.class));
         verify(eventService, times(2)).publishEvent(any(RuntimeEventDto.class));
         verify(operationHandler, times(2)).onEnvelope(any(RuntimeEventEnvelope.class));
