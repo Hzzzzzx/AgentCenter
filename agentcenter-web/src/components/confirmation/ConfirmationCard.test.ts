@@ -123,6 +123,34 @@ describe('ConfirmationCard.vue', () => {
     expect(wrapper.emitted('resolved')![0]).toEqual(['conf-1'])
   })
 
+  it('submits DECISION confirmation when options use value and label fields', async () => {
+    const { confirmationApi } = await import('../../api/confirmations')
+    const wrapper = mountCard({
+      ...pendingConfirmation,
+      requestType: 'DECISION',
+      optionsJson: JSON.stringify([
+        { value: 'FAST', label: '快速验证' },
+        { value: 'STRICT', label: '严格校验' },
+      ]),
+    })
+
+    await openDialog(wrapper)
+    expect(document.body.textContent).not.toContain('[object Object]')
+    const option = document.body.querySelector<HTMLInputElement>('input[value="严格校验"]')
+    expect(option).toBeTruthy()
+    option!.checked = true
+    option!.dispatchEvent(new Event('change'))
+    await wrapper.vm.$nextTick()
+    await document.body.querySelector<HTMLButtonElement>('.confirmation-card__action--approve')!.click()
+    await vi.dynamicImportSettled()
+
+    expect(confirmationApi.resolve).toHaveBeenCalledWith('conf-1', {
+      actionType: 'CHOOSE',
+      payload: { choice: '严格校验' },
+      comment: '严格校验',
+    })
+  })
+
   it('submits INPUT_REQUIRED confirmation with supplemental text', async () => {
     const { confirmationApi } = await import('../../api/confirmations')
     const wrapper = mountCard({

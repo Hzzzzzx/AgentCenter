@@ -27,27 +27,48 @@ export interface InteractionSchema {
   required?: boolean
 }
 
+function optionText(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : String(value ?? '').trim()
+}
+
+function normalizeOption(item: unknown): InteractionOption | null {
+  if (typeof item === 'string') {
+    const text = item.trim()
+    return text ? { id: text, label: text } : null
+  }
+
+  if (!item || typeof item !== 'object') return null
+
+  const record = item as Record<string, unknown>
+  const id = optionText(record.id ?? record.value ?? record.key ?? record.label)
+  const label = optionText(record.label ?? record.name ?? record.title ?? record.value ?? record.id ?? id)
+  if (!id && !label) return null
+
+  const option: InteractionOption = {
+    id: id || label,
+    label: label || id,
+  }
+  const description = optionText(record.description)
+  if (description) option.description = description
+  return option
+}
+
+function normalizeOptions(raw: unknown): InteractionOption[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined
+  const options = raw
+    .map(normalizeOption)
+    .filter((option): option is InteractionOption => !!option)
+  return options.length ? options : undefined
+}
+
 function parseLegacyOptions(optionsJson: string | null): InteractionOption[] | undefined {
   if (!optionsJson) return undefined
 
-  let parsed: unknown
   try {
-    parsed = JSON.parse(optionsJson)
+    return normalizeOptions(JSON.parse(optionsJson))
   } catch {
     return undefined
   }
-
-  if (!Array.isArray(parsed) || parsed.length === 0) return undefined
-
-  if (typeof parsed[0] === 'string') {
-    return (parsed as string[]).map((s) => ({ id: s, label: s }))
-  }
-
-  if (typeof parsed[0] === 'object' && parsed[0] !== null) {
-    return parsed as InteractionOption[]
-  }
-
-  return undefined
 }
 
 function deriveInteractionType(requestType: ConfirmationRequestDto['requestType']): string {
@@ -86,7 +107,7 @@ export function parseInteractionSchema(confirmation: ConfirmationRequestDto): In
         title,
         question: schemaQuestion,
         selection: schema.selection,
-        options: schema.options,
+        options: normalizeOptions(schema.options),
         allowCustom: schema.allowCustom,
         fields: schema.fields,
         required: confirmation.interactionRequired ?? schema.required,

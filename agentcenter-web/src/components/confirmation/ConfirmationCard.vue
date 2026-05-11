@@ -73,29 +73,44 @@ const rejectLabel = computed(() => {
   return '拒绝'
 })
 
+function optionText(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : String(value ?? '').trim()
+}
+
+function normalizeOption(item: unknown): {id: string, label: string} | null {
+  if (typeof item === 'string') {
+    const text = item.trim()
+    return text ? { id: text, label: text } : null
+  }
+
+  if (!item || typeof item !== 'object') return null
+
+  const record = item as Record<string, unknown>
+  const id = optionText(record.id ?? record.value ?? record.key ?? record.label)
+  const label = optionText(record.label ?? record.name ?? record.title ?? record.value ?? record.id ?? id)
+  if (!id && !label) return null
+  return {
+    id: id || label,
+    label: label || id,
+  }
+}
+
+function normalizeOptions(raw: unknown): {id: string, label: string}[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map(normalizeOption)
+    .filter((option): option is {id: string, label: string} => !!option)
+}
+
 function parseOptions(raw: string | null): {id: string, label: string}[] {
   if (!raw || !raw.trim()) return []
   try {
     const parsed = JSON.parse(raw)
     if (Array.isArray(parsed)) {
-      return parsed.map((item) => {
-        if (item && typeof item === 'object' && 'id' in (item as object) && 'label' in (item as object)) {
-          const obj = item as {id: unknown, label: unknown}
-          return { id: String(obj.id), label: String(obj.label) }
-        }
-        const str = String(item).trim()
-        return { id: str, label: str }
-      }).filter((o: {id: string, label: string}) => o.label)
+      return normalizeOptions(parsed)
     }
     if (parsed && typeof parsed === 'object' && Array.isArray(parsed.options)) {
-      return parsed.options.map((item: unknown) => {
-        if (item && typeof item === 'object' && 'id' in (item as object) && 'label' in (item as object)) {
-          const obj = item as {id: unknown, label: unknown}
-          return { id: String(obj.id), label: String(obj.label) }
-        }
-        const str = String(item).trim()
-        return { id: str, label: str }
-      }).filter((o: {id: string, label: string}) => o.label)
+      return normalizeOptions(parsed.options)
     }
   } catch {
     // Fall through to the tolerant text splitter below.

@@ -116,6 +116,36 @@ describe('ConversationInteractionBar.vue', () => {
     expect(wrapper.emitted('resolved')?.[0]).toEqual(['confirm-2'])
   })
 
+  it('submits a selected decision option when legacy options use value and label fields', async () => {
+    const wrapper = mount(ConversationInteractionBar, {
+      props: {
+        interactions: [
+          makeInteraction({
+            id: 'confirm-value-options',
+            requestType: 'DECISION',
+            title: '选择实现路线',
+            optionsJson: JSON.stringify([
+              { value: 'FAST', label: '快速验证', description: '只保留最小测试链路' },
+              { value: 'STRICT', label: '严格校验' },
+            ]),
+          }),
+        ],
+      },
+    })
+
+    expect(wrapper.text()).not.toContain('[object Object]')
+    await wrapper.findAll('.interaction-bar__option')[1].trigger('click')
+    await wrapper.find('.interaction-bar__primary').trigger('click')
+    await flushPromises()
+
+    expect(confirmationApi.resolve).toHaveBeenCalledWith('confirm-value-options', {
+      actionType: 'CHOOSE',
+      payload: { choice: 'STRICT', choiceId: 'STRICT', choiceLabel: '严格校验' },
+      comment: '严格校验',
+    })
+    expect(wrapper.emitted('resolved')?.[0]).toEqual(['confirm-value-options'])
+  })
+
   it('submits custom input for input-required interactions', async () => {
     const wrapper = mount(ConversationInteractionBar, {
       props: {

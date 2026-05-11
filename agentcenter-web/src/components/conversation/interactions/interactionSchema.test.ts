@@ -96,6 +96,41 @@ describe('parseInteractionSchema', () => {
     ])
   })
 
+  it('normalizes legacy value/label options into stable ids', () => {
+    const confirmation = makeConfirmation({
+      optionsJson: JSON.stringify([
+        { value: 'FAST', label: '快速验证', description: '只保留最小测试链路' },
+        { key: 'STRICT', name: '严格校验' },
+      ]),
+    })
+
+    const schema = parseInteractionSchema(confirmation)
+
+    expect(schema!.options).toEqual([
+      { id: 'FAST', label: '快速验证', description: '只保留最小测试链路' },
+      { id: 'STRICT', label: '严格校验' },
+    ])
+  })
+
+  it('normalizes protocol schema options with value fields', () => {
+    const confirmation = makeConfirmation({
+      interactionSchemaJson: JSON.stringify({
+        selection: 'single',
+        options: [
+          { value: 'APPROVE', label: '允许' },
+          { value: 'REJECT', label: '拒绝' },
+        ],
+      }),
+    })
+
+    const schema = parseInteractionSchema(confirmation)
+
+    expect(schema!.options).toEqual([
+      { id: 'APPROVE', label: '允许' },
+      { id: 'REJECT', label: '拒绝' },
+    ])
+  })
+
   it('returns schema without options when optionsJson is null', () => {
     const confirmation = makeConfirmation({ optionsJson: null })
 
