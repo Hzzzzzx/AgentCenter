@@ -444,6 +444,7 @@ public class WorkflowCommandService {
             );
         }
 
+        String runtimeSetupError = null;
         try {
             String ensuredRuntimeSessionId = runtimeGateway.ensureSession(
                     workflowRuntimeType, workItem.getId(), session.id(), runtimeSessionId);
@@ -451,13 +452,18 @@ public class WorkflowCommandService {
                 runtimeSessionId = ensuredRuntimeSessionId;
                 agentSessionService.bindRuntimeSession(session.id(), runtimeSessionId, workflowRuntimeType);
             }
+            node.setErrorMessage(null);
         } catch (Exception e) {
+            runtimeSetupError = runtimeSetupFailureMessage(e);
             log.warn("Runtime session is not ready for workflow node {}, session {}. Workflow context will remain visible.",
                     node.getId(), session.id(), e);
         }
 
         node.setAgentSessionId(session.id());
         node.setRuntimeSessionId(runtimeSessionId);
+        if (runtimeSetupError != null) {
+            node.setErrorMessage(runtimeSetupError);
+        }
         workflowMapper.updateNodeInstance(node);
 
         runtimeGateway.registerWorkflowNodeContext(
@@ -489,8 +495,11 @@ public class WorkflowCommandService {
         SkillRunResult result = validateSkillRunnable(workItem, skillName);
         if (result == null) {
             if (node.getRuntimeSessionId() == null || node.getRuntimeSessionId().isBlank()) {
+                String detail = node.getErrorMessage() != null && !node.getErrorMessage().isBlank()
+                        ? " Underlying error: " + node.getErrorMessage()
+                        : "";
                 result = new SkillRunResult(false, null, null,
-                        "Runtime session is not ready. Please check opencode serve and retry this node.",
+                        "Runtime session is not ready. Please check opencode serve and retry this node." + detail,
                         false);
             } else {
                 SkillInvocationRequest request = workflowPromptComposer.composeInvocationRequest(skillName, inputContext);
@@ -937,6 +946,14 @@ public class WorkflowCommandService {
                 .filter(java.util.Objects::nonNull)
                 .findFirst()
                 .orElse(null);
+    }
+
+    private String runtimeSetupFailureMessage(Exception error) {
+        String message = error.getMessage();
+        if (message != null && !message.isBlank()) {
+            return error.getClass().getSimpleName() + ": " + message;
+        }
+        return error.getClass().getSimpleName();
     }
 
     private String findWorkflowRuntimeSessionId(WorkflowInstanceEntity instance) {

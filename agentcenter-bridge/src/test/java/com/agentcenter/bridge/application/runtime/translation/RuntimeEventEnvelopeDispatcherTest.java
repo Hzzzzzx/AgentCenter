@@ -97,8 +97,8 @@ class RuntimeEventEnvelopeDispatcherTest {
     void continuesOnPublishError() {
         RuntimeEventEnvelope env1 = envelope(RuntimeEventTypes.CONVERSATION_DELTA);
         RuntimeEventEnvelope env2 = envelope(RuntimeEventTypes.TOOL_STARTED);
-        RuntimeEventDto dto1 = legacyDto("agent_ses_1");
-        RuntimeEventDto dto2 = legacyDto("agent_ses_1");
+        RuntimeEventDto dto1 = legacyDto("agent_ses_1", "evt_1");
+        RuntimeEventDto dto2 = legacyDto("agent_ses_1", "evt_2");
 
         when(legacyBridge.toLegacyEvent(env1)).thenReturn(dto1);
         when(legacyBridge.toLegacyEvent(env2)).thenReturn(dto2);

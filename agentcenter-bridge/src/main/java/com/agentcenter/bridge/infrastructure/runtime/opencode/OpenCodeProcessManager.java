@@ -1,5 +1,6 @@
 package com.agentcenter.bridge.infrastructure.runtime.opencode;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -10,6 +11,10 @@ import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -188,13 +193,17 @@ public class OpenCodeProcessManager {
         log.info("Starting opencode serve: {} serve --hostname {} --port {} --print-logs --log-level WARN (cwd={})",
                 resolvedCommand, hostname, port, cwd);
 
-        ProcessBuilder pb = new ProcessBuilder(
-                resolvedCommand, "serve",
-                "--hostname", hostname,
-                "--port", String.valueOf(port),
-                "--print-logs",
-                "--log-level", "WARN"
-        ).directory(cwd.toFile());
+        ProcessBuilder pb = new ProcessBuilder(buildCommandLine(
+                resolvedCommand,
+                List.of(
+                        "serve",
+                        "--hostname", hostname,
+                        "--port", String.valueOf(port),
+                        "--print-logs",
+                        "--log-level", "WARN"
+                ),
+                isWindows()
+        )).directory(cwd.toFile());
 
         pb.environment().put("PATH", System.getenv("PATH"));
         pb.redirectErrorStream(true);
@@ -284,24 +293,107 @@ public class OpenCodeProcessManager {
     }
 
     private String resolveCommand() {
-        // If the configured command contains a path separator, check existence directly
-        if (command.contains("/")) {
-            return Files.exists(Path.of(command)) ? command : null;
+        return resolveCommand(command, isWindows(), System.getenv("PATH"), System.getenv("PATHEXT"));
+    }
+
+    static String resolveCommand(String command, boolean windows, String pathEnv, String pathExtEnv) {
+        if (command == null || command.isBlank()) {
+            return null;
         }
-        // Try running the command to see if it's on PATH
-        try {
-            Process probe = new ProcessBuilder(command, "--version")
-                    .redirectErrorStream(true)
-                    .start();
-            boolean finished = probe.waitFor(5, TimeUnit.SECONDS);
-            if (finished) {
-                return command;
+
+        if (hasPathSeparator(command)) {
+            return firstRunnableCandidate(commandCandidates(Path.of(command), windows, pathExtEnv), windows);
+        }
+
+        String separator = windows ? ";" : File.pathSeparator;
+        for (String rawDir : splitPath(pathEnv, separator)) {
+            if (rawDir == null || rawDir.isBlank()) {
+                continue;
             }
-            probe.destroyForcibly();
-        } catch (IOException | InterruptedException e) {
-            // not found
+            String resolved = firstRunnableCandidate(
+                    commandCandidates(Path.of(rawDir).resolve(command), windows, pathExtEnv), windows);
+            if (resolved != null) {
+                return resolved;
+            }
         }
         return null;
+    }
+
+    static List<String> buildCommandLine(String resolvedCommand, List<String> args, boolean windows) {
+        List<String> commandLine = new ArrayList<>();
+        if (windows && isWindowsCommandShim(resolvedCommand)) {
+            commandLine.add("cmd.exe");
+            commandLine.add("/d");
+            commandLine.add("/c");
+        }
+        commandLine.add(resolvedCommand);
+        commandLine.addAll(args);
+        return commandLine;
+    }
+
+    private static List<Path> commandCandidates(Path base, boolean windows, String pathExtEnv) {
+        List<Path> candidates = new ArrayList<>();
+        candidates.add(base);
+        if (!windows || hasWindowsExecutableExtension(base)) {
+            return candidates;
+        }
+
+        for (String extension : windowsPathExtensions(pathExtEnv)) {
+            candidates.add(Path.of(base.toString() + extension));
+        }
+        return candidates;
+    }
+
+    private static String firstRunnableCandidate(List<Path> candidates, boolean windows) {
+        for (Path candidate : candidates) {
+            if (!Files.isRegularFile(candidate)) {
+                continue;
+            }
+            if (windows || Files.isExecutable(candidate)) {
+                return candidate.toString();
+            }
+        }
+        return null;
+    }
+
+    private static List<String> splitPath(String pathEnv, String separator) {
+        if (pathEnv == null || pathEnv.isBlank()) {
+            return List.of();
+        }
+        return Arrays.asList(pathEnv.split(java.util.regex.Pattern.quote(separator)));
+    }
+
+    private static List<String> windowsPathExtensions(String pathExtEnv) {
+        String value = pathExtEnv == null || pathExtEnv.isBlank()
+                ? ".COM;.EXE;.BAT;.CMD"
+                : pathExtEnv;
+        return Arrays.stream(value.split(";"))
+                .filter(ext -> ext != null && !ext.isBlank())
+                .map(ext -> ext.startsWith(".") ? ext : "." + ext)
+                .toList();
+    }
+
+    private static boolean hasPathSeparator(String value) {
+        return value.contains("/") || value.contains("\\");
+    }
+
+    private static boolean hasWindowsExecutableExtension(Path path) {
+        Path fileName = path.getFileName();
+        if (fileName == null) {
+            return false;
+        }
+        String lower = fileName.toString().toLowerCase(Locale.ROOT);
+        return lower.endsWith(".exe") || lower.endsWith(".cmd")
+                || lower.endsWith(".bat") || lower.endsWith(".com");
+    }
+
+    private static boolean isWindowsCommandShim(String command) {
+        String lower = command.toLowerCase(Locale.ROOT);
+        return lower.endsWith(".cmd") || lower.endsWith(".bat");
+    }
+
+    private static boolean isWindows() {
+        return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
     }
 
     private boolean isPortOpen() {

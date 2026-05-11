@@ -299,11 +299,13 @@ class M1WorkflowStartIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.workflowInstance.status").value("BLOCKED"))
                 .andExpect(jsonPath("$.workflowInstance.nodes[0].status").value("FAILED"))
-                .andExpect(jsonPath("$.workflowInstance.nodes[0].errorMessage")
-                        .value("Runtime session is not ready. Please check opencode serve and retry this node."))
+                .andExpect(jsonPath("$.workflowInstance.nodes[0].errorMessage").exists())
                 .andReturn();
 
         var json = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertThat(json.at("/workflowInstance/nodes/0/errorMessage").asText())
+                .contains("Runtime session is not ready")
+                .contains("IllegalStateException: opencode serve is unavailable");
         String sessionId = json.at("/session/id").asText();
         assertThat(sessionId).isNotBlank();
         String nodeId = json.at("/workflowInstance/nodes/0/id").asText();
@@ -314,6 +316,7 @@ class M1WorkflowStartIntegrationTest {
         assertThat(confirmations).hasSize(1);
         assertThat(confirmations.get(0).get("content").toString())
                 .contains("Runtime session is not ready")
+                .contains("IllegalStateException: opencode serve is unavailable")
                 .doesNotContain("NullPointerException");
 
         var messages = jdbcTemplate.queryForList(

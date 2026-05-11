@@ -30,4 +30,4 @@ agentcenter:
         agent: build
       command: opencode
       model: ""
-      timeout-seconds: 180
+      timeout-seconds: 1800

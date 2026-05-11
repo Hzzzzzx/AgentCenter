@@ -52,8 +52,17 @@ class PersistenceMapperIntegrationTest {
         List<WorkflowDefinitionEntity> defs = workflowMapper.findAllDefinitions();
         assertThat(defs).isNotEmpty();
 
-        List<WorkflowNodeDefinitionEntity> nodes = workflowMapper.findNodeDefinitionsByWorkflowDefinitionId(defs.get(0).getId());
-        assertThat(nodes).hasSize(6);
+        WorkflowDefinitionEntity feDefault = defs.stream()
+                .filter(def -> "FE".equals(def.getWorkItemType()) && Boolean.TRUE.equals(def.getIsDefault()))
+                .findFirst()
+                .orElse(null);
+        assertThat(feDefault).isNotNull();
+
+        List<WorkflowNodeDefinitionEntity> nodes =
+                workflowMapper.findNodeDefinitionsByWorkflowDefinitionId(feDefault.getId());
+        assertThat(nodes).hasSize(3);
+        assertThat(nodes.stream().map(WorkflowNodeDefinitionEntity::getSkillName))
+                .containsExactly("prd-desingn", "hld-design", "lld-design");
     }
 
     @Test
