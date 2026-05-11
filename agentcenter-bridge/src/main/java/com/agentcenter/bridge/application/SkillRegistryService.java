@@ -316,7 +316,7 @@ public class SkillRegistryService {
 
     public String validateRegisteredRunnableSkill(String projectId, String skillName) {
         String resolvedProjectId = ProjectDefaults.resolveProjectId(projectId);
-        RuntimeSkillEntity skill = skillMapper.findByProjectIdAndName(resolvedProjectId, skillName);
+        RuntimeSkillEntity skill = resolveRunnableSkill(resolvedProjectId, skillName);
         if (skill == null) {
             return "Skill is not registered for project " + resolvedProjectId + ": " + skillName;
         }
@@ -326,6 +326,58 @@ public class SkillRegistryService {
             return "Skill is not runnable: " + skillName + " status=" + status + ", validation=" + validation;
         }
         return null;
+    }
+
+    private RuntimeSkillEntity resolveRunnableSkill(String projectId, String requestedSkillName) {
+        RuntimeSkillEntity exact = skillMapper.findByProjectIdAndName(projectId, requestedSkillName);
+        if (exact != null) {
+            return exact;
+        }
+        String requestedNormalized = normalizeSkillName(requestedSkillName);
+        if (requestedNormalized.isBlank()) {
+            return null;
+        }
+        List<RuntimeSkillEntity> skills = skillMapper.findByProjectId(projectId);
+        RuntimeSkillEntity normalizedMatch = skills.stream()
+                .filter(skill -> requestedNormalized.equals(normalizeSkillName(skill.getName())))
+                .findFirst()
+                .orElse(null);
+        if (normalizedMatch != null) {
+            return normalizedMatch;
+        }
+        return skills.stream()
+                .filter(skill -> levenshteinDistance(requestedNormalized, normalizeSkillName(skill.getName())) <= 2)
+                .min(java.util.Comparator.comparingInt(skill ->
+                        levenshteinDistance(requestedNormalized, normalizeSkillName(skill.getName()))))
+                .orElse(null);
+    }
+
+    private String normalizeSkillName(String name) {
+        if (name == null) {
+            return "";
+        }
+        return name.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9]", "");
+    }
+
+    private int levenshteinDistance(String source, String target) {
+        int sourceLength = source.length();
+        int targetLength = target.length();
+        int[][] table = new int[sourceLength + 1][targetLength + 1];
+        for (int i = 0; i <= sourceLength; i++) {
+            table[i][0] = i;
+        }
+        for (int j = 0; j <= targetLength; j++) {
+            table[0][j] = j;
+        }
+        for (int i = 1; i <= sourceLength; i++) {
+            for (int j = 1; j <= targetLength; j++) {
+                int cost = source.charAt(i - 1) == target.charAt(j - 1) ? 0 : 1;
+                table[i][j] = Math.min(
+                        Math.min(table[i - 1][j] + 1, table[i][j - 1] + 1),
+                        table[i - 1][j - 1] + cost);
+            }
+        }
+        return table[sourceLength][targetLength];
     }
 
     public void requireRunnableSkill(String projectId, String skillName) {
