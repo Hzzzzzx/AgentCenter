@@ -18,14 +18,13 @@ import static org.mockito.Mockito.*;
 class OpenCodeRuntimeAdapterBuildPartsTest {
 
     private OpenCodeRuntimeAdapter adapter;
-    private OpenCodeSkillFileService skillFileService;
 
     @BeforeEach
     void setUp() {
         OpenCodeProcessManager processManager = mock(OpenCodeProcessManager.class);
         OpenCodeEventSubscriber eventSubscriber = mock(OpenCodeEventSubscriber.class);
         ObjectMapper objectMapper = new ObjectMapper();
-        skillFileService = mock(OpenCodeSkillFileService.class);
+        OpenCodeSkillFileService skillFileService = mock(OpenCodeSkillFileService.class);
         OpenCodeMcpFileService mcpFileService = mock(OpenCodeMcpFileService.class);
         OpenCodeHttpCommandTransport commandTransport = mock(OpenCodeHttpCommandTransport.class);
         RuntimeEventService runtimeEventService = mock(RuntimeEventService.class);
@@ -94,29 +93,12 @@ class OpenCodeRuntimeAdapterBuildPartsTest {
         ArrayNode parts = adapter.buildSkillParts(request);
 
         String part1 = parts.get(0).get("text").asText();
-        assertTrue(part1.contains("请按 AgentCenter 已内联提供的 Skill `code-review` 处理下面的用户输入。"));
+        assertTrue(part1.contains("请使用当前 Agent Runtime 中的 Skill `code-review` 处理下面的用户输入。"));
         assertTrue(part1.contains("优先遵循 Skill 自身说明和当前会话上下文"));
-        assertTrue(part1.contains("不要调用 Runtime 的 skill 加载工具重复读取这个 Skill"));
         assertTrue(part1.contains("AgentCenter 工作流只提供调用顺序"));
         assertTrue(part1.contains("优先使用 OpenCode 原生 Question 交互"));
         assertTrue(part1.contains("AgentCenter Bridge 会将 Question 翻译为平台待确认"));
         assertTrue(part1.contains("如果任务需要工作目录之外的信息，请先说明缺失信息"));
-    }
-
-    @Test
-    void buildSkillParts_inlinesManagedSkillFileContent() {
-        when(skillFileService.readSkillContent("code-review"))
-                .thenReturn("# Code Review Skill\n\nFollow the review checklist.");
-        SkillInvocationRequest request = new SkillInvocationRequest(
-                "code-review", "input", null, null);
-
-        ArrayNode parts = adapter.buildSkillParts(request);
-
-        String part1 = parts.get(0).get("text").asText();
-        assertTrue(part1.contains("<AGENTCENTER_SKILL_FILE name=\"code-review\">"));
-        assertTrue(part1.contains("# Code Review Skill"));
-        assertTrue(part1.contains("Follow the review checklist."));
-        assertTrue(part1.contains("</AGENTCENTER_SKILL_FILE>"));
     }
 
     @Test

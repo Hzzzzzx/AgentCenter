@@ -209,32 +209,4 @@ class OpenCodeSkillFileServiceTest {
         assertThat(path.replace('\\', '/')).endsWith(".opencode/skills");
         assertThat(Path.of(path)).isAbsolute();
     }
-
-    // --- readSkillContent ---
-
-    @Test
-    void readsManagedSkillContent() throws IOException {
-        Path skillDir = tempDir.resolve(".opencode").resolve("skills").resolve("my-skill");
-        Files.createDirectories(skillDir);
-        Files.writeString(skillDir.resolve("SKILL.md"), "# My Skill\n\nDo the thing.");
-
-        String content = service.readSkillContent("my-skill");
-
-        assertThat(content).contains("# My Skill");
-        assertThat(content).contains("Do the thing.");
-    }
-
-    @Test
-    void readSkillContentReturnsEmptyWhenSkillFileMissing() {
-        String content = service.readSkillContent("missing-skill");
-
-        assertThat(content).isEmpty();
-    }
-
-    @Test
-    void readSkillContentRejectsUnsafeSkillName() {
-        assertThatThrownBy(() -> service.readSkillContent("../escape"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("unsafe characters");
-    }
 }
