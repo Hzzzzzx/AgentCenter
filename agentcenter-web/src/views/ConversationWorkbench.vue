@@ -171,9 +171,17 @@ const activeTitle = computed(() => {
 })
 
 const currentWorkflowInstance = computed(() => {
-  const instance = props.workItemId
-    ? workflowStore.instancesByWorkItemId[props.workItemId] ?? workflowStore.activeWorkflowInstance
-    : workflowStore.activeWorkflowInstance
+  const activeInstance = workflowStore.activeWorkflowInstance
+  const sessionWorkflowInstanceId = sessionStore.activeSession?.workflowInstanceId ?? null
+  const workItemInstance = props.workItemId
+    ? workflowStore.instancesByWorkItemId[props.workItemId] ?? null
+    : null
+  const instance = sessionWorkflowInstanceId && activeInstance?.id === sessionWorkflowInstanceId
+    ? activeInstance
+    : props.workItemId
+      ? workItemInstance ?? activeInstance
+      : activeInstance
+
   if (!instance) return null
   if (props.workItemId && instance.workItemId !== props.workItemId) return null
   if (sessionStore.activeSession?.workflowInstanceId && instance.id !== sessionStore.activeSession.workflowInstanceId) return null
@@ -257,14 +265,30 @@ const isPausedCurrentNode = computed(() =>
   && nodeStateInfo.value.nodeId === pausedRunningNodeId.value
 )
 
+const isActiveWorkflowNodeOwnedByCurrentSession = computed(() =>
+  Boolean(
+    sessionStore.activeSession?.id
+    && activeWorkflowNode.value?.agentSessionId
+    && activeWorkflowNode.value.agentSessionId === sessionStore.activeSession.id
+  )
+)
+
+const hasActiveSessionRuntimeOutput = computed(() =>
+  runtimeStore.activeSessionId === sessionStore.activeSession?.id
+  && (
+    runtimeStore.busy
+    || Boolean(runtimeStore.streamingText.trim())
+  )
+)
+
 const isConversationRunning = computed(() =>
   !composerRecoveryInteraction.value
   && nodeStateInfo.value.type !== 'FAILED'
   && (
-    runtimeStore.busy
-    || Boolean(runtimeStore.streamingText.trim())
+    hasActiveSessionRuntimeOutput.value
     || (
       nodeStateInfo.value.type === 'RUNNING'
+      && isActiveWorkflowNodeOwnedByCurrentSession.value
       && !isPausedCurrentNode.value
     )
   )
@@ -750,7 +774,9 @@ function actionTypeForInteraction(
     return normalized === 'REJECT' ? 'REJECT' : 'APPROVE'
   }
   if (typedRequest === 'EXCEPTION') {
-    return normalized === 'SKIP' || normalized === 'REJECT' ? normalized : 'RETRY'
+    return normalized === 'SKIP' || normalized === 'REJECT' || normalized === 'SUPPLEMENT'
+      ? normalized
+      : 'RETRY'
   }
   if (typedRequest === 'INPUT_REQUIRED') {
     return normalized === 'REJECT' ? 'REJECT' : 'SUPPLEMENT'

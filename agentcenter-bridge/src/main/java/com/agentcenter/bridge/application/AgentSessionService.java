@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -20,6 +21,8 @@ import com.agentcenter.bridge.api.dto.AgentSessionDto;
 import com.agentcenter.bridge.api.dto.RuntimeEventDto;
 import com.agentcenter.bridge.api.dto.SendMessageRequest;
 import com.agentcenter.bridge.application.runtime.RuntimeGateway;
+import com.agentcenter.bridge.domain.confirmation.ConfirmationRequestType;
+import com.agentcenter.bridge.domain.confirmation.ConfirmationStatus;
 import com.agentcenter.bridge.domain.runtime.RuntimeEventSource;
 import com.agentcenter.bridge.domain.runtime.RuntimeEventType;
 import com.agentcenter.bridge.domain.runtime.RuntimeType;
@@ -30,14 +33,17 @@ import com.agentcenter.bridge.domain.session.SessionStatus;
 import com.agentcenter.bridge.domain.session.SessionType;
 import com.agentcenter.bridge.domain.workflow.WorkflowStatus;
 import com.agentcenter.bridge.domain.workflow.WorkflowUserAction;
+import com.agentcenter.bridge.domain.workitem.Priority;
 import com.agentcenter.bridge.infrastructure.id.IdGenerator;
 import com.agentcenter.bridge.infrastructure.event.WebSocketSessionRegistry;
 import com.agentcenter.bridge.infrastructure.persistence.entity.AgentMessageEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.AgentSessionEntity;
+import com.agentcenter.bridge.infrastructure.persistence.entity.ConfirmationRequestEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.RuntimeEventEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowInstanceEntity;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.AgentMessageMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.AgentSessionMapper;
+import com.agentcenter.bridge.infrastructure.persistence.mapper.ConfirmationMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.RuntimeEventMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.WorkflowMapper;
 
@@ -52,9 +58,13 @@ public class AgentSessionService {
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final String CONTINUE_CURRENT_RUNTIME_PROMPT =
             "请继续当前节点未完成的回答，不要重新开始节点，也不要重复发送或复述工作流节点提示词。";
+    private static final int DEFAULT_SAFE_AUTO_RETRY_LIMIT = 2;
+    private static final long DEFAULT_SAFE_AUTO_RETRY_BACKOFF_MS = 700L;
+    private static final String RUNTIME_EXCEPTION_INTERACTION = "RUNTIME_EXCEPTION";
 
     private final AgentSessionMapper sessionMapper;
     private final AgentMessageMapper messageMapper;
+    private final ConfirmationMapper confirmationMapper;
     private final RuntimeEventMapper eventMapper;
     private final IdGenerator idGenerator;
     private final RuntimeGateway runtimeGateway;
@@ -62,6 +72,8 @@ public class AgentSessionService {
     private final RuntimeEventService runtimeEventService;
     private final WorkflowCommandService workflowCommandService;
     private final WorkflowMapper workflowMapper;
+    private final int safeAutoRetryLimit;
+    private final long safeAutoRetryBackoffMs;
     private final ExecutorService messageExecutor = Executors.newCachedThreadPool(runnable -> {
         Thread thread = new Thread(runnable, "agentcenter-message-" + MESSAGE_THREAD_COUNTER.getAndIncrement());
         thread.setDaemon(true);
@@ -70,15 +82,19 @@ public class AgentSessionService {
 
     public AgentSessionService(AgentSessionMapper sessionMapper,
                                AgentMessageMapper messageMapper,
+                               ConfirmationMapper confirmationMapper,
                                RuntimeEventMapper eventMapper,
                                IdGenerator idGenerator,
                                RuntimeGateway runtimeGateway,
                                WebSocketSessionRegistry webSocketSessionRegistry,
                                RuntimeEventService runtimeEventService,
                                @Lazy WorkflowCommandService workflowCommandService,
-                               WorkflowMapper workflowMapper) {
+                               WorkflowMapper workflowMapper,
+                               @Value("${agentcenter.runtime.guard.retry-limit:2}") int safeAutoRetryLimit,
+                               @Value("${agentcenter.runtime.guard.retry-backoff-ms:700}") long safeAutoRetryBackoffMs) {
         this.sessionMapper = sessionMapper;
         this.messageMapper = messageMapper;
+        this.confirmationMapper = confirmationMapper;
         this.eventMapper = eventMapper;
         this.idGenerator = idGenerator;
         this.runtimeGateway = runtimeGateway;
@@ -86,6 +102,8 @@ public class AgentSessionService {
         this.runtimeEventService = runtimeEventService;
         this.workflowCommandService = workflowCommandService;
         this.workflowMapper = workflowMapper;
+        this.safeAutoRetryLimit = normalizeRetryLimit(safeAutoRetryLimit);
+        this.safeAutoRetryBackoffMs = normalizeRetryBackoffMs(safeAutoRetryBackoffMs);
     }
 
     @PreDestroy
@@ -274,61 +292,82 @@ public class AgentSessionService {
 
         RuntimeType runtimeType = RuntimeType.valueOf(session.getRuntimeType());
         if (runtimeType == RuntimeType.MOCK) {
-            recordSendMessageEvent(sessionId, session, true, null, content);
+            recordSendMessageEvent(sessionId, session, true, null, content, 0, "NONE");
             broadcastMessages(sessionId);
             return;
         }
 
-        String effectiveRuntimeSessionId = session.getRuntimeSessionId();
-        boolean runtimeOk = true;
-        String runtimeError = null;
+        RuntimeDispatchResult dispatchResult = dispatchToRuntimeWithGuard(session, runtimeType, content);
+        String effectiveRuntimeSessionId = dispatchResult.runtimeSessionId();
+        boolean runtimeOk = dispatchResult.ok();
+        String runtimeError = dispatchResult.errorMessage();
 
-        try {
-            effectiveRuntimeSessionId = runtimeGateway.ensureSession(
-                    runtimeType, session.getWorkItemId(), sessionId, effectiveRuntimeSessionId);
-            if (!effectiveRuntimeSessionId.equals(session.getRuntimeSessionId())) {
-                session.setRuntimeSessionId(effectiveRuntimeSessionId);
-                sessionMapper.update(session);
-            }
-        } catch (Exception e) {
-            runtimeOk = false;
-            runtimeError = "Failed to create runtime session: " + e.getMessage();
+        recordSendMessageEvent(sessionId, session, runtimeOk, runtimeError, content,
+                dispatchResult.retryCount(), dispatchResult.recoveryMode());
+
+        if (!runtimeOk && runtimeError != null) {
+            insertRuntimeErrorMessage(sessionId, effectiveRuntimeSessionId, runtimeError);
+            createRuntimeExceptionConfirmation(session, effectiveRuntimeSessionId, content,
+                    runtimeError, dispatchResult.retryCount(), dispatchResult.recoveryMode());
         }
 
-        if (runtimeOk && effectiveRuntimeSessionId != null) {
+        broadcastMessages(sessionId);
+    }
+
+    private RuntimeDispatchResult dispatchToRuntimeWithGuard(AgentSessionEntity session,
+                                                             RuntimeType runtimeType,
+                                                             String content) {
+        String runtimeSessionId = session.getRuntimeSessionId();
+        int retryCount = 0;
+        String lastError = null;
+
+        for (int attempt = 0; attempt <= safeAutoRetryLimit; attempt++) {
+            if (attempt > 0) {
+                retryCount++;
+                sleepBeforeSafeRetry(attempt);
+            }
             try {
-                    runtimeGateway.sendMessage(runtimeType, effectiveRuntimeSessionId, content);
-                } catch (Exception e) {
-                    try {
-                        effectiveRuntimeSessionId = runtimeGateway.createSession(runtimeType, session.getWorkItemId(), sessionId);
-                        session.setRuntimeSessionId(effectiveRuntimeSessionId);
-                        sessionMapper.update(session);
-                        runtimeGateway.sendMessage(runtimeType, effectiveRuntimeSessionId, content);
-                } catch (Exception retryError) {
-                    runtimeOk = false;
-                    runtimeError = "Runtime sendMessage failed: " + retryError.getMessage();
+                runtimeSessionId = runtimeGateway.ensureSession(
+                        runtimeType, session.getWorkItemId(), session.getId(), runtimeSessionId);
+                if (runtimeSessionId != null && !runtimeSessionId.equals(session.getRuntimeSessionId())) {
+                    session.setRuntimeSessionId(runtimeSessionId);
+                    sessionMapper.update(session);
+                }
+                runtimeGateway.sendMessage(runtimeType, runtimeSessionId, content);
+                return RuntimeDispatchResult.ok(runtimeSessionId, retryCount);
+            } catch (Exception error) {
+                lastError = errorMessage(error);
+                if (!isSafeAutoRetryable(lastError) || attempt >= safeAutoRetryLimit) {
+                    break;
+                }
+                try {
+                    runtimeSessionId = runtimeGateway.createSession(runtimeType, session.getWorkItemId(), session.getId());
+                    session.setRuntimeSessionId(runtimeSessionId);
+                    sessionMapper.update(session);
+                } catch (Exception createError) {
+                    lastError = "Runtime recovery session creation failed: " + errorMessage(createError);
                 }
             }
         }
 
-        recordSendMessageEvent(sessionId, session, runtimeOk, runtimeError, content);
-
-        if (!runtimeOk && runtimeError != null) {
-            insertRuntimeErrorMessage(sessionId, effectiveRuntimeSessionId, runtimeError);
-        }
-
-        broadcastMessages(sessionId);
+        return RuntimeDispatchResult.failed(runtimeSessionId,
+                "Runtime sendMessage failed after " + retryCount + " guarded retry attempt(s): " + lastError,
+                retryCount,
+                retryCount > 0 ? "SAFE_AUTO_EXHAUSTED" : "USER_INTERVENTION_REQUIRED");
     }
 
     private void recordSendMessageEvent(String sessionId,
                                         AgentSessionEntity session,
                                         boolean runtimeOk,
                                         String runtimeError,
-                                        String content) {
+                                        String content,
+                                        int retryCount,
+                                        String recoveryMode) {
         RuntimeType runtimeType = RuntimeType.valueOf(session.getRuntimeType());
         String payloadJson = """
-                {"action":"sendMessage","runtimeType":"%s","runtimeOk":%s,"runtimeError":"%s","content":"%s"}
-                """.formatted(runtimeType.name(), runtimeOk, jsonEscape(runtimeError), jsonEscape(content)).trim();
+                {"action":"sendMessage","runtimeType":"%s","runtimeOk":%s,"runtimeError":"%s","content":"%s","retryCount":%d,"recoveryMode":"%s"}
+                """.formatted(runtimeType.name(), runtimeOk, jsonEscape(runtimeError), jsonEscape(content),
+                retryCount, jsonEscape(recoveryMode)).trim();
         RuntimeEventDto event = new RuntimeEventDto(
                 null, sessionId, session.getWorkItemId(), session.getWorkflowInstanceId(), null,
                 RuntimeEventType.STATUS, RuntimeEventSource.BRIDGE, payloadJson, null);
@@ -337,6 +376,123 @@ public class AgentSessionService {
         } catch (Exception e) {
             log.debug("Failed to publish sendMessage runtime event for {}", sessionId, e);
         }
+    }
+
+    private void createRuntimeExceptionConfirmation(AgentSessionEntity session,
+                                                    String runtimeSessionId,
+                                                    String originalContent,
+                                                    String runtimeError,
+                                                    int retryCount,
+                                                    String recoveryMode) {
+        String now = java.time.LocalDateTime.now().format(SQLITE_DATETIME);
+        WorkflowInstanceEntity instance = null;
+        String nodeInstanceId = null;
+        if (session.getWorkflowInstanceId() != null && !session.getWorkflowInstanceId().isBlank()) {
+            instance = workflowMapper.findInstanceById(session.getWorkflowInstanceId());
+            if (instance != null) {
+                nodeInstanceId = instance.getCurrentNodeInstanceId();
+                instance.setStatus(WorkflowStatus.BLOCKED.name());
+                instance.setUpdatedAt(now);
+                workflowMapper.updateInstance(instance);
+            }
+        }
+
+        ConfirmationRequestEntity confirmation = new ConfirmationRequestEntity();
+        confirmation.setId(idGenerator.nextId());
+        confirmation.setRequestType(ConfirmationRequestType.EXCEPTION.name());
+        confirmation.setStatus(ConfirmationStatus.PENDING.name());
+        confirmation.setWorkItemId(session.getWorkItemId());
+        confirmation.setWorkflowInstanceId(session.getWorkflowInstanceId());
+        confirmation.setWorkflowNodeInstanceId(nodeInstanceId);
+        confirmation.setAgentSessionId(session.getId());
+        confirmation.setRuntimeType(session.getRuntimeType());
+        confirmation.setRuntimeSessionId(runtimeSessionId);
+        confirmation.setTitle("Runtime 执行中断，需要你介入");
+        confirmation.setContent(buildRuntimeExceptionContent(runtimeError, retryCount));
+        confirmation.setContextSummary("Runtime 调用异常，Bridge 已完成安全自动重试；继续前需要用户选择恢复方式。");
+        confirmation.setOptionsJson("[{\"value\":\"SUPPLEMENT\",\"label\":\"补充指令继续\"},"
+                + "{\"value\":\"RETRY\",\"label\":\"防呆重试\"},"
+                + "{\"value\":\"SKIP\",\"label\":\"跳过当前节点\"},"
+                + "{\"value\":\"REJECT\",\"label\":\"取消恢复\"}]");
+        confirmation.setPriority(Priority.HIGH.name());
+        confirmation.setInteractionType(RUNTIME_EXCEPTION_INTERACTION);
+        confirmation.setInteractionRequired(1);
+        confirmation.setInteractionContextJson("""
+                {"failureCategory":"TRANSPORT_OR_RUNTIME","retryPolicy":"USER_CONFIRM","retryCount":%d,"recoveryMode":"%s","originalUserMessage":"%s","errorMessage":"%s"}
+                """.formatted(retryCount, jsonEscape(recoveryMode), jsonEscape(originalContent), jsonEscape(runtimeError)).trim());
+        confirmation.setCreatedAt(now);
+        confirmation.setUpdatedAt(now);
+        confirmationMapper.insert(confirmation);
+
+        runtimeEventService.publishEvent(new RuntimeEventDto(
+                null,
+                session.getId(),
+                session.getWorkItemId(),
+                session.getWorkflowInstanceId(),
+                nodeInstanceId,
+                RuntimeEventType.CONFIRMATION_CREATED,
+                RuntimeEventSource.BRIDGE,
+                "{\"confirmationId\":\"" + confirmation.getId() + "\",\"requestType\":\"EXCEPTION\",\"interactionType\":\""
+                        + RUNTIME_EXCEPTION_INTERACTION + "\"}",
+                null
+        ));
+    }
+
+    private String buildRuntimeExceptionContent(String runtimeError, int retryCount) {
+        return """
+                Runtime 执行中断，但会话仍可恢复。
+
+                失败原因：%s
+                已自动安全重试：%d 次
+
+                你可以补充一句指令让 Agent 基于当前上下文继续；也可以发起防呆重试、跳过当前节点，或取消本次恢复。
+                """.formatted(runtimeError, retryCount).trim();
+    }
+
+    static boolean isSafeAutoRetryable(String message) {
+        String normalized = message == null ? "" : message.toLowerCase();
+        return normalized.contains("connection")
+                || normalized.contains("refused")
+                || normalized.contains("reset")
+                || normalized.contains("timeout")
+                || normalized.contains("timed out")
+                || isHttp5xxFailure(normalized)
+                || normalized.contains("interrupted")
+                || normalized.contains("serve")
+                || normalized.contains("超时")
+                || normalized.contains("连接");
+    }
+
+    private static boolean isHttp5xxFailure(String normalized) {
+        return normalized.contains("http 5")
+                || normalized.contains("status 5")
+                || normalized.contains(" 500")
+                || normalized.contains(" 502")
+                || normalized.contains(" 503")
+                || normalized.contains(" 504")
+                || normalized.contains(" 5xx");
+    }
+
+    private String errorMessage(Exception error) {
+        return error.getMessage() != null && !error.getMessage().isBlank()
+                ? error.getMessage()
+                : error.getClass().getSimpleName();
+    }
+
+    private void sleepBeforeSafeRetry(int attempt) {
+        try {
+            Thread.sleep(safeAutoRetryBackoffMs * attempt);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    static int normalizeRetryLimit(int configuredLimit) {
+        return configuredLimit >= 0 ? configuredLimit : DEFAULT_SAFE_AUTO_RETRY_LIMIT;
+    }
+
+    static long normalizeRetryBackoffMs(long configuredBackoffMs) {
+        return configuredBackoffMs >= 0 ? configuredBackoffMs : DEFAULT_SAFE_AUTO_RETRY_BACKOFF_MS;
     }
 
     private void insertRuntimeErrorMessage(String sessionId, String runtimeSessionId, String runtimeError) {
@@ -437,5 +593,21 @@ public class AgentSessionService {
                 .replace("\"", "\\\"")
                 .replace("\n", "\\n")
                 .replace("\r", "\\r");
+    }
+
+    private record RuntimeDispatchResult(boolean ok,
+                                         String runtimeSessionId,
+                                         String errorMessage,
+                                         int retryCount,
+                                         String recoveryMode) {
+        static RuntimeDispatchResult ok(String runtimeSessionId, int retryCount) {
+            return new RuntimeDispatchResult(true, runtimeSessionId, null, retryCount,
+                    retryCount > 0 ? "SAFE_AUTO_RECOVERED" : "NONE");
+        }
+
+        static RuntimeDispatchResult failed(String runtimeSessionId, String errorMessage,
+                                            int retryCount, String recoveryMode) {
+            return new RuntimeDispatchResult(false, runtimeSessionId, errorMessage, retryCount, recoveryMode);
+        }
     }
 }
