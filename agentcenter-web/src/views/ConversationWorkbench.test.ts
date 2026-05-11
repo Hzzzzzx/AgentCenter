@@ -8,9 +8,11 @@ import { sessionApi } from '../api/sessions'
 import { workflowApi } from '../api/workflows'
 import { artifactApi } from '../api/artifacts'
 import { confirmationApi } from '../api/confirmations'
+import { eventApi } from '../api/events'
 import { useRuntimeStore } from '../stores/runtime'
 import { useRuntimeSettingsStore } from '../stores/runtimeSettings'
-import type { AgentSessionDto, ArtifactDto, ConfirmationRequestDto, WorkflowInstanceDto } from '../api/types'
+import { useWorkflowStore } from '../stores/workflows'
+import type { AgentMessageDto, AgentSessionDto, ArtifactDto, ConfirmationRequestDto, WorkflowInstanceDto } from '../api/types'
 
 const mocks = vi.hoisted(() => {
   const runningWorkItem = {
@@ -148,6 +150,14 @@ const mocks = vi.hoisted(() => {
   return { runningWorkItem, runningSession, runningWorkflow, workflowDefinition, pendingConfirmation, capturedArtifact }
 })
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((res) => {
+    resolve = res
+  })
+  return { promise, resolve }
+}
+
 vi.mock('../api/workItems', () => ({
   workItemApi: {
     list: vi.fn().mockResolvedValue([mocks.runningWorkItem]),
@@ -261,6 +271,105 @@ describe('ConversationWorkbench.vue', () => {
     expect(sendButton.classes()).toContain('conversation-workbench__send--pause')
     expect(sendButton.attributes('aria-label')).toBe('暂停当前回复')
     expect(wrapper.find('.node-state-area--running').exists()).toBe(false)
+  })
+
+  it('does not reconnect stale SSE after switching target sessions', async () => {
+    const oldSession = {
+      ...mocks.runningSession,
+      id: 'session-old',
+      sessionType: 'GENERAL',
+      title: '旧会话',
+      workItemId: null,
+      workflowInstanceId: null,
+    } satisfies AgentSessionDto
+    const currentSession = {
+      ...mocks.runningSession,
+      id: 'session-current',
+      sessionType: 'GENERAL',
+      title: '当前会话',
+      workItemId: null,
+      workflowInstanceId: null,
+    } satisfies AgentSessionDto
+    const oldMessages = deferred<AgentMessageDto[]>()
+
+    vi.mocked(sessionApi.list).mockResolvedValue([oldSession, currentSession])
+    vi.mocked(sessionApi.getById).mockImplementation((id: string) =>
+      Promise.resolve(id === 'session-old' ? oldSession : currentSession)
+    )
+    vi.mocked(sessionApi.getMessages).mockImplementation((id: string) =>
+      id === 'session-old' ? oldMessages.promise : Promise.resolve([])
+    )
+
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(ConversationWorkbench, {
+      props: {
+        targetSessionId: 'session-old',
+      },
+      global: {
+        plugins: [pinia],
+      },
+    })
+
+    await vi.waitFor(() => {
+      expect(sessionApi.getMessages).toHaveBeenCalledWith('session-old')
+    })
+
+    await wrapper.setProps({ targetSessionId: 'session-current' })
+    await flushPromises()
+
+    oldMessages.resolve([])
+    await flushPromises()
+
+    const runtimeStore = useRuntimeStore()
+    expect(runtimeStore.activeSessionId).toBe('session-current')
+    expect(vi.mocked(eventApi.streamSessionEvents).mock.calls.map(([sessionId]) => sessionId)).toEqual(['session-current'])
+  })
+
+  it('does not let a late cancel response switch back to the cancelled session', async () => {
+    const currentSession = {
+      ...mocks.runningSession,
+      id: 'session-current',
+      sessionType: 'GENERAL',
+      title: '当前会话',
+      workItemId: null,
+      workflowInstanceId: null,
+    } satisfies AgentSessionDto
+    const cancelResult = deferred<void>()
+
+    vi.mocked(sessionApi.list).mockResolvedValue([mocks.runningSession, currentSession])
+    vi.mocked(sessionApi.getById).mockImplementation((id: string) =>
+      Promise.resolve(id === 'session-current' ? currentSession : mocks.runningSession)
+    )
+    vi.mocked(sessionApi.cancel).mockReturnValue(cancelResult.promise)
+
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(ConversationWorkbench, {
+      props: {
+        workItemId: 'work-1',
+        targetSessionId: 'session-1',
+      },
+      global: {
+        plugins: [pinia],
+      },
+    })
+
+    await flushPromises()
+
+    await wrapper.find('.conversation-workbench__send--pause').trigger('click')
+    await wrapper.setProps({ workItemId: undefined, targetSessionId: 'session-current' })
+    await flushPromises()
+
+    cancelResult.resolve()
+    await flushPromises()
+
+    const runtimeStore = useRuntimeStore()
+    expect(runtimeStore.activeSessionId).toBe('session-current')
+    expect(vi.mocked(eventApi.streamSessionEvents).mock.calls.map(([sessionId]) => sessionId)).toEqual([
+      'session-1',
+      'session-current',
+    ])
   })
 
   it('opens captured artifacts by artifactId from conversation evidence', async () => {
@@ -452,6 +561,46 @@ describe('ConversationWorkbench.vue', () => {
     const sendButton = wrapper.find('.conversation-workbench__send')
     expect(sendButton.classes()).not.toContain('conversation-workbench__send--pause')
     expect(sendButton.attributes('aria-label')).toBe('发送消息')
+  })
+
+  it('does not leak workflow interactions into a general session', async () => {
+    const generalSession: AgentSessionDto = {
+      id: 'general-session',
+      sessionType: 'GENERAL',
+      title: '通用会话',
+      workItemId: null,
+      workflowInstanceId: null,
+      runtimeType: 'OPENCODE',
+      status: 'ACTIVE',
+      createdAt: '2026-05-08T10:00:00Z',
+    }
+    const workflowConfirmation: ConfirmationRequestDto = {
+      ...mocks.pendingConfirmation,
+      agentSessionId: null,
+    }
+    vi.mocked(sessionApi.list).mockResolvedValueOnce([generalSession, mocks.runningSession])
+    vi.mocked(sessionApi.getById).mockResolvedValueOnce(generalSession)
+    vi.mocked(confirmationApi.list).mockImplementation((status?: string) =>
+      Promise.resolve(status === 'PENDING' ? [workflowConfirmation] : [])
+    )
+
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    useWorkflowStore().setActiveInstance(mocks.runningWorkflow)
+    const wrapper = mount(ConversationWorkbench, {
+      props: {
+        targetSessionId: 'general-session',
+      },
+      global: {
+        plugins: [pinia],
+      },
+    })
+
+    await flushPromises()
+
+    expect(wrapper.find('.interaction-bar').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('确认继续下一步')
+    expect(wrapper.find('.conversation-workbench__send').attributes('aria-label')).toBe('发送消息')
   })
 
   it('submits exception recovery from the composer with SUPPLEMENT', async () => {

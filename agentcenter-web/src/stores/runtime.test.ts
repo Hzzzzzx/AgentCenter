@@ -326,6 +326,24 @@ describe('useRuntimeStore — SSE event handlers', () => {
     expect(capturedOnEvents).toHaveLength(2)
   })
 
+  it('ignores SSE events without the subscribed session id', () => {
+    vi.useFakeTimers()
+    const runtimeStore = useRuntimeStore()
+
+    runtimeStore.connectSSE('sess-1')
+    capturedOnEvent!(makeEvent({
+      eventType: 'ASSISTANT_DELTA',
+      id: 'evt-missing-session',
+      sessionId: null,
+      payloadJson: JSON.stringify({ delta: '不应显示的文本' }),
+    }))
+
+    vi.advanceTimersByTime(40)
+    expect(runtimeStore.events).toHaveLength(0)
+    expect(runtimeStore.streamingText).toBe('')
+    expect(runtimeStore.busy).toBe(false)
+  })
+
   it('syncs persisted assistant message when assistant completed event arrives', async () => {
     vi.useFakeTimers()
     const { sessionApi } = await import('../api/sessions')

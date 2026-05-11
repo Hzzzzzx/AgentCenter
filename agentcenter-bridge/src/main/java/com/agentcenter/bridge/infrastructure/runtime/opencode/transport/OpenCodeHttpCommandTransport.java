@@ -7,6 +7,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.Locale;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -122,12 +123,15 @@ public class OpenCodeHttpCommandTransport implements RuntimeCommandTransport {
         String cwd = payload.path("workingDirectory").asText("");
         String permissionId = payload.path("permissionId").asText("");
         boolean approved = payload.path("approved").asBoolean(true);
+        if (permissionId.isBlank()) {
+            return RuntimeAckEnvelope.nack(command.messageId(), RuntimeType.OPENCODE,
+                    "permissionId is required for PERMISSION_RESPOND");
+        }
 
         ObjectNode body = objectMapper.createObjectNode();
-        body.put("id", permissionId);
-        body.put("action", approved ? "allow" : "deny");
+        body.put("reply", approved ? "once" : "reject");
 
-        HttpRequest request = buildPost(baseUrl, "/session/" + sessionId + "/permission", body, cwd, timeout);
+        HttpRequest request = buildPost(baseUrl, "/permission/" + permissionId + "/reply", body, cwd, timeout);
         execute(request);
         return buildAck(command, null);
     }
@@ -233,6 +237,13 @@ public class OpenCodeHttpCommandTransport implements RuntimeCommandTransport {
         if (status >= 300) {
             throw new RuntimeTransportException(
                     "opencode serve returned HTTP " + status + ": " + response.body(), null, false);
+        }
+        String contentType = response.headers() != null
+                ? response.headers().firstValue("Content-Type").orElse("")
+                : "";
+        if (contentType.toLowerCase(Locale.ROOT).contains("text/html")) {
+            throw new RuntimeTransportException(
+                    "opencode serve returned HTML for API request " + request.uri(), null, false);
         }
         return response;
     }

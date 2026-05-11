@@ -8,6 +8,7 @@ export const useSessionStore = defineStore('sessions', () => {
   const activeSession = ref<AgentSessionDto | null>(null)
   const messages = ref<AgentMessageDto[]>([])
   const loading = ref(false)
+  let selectionSeq = 0
 
   async function loadSessions() {
     loading.value = true
@@ -19,15 +20,24 @@ export const useSessionStore = defineStore('sessions', () => {
   }
 
   async function selectSession(id: string) {
-    activeSession.value = await sessionApi.getById(id)
-    messages.value = await sessionApi.getMessages(id)
+    const seq = ++selectionSeq
+    const [session, nextMessages] = await Promise.all([
+      sessionApi.getById(id),
+      sessionApi.getMessages(id),
+    ])
+    if (seq !== selectionSeq) return
+    activeSession.value = session
+    messages.value = nextMessages.filter((message) => message.sessionId === id)
   }
 
   async function createSession(data: { sessionType: string; title?: string; workItemId?: string; workflowInstanceId?: string; runtimeType?: string }) {
+    const seq = ++selectionSeq
     const session = await sessionApi.create(data)
     upsertSession(session)
-    activeSession.value = session
-    messages.value = []
+    if (seq === selectionSeq) {
+      activeSession.value = session
+      messages.value = []
+    }
     return session
   }
 
@@ -39,11 +49,14 @@ export const useSessionStore = defineStore('sessions', () => {
   async function sendMessage(data: SendMessageRequest): Promise<AgentMessageDto | undefined>
   async function sendMessage(contentOrData: string | SendMessageRequest): Promise<AgentMessageDto | undefined> {
     if (!activeSession.value) return
+    const sessionId = activeSession.value.id
     const data: SendMessageRequest = typeof contentOrData === 'string'
       ? { content: contentOrData }
       : contentOrData
-    const message = await sessionApi.sendMessage(activeSession.value.id, data)
-    messages.value.push(message)
+    const message = await sessionApi.sendMessage(sessionId, data)
+    if (activeSession.value?.id === sessionId && message.sessionId === sessionId) {
+      messages.value.push(message)
+    }
     return message
   }
 
@@ -53,12 +66,17 @@ export const useSessionStore = defineStore('sessions', () => {
   }
 
   function replaceMessages(nextMessages: AgentMessageDto[]) {
-    messages.value = nextMessages
+    const sessionId = activeSession.value?.id
+    messages.value = sessionId
+      ? nextMessages.filter((message) => message.sessionId === sessionId)
+      : []
   }
 
   function appendStreamingMessage(content: string) {
+    const sessionId = activeSession.value?.id
+    if (!sessionId) return
     const lastMsg = messages.value[messages.value.length - 1]
-    if (lastMsg && lastMsg.role === 'ASSISTANT' && lastMsg.status === 'STREAMING') {
+    if (lastMsg && lastMsg.sessionId === sessionId && lastMsg.role === 'ASSISTANT' && lastMsg.status === 'STREAMING') {
       messages.value[messages.value.length - 1] = {
         ...lastMsg,
         content: (lastMsg.content || '') + content,
@@ -67,7 +85,7 @@ export const useSessionStore = defineStore('sessions', () => {
     }
     messages.value.push({
       id: `streaming_${Date.now()}`,
-      sessionId: activeSession.value?.id || '',
+      sessionId,
       role: 'ASSISTANT',
       content,
       contentFormat: 'TEXT',

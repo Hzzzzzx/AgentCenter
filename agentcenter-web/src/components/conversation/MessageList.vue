@@ -73,6 +73,7 @@ const normalizedMessages = computed(() =>
     dedupeWorkflowInputMessages(
       props.messages
       .map((message, index) => ({ message, index }))
+      .filter(({ message }) => !props.activeSessionId || message.sessionId === props.activeSessionId)
       .filter(({ message }) => Boolean(message.content?.trim()))
       .sort((a, b) => compareMessages(a.message, b.message, a.index, b.index))
       .map(({ message }) => message)
@@ -106,18 +107,20 @@ const projectorInput = computed<ProjectorInput>(() => ({
       createdAt: m.createdAt,
       workflowNodeInstanceId: m.workflowNodeInstanceId,
     })),
-  runtimeEvents: (props.runtimeEvents ?? []).map(e => ({
-    id: e.id,
-    sessionId: e.sessionId,
-    workItemId: e.workItemId,
-    workflowInstanceId: e.workflowInstanceId,
-    workflowNodeInstanceId: e.workflowNodeInstanceId,
-    eventType: e.eventType as string,
-    eventSource: e.eventSource,
-    payloadJson: e.payloadJson,
-    seqNo: e.seqNo,
-    createdAt: e.createdAt,
-  })),
+  runtimeEvents: (props.runtimeEvents ?? [])
+    .filter(e => !props.activeSessionId || e.sessionId === props.activeSessionId)
+    .map(e => ({
+      id: e.id,
+      sessionId: e.sessionId,
+      workItemId: e.workItemId,
+      workflowInstanceId: e.workflowInstanceId,
+      workflowNodeInstanceId: e.workflowNodeInstanceId,
+      eventType: e.eventType as string,
+      eventSource: e.eventSource,
+      payloadJson: e.payloadJson,
+      seqNo: e.seqNo,
+      createdAt: e.createdAt,
+    })),
   confirmations: props.confirmations.map(c => ({
     id: c.id,
     requestType: c.requestType,

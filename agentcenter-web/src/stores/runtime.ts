@@ -50,7 +50,7 @@ export const useRuntimeStore = defineStore('runtime', () => {
     const subscribedSessionId = sessionId
     activeSse.value = eventApi.streamSessionEvents(subscribedSessionId, (event: RuntimeEventDto) => {
       if (activeSessionId.value !== subscribedSessionId) return
-      if (event.sessionId && event.sessionId !== subscribedSessionId) return
+      if (event.sessionId !== subscribedSessionId) return
       if (hasSeenEvent(event)) return
       events.value.push(event)
       applyRuntimeEvent(event)
