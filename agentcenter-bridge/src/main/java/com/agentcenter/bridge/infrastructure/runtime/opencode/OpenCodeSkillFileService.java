@@ -134,6 +134,28 @@ public class OpenCodeSkillFileService {
         return skillsRoot(resolveWorkingDirectory(projectWorkdir)).toString();
     }
 
+    public String readSkillContent(String skillName) {
+        return readSkillContent(null, skillName);
+    }
+
+    public String readSkillContent(Path projectWorkdir, String skillName) {
+        validateSkillName(skillName);
+        Path workspace = resolveWorkingDirectory(projectWorkdir);
+        Path skillsRoot = skillsRoot(workspace);
+        Path skillFile = skillsRoot.resolve(skillName).resolve("SKILL.md").normalize();
+        if (!skillFile.startsWith(skillsRoot)) {
+            throw new IllegalStateException("Refusing to read skill outside skills directory: " + skillFile);
+        }
+        if (!Files.isRegularFile(skillFile)) {
+            return "";
+        }
+        try {
+            return Files.readString(skillFile, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to read skill file: " + skillFile, e);
+        }
+    }
+
     private Path skillsRoot(Path workingDir) {
         return OpenCodeSkillPaths.managedProjectSkillsRoot(workingDir);
     }

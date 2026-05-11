@@ -216,6 +216,44 @@ class OpenCodeRuntimeAdapterCreateSessionTest {
     }
 
     @Test
+    void runSkillSendsManagedSkillContentInPrompt() throws Exception {
+        ObjectNode ackPayload = objectMapper.createObjectNode();
+        RuntimeAckEnvelope ack = new RuntimeAckEnvelope(
+                null, "agentcenter.runtime.v1", null,
+                "ack-msg-id", "corr-id", null,
+                RuntimeType.OPENCODE, null, "ses_legacy",
+                true, null, ackPayload, null);
+
+        ArgumentCaptor<RuntimeCommandEnvelope> commandCaptor =
+                ArgumentCaptor.forClass(RuntimeCommandEnvelope.class);
+        when(commandTransport.send(commandCaptor.capture())).thenReturn(ack);
+        when(skillFileService.readSkillContent("legacy-skill"))
+                .thenReturn("# Legacy Skill\n\nFollow the embedded rules.");
+        when(commandTransport.fetchMessages(anyString(), anyString(), eq("ses_legacy")))
+                .thenReturn(objectMapper.readTree("[]"))
+                .thenReturn(objectMapper.readTree("""
+                        [
+                          {
+                            "info": {"id": "msg-done", "role": "assistant", "finish": "stop"},
+                            "parts": [{"type": "text", "text": "done"}]
+                          }
+                        ]
+                        """));
+
+        SkillRunResult result = adapter.runSkill("ses_legacy", "legacy-skill", "ctx");
+
+        assertTrue(result.success());
+        RuntimeCommandEnvelope sentCommand = commandCaptor.getValue();
+        String promptText = sentCommand.payload()
+                .path("parts").path(0).path("text").asText("");
+        assertTrue(promptText.contains("请按 AgentCenter 已内联提供的 Skill `legacy-skill`"));
+        assertTrue(promptText.contains("不要调用 Runtime 的 skill 加载工具重复读取这个 Skill"));
+        assertTrue(promptText.contains("<AGENTCENTER_SKILL_FILE name=\"legacy-skill\">"));
+        assertTrue(promptText.contains("# Legacy Skill"));
+        assertTrue(promptText.contains("Follow the embedded rules."));
+    }
+
+    @Test
     void sendMessagePublishesPromptDebugEvent() {
         ObjectNode createAckPayload = objectMapper.createObjectNode();
         createAckPayload.put("sessionId", "ses_debug");
