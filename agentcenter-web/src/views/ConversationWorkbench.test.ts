@@ -3,9 +3,12 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { nextTick } from 'vue'
 import ConversationWorkbench from './ConversationWorkbench.vue'
+import MessageList from '../components/conversation/MessageList.vue'
 import { sessionApi } from '../api/sessions'
+import { confirmationApi } from '../api/confirmations'
 import { useRuntimeStore } from '../stores/runtime'
 import { useRuntimeSettingsStore } from '../stores/runtimeSettings'
+import type { ConfirmationRequestDto } from '../api/types'
 
 const mocks = vi.hoisted(() => {
   const runningWorkItem = {
@@ -291,6 +294,51 @@ describe('ConversationWorkbench.vue', () => {
     expect(wrapper.find('.interaction-bar').exists()).toBe(true)
     expect(wrapper.find('.wf-control').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('进入下一步')
+  })
+
+  it('resolves permission interactions with APPROVE instead of CHOOSE', async () => {
+    const permissionConfirmation: ConfirmationRequestDto = {
+      ...(mocks.pendingConfirmation as ConfirmationRequestDto),
+      id: 'perm-session-1-write',
+      requestType: 'PERMISSION',
+      title: '允许写入文件？',
+      content: 'OpenCode permission request',
+      optionsJson: JSON.stringify([
+        { value: 'APPROVE', label: '允许' },
+        { value: 'REJECT', label: '拒绝' },
+      ]),
+    }
+    vi.mocked(confirmationApi.list).mockImplementation((status?: string) =>
+      Promise.resolve(status === 'PENDING' ? [permissionConfirmation] : [])
+    )
+
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(ConversationWorkbench, {
+      props: {
+        workItemId: 'work-1',
+        targetSessionId: 'session-1',
+      },
+      global: {
+        plugins: [pinia],
+      },
+    })
+
+    await flushPromises()
+
+    wrapper.findComponent(MessageList).vm.$emit('resolve-confirmation', permissionConfirmation.id, 'APPROVE', {
+      requestType: 'PERMISSION',
+    })
+    await flushPromises()
+
+    expect(confirmationApi.resolve).toHaveBeenCalledWith(
+      permissionConfirmation.id,
+      expect.objectContaining({
+        actionType: 'APPROVE',
+        payload: { choice: 'APPROVE' },
+        comment: 'APPROVE',
+      }),
+    )
   })
 
   it('shows prompt debug replies, annotated events, and copy actions', async () => {

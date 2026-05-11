@@ -12,6 +12,7 @@ import java.time.Duration;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeAckEnvelope;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeCommandEnvelope;
@@ -119,6 +120,29 @@ class OpenCodeHttpCommandTransportTest {
 
         assertFalse(ack.success());
         assertTrue(ack.message().contains("runtimeSessionId is required"));
+    }
+
+    @Test
+    void permissionRespondPostsDecisionToRuntimeSession() throws Exception {
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("baseUrl", "http://localhost:4097");
+        payload.put("workingDirectory", "/tmp/work");
+        payload.put("permissionId", "perm_abc");
+        payload.put("approved", true);
+
+        RuntimeCommandEnvelope command = RuntimeCommandEnvelope.of(
+                RuntimeCommandTypes.PERMISSION_RESPOND, RuntimeType.OPENCODE,
+                "ses_abc123", payload);
+
+        RuntimeAckEnvelope ack = transport.send(command);
+
+        assertTrue(ack.success());
+        ArgumentCaptor<HttpRequest> captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(httpClient).send(captor.capture(), any());
+        HttpRequest request = captor.getValue();
+        assertEquals("POST", request.method());
+        assertEquals("http://localhost:4097/session/ses_abc123/permission", request.uri().toString());
+        assertEquals("/tmp/work", request.headers().firstValue("x-opencode-directory").orElse(""));
     }
 
     @Test

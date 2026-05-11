@@ -7,6 +7,7 @@ import { useWorkItemStore } from '../stores/workItems'
 import { useConfirmationStore } from '../stores/confirmations'
 import { useRuntimeSettingsStore } from '../stores/runtimeSettings'
 import { useWorkItemWorkflowProjectionStore } from '../stores/workItemWorkflowProjection'
+import { useNotificationStore } from '../stores/notifications'
 import MessageList from '../components/conversation/MessageList.vue'
 import WorkflowNodeControlBar from '../components/conversation/WorkflowNodeControlBar.vue'
 import { runtimeResourceApi } from '../api/runtimeResources'
@@ -17,6 +18,7 @@ import type {
   AgentStateStatus,
   ArtifactDto,
   ConfirmationActionType,
+  ConfirmationRequestType,
   RuntimeEventDto,
   WorkflowNodeInstanceDto,
   WorkflowNodeStatus,
@@ -87,6 +89,7 @@ const runtimeStore = useRuntimeStore()
 const runtimeSettingsStore = useRuntimeSettingsStore()
 const workItemStore = useWorkItemStore()
 const confirmationStore = useConfirmationStore()
+const notificationStore = useNotificationStore()
 const workflowProjectionStore = useWorkItemWorkflowProjectionStore()
 
 const inputText = ref('')
@@ -574,6 +577,19 @@ watch(
 async function handleSend() {
   const text = inputText.value.trim()
   if (!text || isConversationRunning.value) return
+  const blockingInteraction = currentInteractions.value[0]
+  if (blockingInteraction) {
+    notificationStore.push({
+      anchor: 'right-panel',
+      tone: 'warning',
+      title: '请先处理当前交互',
+      message: blockingInteraction.requestType === 'PERMISSION'
+        ? 'Runtime 正在等待权限授权，发送普通消息不会解除权限等待。'
+        : '当前节点正在等待你的确认或补充，请先处理交互卡片。',
+      durationMs: 5200,
+    })
+    return
+  }
 
   const session = await ensureActiveSession()
   if (!session) return
@@ -629,11 +645,7 @@ async function handleInteractionChanged(_confirmationId?: string) {
 }
 
 async function handleResolveConfirmation(confirmationId: string, value: string, meta?: { requestType?: string; interactionType?: string }) {
-  const VALID_ACTION_TYPES: ConfirmationActionType[] = ['ENTER_SESSION', 'APPROVE', 'REJECT', 'SUPPLEMENT', 'CHOOSE', 'RETRY', 'SKIP', 'ADVANCE']
-  const isWorkflowAdvance = meta?.interactionType === 'WORKFLOW_ADVANCE'
-  const actionType: ConfirmationActionType = (isWorkflowAdvance && VALID_ACTION_TYPES.includes(value as ConfirmationActionType))
-    ? value as ConfirmationActionType
-    : 'CHOOSE'
+  const actionType = actionTypeForInteraction(meta?.requestType, value, meta?.interactionType)
   try {
     await confirmationStore.resolveConfirmation(confirmationId, {
       actionType,
@@ -641,9 +653,50 @@ async function handleResolveConfirmation(confirmationId: string, value: string, 
       comment: value,
     })
     await handleInteractionChanged()
-  } catch {
-    // resolveConfirmation already shows notification on error
+  } catch (error) {
+    notificationStore.push({
+      anchor: 'right-panel',
+      tone: 'error',
+      title: '交互提交失败',
+      message: error instanceof Error ? error.message : '权限或确认提交失败，请稍后重试。',
+      durationMs: 5200,
+    })
   }
+}
+
+function actionTypeForInteraction(
+  requestType: string | undefined,
+  value: string,
+  interactionType?: string,
+): ConfirmationActionType {
+  const normalized = normalizeConfirmationAction(value)
+  const typedRequest = requestType as ConfirmationRequestType | undefined
+
+  if (typedRequest === 'PERMISSION' || typedRequest === 'APPROVAL' || typedRequest === 'CONFIRM') {
+    return normalized === 'REJECT' ? 'REJECT' : 'APPROVE'
+  }
+  if (typedRequest === 'EXCEPTION') {
+    return normalized === 'SKIP' || normalized === 'REJECT' ? normalized : 'RETRY'
+  }
+  if (typedRequest === 'INPUT_REQUIRED') {
+    return normalized === 'REJECT' ? 'REJECT' : 'SUPPLEMENT'
+  }
+  if (typedRequest === 'DECISION') {
+    if (interactionType === 'WORKFLOW_ADVANCE') {
+      return normalized ?? 'CHOOSE'
+    }
+    return normalized === 'REJECT' ? 'REJECT' : 'CHOOSE'
+  }
+
+  return normalized ?? 'CHOOSE'
+}
+
+function normalizeConfirmationAction(value: string): ConfirmationActionType | undefined {
+  const normalized = value.trim().toUpperCase()
+  const validActions: ConfirmationActionType[] = ['ENTER_SESSION', 'APPROVE', 'REJECT', 'SUPPLEMENT', 'CHOOSE', 'RETRY', 'SKIP', 'ADVANCE']
+  return validActions.includes(normalized as ConfirmationActionType)
+    ? normalized as ConfirmationActionType
+    : undefined
 }
 
 async function refreshSkills() {
