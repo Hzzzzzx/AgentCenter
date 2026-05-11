@@ -1,5 +1,6 @@
 package com.agentcenter.bridge.infrastructure.runtime.opencode;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -9,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeEventEnvelope;
+import com.agentcenter.bridge.application.runtime.protocol.RuntimeEventTypes;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeRawEvent;
 import com.agentcenter.bridge.application.runtime.transport.RuntimeEventSink;
 import com.agentcenter.bridge.application.runtime.transport.RuntimeTransportException;
@@ -20,6 +22,8 @@ import com.agentcenter.bridge.domain.runtime.RuntimeType;
 import com.agentcenter.bridge.infrastructure.runtime.opencode.transport.OpenCodeSseEventStreamTransport;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 /**
  * Subscribes to the opencode serve SSE event stream via
@@ -153,11 +157,28 @@ public class OpenCodeEventSubscriber implements RuntimeTranslationContext, Runti
         } else {
             log.error("Unrecoverable SSE transport error: {}", error.getMessage());
         }
+        publishStreamDiagnostic(
+            RuntimeEventTypes.RUNTIME_ERROR,
+            "failed",
+            "OpenCode 事件流异常",
+            error.getMessage(),
+            error.isRecoverable(),
+            "event.stream.error"
+        );
     }
 
     @Override
     public void onClose() {
         log.info("SSE event stream closed by transport");
+        subscriptionHandle = null;
+        publishStreamDiagnostic(
+            RuntimeEventTypes.RUNTIME_STATUS_CHANGED,
+            "disconnected",
+            "OpenCode 事件流已断开",
+            "OpenCode 事件流连接已关闭，后续事件需要重新订阅后才能继续同步。",
+            true,
+            "event.stream.closed"
+        );
     }
 
     // --- Subscription setup ---
@@ -165,6 +186,43 @@ public class OpenCodeEventSubscriber implements RuntimeTranslationContext, Runti
     private void startSubscription(String baseUrl, String workingDirectory) {
         transport.configure(baseUrl, workingDirectory);
         subscriptionHandle = transport.subscribe(this);
+    }
+
+    private void publishStreamDiagnostic(String eventType, String status, String title, String summary,
+                                         boolean recoverable, String rawEventType) {
+        List<RuntimeEventEnvelope> envelopes = new ArrayList<>();
+        opencodeToAgentSession.forEach((opencodeSessionId, agentSessionId) -> {
+            ObjectNode payload = JsonNodeFactory.instance.objectNode();
+            payload.put("type", "runtime_connection");
+            payload.put("kind", "runtime_connection");
+            payload.put("status", status);
+            payload.put("title", title);
+            payload.put("label", title);
+            payload.put("summary", summary == null || summary.isBlank() ? title : summary);
+            payload.put("recoverable", recoverable);
+            payload.put("rawEventType", rawEventType);
+            payload.put("runtimeSessionId", opencodeSessionId);
+
+            WorkflowContext ctx = agentSessionToWorkflow.get(agentSessionId);
+            envelopes.add(new RuntimeEventEnvelope(
+                "runtime-event",
+                eventType,
+                null,
+                null,
+                "opencode-event-stream",
+                RuntimeType.OPENCODE,
+                agentSessionId,
+                opencodeSessionId,
+                ctx != null ? ctx.workItemId() : null,
+                ctx != null ? ctx.workflowInstanceId() : null,
+                ctx != null ? ctx.workflowNodeInstanceId() : null,
+                payload,
+                java.time.OffsetDateTime.now()
+            ));
+        });
+        if (!envelopes.isEmpty()) {
+            dispatcher.dispatch(envelopes);
+        }
     }
 
     // --- Test support: expose normalizeAndPublish for glue tests ---

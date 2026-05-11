@@ -31,7 +31,7 @@ interface ParsedPayload {
   reason?: string
   errorMessage?: string
   label?: string
-  output?: string
+  output?: unknown
   isError?: boolean
   success?: boolean
   skillName?: string
@@ -41,15 +41,19 @@ interface ParsedPayload {
   actionDescription?: string
   question?: string
   contextSummary?: string
-  options?: string
+  options?: unknown
   comment?: string
-  resolutionPayload?: string
+  resolutionPayload?: unknown
   command?: string
-  input?: string
+  input?: unknown
   args?: unknown
   arguments?: unknown
-  result?: string
-  detail?: string
+  result?: unknown
+  detail?: unknown
+  error?: unknown
+  rawPart?: unknown
+  rawEventType?: string
+  rawPartType?: string
   nodeName?: string
   visibility?: string
   filePath?: string
@@ -96,6 +100,54 @@ function parsePayload(payloadJson: string | null): ParsedPayload {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function stringifyPayloadValue(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed || undefined
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  try {
+    const serialized = JSON.stringify(value, null, 2)
+    return serialized && serialized !== '{}' && serialized !== '[]' ? serialized : undefined
+  } catch {
+    return String(value)
+  }
+}
+
+function payloadText(payload: ParsedPayload, keys: Array<keyof ParsedPayload>): string | undefined {
+  for (const key of keys) {
+    const value = stringifyPayloadValue(payload[key])
+    if (value) return value
+  }
+  return undefined
+}
+
+function nestedRecord(value: unknown, key: string): Record<string, unknown> | undefined {
+  if (!isRecord(value)) return undefined
+  const nested = value[key]
+  return isRecord(nested) ? nested : undefined
+}
+
+function rawPartText(payload: ParsedPayload, keys: string[], stateKeys: string[] = keys): string | undefined {
+  const raw = isRecord(payload.rawPart) ? payload.rawPart : undefined
+  if (!raw) return undefined
+  const state = nestedRecord(raw, 'state')
+  for (const key of stateKeys) {
+    const value = state ? stringifyPayloadValue(state[key]) : undefined
+    if (value) return value
+  }
+  for (const key of keys) {
+    const value = stringifyPayloadValue(raw[key])
+    if (value) return value
+  }
+  return undefined
+}
+
 function timestamp(value: string | null | undefined): number {
   if (!value) return 0
   const trimmed = value.trim()
@@ -134,18 +186,12 @@ function isNoisyToolHeartbeat(payload: ParsedPayload): boolean {
   if (payload.kind !== 'tool_call') return false
   const hasToolIdentity = Boolean(payload.toolCallId || payload.toolName || payload.skillName || payload.command)
   if (hasToolIdentity) return false
-  const label = (payload.label || payload.title || payload.status || '').trim().toLowerCase()
+  const label = (payloadText(payload, ['label', 'title', 'status']) || '').trim().toLowerCase()
   return ['running', 'completed', 'done', 'idle'].includes(label) && !payload.summary
 }
 
 function isPromptDebug(payload: ParsedPayload): boolean {
   return payload.kind === 'prompt_debug'
-}
-
-function isRuntimeStatusHeartbeat(eventType: string, payload: ParsedPayload): boolean {
-  return eventType === 'STATUS'
-    && payload.type === 'status'
-    && ['running', 'idle', 'waiting_user'].includes(payload.label || '')
 }
 
 function isAssistantStreamEvent(eventType: string): boolean {
@@ -163,22 +209,12 @@ function isConfirmationEvent(eventType: string): boolean {
   return eventType === 'CONFIRMATION_CREATED' || eventType === 'CONFIRMATION_RESOLVED' || eventType === 'PERMISSION_REQUIRED'
 }
 
-function isInactiveConfirmationCreated(
-  ee: EnrichedEvent,
-  confirmationMap: Map<string, ProjectorConfirmation>,
-): boolean {
-  if (ee.event.eventType !== 'CONFIRMATION_CREATED') return false
-  const confId = ee.payload.confirmationId || ee.payload.id
-  const confirmation = confId ? confirmationMap.get(confId) : undefined
-  return !confirmation || (confirmation.status !== 'PENDING' && confirmation.status !== 'IN_CONVERSATION')
-}
-
 function toolNameFromPayload(payload: ParsedPayload): string {
-  return payload.skillName || payload.toolName || payload.label || payload.command || 'tool'
+  return payloadText(payload, ['skillName', 'toolName', 'label', 'command']) || rawPartText(payload, ['tool']) || 'tool'
 }
 
 function rawToolNameFromPayload(payload: ParsedPayload): string {
-  return payload.toolName || payload.rawToolName || payload.skillName || payload.label || payload.command || 'tool'
+  return payloadText(payload, ['toolName', 'rawToolName', 'skillName', 'label', 'command']) || rawPartText(payload, ['tool']) || 'tool'
 }
 
 function isWorkflowSkillPayload(payload: ParsedPayload, event: ProjectorRuntimeEvent): boolean {
@@ -205,12 +241,15 @@ function buildToolPart(lifecycle: ToolLifecycle): ToolInvocationPart {
   // Scan ALL lifecycle events for output — don't rely on last payload only,
   // because a trailing PROCESS_TRACE (without output) would overwrite the real tool output.
   const outputSummary = sorted
-    .map(e => e.payload.output || e.payload.result || e.payload.errorMessage || e.payload.reason || e.payload.detail)
+    .map(e => payloadText(e.payload, ['output', 'result', 'error', 'errorMessage', 'reason', 'detail'])
+      || rawPartText(e.payload, ['output', 'result', 'error']))
     .find(v => v !== undefined && v !== null && v !== '') ?? undefined
   const inputSummary = sorted
-    .map(e => e.payload.input || e.payload.command)
+    .map(e => payloadText(e.payload, ['input', 'command', 'args', 'arguments'])
+      || rawPartText(e.payload, ['input', 'command', 'args', 'arguments']))
     .find(v => v !== undefined && v !== null && v !== '')
-    ?? (firstPayload.input || firstPayload.command)
+    ?? payloadText(firstPayload, ['input', 'command', 'args', 'arguments'])
+    ?? rawPartText(firstPayload, ['input', 'command', 'args', 'arguments'])
 
   const defaultExpanded = status === 'failed'
     || (outputSummary !== undefined && outputSummary.length < 200)
@@ -287,7 +326,7 @@ function extractLoadedSkillName(output?: string): string | undefined {
 function isInternalSkillLoaderLifecycle(lifecycle: ToolLifecycle): boolean {
   const sorted = [...lifecycle.events].sort(sortEvents)
   const output = sorted
-    .map(e => e.payload.output || e.payload.result)
+    .map(e => payloadText(e.payload, ['output', 'result']) || rawPartText(e.payload, ['output', 'result']))
     .find(v => v !== undefined && v !== null && v !== '')
   const name = lifecycle.rawToolName.toLowerCase()
   const onlyInternalSkillToolEvents = name === 'skill'
@@ -321,54 +360,42 @@ function artifactTitleFromPayload(payload: ParsedPayload): string {
   return payload.summary || 'Artifact'
 }
 
+function parseDecisionOptions(value: unknown): Array<{ value: string; label: string; description?: string }> {
+  let parsed: unknown = value
+  if (typeof value === 'string') {
+    try {
+      parsed = JSON.parse(value)
+    } catch {
+      return []
+    }
+  }
+  if (!Array.isArray(parsed)) return []
+  return parsed.map((item: unknown) => {
+    if (typeof item === 'object' && item !== null) {
+      const rec = item as Record<string, unknown>
+      return {
+        value: String(rec.value ?? rec.key ?? rec.id ?? ''),
+        label: String(rec.label ?? rec.name ?? rec.title ?? rec.value ?? ''),
+        description: rec.description ? String(rec.description) : undefined,
+      }
+    }
+    return { value: String(item), label: String(item) }
+  })
+}
+
 function buildDecisionPart(ee: EnrichedEvent, confirmation?: ProjectorConfirmation): DecisionGatePart {
   const p = ee.payload
   const confirmationId = p.confirmationId || p.id || ee.event.id
-  let options: Array<{ value: string; label: string; description?: string }> = []
-  if (p.options) {
-    try {
-      const parsed: unknown = JSON.parse(p.options)
-      if (Array.isArray(parsed)) {
-        options = parsed.map((item: unknown) => {
-          if (typeof item === 'object' && item !== null) {
-            const rec = item as Record<string, unknown>
-            return {
-              value: String(rec.value ?? rec.key ?? rec.id ?? ''),
-              label: String(rec.label ?? rec.name ?? rec.title ?? rec.value ?? ''),
-              description: rec.description ? String(rec.description) : undefined,
-            }
-          }
-          return { value: String(item), label: String(item) }
-        })
-      }
-    } catch { /* use empty options */ }
-  } else if (confirmation?.optionsJson) {
-    try {
-      const parsed: unknown = JSON.parse(confirmation.optionsJson)
-      if (Array.isArray(parsed)) {
-        options = parsed.map((item: unknown) => {
-          if (typeof item === 'object' && item !== null) {
-            const rec = item as Record<string, unknown>
-            return {
-              value: String(rec.value ?? rec.key ?? rec.id ?? ''),
-              label: String(rec.label ?? rec.name ?? rec.title ?? rec.value ?? ''),
-              description: rec.description ? String(rec.description) : undefined,
-            }
-          }
-          return { value: String(item), label: String(item) }
-        })
-      }
-    } catch { /* empty */ }
-  }
+  const payloadOptions = parseDecisionOptions(p.options)
+  const options = payloadOptions.length > 0
+    ? payloadOptions
+    : parseDecisionOptions(confirmation?.optionsJson)
 
   const activeConfirmation = confirmation?.status === 'PENDING' || confirmation?.status === 'IN_CONVERSATION'
   const status = ee.event.eventType === 'CONFIRMATION_RESOLVED' || !activeConfirmation
     ? 'resolved'
     : 'waiting'
   const selectedValue = status === 'resolved' ? selectedDecisionValueFromAction(p, options) : undefined
-  if (selectedValue) {
-    options = options.filter(option => option.value === selectedValue)
-  }
 
   return {
     type: 'decision',
@@ -395,7 +422,7 @@ function resolveSelectedDecisionValue(
 ): string | undefined {
   const candidates = [
     payload.actionType,
-    payload.resolutionPayload,
+    stringifyPayloadValue(payload.resolutionPayload),
     parseResolutionPayloadValue(payload.resolutionPayload),
     payload.actionDescription,
   ].filter((value): value is string => Boolean(value && value.trim()))
@@ -406,10 +433,10 @@ function resolveSelectedDecisionValue(
     .find(value => options.some(option => option.value === value))
 }
 
-function parseResolutionPayloadValue(value: string | undefined): string | undefined {
+function parseResolutionPayloadValue(value: unknown): string | undefined {
   if (!value) return undefined
   try {
-    const parsed: unknown = JSON.parse(value)
+    const parsed: unknown = typeof value === 'string' ? JSON.parse(value) : value
     if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
       const rec = parsed as Record<string, unknown>
       return String(rec.value ?? rec.actionType ?? rec.action ?? rec.choice ?? '')
@@ -434,10 +461,11 @@ function determineStepKind(ee: EnrichedEvent): StepKind {
   const { event, payload } = ee
   if (isToolLifecycleEvent(event.eventType, payload)) return 'tool'
   if (payload.kind === 'artifact') return 'artifact'
-  if (payload.kind === 'reasoning_summary') return 'reasoning'
+  if (payload.kind === 'reasoning' || payload.kind === 'reasoning_summary' || payload.rawPartType === 'reasoning') return 'reasoning'
   if (payload.kind === 'error' || event.eventType === 'ERROR') return 'error'
   if (isConfirmationEvent(event.eventType)) return 'decision'
-  if (payload.kind === 'node_status') return 'status'
+  if (payload.kind === 'node_status' || event.eventType === 'STATUS' || payload.kind === 'runtime_connection') return 'status'
+  if (payload.kind === 'subtask' || payload.kind === 'agent') return 'subtask'
   return 'context'
 }
 
@@ -453,8 +481,8 @@ function buildStepFromSingleEvent(ee: EnrichedEvent, order: number, confirmation
   } else if (kind === 'error') {
     parts.push({
       type: 'error',
-      message: payload.errorMessage || payload.detail || payload.reason || 'Error occurred',
-      detail: payload.output || payload.result || undefined,
+      message: payloadText(payload, ['errorMessage', 'detail', 'reason', 'summary', 'label']) || rawPartText(payload, ['error']) || 'Error occurred',
+      detail: payloadText(payload, ['output', 'result', 'error']) || rawPartText(payload, ['output', 'result', 'error']),
       defaultExpanded: true,
       rawEventRef: {
         eventId: event.id,
@@ -465,8 +493,8 @@ function buildStepFromSingleEvent(ee: EnrichedEvent, order: number, confirmation
   } else if (kind === 'status') {
     parts.push({
       type: 'status',
-      label: payload.title || payload.label || 'Status',
-      detail: payload.summary || payload.status || undefined,
+      label: payloadText(payload, ['title', 'label', 'kind']) || 'Status',
+      detail: payloadText(payload, ['summary', 'status', 'detail']),
       rawEventRef: {
         eventId: event.id,
         eventType: event.eventType,
@@ -476,7 +504,7 @@ function buildStepFromSingleEvent(ee: EnrichedEvent, order: number, confirmation
   } else if (kind === 'reasoning') {
     parts.push({
       type: 'reasoning',
-      summary: payload.summary || payload.title || 'Reasoning',
+      summary: payloadText(payload, ['summary', 'label', 'output', 'result', 'detail']) || rawPartText(payload, ['text', 'summary']) || 'Reasoning',
       messageId: undefined,
       partId: undefined,
       defaultExpanded: false,
@@ -513,19 +541,23 @@ function buildStepFromSingleEvent(ee: EnrichedEvent, order: number, confirmation
     }
   }
 
-  const stepStatus: 'running' | 'completed' | 'failed' = kind === 'error' ? 'failed'
-    : event.eventType === 'SKILL_STARTED' ? 'running'
-    : 'completed'
+  const stepStatus: 'running' | 'completed' | 'failed' | 'waiting_input' = kind === 'error' || payload.status === 'failed'
+    ? 'failed'
+    : kind === 'decision' && event.eventType !== 'CONFIRMATION_RESOLVED'
+      ? 'waiting_input'
+      : event.eventType === 'SKILL_STARTED' || payload.status === 'running'
+        ? 'running'
+        : 'completed'
 
   return {
     id: event.id,
     order,
     kind,
     title: keyProgressTitle(payload, event.eventType) || stepTitle(payload, event.eventType, kind),
-    summary: kind === 'context' ? undefined : payload.summary || undefined,
+    summary: kind === 'context' ? undefined : payloadText(payload, ['summary']) || undefined,
     status: stepStatus,
     startedAt: event.createdAt,
-    completedAt: kind === 'error' || stepStatus === 'completed' ? event.createdAt : undefined,
+    completedAt: kind === 'error' || stepStatus === 'completed' || stepStatus === 'failed' ? event.createdAt : undefined,
     parts,
     rawEventRefs: [{
       eventId: event.id,
@@ -536,11 +568,10 @@ function buildStepFromSingleEvent(ee: EnrichedEvent, order: number, confirmation
 }
 
 function renderableContextText(payload: ParsedPayload): string | undefined {
-  const text = payload.output || payload.result || payload.summary || payload.title
+  const text = payloadText(payload, ['output', 'result', 'summary', 'title', 'label', 'detail'])
+    || rawPartText(payload, ['text', 'summary', 'reason'])
   if (!text) return undefined
-  const normalized = normalizeMarkdownText(text)
-  if (!isMarkdownLike(normalized)) return undefined
-  return normalized
+  return normalizeMarkdownText(text)
 }
 
 function normalizeMarkdownText(text: string): string {
@@ -552,13 +583,6 @@ function normalizeMarkdownText(text: string): string {
     .trim()
 }
 
-function isMarkdownLike(text: string): boolean {
-  return /(^|\n)#{1,6}[ \t]+\S/.test(text)
-    || /\*\*[^*]+\*\*/.test(text)
-    || /(^|\n)\s*[-*]\s+\S/.test(text)
-    || text.includes('\n\n')
-}
-
 function stepTitle(payload: ParsedPayload, eventType: string, kind: StepKind): string {
   if (kind === 'context') {
     const text = renderableContextText(payload)
@@ -568,7 +592,7 @@ function stepTitle(payload: ParsedPayload, eventType: string, kind: StepKind): s
       return 'Agent 输出'
     }
   }
-  return payload.title || payload.label || toolNameFromPayload(payload) || eventType
+  return payloadText(payload, ['title', 'label']) || toolNameFromPayload(payload) || eventType
 }
 
 function userFacingNodeReason(reason?: string): string {
@@ -583,13 +607,13 @@ function userFacingNodeReason(reason?: string): string {
 
 function keyProgressTitle(payload: ParsedPayload, eventType: string): string | undefined {
   if (eventType === 'SKILL_STARTED') {
-    const skill = payload.skillName || payload.toolName || payload.label
+    const skill = payloadText(payload, ['skillName', 'toolName', 'label'])
     return skill ? `开始执行 ${skill}` : '开始执行 Skill'
   }
   if (eventType === 'SKILL_COMPLETED') {
     if (payload.nodeState === 'NEEDS_USER_INPUT') return userFacingNodeReason(payload.nodeStateReason || payload.reason)
-    if (payload.nodeState === 'READY_TO_ADVANCE') return `${payload.skillName || 'Skill'} 已生成产物`
-    return `${payload.skillName || 'Skill'} 执行完成`
+    if (payload.nodeState === 'READY_TO_ADVANCE') return `${payloadText(payload, ['skillName']) || 'Skill'} 已生成产物`
+    return `${payloadText(payload, ['skillName']) || 'Skill'} 执行完成`
   }
   if (eventType === 'CONFIRMATION_RESOLVED') {
     return payload.actionDescription || payload.comment || payload.title || '已处理用户确认'
@@ -723,7 +747,7 @@ function buildDisplayItems(
       steps,
       status,
       currentAction,
-      collapsedByDefault: hasAnswer && status === 'completed',
+      collapsedByDefault: false,
     })
   }
 
@@ -809,10 +833,6 @@ export function projectConversationTurns(input: ProjectorInput): ConversationTur
       continue
     }
 
-    if (isRuntimeStatusHeartbeat(ee.event.eventType, ee.payload)) {
-      continue
-    }
-
     if (isAssistantStreamEvent(ee.event.eventType)) {
       continue
     }
@@ -824,14 +844,6 @@ export function projectConversationTurns(input: ProjectorInput): ConversationTur
     }
 
     if (isActiveInteractionEvent(ee, confirmationMap)) {
-      continue
-    }
-
-    if (isInactiveConfirmationCreated(ee, confirmationMap)) {
-      continue
-    }
-
-    if (ee.payload.kind === 'node_status') {
       continue
     }
 
@@ -975,24 +987,8 @@ function extractAnswerText(messages: ProjectorMessage[]): string {
     .join('\n')
 }
 
-function parseOptionsFromJson(json: string): Array<{ value: string; label: string; description?: string }> {
-  try {
-    const parsed: unknown = JSON.parse(json)
-    if (Array.isArray(parsed)) {
-      return parsed.map((item: unknown) => {
-        if (typeof item === 'object' && item !== null) {
-          const rec = item as Record<string, unknown>
-          return {
-            value: String(rec.value ?? rec.key ?? rec.id ?? ''),
-            label: String(rec.label ?? rec.name ?? rec.title ?? rec.value ?? ''),
-            description: rec.description ? String(rec.description) : undefined,
-          }
-        }
-        return { value: String(item), label: String(item) }
-      })
-    }
-  } catch { /* empty */ }
-  return []
+function parseOptionsFromJson(value: unknown): Array<{ value: string; label: string; description?: string }> {
+  return parseDecisionOptions(value)
 }
 
 function findPendingInteraction(
@@ -1019,6 +1015,8 @@ function findPendingInteraction(
             prompt: ee.payload.contextSummary || undefined,
             options,
             status: 'waiting',
+            requestType: confirmation.requestType,
+            interactionType: confirmation.interactionType ?? undefined,
           },
           createdAt: ee.event.createdAt,
         }
@@ -1037,6 +1035,7 @@ function findPendingInteraction(
             prompt: ee.payload.contextSummary || undefined,
             options,
             status: 'waiting',
+            requestType: 'PERMISSION',
           },
           createdAt: ee.event.createdAt,
         }

@@ -52,6 +52,9 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
             case "message.part.updated", "message.part.delta" -> {
                 result.addAll(translateMessagePart(opencodeSessionId, agentSessionId, props, eventType, context));
             }
+            case "message.part.removed" -> {
+                result.addAll(translateMessagePartRemoved(opencodeSessionId, agentSessionId, props, context));
+            }
             case "session.status" -> {
                 result.addAll(translateSessionStatus(opencodeSessionId, agentSessionId, props, context));
             }
@@ -70,6 +73,9 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
             }
             case "permission.asked", "permission.updated" -> {
                 result.addAll(translatePermission(opencodeSessionId, agentSessionId, props, context));
+            }
+            case "permission.replied" -> {
+                result.addAll(translatePermissionClosed(opencodeSessionId, agentSessionId, props, context));
             }
             case "question.asked" -> {
                 result.addAll(translateQuestionAsked(opencodeSessionId, agentSessionId, props, context));
@@ -163,32 +169,54 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
         if ("text".equals(partType)) {
             String text = resolvePartText(opencodeSessionId, part, delta);
             if (!text.isEmpty()) {
+                ObjectNode payload = payloadObject("assistant_delta", text,
+                    projectionMeta(eventType, partType, Map.of("delta", text, "messageId", msgId, "partId", partId)));
+                attachOpenCodePart(payload, properties, part, eventType, partType, msgId, partId);
                 result.add(buildEnvelope(RuntimeEventTypes.CONVERSATION_DELTA, agentSessionId,
-                    opencodeSessionId, payloadNode("assistant_delta", text,
-                    projectionMeta(eventType, partType, Map.of("delta", text, "messageId", msgId, "partId", partId)))));
+                    opencodeSessionId, payload));
             }
         } else if ("tool".equals(partType)) {
             result.addAll(translateToolPart(opencodeSessionId, agentSessionId, part, eventType, context));
         } else if ("reasoning".equals(partType)) {
             String summary = safeReasoningSummary(part, delta);
             if (!summary.isBlank()) {
+                ObjectNode payload = (ObjectNode) processTracePayload("reasoning", "running", "思考", summary, null, null,
+                        eventType, partType, Map.of("messageId", msgId, "partId", partId));
+                attachOpenCodePart(payload, properties, part, eventType, partType, msgId, partId);
                 result.add(buildProcessTraceEnvelope(
                     RuntimeEventTypes.PROCESS_TRACE, agentSessionId, opencodeSessionId,
-                    processTracePayload("reasoning_summary", "running", "思考摘要", summary, null, null,
-                        eventType, partType, Map.of("messageId", msgId, "partId", partId)),
+                    payload,
                     context));
             }
         } else if ("file".equals(partType) || "patch".equals(partType) || "artifact".equals(partType)) {
             result.addAll(translateArtifactPart(opencodeSessionId, agentSessionId, part, eventType, partType, context));
+        } else if ("step-start".equals(partType) || "step-finish".equals(partType)
+                || "snapshot".equals(partType) || "compaction".equals(partType)) {
+            result.addAll(translateLifecyclePart(opencodeSessionId, agentSessionId, part, eventType, partType, context));
         } else if ("retry".equals(partType)) {
             result.addAll(translateRetryPart(opencodeSessionId, agentSessionId, part, eventType, context));
         } else if ("subtask".equals(partType)) {
             result.addAll(translateSubtaskPart(opencodeSessionId, agentSessionId, part, eventType, context));
-        } else if ("agent-handoff".equals(partType)) {
+        } else if ("agent".equals(partType) || "agent-handoff".equals(partType)) {
             result.addAll(translateAgentHandoffPart(opencodeSessionId, agentSessionId, part, eventType, context));
         }
 
         return result;
+    }
+
+    private List<RuntimeEventEnvelope> translateMessagePartRemoved(String opencodeSessionId, String agentSessionId,
+                                                                    JsonNode properties,
+                                                                    RuntimeTranslationContext context) {
+        String partId = properties.path("partID").asText(properties.path("partId").asText(""));
+        String messageId = properties.path("messageID").asText(properties.path("messageId").asText(""));
+        ObjectNode payload = (ObjectNode) processTracePayload("part_removed", "completed", "消息片段已移除",
+                partId.isBlank() ? "OpenCode 移除了一个消息片段" : "OpenCode 移除了消息片段 " + partId,
+                null, null, "message.part.removed", null, Map.of());
+        if (!messageId.isBlank()) payload.put("messageId", messageId);
+        if (!partId.isBlank()) payload.put("partId", partId);
+        payload.set("rawProperties", properties.deepCopy());
+        return List.of(buildProcessTraceEnvelope(RuntimeEventTypes.PROCESS_TRACE, agentSessionId,
+                opencodeSessionId, payload, context));
     }
 
     private String resolvePartText(String opencodeSessionId, JsonNode part, String delta) {
@@ -213,14 +241,18 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
 
         if (("running".equals(status) || "completed".equals(status) || "error".equals(status))
                 && state.addRunningTool(opencodeSessionId, callId)) {
-            result.add(buildEnvelope(RuntimeEventTypes.TOOL_STARTED, agentSessionId,
-                opencodeSessionId, payloadNode("skill_started", skillName,
+            ObjectNode startedPayload = payloadObject("skill_started", skillName,
                 projectionMeta(eventType, "tool", Map.of(
-                    "toolCallId", callId, "rawName", skillName, "displayName", displayName)))));
+                    "toolCallId", callId, "rawName", skillName, "displayName", displayName)));
+            attachToolState(startedPayload, part);
+            result.add(buildEnvelope(RuntimeEventTypes.TOOL_STARTED, agentSessionId,
+                opencodeSessionId, startedPayload));
+            ObjectNode tracePayload = (ObjectNode) processTracePayload("tool_call", "running", "调用工具",
+                    "正在调用 " + displayName, skillName, callId, eventType, "tool", Map.of());
+            attachToolState(tracePayload, part);
             result.add(buildProcessTraceEnvelope(
                 RuntimeEventTypes.PROCESS_TRACE, agentSessionId, opencodeSessionId,
-                processTracePayload("tool_call", "running", "调用工具", "正在调用 " + skillName, skillName, callId,
-                    eventType, "tool", Map.of()),
+                tracePayload,
                 context));
         }
 
@@ -231,22 +263,42 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
                     ? (stateNode.path("result").isMissingNode() ? part.path("output") : stateNode.path("result"))
                     : stateNode.path("output"));
             boolean isError = "error".equals(status);
-            result.add(buildEnvelope(RuntimeEventTypes.TOOL_COMPLETED, agentSessionId,
-                opencodeSessionId, payloadNode("skill_completed", skillName,
+            ObjectNode completedPayload = payloadObject("skill_completed", skillName,
                 projectionMeta(eventType, "tool", Map.of(
                     "toolCallId", callId, "rawName", skillName, "displayName", displayName,
-                    "isError", isError, "output", output)))));
+                    "isError", isError, "output", output)));
+            attachToolState(completedPayload, part);
+            result.add(buildEnvelope(RuntimeEventTypes.TOOL_COMPLETED, agentSessionId,
+                opencodeSessionId, completedPayload));
             String traceStatus = isError ? "failed" : "completed";
-            String traceSummary = isError ? skillName + " 调用失败" : skillName + " 调用完成";
+            String traceSummary = isError ? displayName + " 调用失败" : displayName + " 调用完成";
+            ObjectNode tracePayload = (ObjectNode) processTracePayload("tool_call", traceStatus, "调用工具",
+                    traceSummary, skillName, callId, eventType, "tool", Map.of("output", output, "isError", isError));
+            attachToolState(tracePayload, part);
             result.add(buildProcessTraceEnvelope(
                 RuntimeEventTypes.PROCESS_TRACE, agentSessionId, opencodeSessionId,
-                processTracePayload("tool_call", traceStatus, "调用工具", traceSummary, skillName, callId,
-                    eventType, "tool", Map.of()),
+                tracePayload,
                 context));
             state.removeRunningTool(opencodeSessionId, callId);
         }
 
         return result;
+    }
+
+    private List<RuntimeEventEnvelope> translatePermissionClosed(String opencodeSessionId, String agentSessionId,
+                                                                  JsonNode properties,
+                                                                  RuntimeTranslationContext context) {
+        String requestId = properties.path("requestID").asText(properties.path("requestId").asText(""));
+        String reply = properties.path("reply").asText("");
+        String confirmationId = PermissionConfirmationHandler.confirmationIdFor(opencodeSessionId, requestId);
+        ObjectNode payload = (ObjectNode) processTracePayload("confirmation", "completed", "权限确认",
+                reply.isBlank() ? "权限请求已处理" : "权限请求已处理：" + reply,
+                "permission", requestId, "permission.replied", null,
+                Map.of("confirmationId", confirmationId));
+        if (!reply.isBlank()) payload.put("reply", reply);
+        payload.set("rawProperties", properties.deepCopy());
+        return List.of(buildProcessTraceEnvelope(RuntimeEventTypes.PROCESS_TRACE, agentSessionId,
+                opencodeSessionId, payload, context));
     }
 
     private List<RuntimeEventEnvelope> translateSessionStatus(String opencodeSessionId, String agentSessionId,
@@ -334,12 +386,48 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
             default -> "产物 " + filePath;
         };
 
+        ObjectNode payload = (ObjectNode) processTracePayload("artifact", "completed", "产物变更", summary, null, null,
+                eventType, partType, Map.of("artifactId", artifactId, "filePath", filePath));
+        attachOpenCodePart(payload, part, part, eventType, partType,
+                part.path("messageID").asText(part.path("message_id").asText("")), artifactId);
+        copyIfPresent(payload, part, "url");
+        copyIfPresent(payload, part, "mime");
+        copyIfPresent(payload, part, "filename");
+        copyIfPresent(payload, part, "hash");
+        if (part.has("files")) payload.set("files", part.get("files").deepCopy());
         result.add(buildProcessTraceEnvelope(
             RuntimeEventTypes.PROCESS_TRACE, agentSessionId, opencodeSessionId,
-            processTracePayload("artifact", "completed", "产物变更", summary, null, null,
-                eventType, partType, Map.of("artifactId", artifactId, "filePath", filePath)),
+            payload,
             context));
         return result;
+    }
+
+    private List<RuntimeEventEnvelope> translateLifecyclePart(String opencodeSessionId, String agentSessionId,
+                                                               JsonNode part, String eventType, String partType,
+                                                               RuntimeTranslationContext context) {
+        String partId = part.path("id").asText(part.path("partID").asText(""));
+        String messageId = part.path("messageID").asText(part.path("message_id").asText(""));
+        String kind = partType.replace('-', '_');
+        String title = switch (partType) {
+            case "step-start" -> "步骤开始";
+            case "step-finish" -> "步骤完成";
+            case "snapshot" -> "会话快照";
+            case "compaction" -> "上下文压缩";
+            default -> "OpenCode 事件";
+        };
+        String summary = switch (partType) {
+            case "step-finish" -> firstNonBlank(part.path("reason").asText(""), "OpenCode 完成一个执行步骤");
+            case "compaction" -> part.path("auto").asBoolean(false) ? "OpenCode 自动压缩了上下文" : "OpenCode 压缩了上下文";
+            default -> title;
+        };
+        ObjectNode payload = (ObjectNode) processTracePayload(kind, "completed", title, summary, null, null,
+                eventType, partType, Map.of("messageId", messageId, "partId", partId));
+        attachOpenCodePart(payload, part, part, eventType, partType, messageId, partId);
+        if (part.has("cost")) payload.set("cost", part.get("cost").deepCopy());
+        if (part.has("tokens")) payload.set("tokens", part.get("tokens").deepCopy());
+        if (part.has("snapshot")) payload.set("snapshot", part.get("snapshot").deepCopy());
+        return List.of(buildProcessTraceEnvelope(RuntimeEventTypes.PROCESS_TRACE, agentSessionId,
+                opencodeSessionId, payload, context));
     }
 
     private List<RuntimeEventEnvelope> translateRetryPart(String opencodeSessionId, String agentSessionId,
@@ -352,10 +440,14 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
         String reason = part.path("reason").asText("");
         String summary = "重试中 (" + attempt + "/" + maxAttempts + ")" + (reason.isEmpty() ? "" : ": " + reason);
 
+        ObjectNode payload = (ObjectNode) processTracePayload("retry", "running", "重试", summary, null, null,
+                eventType, "retry", Map.of("operationId", retryId));
+        attachOpenCodePart(payload, part, part, eventType, "retry",
+                part.path("messageID").asText(part.path("message_id").asText("")), retryId);
+        if (part.has("error")) payload.set("error", part.get("error").deepCopy());
         result.add(buildProcessTraceEnvelope(
             RuntimeEventTypes.PROCESS_TRACE, agentSessionId, opencodeSessionId,
-            processTracePayload("retry", "running", "重试", summary, null, null,
-                eventType, "retry", Map.of("operationId", retryId)),
+            payload,
             context));
         return result;
     }
@@ -368,10 +460,13 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
         String name = part.path("name").asText("子任务");
         String subtaskStatus = part.path("status").asText("running");
 
+        ObjectNode payload = (ObjectNode) processTracePayload("subtask", subtaskStatus, "子任务", name, null, null,
+                eventType, "subtask", Map.of("operationId", subtaskId));
+        attachOpenCodePart(payload, part, part, eventType, "subtask",
+                part.path("messageID").asText(part.path("message_id").asText("")), subtaskId);
         result.add(buildProcessTraceEnvelope(
             RuntimeEventTypes.PROCESS_TRACE, agentSessionId, opencodeSessionId,
-            processTracePayload("subtask", subtaskStatus, "子任务", name, null, null,
-                eventType, "subtask", Map.of("operationId", subtaskId)),
+            payload,
             context));
         return result;
     }
@@ -381,7 +476,7 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
                                                                    RuntimeTranslationContext context) {
         List<RuntimeEventEnvelope> result = new ArrayList<>();
         String handoffId = part.path("id").asText("");
-        String targetAgent = part.path("targetAgent").asText("unknown");
+        String targetAgent = firstNonBlank(part.path("targetAgent").asText(""), part.path("name").asText(""), "unknown");
         String parentStepId = part.path("parentStepId").asText("");
         String summary = "移交至 " + targetAgent;
 
@@ -389,10 +484,14 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
         extra.put("operationId", handoffId);
         if (!parentStepId.isEmpty()) extra.put("parentStepId", parentStepId);
 
+        ObjectNode payload = (ObjectNode) processTracePayload("agent", "running", "Agent", summary, null, null,
+                eventType, part.path("type").asText("agent"), extra);
+        attachOpenCodePart(payload, part, part, eventType, part.path("type").asText("agent"),
+                part.path("messageID").asText(part.path("message_id").asText("")), handoffId);
+        if (part.has("source")) payload.set("source", part.get("source").deepCopy());
         result.add(buildProcessTraceEnvelope(
             RuntimeEventTypes.PROCESS_TRACE, agentSessionId, opencodeSessionId,
-            processTracePayload("agent_handoff", "running", "Agent 移交", summary, null, null,
-                eventType, "agent-handoff", extra),
+            payload,
             context));
         return result;
     }
@@ -416,6 +515,10 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
     }
 
     private JsonNode payloadNode(String type, Object label, Map<String, Object> extra) {
+        return payloadObject(type, label, extra);
+    }
+
+    private ObjectNode payloadObject(String type, Object label, Map<String, Object> extra) {
         var node = JsonNodeFactory.instance.objectNode();
         node.put("type", type);
         if (label instanceof String s) node.put("label", s);
@@ -439,6 +542,41 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
         if (v instanceof String s) node.put(key, s);
         else if (v instanceof Boolean b) node.put(key, b);
         else if (v instanceof Number n) node.put(key, n.doubleValue());
+    }
+
+    private void attachOpenCodePart(ObjectNode node, JsonNode properties, JsonNode part,
+                                    String rawEventType, String rawPartType,
+                                    String messageId, String partId) {
+        if (rawEventType != null && !rawEventType.isBlank() && !node.has("rawEventType")) node.put("rawEventType", rawEventType);
+        if (rawPartType != null && !rawPartType.isBlank() && !node.has("rawPartType")) node.put("rawPartType", rawPartType);
+        if (messageId != null && !messageId.isBlank() && !node.has("messageId")) node.put("messageId", messageId);
+        if (partId != null && !partId.isBlank() && !node.has("partId")) node.put("partId", partId);
+        String field = properties.path("field").asText("");
+        if (!field.isBlank()) node.put("field", field);
+        if (properties.has("delta") && !node.has("delta")) node.put("delta", properties.path("delta").asText(""));
+        if (part != null && part.isObject()) node.set("rawPart", part.deepCopy());
+    }
+
+    private void attachToolState(ObjectNode node, JsonNode part) {
+        attachOpenCodePart(node, part, part, "message.part.updated", "tool",
+                part.path("messageID").asText(part.path("message_id").asText("")),
+                part.path("id").asText(part.path("partID").asText("")));
+        JsonNode stateNode = part.path("state");
+        if (stateNode.has("input")) node.set("input", stateNode.get("input").deepCopy());
+        if (stateNode.has("output")) node.set("output", stateNode.get("output").deepCopy());
+        if (stateNode.has("result") && !node.has("output")) node.set("output", stateNode.get("result").deepCopy());
+        if (stateNode.has("error")) node.set("error", stateNode.get("error").deepCopy());
+        if (stateNode.has("metadata")) node.set("metadata", stateNode.get("metadata").deepCopy());
+        if (stateNode.has("time")) node.set("time", stateNode.get("time").deepCopy());
+        if (stateNode.has("attachments")) node.set("attachments", stateNode.get("attachments").deepCopy());
+        copyIfPresent(node, stateNode, "title");
+        copyIfPresent(node, part, "metadata");
+    }
+
+    private void copyIfPresent(ObjectNode target, JsonNode source, String field) {
+        if (source != null && source.has(field) && !source.get(field).isMissingNode()) {
+            target.set(field, source.get(field).deepCopy());
+        }
     }
 
     private String stringifyValue(JsonNode value) {
@@ -500,9 +638,10 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
         }
 
         String summary = part.path("summary").asText("");
-        if (!summary.isBlank() && summary.length() <= 200) return summary;
+        if (!summary.isBlank()) return truncate(summary, 1000);
 
-        return "";
+        String text = firstNonBlank(part.path("text").asText(""), delta);
+        return text.isBlank() ? "" : truncate(text, 2000);
     }
 
     private String extractPermissionTargetPath(JsonNode properties) {

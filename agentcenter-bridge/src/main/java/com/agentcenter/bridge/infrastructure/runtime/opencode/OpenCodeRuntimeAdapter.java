@@ -485,6 +485,10 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
     }
 
     public void respondPermission(String opencodeSessionId, String permissionId, boolean approved) {
+        respondPermission(opencodeSessionId, permissionId, approved ? "once" : "reject");
+    }
+
+    public void respondPermission(String opencodeSessionId, String permissionId, String reply) {
         String baseUrl = processManager.ensureRunning();
         Path cwd = processManager.resolveWorkingDirectory();
 
@@ -492,13 +496,18 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         payload.put("baseUrl", baseUrl);
         payload.put("workingDirectory", cwd.toString());
         payload.put("permissionId", permissionId);
-        payload.put("approved", approved);
+        payload.put("reply", normalizePermissionReply(reply));
 
         RuntimeCommandEnvelope command = RuntimeCommandEnvelope.of(
             RuntimeCommandTypes.PERMISSION_RESPOND, RuntimeType.OPENCODE,
             opencodeSessionId, payload);
 
         commandTransport.send(command);
+    }
+
+    private String normalizePermissionReply(String reply) {
+        if ("always".equals(reply) || "reject".equals(reply)) return reply;
+        return "once";
     }
 
     public void replyQuestion(String opencodeSessionId, String requestId, List<List<String>> answers) {

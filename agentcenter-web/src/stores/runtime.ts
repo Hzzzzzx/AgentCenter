@@ -28,6 +28,7 @@ export const useRuntimeStore = defineStore('runtime', () => {
   let finalSyncAttempts = 0
   let lastUserSeqNo = 0
   let connectedAtMs = 0
+  let lastSseErrorMs = 0
 
   function connectSSE(sessionId: string) {
     if (activeSessionId.value === sessionId && activeSse.value) {
@@ -48,13 +49,17 @@ export const useRuntimeStore = defineStore('runtime', () => {
     lastUserSeqNo = latestUserSeqNo()
 
     const subscribedSessionId = sessionId
-    activeSse.value = eventApi.streamSessionEvents(subscribedSessionId, (event: RuntimeEventDto) => {
-      if (activeSessionId.value !== subscribedSessionId) return
-      if (event.sessionId !== subscribedSessionId) return
-      if (hasSeenEvent(event)) return
-      events.value.push(event)
-      applyRuntimeEvent(event)
-    })
+    activeSse.value = eventApi.streamSessionEvents(
+      subscribedSessionId,
+      (event: RuntimeEventDto) => {
+        if (activeSessionId.value !== subscribedSessionId) return
+        if (event.sessionId !== subscribedSessionId) return
+        if (hasSeenEvent(event)) return
+        events.value.push(event)
+        applyRuntimeEvent(event)
+      },
+      () => handleSseError(subscribedSessionId),
+    )
   }
 
   function disconnectSSE() {
@@ -302,6 +307,37 @@ export const useRuntimeStore = defineStore('runtime', () => {
 
   function markIdle() {
     busy.value = false
+  }
+
+  function handleSseError(sessionId: string) {
+    if (activeSessionId.value !== sessionId) return
+    const now = Date.now()
+    if (now - lastSseErrorMs < 2000) return
+    lastSseErrorMs = now
+    connected.value = false
+    markIdle()
+
+    const event: RuntimeEventDto = {
+      id: `local-sse-error-${sessionId}-${now}`,
+      sessionId,
+      workItemId: null,
+      workflowInstanceId: null,
+      workflowNodeInstanceId: null,
+      eventType: 'ERROR',
+      eventSource: 'BRIDGE',
+      payloadJson: JSON.stringify({
+        kind: 'runtime_connection',
+        status: 'failed',
+        title: '事件流连接异常',
+        summary: '浏览器与 Bridge 的事件流连接已中断，刷新或重新进入会话后会重新订阅。',
+        recoverable: true,
+        rawEventType: 'browser.sse.error',
+      }),
+      seqNo: null,
+      createdAt: new Date(now).toISOString(),
+    }
+    events.value.push(event)
+    applyRuntimeEvent(event)
   }
 
   function splitDeltas(text: string): string[] {

@@ -152,12 +152,12 @@ class OpenCodeHttpCommandTransportTest {
     }
 
     @Test
-    void permissionRespondPostsDecisionToPermissionReplyEndpoint() throws Exception {
+    void permissionRespondPostsDecisionToDocumentedSessionPermissionEndpoint() throws Exception {
         ObjectNode payload = objectMapper.createObjectNode();
         payload.put("baseUrl", "http://localhost:4097");
         payload.put("workingDirectory", "/tmp/work");
         payload.put("permissionId", "per_abc");
-        payload.put("approved", true);
+        payload.put("reply", "always");
 
         RuntimeCommandEnvelope command = RuntimeCommandEnvelope.of(
                 RuntimeCommandTypes.PERMISSION_RESPOND, RuntimeType.OPENCODE,
@@ -170,7 +170,7 @@ class OpenCodeHttpCommandTransportTest {
         verify(httpClient).send(captor.capture(), any());
         HttpRequest request = captor.getValue();
         assertEquals("POST", request.method());
-        assertEquals("http://localhost:4097/permission/per_abc/reply", request.uri().toString());
+        assertEquals("http://localhost:4097/session/ses_abc123/permissions/per_abc", request.uri().toString());
         assertEquals("/tmp/work", request.headers().firstValue("x-opencode-directory").orElse(""));
     }
 
@@ -216,6 +216,24 @@ class OpenCodeHttpCommandTransportTest {
     }
 
     @Test
+    void questionReplyReturnsNackWithoutRequestId() throws Exception {
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("baseUrl", "http://localhost:4097");
+        payload.put("workingDirectory", "/tmp/work");
+        payload.putArray("answers").addArray().add("快速验证");
+
+        RuntimeCommandEnvelope command = RuntimeCommandEnvelope.of(
+                RuntimeCommandTypes.QUESTION_REPLY, RuntimeType.OPENCODE,
+                "ses_abc123", payload);
+
+        RuntimeAckEnvelope ack = transport.send(command);
+
+        assertFalse(ack.success());
+        assertTrue(ack.message().contains("requestId is required"));
+        verify(httpClient, never()).send(any(HttpRequest.class), any());
+    }
+
+    @Test
     void questionRejectPostsToRejectEndpoint() throws Exception {
         ObjectNode payload = objectMapper.createObjectNode();
         payload.put("baseUrl", "http://localhost:4097");
@@ -235,6 +253,23 @@ class OpenCodeHttpCommandTransportTest {
         assertEquals("POST", request.method());
         assertEquals("http://localhost:4097/question/question_abc/reject", request.uri().toString());
         assertEquals("/tmp/work", request.headers().firstValue("x-opencode-directory").orElse(""));
+    }
+
+    @Test
+    void questionRejectReturnsNackWithoutRequestId() throws Exception {
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("baseUrl", "http://localhost:4097");
+        payload.put("workingDirectory", "/tmp/work");
+
+        RuntimeCommandEnvelope command = RuntimeCommandEnvelope.of(
+                RuntimeCommandTypes.QUESTION_REJECT, RuntimeType.OPENCODE,
+                "ses_abc123", payload);
+
+        RuntimeAckEnvelope ack = transport.send(command);
+
+        assertFalse(ack.success());
+        assertTrue(ack.message().contains("requestId is required"));
+        verify(httpClient, never()).send(any(HttpRequest.class), any());
     }
 
     @Test

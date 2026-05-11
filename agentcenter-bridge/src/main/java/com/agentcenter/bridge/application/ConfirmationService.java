@@ -191,7 +191,7 @@ public class ConfirmationService {
         }
 
         if (ConfirmationRequestType.PERMISSION.equals(requestType)) {
-            respondPermissionBeforeResolving(entity, actionType);
+            respondPermissionBeforeResolving(entity, request, actionType);
         }
 
         if (ConfirmationActionType.REJECT.equals(actionType)) {
@@ -215,8 +215,6 @@ public class ConfirmationService {
         updateConfirmationWithRetry(entity);
 
         String actionDescription = buildActionDescription(actionType, request);
-        writeResolutionLedgerMessage(entity, actionDescription);
-
         var nodeInstanceId = entity.getWorkflowNodeInstanceId();
         boolean shouldDispatchWorkflow = nodeInstanceId != null
                 && !isQuestionConfirmation
@@ -277,16 +275,30 @@ public class ConfirmationService {
     }
 
     private void respondPermissionBeforeResolving(ConfirmationRequestEntity entity,
+                                                  ResolveConfirmationRequest request,
                                                   ConfirmationActionType actionType) {
         try {
             permissionConfirmationHandler.respondPermission(
                     entity.getRuntimeSessionId(),
                     entity.getInteractionId(),
-                    ConfirmationActionType.APPROVE.equals(actionType));
+                    permissionReply(request, actionType));
         } catch (Exception e) {
+            publishConfirmationResponseFailure(entity, actionType, "permission.reply.failed", e);
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                     "Failed to respond to OpenCode permission: " + e.getMessage(), e);
         }
+    }
+
+    private String permissionReply(ResolveConfirmationRequest request,
+                                   ConfirmationActionType actionType) {
+        if (ConfirmationActionType.REJECT.equals(actionType)) {
+            return "reject";
+        }
+        String reply = extractPayloadField(request, "reply");
+        if ("always".equals(reply) || "reject".equals(reply) || "once".equals(reply)) {
+            return reply;
+        }
+        return "once";
     }
 
     private void respondQuestionBeforeResolving(ConfirmationRequestEntity entity,
@@ -295,6 +307,7 @@ public class ConfirmationService {
         try {
             questionConfirmationHandler.respondQuestion(entity, request, actionType);
         } catch (Exception e) {
+            publishConfirmationResponseFailure(entity, actionType, "question.reply.failed", e);
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                     "Failed to respond to OpenCode question: " + e.getMessage(), e);
         }
@@ -310,10 +323,6 @@ public class ConfirmationService {
         entity.setResolutionComment(request.comment());
         entity.setUpdatedAt(now);
         updateConfirmationWithRetry(entity);
-
-        writeResolutionLedgerMessage(entity,
-                "用户拒绝" + (request.comment() != null ? "：" + request.comment() : "")
-                        + "，工作流保持阻塞");
 
         logConfirmationResolved(entity,
                 ConfirmationRequestType.valueOf(entity.getRequestType()),
@@ -500,6 +509,45 @@ public class ConfirmationService {
                 confirmation.getWorkflowInstanceId(),
                 confirmation.getWorkflowNodeInstanceId(),
                 error ? RuntimeEventType.ERROR : RuntimeEventType.STATUS,
+                RuntimeEventSource.BRIDGE,
+                payloadJson,
+                null
+        ));
+    }
+
+    private void publishConfirmationResponseFailure(ConfirmationRequestEntity confirmation,
+                                                    ConfirmationActionType actionType,
+                                                    String rawEventType,
+                                                    Exception error) {
+        if (confirmation.getAgentSessionId() == null || confirmation.getAgentSessionId().isBlank()) {
+            return;
+        }
+
+        String payloadJson;
+        try {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("kind", "confirmation_response");
+            payload.put("status", "failed");
+            payload.put("title", "交互响应失败");
+            payload.put("summary", errorMessage(error));
+            payload.put("confirmationId", confirmation.getId());
+            payload.put("requestType", confirmation.getRequestType());
+            payload.put("actionType", actionType.name());
+            payload.put("recoverable", true);
+            payload.put("rawEventType", rawEventType);
+            payloadJson = objectMapper.writeValueAsString(payload);
+        } catch (Exception serializationError) {
+            payloadJson = "{\"kind\":\"confirmation_response\",\"status\":\"failed\",\"confirmationId\":\""
+                    + confirmation.getId() + "\"}";
+        }
+
+        runtimeEventService.publishEvent(new RuntimeEventDto(
+                null,
+                confirmation.getAgentSessionId(),
+                confirmation.getWorkItemId(),
+                confirmation.getWorkflowInstanceId(),
+                confirmation.getWorkflowNodeInstanceId(),
+                RuntimeEventType.ERROR,
                 RuntimeEventSource.BRIDGE,
                 payloadJson,
                 null

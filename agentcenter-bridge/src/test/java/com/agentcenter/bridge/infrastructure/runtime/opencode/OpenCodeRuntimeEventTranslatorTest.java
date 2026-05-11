@@ -709,7 +709,7 @@ class OpenCodeRuntimeEventTranslatorTest {
     }
 
     @Test
-    void reasoningWithoutVisibilityDoesNotEmitSyntheticSummary() throws Exception {
+    void reasoningWithoutVisibilityEmitsReasoningProcessTrace() throws Exception {
         String json = """
         {
           "type": "message.part.delta",
@@ -722,7 +722,13 @@ class OpenCodeRuntimeEventTranslatorTest {
         RuntimeRawEvent raw = rawEvent("message.part.delta", json);
         List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
 
-        assertTrue(result.isEmpty());
+        assertEquals(1, result.size());
+        RuntimeEventEnvelope env = result.get(0);
+        assertEquals(RuntimeEventTypes.PROCESS_TRACE, env.type());
+        assertEquals("reasoning", env.payload().path("kind").asText());
+        assertEquals("思考", env.payload().path("title").asText());
+        assertEquals("Full private reasoning text that should not be exposed", env.payload().path("summary").asText());
+        assertEquals("reasoning", env.payload().path("rawPartType").asText());
     }
 
     @Test
@@ -1038,7 +1044,7 @@ class OpenCodeRuntimeEventTranslatorTest {
         assertFalse(result.isEmpty(), "agent-handoff part should produce at least one event");
         RuntimeEventEnvelope env = result.get(0);
         assertEquals(RuntimeEventTypes.PROCESS_TRACE, env.type());
-        assertEquals("agent_handoff", env.payload().path("kind").asText());
+        assertEquals("agent", env.payload().path("kind").asText());
         assertEquals("running", env.payload().path("status").asText());
         assertEquals("step_42", env.payload().path("parentStepId").asText());
         assertEquals("agent-handoff", env.payload().path("rawPartType").asText());

@@ -62,7 +62,9 @@ public class PermissionConfirmationHandler {
         entity.setTitle(title);
         entity.setContent("OpenCode permission request");
         entity.setInteractionContextJson(interactionContextJson);
-        entity.setOptionsJson("[{\"value\":\"APPROVE\",\"label\":\"允许\"},{\"value\":\"REJECT\",\"label\":\"拒绝\"}]");
+        entity.setOptionsJson("[{\"value\":\"once\",\"label\":\"允许一次\"},"
+                + "{\"value\":\"always\",\"label\":\"始终允许\"},"
+                + "{\"value\":\"reject\",\"label\":\"拒绝\"}]");
         entity.setPriority(Priority.HIGH.name());
         entity.setCreatedAt(now);
         entity.setUpdatedAt(now);
@@ -78,12 +80,16 @@ public class PermissionConfirmationHandler {
     }
 
     public void respondPermission(String opencodeSessionId, String permissionId, boolean approved) {
+        respondPermission(opencodeSessionId, permissionId, approved ? "once" : "reject");
+    }
+
+    public void respondPermission(String opencodeSessionId, String permissionId, String reply) {
         OpenCodeRuntimeAdapter adapter = runtimeAdapterProvider.getIfAvailable();
         if (adapter == null) {
             throw new IllegalStateException("OpenCodeRuntimeAdapter not available for permissionId=" + permissionId);
         }
-        adapter.respondPermission(opencodeSessionId, permissionId, approved);
-        log.info("Sent permission.respond for permissionId={}, approved={}", permissionId, approved);
+        adapter.respondPermission(opencodeSessionId, permissionId, normalizeReply(reply));
+        log.info("Sent permission.respond for permissionId={}, reply={}", permissionId, reply);
     }
 
     public static String confirmationIdFor(String opencodeSessionId, String permissionId) {
@@ -95,5 +101,10 @@ public class PermissionConfirmationHandler {
     private static String normalizeIdPart(String value, String fallback) {
         if (value == null || value.isBlank()) return fallback;
         return value.replaceAll("[^A-Za-z0-9_-]", "_");
+    }
+
+    private String normalizeReply(String reply) {
+        if ("always".equals(reply) || "reject".equals(reply)) return reply;
+        return "once";
     }
 }

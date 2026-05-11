@@ -56,16 +56,8 @@ function shouldShowToolPart(part: {
   outputSummary?: string
 }, stepTitle?: string): boolean {
   if (part.type !== 'tool') return false
-  if (part.status === 'failed') return true
-
-  const hasDetail = Boolean(part.inputSummary?.trim()) || Boolean(part.outputSummary?.trim())
-  if (hasDetail) return true
-
-  const displayName = part.displayName?.trim()
-  const title = stepTitle?.trim()
-  const duplicatesStepTitle = Boolean(displayName && title && displayName === title)
-
-  return part.status === 'running' && !duplicatesStepTitle
+  void stepTitle
+  return true
 }
 </script>
 
@@ -90,8 +82,10 @@ function shouldShowToolPart(part: {
 
         <!-- reasoning summary (collapsible) -->
         <details v-else-if="part.type === 'reasoning'" class="step-item__reasoning">
-          <summary>思考摘要</summary>
-          <div class="step-item__reasoning-body">{{ part.summary }}</div>
+          <summary>思考</summary>
+          <div class="step-item__reasoning-body">
+            <MarkdownContent :content="part.summary" />
+          </div>
         </details>
 
         <!-- tool invocation -->

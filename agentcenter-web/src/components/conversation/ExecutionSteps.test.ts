@@ -17,7 +17,7 @@ function makeStep(overrides: Partial<ExecutionStep> = {}): ExecutionStep {
 }
 
 describe('ExecutionSteps.vue', () => {
-  it('keeps execution details collapsed when answer text is present', () => {
+  it('keeps execution details open when answer text is present', () => {
     const wrapper = mount(ExecutionSteps, {
       props: {
         steps: [makeStep()],
@@ -30,13 +30,13 @@ describe('ExecutionSteps.vue', () => {
       },
     })
 
-    expect(wrapper.find('details').attributes('open')).toBeUndefined()
-    expect(wrapper.text()).toContain('调用 hld-design')
+    expect(wrapper.find('details').attributes('open')).toBeDefined()
+    expect(wrapper.text()).toContain('执行过程')
     expect(wrapper.text()).toContain('进行中')
     expect(wrapper.find('.execution-steps__current').exists()).toBe(false)
   })
 
-  it('keeps the completed execution summary copy while collapsed', () => {
+  it('keeps the completed execution summary copy while expanded', () => {
     const wrapper = mount(ExecutionSteps, {
       props: {
         steps: [makeStep({ status: 'completed' })],
@@ -50,7 +50,7 @@ describe('ExecutionSteps.vue', () => {
 
     expect(wrapper.text()).toContain('已处理 1 个步骤')
     expect(wrapper.text()).toContain('调用 1 个工具/Skill')
-    expect(wrapper.text()).toContain('已收起')
+    expect(wrapper.text()).toContain('过程')
   })
 
   it('opens execution details when there is no answer text yet', () => {

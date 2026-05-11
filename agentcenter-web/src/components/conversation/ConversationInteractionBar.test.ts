@@ -239,6 +239,35 @@ describe('ConversationInteractionBar.vue', () => {
 
     expect(wrapper.text()).toContain('需要你授权')
     expect(wrapper.text()).toContain('允许 Agent 编辑文件：C:/.../.opencode/skills/planner/SKILL.md？')
+    expect(wrapper.text()).toContain('允许一次')
+    expect(wrapper.text()).toContain('始终允许')
+    expect(wrapper.text()).toContain('拒绝')
+  })
+
+  it('submits always for OpenCode permission requests', async () => {
+    const wrapper = mount(ConversationInteractionBar, {
+      props: {
+        interactions: [
+          makeInteraction({
+            id: 'confirm-permission-always',
+            requestType: 'PERMISSION',
+            title: 'Allow command?',
+            content: 'OpenCode permission request',
+          }),
+        ],
+      },
+    })
+
+    const alwaysButton = wrapper.findAll('button').find(button => button.text() === '始终允许')
+    expect(alwaysButton).toBeTruthy()
+    await alwaysButton!.trigger('click')
+    await flushPromises()
+
+    expect(confirmationApi.resolve).toHaveBeenCalledWith('confirm-permission-always', {
+      actionType: 'APPROVE',
+      payload: { reply: 'always' },
+      comment: 'always',
+    })
   })
 
   it('renders multi-select checkboxes for DECISION with selection: multi', async () => {

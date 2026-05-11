@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Objects;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -20,13 +21,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public class RuntimeEnvironmentStatusService {
 
     private final ObjectMapper objectMapper;
-    private final HttpClient httpClient;
+    private final RuntimePathHttpClient runtimePathHttpClient;
     private final String runtimeType;
     private final boolean enabled;
     private final String hostname;
     private final int port;
     private final String configuredWorkingDirectory;
 
+    @Autowired
     public RuntimeEnvironmentStatusService(
             ObjectMapper objectMapper,
             @Value("${agentcenter.runtime.default-type:OPENCODE}") String runtimeType,
@@ -34,15 +36,53 @@ public class RuntimeEnvironmentStatusService {
             @Value("${agentcenter.runtime.opencode.serve.hostname:127.0.0.1}") String hostname,
             @Value("${agentcenter.runtime.opencode.serve.port:4097}") int port,
             @Value("${agentcenter.runtime.opencode.serve.working-directory:${user.dir}/runtime-workspace}") String configuredWorkingDirectory) {
+        this(
+                objectMapper,
+                runtimeType,
+                enabled,
+                hostname,
+                port,
+                configuredWorkingDirectory,
+                HttpClient.newBuilder()
+                        .connectTimeout(Duration.ofSeconds(2))
+                        .build()
+        );
+    }
+
+    RuntimeEnvironmentStatusService(
+            ObjectMapper objectMapper,
+            String runtimeType,
+            boolean enabled,
+            String hostname,
+            int port,
+            String configuredWorkingDirectory,
+            HttpClient httpClient) {
+        this(
+                objectMapper,
+                runtimeType,
+                enabled,
+                hostname,
+                port,
+                configuredWorkingDirectory,
+                request -> httpClient.send(request, HttpResponse.BodyHandlers.ofString())
+        );
+    }
+
+    RuntimeEnvironmentStatusService(
+            ObjectMapper objectMapper,
+            String runtimeType,
+            boolean enabled,
+            String hostname,
+            int port,
+            String configuredWorkingDirectory,
+            RuntimePathHttpClient runtimePathHttpClient) {
         this.objectMapper = objectMapper;
         this.runtimeType = runtimeType;
         this.enabled = enabled;
         this.hostname = hostname;
         this.port = port;
         this.configuredWorkingDirectory = configuredWorkingDirectory;
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(2))
-                .build();
+        this.runtimePathHttpClient = Objects.requireNonNull(runtimePathHttpClient, "runtimePathHttpClient");
     }
 
     public RuntimeEnvironmentStatusDto currentStatus() {
@@ -57,7 +97,7 @@ public class RuntimeEnvironmentStatusService {
                     .timeout(Duration.ofSeconds(3))
                     .GET()
                     .build();
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = runtimePathHttpClient.send(request);
             if (response.statusCode() != 200) {
                 return unavailable(serverUrl, workingDirectoryValue, "OpenCode /path 返回 HTTP " + response.statusCode());
             }
@@ -100,5 +140,10 @@ public class RuntimeEnvironmentStatusService {
     private static String text(JsonNode node, String fieldName) {
         JsonNode value = node.path(fieldName);
         return value.isMissingNode() || value.isNull() ? null : value.asText();
+    }
+
+    @FunctionalInterface
+    interface RuntimePathHttpClient {
+        HttpResponse<String> send(HttpRequest request) throws Exception;
     }
 }

@@ -206,6 +206,8 @@ export interface InteractionProjection {
   options: DecisionOption[]
   recommended?: string
   status: 'waiting' | 'submitted' | 'resolved'
+  requestType?: string
+  interactionType?: string
 }
 
 export interface DecisionOption {

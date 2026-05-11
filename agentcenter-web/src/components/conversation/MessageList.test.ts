@@ -360,7 +360,7 @@ describe('MessageList.vue', () => {
     expect(toolSteps.length).toBeGreaterThanOrEqual(1)
   })
 
-  it('hides node status runtime events from execution steps', () => {
+  it('keeps node status runtime events in execution steps', () => {
     const wrapper = mount(MessageList, {
       props: {
         messages: [makeMessage({ role: 'ASSISTANT', content: 'reply' })],
@@ -376,10 +376,10 @@ describe('MessageList.vue', () => {
     const turn = parseTurnFromMock(wrapper)
     expect(turn).not.toBeNull()
     const statusSteps = turn.steps.filter((s: { kind: string }) => s.kind === 'status')
-    expect(statusSteps.length).toBe(0)
+    expect(statusSteps.length).toBe(1)
   })
 
-  it('filters repeated node status heartbeat events', () => {
+  it('keeps repeated node status heartbeat events for traceability', () => {
     const wrapper = mount(MessageList, {
       props: {
         messages: [makeMessage({ role: 'ASSISTANT', content: 'reply' })],
@@ -392,7 +392,7 @@ describe('MessageList.vue', () => {
     const turn = parseTurnFromMock(wrapper)
     expect(turn).not.toBeNull()
     const statusSteps = turn.steps.filter((s: { kind: string }) => s.kind === 'status')
-    expect(statusSteps.length).toBe(0)
+    expect(statusSteps.length).toBe(2)
   })
 
   it('keeps pending confirmation prompts out of the chat timeline', () => {
@@ -432,7 +432,7 @@ describe('MessageList.vue', () => {
     expect(decisionSteps.length).toBeGreaterThanOrEqual(1)
   })
 
-  it('renders confirmation response messages as compact user feedback', () => {
+  it('renders confirmation response messages as neutral interaction records', () => {
     const wrapper = mount(MessageList, {
       props: {
         messages: [
@@ -447,7 +447,8 @@ describe('MessageList.vue', () => {
     })
 
     expect(wrapper.find('.interaction-response-card').exists()).toBe(true)
-    expect(wrapper.text()).toContain('用户反馈')
+    expect(wrapper.find('.user-turn').exists()).toBe(false)
+    expect(wrapper.text()).toContain('交互记录')
     expect(wrapper.text()).toContain('LLD 实现路线')
     expect(wrapper.text()).toContain('选择：快速验证（FAST）')
     expect(wrapper.text()).not.toContain('类型：DECISION')

@@ -26,7 +26,7 @@ function makeToolStep(overrides: Partial<ExecutionStep> = {}): ExecutionStep {
 }
 
 describe('ExecutionStepItem.vue', () => {
-  it('does not render a duplicate empty tool card when the part title matches the step title', () => {
+  it('renders the tool card even when the part title matches the step title', () => {
     const wrapper = mount(ExecutionStepItem, {
       props: {
         step: makeToolStep(),
@@ -45,7 +45,7 @@ describe('ExecutionStepItem.vue', () => {
     })
 
     expect(wrapper.find('.step-item__title').text()).toBe('调用 hld-design')
-    expect(wrapper.find('.tool-invocation-stub').exists()).toBe(false)
+    expect(wrapper.find('.tool-invocation-stub').exists()).toBe(true)
   })
 
   it('keeps the tool card when the tool has detail worth showing', () => {

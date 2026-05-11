@@ -310,7 +310,7 @@ describe('projectConversationTurns', () => {
     expect(toolPart.outputSummary).toContain('/Users/hzz/workspace/AgentCenter/agentcenter-web/src/App.vue')
   })
 
-  it('hides stale confirmation-created events when there is no active confirmation', () => {
+  it('keeps stale confirmation-created events visible as resolved decision history', () => {
     const input = makeInput({
       runtimeEvents: [
         makeEvent({
@@ -330,10 +330,16 @@ describe('projectConversationTurns', () => {
     })
 
     const turns = projectConversationTurns(input)
-    expect(turns).toEqual([])
+    expect(turns).toHaveLength(1)
+    const decisionPart = turns[0].steps[0].parts.find(part => part.type === 'decision')
+    expect(decisionPart?.type).toBe('decision')
+    if (decisionPart?.type === 'decision') {
+      expect(decisionPart.status).toBe('resolved')
+      expect(decisionPart.options).toEqual([{ value: 'ADVANCE', label: '进入下一步', description: undefined }])
+    }
   })
 
-  it('shows only the selected option for resolved workflow advance decisions', () => {
+  it('keeps all options for resolved workflow advance decisions and marks selected recommendation', () => {
     const input = makeInput({
       runtimeEvents: [
         makeEvent({
@@ -362,12 +368,16 @@ describe('projectConversationTurns', () => {
     expect(decisionPart?.type).toBe('decision')
     if (decisionPart?.type === 'decision') {
       expect(decisionPart.status).toBe('resolved')
-      expect(decisionPart.options).toEqual([{ value: 'ADVANCE', label: '进入下一节点' }])
+      expect(decisionPart.options).toEqual([
+        { value: 'ADVANCE', label: '进入下一节点', description: undefined },
+        { value: 'SUPPLEMENT', label: '继续补充当前节点', description: undefined },
+        { value: 'RETRY', label: '重新执行', description: undefined },
+      ])
       expect(decisionPart.recommended).toBe('ADVANCE')
     }
   })
 
-  it('shows only the approved option for resolved artifact review decisions', () => {
+  it('keeps all options for resolved artifact review decisions', () => {
     const input = makeInput({
       runtimeEvents: [
         makeEvent({
@@ -397,7 +407,11 @@ describe('projectConversationTurns', () => {
     expect(decisionPart?.type).toBe('decision')
     if (decisionPart?.type === 'decision') {
       expect(decisionPart.status).toBe('resolved')
-      expect(decisionPart.options).toEqual([{ value: 'PASS', label: '通过' }])
+      expect(decisionPart.options).toEqual([
+        { value: 'PASS', label: '通过', description: undefined },
+        { value: 'REVISE', label: '需要调整', description: undefined },
+      ])
+      expect(decisionPart.recommended).toBe('PASS')
     }
   })
 
@@ -707,7 +721,7 @@ describe('projectConversationTurns', () => {
     expect(turns[0].steps.length).toBeGreaterThanOrEqual(1)
   })
 
-  it('filters node_status heartbeat events out of execution steps', () => {
+  it('keeps node_status heartbeat events as visible status steps', () => {
     const turns = projectConversationTurns(makeInput({
       runtimeEvents: [
         makeEvent({
@@ -718,10 +732,16 @@ describe('projectConversationTurns', () => {
       ],
     }))
 
-    expect(turns).toEqual([])
+    expect(turns).toHaveLength(1)
+    expect(turns[0].steps[0].kind).toBe('status')
+    expect(turns[0].steps[0].parts[0]).toMatchObject({
+      type: 'status',
+      label: 'running',
+      detail: 'completed',
+    })
   })
 
-  it('filters runtime STATUS heartbeat events out of execution steps', () => {
+  it('keeps runtime STATUS heartbeat events as visible status steps', () => {
     const turns = projectConversationTurns(makeInput({
       runtimeEvents: [
         makeEvent({
@@ -739,7 +759,8 @@ describe('projectConversationTurns', () => {
       ],
     }))
 
-    expect(turns).toEqual([])
+    expect(turns).toHaveLength(1)
+    expect(turns[0].steps.map(step => step.kind)).toEqual(['status', 'status'])
   })
 
   it('keeps assistant stream events out of execution steps', () => {

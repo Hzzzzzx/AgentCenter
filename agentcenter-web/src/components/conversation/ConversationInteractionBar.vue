@@ -343,6 +343,12 @@ function secondaryActionLabel(item: ConfirmationRequestDto): string {
   return '退回'
 }
 
+function permissionBusyLabel(reply: 'once' | 'always' | 'reject'): string {
+  if (reply === 'always') return '正在始终允许...'
+  if (reply === 'reject') return '正在拒绝...'
+  return '正在允许...'
+}
+
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : '操作失败，请稍后重试'
 }
@@ -373,9 +379,45 @@ async function resolveActive(actionType: ConfirmationActionType, payload?: Recor
   }
 }
 
+async function handlePermissionDecision(reply: 'once' | 'always' | 'reject') {
+  const interaction = activeInteraction.value
+  if (!interaction || busyAction.value) return
+  const actionType: ConfirmationActionType = reply === 'reject' ? 'REJECT' : 'APPROVE'
+  busyAction.value = `${interaction.id}:PERMISSION:${reply}`
+  try {
+    await confirmationStore.resolveConfirmation(interaction.id, {
+      actionType,
+      payload: { reply },
+      comment: reply,
+    })
+    notificationStore.push({
+      anchor: 'right-panel',
+      tone: reply === 'reject' ? 'warning' : 'success',
+      title: reply === 'reject' ? '权限已拒绝' : '权限已允许',
+      message: reply === 'always' ? 'OpenCode 后续同类请求会自动允许' : `${interaction.title} 已收到处理结果`,
+    })
+    if (reply === 'reject') emit('rejected', interaction.id)
+    else emit('resolved', interaction.id)
+  } catch (error) {
+    notificationStore.push({
+      anchor: 'right-panel',
+      tone: 'error',
+      title: '提交失败',
+      message: errorMessage(error),
+      durationMs: 5200,
+    })
+  } finally {
+    busyAction.value = null
+  }
+}
+
 function handlePrimary() {
   const interaction = activeInteraction.value
   if (!interaction) return
+  if (interaction.requestType === 'PERMISSION') {
+    void handlePermissionDecision('once')
+    return
+  }
   if (interaction.requestType === 'INPUT_REQUIRED') {
     if (activeFields.value.length > 0) {
       const vals = fieldValues.value[interaction.id] ?? {}
@@ -448,6 +490,10 @@ function handleSecondary() {
   if (!interaction || busyAction.value) return
   if (interaction.requestType === 'EXCEPTION') {
     void resolveActive('SKIP')
+    return
+  }
+  if (interaction.requestType === 'PERMISSION') {
+    void handlePermissionDecision('reject')
     return
   }
   busyAction.value = `${interaction.id}:REJECT`
@@ -607,17 +653,30 @@ function handleSecondary() {
           <button type="button" class="interaction-bar__ghost" :disabled="!!busyAction" @click="emit('open', activeInteraction.id)">
             详情
           </button>
-          <button type="button" class="interaction-bar__ghost" :disabled="!!busyAction" @click="handleSecondary">
-            {{ secondaryActionLabel(activeInteraction) }}
-          </button>
-          <button
-            type="button"
-            class="interaction-bar__primary"
-            :disabled="!!busyAction || (activeInteraction.requestType === 'INPUT_REQUIRED' && !canSubmitInput) || (activeInteraction.requestType === 'DECISION' && !canSubmitChoice)"
-            @click="handlePrimary"
-          >
-            {{ busyAction ? '提交中...' : primaryActionLabel(activeInteraction) }}
-          </button>
+          <template v-if="activeInteraction.requestType === 'PERMISSION'">
+            <button type="button" class="interaction-bar__ghost" :disabled="!!busyAction" @click="handlePermissionDecision('reject')">
+              {{ busyAction?.includes(':reject') ? permissionBusyLabel('reject') : '拒绝' }}
+            </button>
+            <button type="button" class="interaction-bar__ghost" :disabled="!!busyAction" @click="handlePermissionDecision('always')">
+              {{ busyAction?.includes(':always') ? permissionBusyLabel('always') : '始终允许' }}
+            </button>
+            <button type="button" class="interaction-bar__primary" :disabled="!!busyAction" @click="handlePermissionDecision('once')">
+              {{ busyAction?.includes(':once') ? permissionBusyLabel('once') : '允许一次' }}
+            </button>
+          </template>
+          <template v-else>
+            <button type="button" class="interaction-bar__ghost" :disabled="!!busyAction" @click="handleSecondary">
+              {{ secondaryActionLabel(activeInteraction) }}
+            </button>
+            <button
+              type="button"
+              class="interaction-bar__primary"
+              :disabled="!!busyAction || (activeInteraction.requestType === 'INPUT_REQUIRED' && !canSubmitInput) || (activeInteraction.requestType === 'DECISION' && !canSubmitChoice)"
+              @click="handlePrimary"
+            >
+              {{ busyAction ? '提交中...' : primaryActionLabel(activeInteraction) }}
+            </button>
+          </template>
         </div>
       </div>
     </div>

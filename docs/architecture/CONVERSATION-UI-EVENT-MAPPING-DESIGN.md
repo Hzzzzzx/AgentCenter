@@ -90,6 +90,17 @@ Raw Runtime Events
 - 没有 `toolCallId` 时按工具名合并多个调用。
 - 把 Agent 的最终文本回复拆成多个卡片气泡。
 
+### 4.3 OpenCode 信息保真规则
+
+2026-05-11 的 OpenCode 对齐后，主对话投影以“保真优先、噪音可折叠”为原则：
+
+- `reasoning`、`tool`、`file`、`patch`、`step-start`、`step-finish`、`snapshot`、`retry`、`subtask`、`agent`、`compaction` 等 part 不得静默丢弃。
+- `rawEventType`、`rawPartType`、`rawPart`、`messageId`、`partId`、`toolCallId` 要随事件进入 payload，便于 UI 与调试视图追溯。
+- Tool 的 `input`、`output`、`error`、`metadata`、`attachments`、`time` 要保留；对象 payload 由前端稳定 stringify 后展示。
+- `STATUS` 与 `node_status` 默认成为状态步骤，不再作为 heartbeat 隐藏。真正不适合主 UI 的 prompt debug 才进入 `debugRefs`。
+- 已解决的 `DecisionGatePart` 保留完整原始选项，用 `recommended` 标记实际选择，不裁剪成单个选项。
+- confirmation resolve 不写入 `role=USER` 的 ledger 消息；用户确认、拒绝、选择、补充统一通过 `CONFIRMATION_RESOLVED` 表示。
+
 ---
 
 ## 5. 目标 Projection Model
@@ -296,6 +307,16 @@ Agent 输出/步骤
 - 待交互 tab 放在标题区域，便于切换多个问题。
 - tab 文案使用 `问题 1 / 问题 2 / 问题 3` 和短标题，不重复事项编号与节点名。
 - 正文区域聚焦问题、选项、推荐理由和提交动作。
+
+OpenCode permission 交互必须使用三态动作：
+
+```text
+拒绝 -> reply=reject
+始终允许 -> reply=always
+允许一次 -> reply=once
+```
+
+如果 OpenCode 没有响应或 permission/question reply 失败，确认项保持 pending，并在 Runtime Event 中出现可见错误。
 
 ### 8.4 Prompt Debug
 

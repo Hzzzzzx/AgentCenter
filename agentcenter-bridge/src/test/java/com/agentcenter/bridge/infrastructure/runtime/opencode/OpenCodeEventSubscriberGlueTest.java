@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeEventEnvelope;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeEventTypes;
+import com.agentcenter.bridge.application.runtime.transport.RuntimeTransportException;
 import com.agentcenter.bridge.application.runtime.translation.AssistantMessageProjector;
 import com.agentcenter.bridge.application.runtime.translation.RuntimeEventEnvelopeDispatcher;
 import com.agentcenter.bridge.infrastructure.runtime.opencode.transport.OpenCodeSseEventStreamTransport;
@@ -133,5 +134,38 @@ class OpenCodeEventSubscriberGlueTest {
             && RuntimeEventTypes.RUNTIME_STATUS_CHANGED.equals(envelopes.get(0).type())
             && "running".equals(envelopes.get(0).payload().path("label").asText())
         ));
+    }
+
+    @Test
+    void transportErrorDispatchesVisibleRuntimeError() {
+        subscriber.onError(new RuntimeTransportException("stream dropped", null, true));
+
+        verify(dispatcher).dispatch(argThat(envelopes -> {
+            if (envelopes == null || envelopes.isEmpty()) return false;
+            RuntimeEventEnvelope env = envelopes.get(0);
+            return RuntimeEventTypes.RUNTIME_ERROR.equals(env.type())
+                && AGENT_SES.equals(env.agentSessionId())
+                && OPENCODE_SES.equals(env.runtimeSessionId())
+                && "runtime_connection".equals(env.payload().path("kind").asText())
+                && "failed".equals(env.payload().path("status").asText())
+                && "event.stream.error".equals(env.payload().path("rawEventType").asText())
+                && env.payload().path("recoverable").asBoolean(false);
+        }));
+    }
+
+    @Test
+    void transportCloseDispatchesVisibleDisconnectedStatus() {
+        subscriber.onClose();
+
+        verify(dispatcher).dispatch(argThat(envelopes -> {
+            if (envelopes == null || envelopes.isEmpty()) return false;
+            RuntimeEventEnvelope env = envelopes.get(0);
+            return RuntimeEventTypes.RUNTIME_STATUS_CHANGED.equals(env.type())
+                && AGENT_SES.equals(env.agentSessionId())
+                && OPENCODE_SES.equals(env.runtimeSessionId())
+                && "runtime_connection".equals(env.payload().path("kind").asText())
+                && "disconnected".equals(env.payload().path("status").asText())
+                && "event.stream.closed".equals(env.payload().path("rawEventType").asText());
+        }));
     }
 }

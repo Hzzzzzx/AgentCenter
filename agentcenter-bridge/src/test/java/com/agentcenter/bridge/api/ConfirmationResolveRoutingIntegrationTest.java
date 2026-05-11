@@ -30,12 +30,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Integration tests for ConfirmationService.resolve() routing of all action types.
  *
  * Covers:
- * - APPROVE: Record result, write USER message, resume current Skill
- * - CHOOSE: Save choice payload, write USER message, resume current Skill
- * - SUPPLEMENT: Save input payload, write USER message, resume current Skill
+ * - APPROVE: Record result, emit CONFIRMATION_RESOLVED, resume current Skill
+ * - CHOOSE: Save choice payload, emit CONFIRMATION_RESOLVED, resume current Skill
+ * - SUPPLEMENT: Save input payload, emit CONFIRMATION_RESOLVED, resume current Skill
  * - RETRY: Resolve exception confirmation, retryNode
  * - SKIP: Resolve exception confirmation, skipNode
- * - REJECT: Keep workflow BLOCKED, write USER message
+ * - REJECT: Keep workflow BLOCKED, emit CONFIRMATION_RESOLVED
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -66,6 +66,25 @@ class ConfirmationResolveRoutingIntegrationTest {
         jdbcTemplate.execute("DELETE FROM workflow_node_instance");
         jdbcTemplate.execute("DELETE FROM workflow_instance");
         jdbcTemplate.execute("UPDATE work_item SET current_workflow_instance_id = NULL");
+    }
+
+    private void assertNoConfirmationLedgerMessages(String sessionId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM agent_message WHERE session_id = ? AND role = 'USER' AND created_by = 'confirmation-service'",
+                Integer.class,
+                sessionId);
+        assertThat(count).isZero();
+    }
+
+    private void assertConfirmationResolvedEvent(String confirmationId, String actionType) {
+        var events = jdbcTemplate.queryForList(
+                "SELECT payload_json FROM runtime_event WHERE event_type = 'CONFIRMATION_RESOLVED'");
+        boolean found = events.stream().anyMatch(row -> {
+            String payload = row.get("payload_json").toString();
+            return payload.contains("\"confirmationId\":\"" + confirmationId + "\"")
+                    && payload.contains("\"actionType\":\"" + actionType + "\"");
+        });
+        assertThat(found).isTrue();
     }
 
     private String findWorkItemIdByCode(String code) throws Exception {
@@ -124,11 +143,11 @@ class ConfirmationResolveRoutingIntegrationTest {
     /**
      * APPROVE: resolving with APPROVE action should:
      * - Set confirmation status to RESOLVED
-     * - Write a USER message to session
+     * - Emit CONFIRMATION_RESOLVED without writing a USER ledger message
      * - Resume current Skill instead of treating the interaction as node completion
      */
     @Test
-    void approveAction_resolvesConfirmation_writesUserMessage_keepsCurrentSkillWaiting() throws Exception {
+    void approveAction_resolvesConfirmation_emitsResolutionEvent_keepsCurrentSkillWaiting() throws Exception {
         StartedWorkflow wf = startWorkflowAndConfirm("FE1234");
 
         jdbcTemplate.update("""
@@ -153,15 +172,8 @@ class ConfirmationResolveRoutingIntegrationTest {
                 "SELECT resolution_comment FROM confirmation_request WHERE id = 'conf-approve-test'");
         assertThat(confirmRow.get("resolution_comment").toString()).isEqualTo("审批通过");
 
-        var messages = jdbcTemplate.queryForList(
-                "SELECT * FROM agent_message WHERE session_id = ? AND role = 'USER' AND created_by = 'confirmation-service'",
-                wf.sessionId());
-        assertThat(messages).hasSizeGreaterThanOrEqualTo(1);
-        boolean hasApproveMessage = messages.stream()
-                .anyMatch(m -> m.get("content").toString()
-                        .contains("用户输入：用户确认通过")
-                        && m.get("content").toString().contains("确认项：审批确认"));
-        assertThat(hasApproveMessage).isTrue();
+        assertNoConfirmationLedgerMessages(wf.sessionId());
+        assertConfirmationResolvedEvent("conf-approve-test", "APPROVE");
 
         MvcResult wfResult = mockMvc.perform(get("/api/workflow-instances/" + wf.instanceId()))
                 .andExpect(status().isOk())
@@ -175,11 +187,11 @@ class ConfirmationResolveRoutingIntegrationTest {
     /**
      * CHOOSE: resolving with CHOOSE action should:
      * - Save choice payload
-     * - Write USER message with user's choice
+     * - Emit CONFIRMATION_RESOLVED instead of writing a USER ledger message
      * - Resume current Skill with the choice in its input context
      */
     @Test
-    void chooseAction_savesChoicePayload_writesUserMessage_resumesCurrentSkill() throws Exception {
+    void chooseAction_savesChoicePayload_emitsResolutionEvent_resumesCurrentSkill() throws Exception {
         StartedWorkflow wf = startWorkflowAndConfirm("FE1234");
 
         mockMvc.perform(post("/api/confirmations/" + wf.confirmationId() + "/resolve")
@@ -195,16 +207,8 @@ class ConfirmationResolveRoutingIntegrationTest {
         assertThat(payloadJson).contains("低风险方案");
         assertThat(confirmation.get("resolution_comment").toString()).isEqualTo("选择方案");
 
-        var messages = jdbcTemplate.queryForList(
-                "SELECT * FROM agent_message WHERE session_id = ? AND role = 'USER' AND created_by = 'confirmation-service'",
-                wf.sessionId());
-        assertThat(messages).hasSizeGreaterThanOrEqualTo(1);
-        boolean hasChooseMessage = messages.stream()
-                .anyMatch(m -> m.get("content").toString()
-                        .contains("用户输入：用户选择：低风险方案")
-                        && m.get("content").toString().contains("类型：DECISION")
-                        && m.get("content").toString().contains("确认项：FE1234 方案设计 · 方案选择"));
-        assertThat(hasChooseMessage).isTrue();
+        assertNoConfirmationLedgerMessages(wf.sessionId());
+        assertConfirmationResolvedEvent(wf.confirmationId(), "CHOOSE");
 
         MvcResult wfResult = mockMvc.perform(get("/api/workflow-instances/" + wf.instanceId()))
                 .andExpect(status().isOk())
@@ -223,11 +227,11 @@ class ConfirmationResolveRoutingIntegrationTest {
     /**
      * SUPPLEMENT: resolving with SUPPLEMENT action should:
      * - Save input payload
-     * - Write USER message with user's input
+     * - Emit CONFIRMATION_RESOLVED instead of writing a USER ledger message
      * - Resume current Skill with the supplement in its input context
      */
     @Test
-    void supplementAction_savesInputPayload_writesUserMessage_resumesCurrentSkill() throws Exception {
+    void supplementAction_savesInputPayload_emitsResolutionEvent_resumesCurrentSkill() throws Exception {
         StartedWorkflow wf = startWorkflowAndConfirm("FE1234");
 
         jdbcTemplate.update("""
@@ -253,15 +257,8 @@ class ConfirmationResolveRoutingIntegrationTest {
         String payloadJson = (String) confirmation.get("resolution_payload_json");
         assertThat(payloadJson).contains("需要支持移动端");
 
-        var messages = jdbcTemplate.queryForList(
-                "SELECT * FROM agent_message WHERE session_id = ? AND role = 'USER' AND created_by = 'confirmation-service'",
-                wf.sessionId());
-        assertThat(messages).hasSizeGreaterThanOrEqualTo(1);
-        boolean hasSupplementMessage = messages.stream()
-                .anyMatch(m -> m.get("content").toString()
-                        .contains("用户输入：用户补充：需要支持移动端")
-                        && m.get("content").toString().contains("确认项：补充信息"));
-        assertThat(hasSupplementMessage).isTrue();
+        assertNoConfirmationLedgerMessages(wf.sessionId());
+        assertConfirmationResolvedEvent("conf-supplement-test", "SUPPLEMENT");
 
         MvcResult wfResult = mockMvc.perform(get("/api/workflow-instances/" + wf.instanceId()))
                 .andExpect(status().isOk())
@@ -279,11 +276,11 @@ class ConfirmationResolveRoutingIntegrationTest {
     /**
      * RETRY: resolving an EXCEPTION confirmation with RETRY should:
      * - Set confirmation status to RESOLVED
-     * - Write USER message
+     * - Emit CONFIRMATION_RESOLVED
      * - Call retryNode
      */
     @Test
-    void retryAction_resolvesExceptionConfirmation_writesUserMessage() throws Exception {
+    void retryAction_resolvesExceptionConfirmation_emitsResolutionEvent() throws Exception {
         StartedWorkflow wf = startWorkflowAndConfirm("FE1234");
 
         // First resolve the original confirmation to unblock node
@@ -307,22 +304,18 @@ class ConfirmationResolveRoutingIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("RESOLVED"));
 
-        var messages = jdbcTemplate.queryForList(
-                "SELECT * FROM agent_message WHERE session_id = ? AND role = 'USER' AND created_by = 'confirmation-service'",
-                wf.sessionId());
-        boolean hasRetryMessage = messages.stream()
-                .anyMatch(m -> m.get("content").toString().contains("重试"));
-        assertThat(hasRetryMessage).isTrue();
+        assertNoConfirmationLedgerMessages(wf.sessionId());
+        assertConfirmationResolvedEvent(exceptionId, "RETRY");
     }
 
     /**
      * SKIP: resolving an EXCEPTION confirmation with SKIP should:
      * - Set confirmation status to RESOLVED
-     * - Write USER message
+     * - Emit CONFIRMATION_RESOLVED
      * - Call skipNode
      */
     @Test
-    void skipAction_resolvesExceptionConfirmation_writesUserMessage() throws Exception {
+    void skipAction_resolvesExceptionConfirmation_emitsResolutionEvent() throws Exception {
         StartedWorkflow wf = startWorkflowAndConfirm("FE1234");
 
         // First resolve the original confirmation to unblock node
@@ -346,23 +339,19 @@ class ConfirmationResolveRoutingIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("RESOLVED"));
 
-        var messages = jdbcTemplate.queryForList(
-                "SELECT * FROM agent_message WHERE session_id = ? AND role = 'USER' AND created_by = 'confirmation-service'",
-                wf.sessionId());
-        boolean hasSkipMessage = messages.stream()
-                .anyMatch(m -> m.get("content").toString().contains("跳过"));
-        assertThat(hasSkipMessage).isTrue();
+        assertNoConfirmationLedgerMessages(wf.sessionId());
+        assertConfirmationResolvedEvent(exceptionId, "SKIP");
     }
 
     /**
      * REJECT: resolving with REJECT action should:
      * - Set confirmation status to REJECTED (not RESOLVED)
-     * - Write USER message about rejection
+     * - Emit CONFIRMATION_RESOLVED about rejection
      * - Keep workflow BLOCKED (node stays in WAITING_CONFIRMATION)
      * - NOT advance the workflow
      */
     @Test
-    void rejectAction_setsRejected_writesUserMessage_keepsWorkflowBlocked() throws Exception {
+    void rejectAction_setsRejected_emitsResolutionEvent_keepsWorkflowBlocked() throws Exception {
         StartedWorkflow wf = startWorkflowAndConfirm("FE1234");
 
         mockMvc.perform(post("/api/confirmations/" + wf.confirmationId() + "/resolve")
@@ -371,13 +360,8 @@ class ConfirmationResolveRoutingIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("REJECTED"));
 
-        var messages = jdbcTemplate.queryForList(
-                "SELECT * FROM agent_message WHERE session_id = ? AND role = 'USER' AND created_by = 'confirmation-service'",
-                wf.sessionId());
-        assertThat(messages).hasSizeGreaterThanOrEqualTo(1);
-        boolean hasRejectMessage = messages.stream()
-                .anyMatch(m -> m.get("content").toString().contains("拒绝"));
-        assertThat(hasRejectMessage).isTrue();
+        assertNoConfirmationLedgerMessages(wf.sessionId());
+        assertConfirmationResolvedEvent(wf.confirmationId(), "REJECT");
 
         MvcResult wfResult = mockMvc.perform(get("/api/workflow-instances/" + wf.instanceId()))
                 .andExpect(status().isOk())
@@ -390,11 +374,11 @@ class ConfirmationResolveRoutingIntegrationTest {
     /**
      * REJECT for EXCEPTION: resolving EXCEPTION confirmation with REJECT should:
      * - Set confirmation status to REJECTED
-     * - Write USER message
+     * - Emit CONFIRMATION_RESOLVED
      * - NOT call retryNode or skipNode
      */
     @Test
-    void rejectAction_forException_setsRejected_writesUserMessage_noNodeAction() throws Exception {
+    void rejectAction_forException_setsRejected_emitsResolutionEvent_noNodeAction() throws Exception {
         StartedWorkflow wf = startWorkflowAndConfirm("FE1234");
 
         // Insert an EXCEPTION confirmation
@@ -412,12 +396,8 @@ class ConfirmationResolveRoutingIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("REJECTED"));
 
-        var messages = jdbcTemplate.queryForList(
-                "SELECT * FROM agent_message WHERE session_id = ? AND role = 'USER' AND created_by = 'confirmation-service'",
-                wf.sessionId());
-        boolean hasRejectMessage = messages.stream()
-                .anyMatch(m -> m.get("content").toString().contains("拒绝"));
-        assertThat(hasRejectMessage).isTrue();
+        assertNoConfirmationLedgerMessages(wf.sessionId());
+        assertConfirmationResolvedEvent(exceptionId, "REJECT");
     }
 
     @Test
@@ -439,7 +419,7 @@ class ConfirmationResolveRoutingIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("REJECTED"));
 
-        verify(permissionConfirmationHandler).respondPermission("rt-session", "perm-1", false);
+        verify(permissionConfirmationHandler).respondPermission("rt-session", "perm-1", "reject");
     }
 
     @Test
@@ -461,7 +441,29 @@ class ConfirmationResolveRoutingIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("RESOLVED"));
 
-        verify(permissionConfirmationHandler).respondPermission("rt-session", "perm-2", true);
+        verify(permissionConfirmationHandler).respondPermission("rt-session", "perm-2", "once");
+    }
+
+    @Test
+    void permissionApproveAlways_sendsAlwaysToRuntime() throws Exception {
+        StartedWorkflow wf = startWorkflowAndConfirm("FE1234");
+        String confirmationId = "perm_rt_session_perm_2a";
+        jdbcTemplate.update("""
+                INSERT INTO confirmation_request (
+                    id, request_type, status, work_item_id, workflow_instance_id,
+                    workflow_node_instance_id, agent_session_id, runtime_type, runtime_session_id,
+                    interaction_id, title, priority, created_at, updated_at
+                ) VALUES (?, 'PERMISSION', 'PENDING', ?, ?, ?, ?, 'OPENCODE', 'rt-session',
+                          'perm-2a', 'Allow command?', 'HIGH', datetime('now'), datetime('now'))
+                """, confirmationId, wf.workItemId(), wf.instanceId(), wf.nodeInstanceId(), wf.sessionId());
+
+        mockMvc.perform(post("/api/confirmations/" + confirmationId + "/resolve")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"actionType\":\"APPROVE\",\"payload\":{\"reply\":\"always\"}}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("RESOLVED"));
+
+        verify(permissionConfirmationHandler).respondPermission("rt-session", "perm-2a", "always");
     }
 
     @Test
@@ -477,7 +479,7 @@ class ConfirmationResolveRoutingIntegrationTest {
                           'perm-3', 'Allow delete?', 'HIGH', datetime('now'), datetime('now'))
                 """, confirmationId, wf.workItemId(), wf.instanceId(), wf.nodeInstanceId(), wf.sessionId());
         doThrow(new IllegalStateException("permission endpoint failed"))
-                .when(permissionConfirmationHandler).respondPermission("rt-session", "perm-3", true);
+                .when(permissionConfirmationHandler).respondPermission("rt-session", "perm-3", "once");
 
         mockMvc.perform(post("/api/confirmations/" + confirmationId + "/resolve")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -519,10 +521,10 @@ class ConfirmationResolveRoutingIntegrationTest {
 
     /**
      * Structured CHOOSE payload: resolving a DECISION confirmation with choiceId+choiceLabel
-     * should produce a descriptive USER message including both fields.
+     * should save the structured fields and emit CONFIRMATION_RESOLVED.
      */
     @Test
-    void resolveDecisionWithStructuredPayload_writesDescriptiveMessage() throws Exception {
+    void resolveDecisionWithStructuredPayload_savesPayloadAndEmitsResolutionEvent() throws Exception {
         StartedWorkflow wf = startWorkflowAndConfirm("FE1234");
 
         // Resolve original confirmation first
@@ -551,15 +553,8 @@ class ConfirmationResolveRoutingIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("RESOLVED"));
 
-        // Verify the USER message contains structured choice info
-        var messages = jdbcTemplate.queryForList(
-                "SELECT * FROM agent_message WHERE session_id = ? AND role = 'USER' AND created_by = 'confirmation-service'",
-                wf.sessionId());
-        boolean hasStructuredChoice = messages.stream()
-                .anyMatch(m -> m.get("content").toString()
-                        .contains("用户选择：双写方案（A）")
-                        && m.get("content").toString().contains("确认项：选择技术方案"));
-        assertThat(hasStructuredChoice).isTrue();
+        assertNoConfirmationLedgerMessages(wf.sessionId());
+        assertConfirmationResolvedEvent(structuredId, "CHOOSE");
 
         // Verify resolution payload was saved
         var confirmation = jdbcTemplate.queryForMap(
@@ -571,10 +566,10 @@ class ConfirmationResolveRoutingIntegrationTest {
 
     /**
      * Structured SUPPLEMENT payload: resolving an INPUT_REQUIRED confirmation with fields map
-     * should produce a descriptive USER message summarizing all fields.
+     * should save the structured fields and emit CONFIRMATION_RESOLVED without a USER ledger message.
      */
     @Test
-    void resolveInputWithStructuredFields_writesDescriptiveMessage() throws Exception {
+    void resolveInputWithStructuredFields_savesPayloadAndEmitsResolutionEvent() throws Exception {
         StartedWorkflow wf = startWorkflowAndConfirm("FE1234");
 
         // Resolve original confirmation first
@@ -603,16 +598,13 @@ class ConfirmationResolveRoutingIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("RESOLVED"));
 
-        // Verify the USER message contains structured field summary
-        var messages = jdbcTemplate.queryForList(
-                "SELECT * FROM agent_message WHERE session_id = ? AND role = 'USER' AND created_by = 'confirmation-service'",
-                wf.sessionId());
-        boolean hasFieldSummary = messages.stream()
-                .anyMatch(m -> m.get("content").toString()
-                        .contains("用户补充：")
-                        && m.get("content").toString().contains("targetEnv=生产环境")
-                        && m.get("content").toString().contains("deadline=2026-06-01"));
-        assertThat(hasFieldSummary).isTrue();
+        assertNoConfirmationLedgerMessages(wf.sessionId());
+        assertConfirmationResolvedEvent(inputId, "SUPPLEMENT");
+        var confirmation = jdbcTemplate.queryForMap(
+                "SELECT resolution_payload_json FROM confirmation_request WHERE id = ?", inputId);
+        String payloadJson = (String) confirmation.get("resolution_payload_json");
+        assertThat(payloadJson).contains("生产环境");
+        assertThat(payloadJson).contains("2026-06-01");
     }
 
     /**

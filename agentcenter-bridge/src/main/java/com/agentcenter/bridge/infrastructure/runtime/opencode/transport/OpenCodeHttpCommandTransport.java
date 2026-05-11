@@ -122,16 +122,20 @@ public class OpenCodeHttpCommandTransport implements RuntimeCommandTransport {
         String baseUrl = payload.path("baseUrl").asText("");
         String cwd = payload.path("workingDirectory").asText("");
         String permissionId = payload.path("permissionId").asText("");
-        boolean approved = payload.path("approved").asBoolean(true);
+        String reply = payload.path("reply").asText("");
+        if (reply.isBlank()) {
+            reply = payload.path("approved").asBoolean(true) ? "once" : "reject";
+        }
+        reply = normalizePermissionReply(reply);
         if (permissionId.isBlank()) {
             return RuntimeAckEnvelope.nack(command.messageId(), RuntimeType.OPENCODE,
                     "permissionId is required for PERMISSION_RESPOND");
         }
 
         ObjectNode body = objectMapper.createObjectNode();
-        body.put("reply", approved ? "once" : "reject");
+        body.put("response", reply);
 
-        HttpRequest request = buildPost(baseUrl, "/permission/" + permissionId + "/reply", body, cwd, timeout);
+        HttpRequest request = buildPost(baseUrl, "/session/" + sessionId + "/permissions/" + permissionId, body, cwd, timeout);
         execute(request);
         return buildAck(command, null);
     }
@@ -141,6 +145,10 @@ public class OpenCodeHttpCommandTransport implements RuntimeCommandTransport {
         String baseUrl = payload.path("baseUrl").asText("");
         String cwd = payload.path("workingDirectory").asText("");
         String requestId = payload.path("requestId").asText("");
+        if (requestId.isBlank()) {
+            return RuntimeAckEnvelope.nack(command.messageId(), RuntimeType.OPENCODE,
+                    "requestId is required for QUESTION_REPLY");
+        }
 
         ObjectNode body = objectMapper.createObjectNode();
         body.set("answers", payload.path("answers"));
@@ -155,6 +163,10 @@ public class OpenCodeHttpCommandTransport implements RuntimeCommandTransport {
         String baseUrl = payload.path("baseUrl").asText("");
         String cwd = payload.path("workingDirectory").asText("");
         String requestId = payload.path("requestId").asText("");
+        if (requestId.isBlank()) {
+            return RuntimeAckEnvelope.nack(command.messageId(), RuntimeType.OPENCODE,
+                    "requestId is required for QUESTION_REJECT");
+        }
 
         HttpRequest request = buildPostNoBody(baseUrl, "/question/" + requestId + "/reject", cwd, timeout);
         execute(request);
@@ -254,6 +266,11 @@ public class OpenCodeHttpCommandTransport implements RuntimeCommandTransport {
         } catch (Exception e) {
             throw new RuntimeTransportException("JSON parse failed: " + e.getMessage(), e, false);
         }
+    }
+
+    private String normalizePermissionReply(String reply) {
+        if ("always".equals(reply) || "reject".equals(reply)) return reply;
+        return "once";
     }
 
     private RuntimeAckEnvelope buildAck(RuntimeCommandEnvelope command, ObjectNode payload) {

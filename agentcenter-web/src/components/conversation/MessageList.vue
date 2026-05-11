@@ -63,6 +63,7 @@ type InteractionResponseSummary = {
 type DisplayItem =
   | { type: 'user-message'; id: string; message: AgentMessageDto }
   | { type: 'system-message'; id: string; message: AgentMessageDto }
+  | { type: 'interaction-response'; id: string; message: AgentMessageDto }
   | { type: 'assistant-turn'; id: string; turn: ConversationTurnProjection }
   | { type: 'interaction-bar'; id: string; interactions: ConfirmationRequestDto[] }
 
@@ -96,6 +97,7 @@ const resolvedSessionId = computed(() =>
 const projectorInput = computed<ProjectorInput>(() => ({
   messages: normalizedMessages.value
     .filter(m => m.role !== 'SYSTEM')
+    .filter(m => !isInteractionResponseMessage(m))
     .map(m => ({
       id: m.id,
       sessionId: m.sessionId,
@@ -189,7 +191,9 @@ const displayItems = computed<DisplayItem[]>(() => {
   }
 
   for (const msg of sorted) {
-    if (msg.role === 'USER') {
+    if (msg.role === 'USER' && isInteractionResponseMessage(msg)) {
+      items.push({ type: 'interaction-response', id: msg.id, message: msg })
+    } else if (msg.role === 'USER') {
       items.push({ type: 'user-message', id: msg.id, message: msg })
       appendAnchoredTurns(msg.id)
     } else if (msg.role === 'SYSTEM') {
@@ -436,6 +440,21 @@ function systemLineParts(content: string): SystemLinePart[] {
             <template v-else>{{ item.message.content }}</template>
           </div>
           <div class="message-time">{{ formatTime(item.message.createdAt) }}</div>
+        </article>
+
+        <!-- INTERACTION response ledger -->
+        <article
+          v-else-if="item.type === 'interaction-response'"
+          class="interaction-response-line"
+        >
+          <span class="interaction-response-line__dot">✓</span>
+          <div class="interaction-response-card">
+            <div class="interaction-response-card__eyebrow">交互记录</div>
+            <div class="interaction-response-card__title">
+              {{ interactionResponseSummary(item.message).title }}
+            </div>
+            <p>{{ interactionResponseSummary(item.message).value }}</p>
+          </div>
         </article>
 
         <!-- SYSTEM message -->
@@ -687,6 +706,45 @@ function systemLineParts(content: string): SystemLinePart[] {
   color: color-mix(in srgb, var(--on-brand) 90%, transparent);
   font-size: 13px;
   line-height: 1.5;
+}
+
+.interaction-response-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card) 92%, var(--accent-blue));
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.interaction-response-line__dot {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--success-soft);
+  color: var(--success);
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.interaction-response-line .interaction-response-card__eyebrow {
+  color: var(--text-muted);
+}
+
+.interaction-response-line .interaction-response-card__title {
+  color: var(--text-primary);
+}
+
+.interaction-response-line .interaction-response-card p {
+  color: var(--text-secondary);
 }
 
 .message-time {

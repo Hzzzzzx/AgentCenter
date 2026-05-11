@@ -48,9 +48,10 @@ export const useConfirmationStore = defineStore('confirmations', () => {
   function addFromEvent(event: RuntimeEventDto) {
     try {
       const payload = event.payloadJson ? JSON.parse(event.payloadJson) : {}
-      if (payload.id) {
-        if (!pendingConfirmations.value.some((c) => c.id === payload.id)) {
-          pendingConfirmations.value.push(payload as ConfirmationRequestDto)
+      const id = payload.id || payload.confirmationId
+      if (id && payload.requestType) {
+        if (!pendingConfirmations.value.some((c) => c.id === id)) {
+          pendingConfirmations.value.push({ ...payload, id } as ConfirmationRequestDto)
         }
       } else {
         loadPending()

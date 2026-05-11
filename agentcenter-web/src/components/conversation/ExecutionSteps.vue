@@ -18,11 +18,9 @@ defineEmits<{
 
 const shouldOpen = computed(() =>
   props.status === 'failed'
-  || (!props.collapsedByDefault && !props.hasAnswer && (
-    props.status === 'running'
-    || props.status === 'waiting_input'
-    || props.steps.length <= 1
-  ))
+  || props.status === 'running'
+  || props.status === 'waiting_input'
+  || !props.collapsedByDefault
 )
 
 const toolCount = computed(() => props.steps.filter(step => step.kind === 'tool').length)
@@ -103,7 +101,7 @@ function toolCategorySummary(): string {
       <span>{{ summaryText }}</span>
       </span>
       <span class="execution-steps__badge">
-        {{ status === 'running' ? '进行中' : status === 'waiting_input' ? '需确认' : status === 'failed' ? '异常' : '已收起' }}
+        {{ status === 'running' ? '进行中' : status === 'waiting_input' ? '需确认' : status === 'failed' ? '异常' : shouldOpen ? '过程' : '已收起' }}
       </span>
     </summary>
 

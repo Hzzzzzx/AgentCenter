@@ -7,12 +7,18 @@ import { useSessionStore } from './sessions'
 import type { AgentMessageDto, RuntimeEventDto } from '../api/types'
 
 let capturedOnEvent: ((event: RuntimeEventDto) => void) | null = null
+let capturedOnError: (() => void) | null = null
 let capturedOnEvents: Array<(event: RuntimeEventDto) => void> = []
 
 vi.mock('../api/events', () => ({
   eventApi: {
-    streamSessionEvents: vi.fn().mockImplementation((_sessionId: string, onEvent: (event: RuntimeEventDto) => void) => {
+    streamSessionEvents: vi.fn().mockImplementation((
+      _sessionId: string,
+      onEvent: (event: RuntimeEventDto) => void,
+      onError?: () => void,
+    ) => {
       capturedOnEvent = onEvent
+      capturedOnError = onError ?? null
       capturedOnEvents.push(onEvent)
       return { close: vi.fn() }
     }),
@@ -83,6 +89,7 @@ describe('useRuntimeStore — SSE event handlers', () => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
     capturedOnEvent = null
+    capturedOnError = null
     capturedOnEvents = []
   })
 
@@ -342,6 +349,22 @@ describe('useRuntimeStore — SSE event handlers', () => {
     expect(runtimeStore.events).toHaveLength(0)
     expect(runtimeStore.streamingText).toBe('')
     expect(runtimeStore.busy).toBe(false)
+  })
+
+  it('records a visible runtime connection error when the browser SSE stream fails', () => {
+    const runtimeStore = useRuntimeStore()
+
+    runtimeStore.connectSSE('sess-1')
+    runtimeStore.markBusy()
+    expect(capturedOnError).toBeTruthy()
+
+    capturedOnError!()
+
+    expect(runtimeStore.connected).toBe(false)
+    expect(runtimeStore.busy).toBe(false)
+    expect(runtimeStore.events).toHaveLength(1)
+    expect(runtimeStore.events[0].eventType).toBe('ERROR')
+    expect(runtimeStore.events[0].payloadJson).toContain('browser.sse.error')
   })
 
   it('syncs persisted assistant message when assistant completed event arrives', async () => {
