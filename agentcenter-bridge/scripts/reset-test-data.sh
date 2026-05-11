@@ -45,7 +45,7 @@ done
 # ---- 校验 ----
 if [[ ! -f "$DB_PATH" ]]; then
     echo "❌ 数据库文件不存在: $DB_PATH"
-    echo "   先启动一次 Bridge 让 Flyway 创建 schema: cd agentcenter-bridge && ./mvnw spring-boot:run"
+    echo "   先启动一次 Bridge 让 Flyway 创建 schema: cd agentcenter-bridge && mvn spring-boot:run"
     exit 1
 fi
 

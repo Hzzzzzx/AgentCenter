@@ -13,13 +13,13 @@ Java Spring Boot 后端。管理工作事项、工作流、会话、确认项，
 ## Prerequisites
 
 - Java 17+
-- Maven 3.8+（或用自带的 `./mvnw`）
+- Maven 3.8+（使用企业内部 Maven，确保 `mvn` 在 `PATH` 中）
 - opencode CLI（`npm install -g opencode-ai`），需先 `opencode auth` 登录
 
 ## Run
 
 ```bash
-./mvnw spring-boot:run
+mvn spring-boot:run
 ```
 
 启动后监听 8080 端口。首次发消息时会自动启动 `opencode serve`（4097 端口）。
@@ -33,13 +33,13 @@ Java Spring Boot 后端。管理工作事项、工作流、会话、确认项，
 ../start.sh --dev    # 开发模式：tmux 保活 + Spring Boot DevTools
 ```
 
-开发模式启用 `spring-boot-devtools`。修改 Java 源码后执行 `./mvnw compile`，DevTools 会在 classpath 变化后自动重启 Spring Context；这会断开当前 SSE 连接，但不需要手动停止再启动 Bridge。
+开发模式启用 `spring-boot-devtools`。修改 Java 源码后执行 `mvn compile`，DevTools 会在 classpath 变化后自动重启 Spring Context；这会断开当前 SSE 连接，但不需要手动停止再启动 Bridge。
 
 ## Build & Test
 
 ```bash
-./mvnw clean package    # 编译打包
-./mvnw test             # 跑测试
+mvn clean package    # 编译打包
+mvn test             # 跑测试
 ```
 
 ## API Endpoints
