@@ -422,7 +422,7 @@ public class AgentSessionService {
                 """.formatted(retryCount, jsonEscape(recoveryMode), jsonEscape(originalContent), jsonEscape(runtimeError)).trim());
         confirmation.setCreatedAt(now);
         confirmation.setUpdatedAt(now);
-        confirmationMapper.insert(confirmation);
+        boolean deduplicated = upsertRuntimeExceptionConfirmation(confirmation);
 
         runtimeEventService.publishEvent(new RuntimeEventDto(
                 null,
@@ -433,9 +433,23 @@ public class AgentSessionService {
                 RuntimeEventType.CONFIRMATION_CREATED,
                 RuntimeEventSource.BRIDGE,
                 "{\"confirmationId\":\"" + confirmation.getId() + "\",\"requestType\":\"EXCEPTION\",\"interactionType\":\""
-                        + RUNTIME_EXCEPTION_INTERACTION + "\"}",
+                        + RUNTIME_EXCEPTION_INTERACTION + "\",\"deduplicated\":" + deduplicated + "}",
                 null
         ));
+    }
+
+    boolean upsertRuntimeExceptionConfirmation(ConfirmationRequestEntity confirmation) {
+        ConfirmationRequestEntity existing = confirmationMapper.findPendingRuntimeExceptionBySessionId(
+                confirmation.getAgentSessionId());
+        if (existing == null) {
+            confirmationMapper.insert(confirmation);
+            return false;
+        }
+
+        confirmation.setId(existing.getId());
+        confirmation.setCreatedAt(existing.getCreatedAt());
+        confirmationMapper.updateRuntimeIntervention(confirmation);
+        return true;
     }
 
     private String buildRuntimeExceptionContent(String runtimeError, int retryCount) {

@@ -45,6 +45,25 @@
         ORDER BY created_at DESC
     </select>
 
+    <select id="findPendingRuntimeExceptionBySessionId" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.ConfirmationRequestEntity">
+        SELECT id, request_type, status, project_id, space_id, iteration_id,
+               work_item_id, workflow_instance_id, workflow_node_instance_id,
+               agent_session_id, runtime_type, runtime_session_id, runtime_event_id,
+               skill_name, mcp_server, mcp_tool, title, content, context_summary,
+               options_json, priority, required_role, assignee_user_id,
+                created_at, updated_at, resolved_by, resolved_at,
+                resolution_comment, resolution_payload_json,
+                interaction_id, interaction_type, interaction_schema_json,
+                interaction_context_json, interaction_required, interaction_order_no
+        FROM confirmation_request
+        WHERE agent_session_id = #{agentSessionId}
+          AND request_type = 'EXCEPTION'
+          AND status = 'PENDING'
+          AND interaction_type = 'RUNTIME_EXCEPTION'
+        ORDER BY updated_at DESC, created_at DESC
+        LIMIT 1
+    </select>
+
     <insert id="insert">
         INSERT INTO confirmation_request (id, request_type, status, project_id, space_id, iteration_id,
                                           work_item_id, workflow_instance_id, workflow_node_instance_id,
@@ -78,6 +97,27 @@
             interaction_order_no = COALESCE(#{interactionOrderNo}, interaction_order_no),
             updated_at = datetime('now')
         WHERE id = #{id}
+    </update>
+
+    <update id="updateRuntimeIntervention">
+        UPDATE confirmation_request
+        SET work_item_id = #{workItemId},
+            workflow_instance_id = #{workflowInstanceId},
+            workflow_node_instance_id = #{workflowNodeInstanceId},
+            agent_session_id = #{agentSessionId},
+            runtime_type = #{runtimeType},
+            runtime_session_id = #{runtimeSessionId},
+            title = #{title},
+            content = #{content},
+            context_summary = #{contextSummary},
+            options_json = #{optionsJson},
+            priority = #{priority},
+            interaction_type = #{interactionType},
+            interaction_context_json = #{interactionContextJson},
+            interaction_required = #{interactionRequired},
+            updated_at = datetime('now')
+        WHERE id = #{id}
+          AND status = 'PENDING'
     </update>
 
 </mapper>
