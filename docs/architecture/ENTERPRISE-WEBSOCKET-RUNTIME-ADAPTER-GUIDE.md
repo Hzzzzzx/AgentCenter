@@ -551,8 +551,8 @@ Fake Runtime 行为：
 
 ```bash
 cd agentcenter-bridge
-mvn test
-mvn clean package
+./mvnw test
+./mvnw clean package
 ```
 
 边界审计：
@@ -643,4 +643,4 @@ void refreshMcps(RuntimeType runtimeType, RuntimeOperationContext context);
 - 对话 delta/completed 能通过统一 dispatcher 投影到平台消息/事件。
 - application 层没有企业 Runtime 私有协议泄漏。
 - fake WebSocket Runtime contract tests 通过。
-- `mvn test` 与 `mvn clean package` 通过。
+- `./mvnw test` 与 `./mvnw clean package` 通过。

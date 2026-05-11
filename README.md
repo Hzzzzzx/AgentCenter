@@ -42,7 +42,7 @@
 开发模式会把 opencode、Java Bridge、Vue Dev Server 放进固定的 tmux 会话里保活，并启用 Spring Boot DevTools。Java 源码变更后需要让 classpath 更新，常用方式是：
 
 ```bash
-cd agentcenter-bridge && mvn compile
+cd agentcenter-bridge && ./mvnw compile
 ```
 
 DevTools 检测到编译后的 class 变化后会自动重启 Spring Context；SSE 连接和当前会话 UI 可能短暂断开，刷新页面或重新进入会话即可。停止仍统一使用：
@@ -62,7 +62,7 @@ opencode serve --hostname 127.0.0.1 --port 4097 --print-logs --log-level WARN
 
 **第二步：Java Bridge**
 ```bash
-cd agentcenter-bridge && mvn spring-boot:run
+cd agentcenter-bridge && ./mvnw spring-boot:run
 ```
 
 **第三步：Vue 前端**
@@ -168,7 +168,6 @@ AgentCenter/
    ```bash
    export MAVEN_SETTINGS=/path/to/your/settings.xml
    ```
-   `start.sh` 会把该设置传给 Maven；手动执行时可使用 `mvn -s "$MAVEN_SETTINGS" ...`。
 
 `./start.sh --check` 会自动检测这些配置并给出提示。
 
@@ -191,8 +190,8 @@ Java Bridge 可能用了旧代码，重新编译：
 
 ```bash
 cd agentcenter-bridge
-mvn clean compile
-mvn spring-boot:run
+./mvnw clean compile
+./mvnw spring-boot:run
 ```
 
 确认 opencode serve 在运行：

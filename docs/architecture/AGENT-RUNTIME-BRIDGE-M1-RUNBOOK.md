@@ -42,7 +42,7 @@ Or via environment variable:
 
 ```bash
 export AGENTCENTER_RUNTIME_WORKSPACE=/absolute/path/to/runtime-sandbox
-mvn spring-boot:run
+./mvnw spring-boot:run
 ```
 
 ### Port Configuration
@@ -82,7 +82,7 @@ opencode serve --hostname 127.0.0.1 --port 4097 --print-logs --log-level WARN
 
 ```bash
 cd agentcenter-bridge
-mvn spring-boot:run
+./mvnw spring-boot:run
 ```
 
 Wait for: `Started AgentCenterBridgeApplication in X.XXX seconds`
@@ -107,7 +107,7 @@ nohup opencode serve --hostname 127.0.0.1 --port 4097 \
 
 # 2. Start Java Bridge
 cd agentcenter-bridge
-nohup mvn spring-boot:run -q > /tmp/bridge.log 2>&1 &
+nohup ./mvnw spring-boot:run -q > /tmp/bridge.log 2>&1 &
 cd ..
 
 # 3. Start Vue dev
@@ -176,8 +176,8 @@ lsof -i:4097
 
 ```bash
 cd agentcenter-bridge
-mvn clean package -DskipTests
-mvn spring-boot:run
+./mvnw clean package -DskipTests
+./mvnw spring-boot:run
 ```
 
 Also check that opencode serve is running: `curl http://127.0.0.1:4097/path -H 'x-opencode-directory: .'`
@@ -267,7 +267,7 @@ lsof -ti:5173 | xargs kill
 ```bash
 # Backend
 cd agentcenter-bridge
-mvn test
+./mvnw test
 
 # Frontend
 cd agentcenter-web

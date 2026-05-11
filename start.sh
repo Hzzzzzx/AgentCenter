@@ -38,15 +38,6 @@ ok()    { echo -e "${GREEN}[OK]${NC}    $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 fail()  { echo -e "${RED}[FAIL]${NC}  $*"; }
 
-maven_command_string() {
-    local cmd=(mvn)
-    if [[ -n "${MAVEN_SETTINGS:-}" ]]; then
-        cmd+=(-s "$MAVEN_SETTINGS")
-    fi
-    cmd+=("$@")
-    printf "%q " "${cmd[@]}"
-}
-
 # ─── Environment Checks ──────────────────────────────────
 
 check_java() {
@@ -89,14 +80,16 @@ check_opencode() {
 }
 
 check_maven_settings() {
-    if ! command -v mvn &>/dev/null; then
-        fail "未找到 mvn。企业环境请安装内部 Maven，并确保 mvn 在 PATH 中"
+    local mvn="$BRIDGE_DIR/mvnw"
+    if [[ ! -f "$mvn" ]]; then
+        fail "未找到 Maven Wrapper: $mvn"
         return 1
     fi
 
-    ok "$(mvn -version 2>/dev/null | head -1)"
+    ok "Maven Wrapper 存在"
 
     # Maven settings
+    local settings_xml="${MAVEN_OPTS##*-s }"
     if [[ -n "${MAVEN_SETTINGS:-}" ]]; then
         ok "检测到自定义 MAVEN_SETTINGS=$MAVEN_SETTINGS"
     fi
@@ -119,11 +112,7 @@ check_maven_settings() {
 
     # Windows C: drive check
     local local_repo
-    local mvn_cmd=(mvn)
-    if [[ -n "${MAVEN_SETTINGS:-}" ]]; then
-        mvn_cmd+=(-s "$MAVEN_SETTINGS")
-    fi
-    local_repo=$("${mvn_cmd[@]}" help:evaluate -Dexpression=settings.localRepository -q -DforceStdout 2>/dev/null || echo "")
+    local_repo=$("$mvn" help:evaluate -Dexpression=settings.localRepository -q -DforceStdout 2>/dev/null || echo "")
     if [[ -n "$local_repo" && "$local_repo" == /c/* ]]; then
         warn "Maven 本地仓库在 C 盘: $local_repo"
         warn "  建议在 settings.xml 中配置 <localRepository> 到非系统盘路径"
@@ -148,7 +137,7 @@ check_all() {
     check_java       || rc=1
     check_node        || rc=1
     check_opencode    || rc=1
-    check_maven_settings || rc=1
+    check_maven_settings
     check_opencode_auth
     echo ""
     if [[ $rc -eq 0 ]]; then
@@ -305,11 +294,7 @@ start_bridge() {
 
     info "启动 Java Bridge (port $BRIDGE_PORT)..."
     mkdir -p "$LOG_DIR"
-    local mvn_cmd=(mvn)
-    if [[ -n "${MAVEN_SETTINGS:-}" ]]; then
-        mvn_cmd+=(-s "$MAVEN_SETTINGS")
-    fi
-    (cd "$BRIDGE_DIR" && AGENTCENTER_RUNTIME_WORKSPACE="$RUNTIME_WS" nohup "${mvn_cmd[@]}" spring-boot:run > "$LOG_DIR/bridge.log" 2>&1 &)
+    (cd "$BRIDGE_DIR" && AGENTCENTER_RUNTIME_WORKSPACE="$RUNTIME_WS" nohup ./mvnw spring-boot:run > "$LOG_DIR/bridge.log" 2>&1 &)
     BRIDGE_PID=$(lsof -ti :$BRIDGE_PORT -sTCP:LISTEN 2>/dev/null || echo "")
 
     if wait_for_port $BRIDGE_PORT "Java Bridge" 60; then
@@ -374,14 +359,12 @@ start_all_dev() {
     echo ""
     mkdir -p "$RUNTIME_WS" "$LOG_DIR"
     ensure_runtime_workspace_isolated
-    local bridge_mvn_cmd
-    bridge_mvn_cmd=$(maven_command_string spring-boot:run)
 
     start_tmux_service "$DEV_TMUX_PREFIX-opencode" "opencode serve" "$OPENCODE_PORT" \
         "cd '$RUNTIME_WS' && opencode serve --hostname 127.0.0.1 --port $OPENCODE_PORT --print-logs --log-level WARN 2>&1 | tee '$LOG_DIR/opencode-serve.log'" || return 1
 
     start_tmux_service "$DEV_TMUX_PREFIX-bridge" "Java Bridge" "$BRIDGE_PORT" \
-        "cd '$BRIDGE_DIR' && AGENTCENTER_RUNTIME_WORKSPACE='$RUNTIME_WS' SPRING_DEVTOOLS_RESTART_ENABLED=true $bridge_mvn_cmd 2>&1 | tee '$LOG_DIR/bridge.log'" || return 1
+        "cd '$BRIDGE_DIR' && AGENTCENTER_RUNTIME_WORKSPACE='$RUNTIME_WS' SPRING_DEVTOOLS_RESTART_ENABLED=true ./mvnw spring-boot:run 2>&1 | tee '$LOG_DIR/bridge.log'" || return 1
 
     info "安装前端依赖 (首次)..."
     (cd "$WEB_DIR" && npm install --silent 2>/dev/null || true)

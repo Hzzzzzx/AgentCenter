@@ -296,7 +296,7 @@ session.snapshot
 
 ```bash
 cd agentcenter-bridge
-mvn test
+./mvnw test
 ```
 
 ```bash
