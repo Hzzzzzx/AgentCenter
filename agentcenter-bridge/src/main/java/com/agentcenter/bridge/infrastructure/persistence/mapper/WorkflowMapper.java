@@ -32,4 +32,6 @@ public interface WorkflowMapper {
     WorkflowNodeInstanceEntity findNodeInstanceById(@Param("id") String id);
     List<WorkflowInstanceEntity> findInstancesByWorkItemId(@Param("workItemId") String workItemId);
     int countNodeDefinitionsBySkillName(@Param("skillName") String skillName);
+    int renameSkillReferences(@Param("oldSkillName") String oldSkillName, @Param("newSkillName") String newSkillName);
+    int renameNodeInstanceSkillName(@Param("oldSkillName") String oldSkillName, @Param("newSkillName") String newSkillName);
 }

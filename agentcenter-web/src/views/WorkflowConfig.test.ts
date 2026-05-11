@@ -3,7 +3,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import WorkflowConfig from './WorkflowConfig.vue'
 import { workflowApi } from '../api/workflows'
-import type { WorkflowDefinitionDto } from '../api/types'
+import { skillApi } from '../api/runtimeResources'
+import type { RuntimeSkillDetailDto, WorkflowDefinitionDto } from '../api/types'
 
 const mocks = vi.hoisted(() => ({
   definition: {
@@ -52,9 +53,9 @@ vi.mock('../api/workflows', () => ({
 
 vi.mock('../api/runtimeResources', () => ({
   skillApi: {
-    list: vi.fn().mockResolvedValue([
-      { id: 'skill-1', name: 'prd-desingn', status: 'ENABLED' },
-      { id: 'skill-2', name: 'hld-design', status: 'ENABLED' },
+    catalog: vi.fn().mockResolvedValue([
+      { id: 'skill-1', name: 'prd-desingn', status: 'ENABLED', validationStatus: 'VALID' },
+      { id: 'skill-2', name: 'hld-design', status: 'ENABLED', validationStatus: 'VALID' },
     ]),
   },
 }))
@@ -131,6 +132,39 @@ describe('WorkflowConfig.vue', () => {
 
     const saveButton = wrapper.findAll('button').find((button) => button.text() === '无改动')
     expect(saveButton?.attributes('disabled')).toBeDefined()
+    expect(workflowApi.updateDefinition).not.toHaveBeenCalled()
+  })
+
+  it('flags workflow skills missing from the realtime project skill catalog', async () => {
+    const prdSkill: RuntimeSkillDetailDto = {
+      id: 'skill-1',
+      projectId: '01DEFAULTPROJECT0000000000001',
+      name: 'prd-desingn',
+      displayName: null,
+      description: null,
+      currentVersionId: null,
+      status: 'ENABLED',
+      source: 'LOCAL_SCAN',
+      relativePath: '.opencode/skills/prd-desingn',
+      checksum: 'checksum-prd',
+      validationStatus: 'VALID',
+      validationMessage: null,
+      createdBy: null,
+      createdAt: '2026-05-11T00:00:00Z',
+      updatedAt: '2026-05-11T00:00:00Z',
+      version: null,
+      referenceCount: 0,
+    }
+    vi.mocked(skillApi.catalog).mockResolvedValueOnce([prdSkill])
+
+    const wrapper = await mountWorkflowConfig()
+
+    expect(wrapper.text()).toContain('编排引用的 Skill 当前不可用：hld-design')
+    await wrapper.find('button.workflow-config__button--primary').trigger('click')
+    await wrapper.find('input[type="text"]').setValue('FE 缺失 Skill 编排')
+    await wrapper.findAll('button').find((button) => button.text() === '保存新版')?.trigger('click')
+
+    expect(wrapper.text()).toContain('Skill "hld-design" 当前未在 Skill 管理中启用')
     expect(workflowApi.updateDefinition).not.toHaveBeenCalled()
   })
 })

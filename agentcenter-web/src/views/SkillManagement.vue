@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { skillApi } from '../api/runtimeResources'
+import { DEFAULT_PROJECT_ID } from '../constants/projects'
 import type { RuntimeSkillDetailDto, SkillStatus } from '../api/types'
 
 interface Props {
@@ -8,7 +9,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  projectId: '01DEFAULTPROJECT0000000000001',
+  projectId: DEFAULT_PROJECT_ID,
 })
 
 const skills = ref<RuntimeSkillDetailDto[]>([])
@@ -20,7 +21,9 @@ const filterStatus = ref<SkillStatus | 'ALL'>('ALL')
 const filteredSkills = computed(() => {
   let result = skills.value
   if (filterStatus.value !== 'ALL') {
-    result = result.filter(s => s.status === filterStatus.value)
+    result = filterStatus.value === 'INVALID'
+      ? result.filter(s => s.status === 'INVALID' || s.validationStatus !== 'VALID')
+      : result.filter(s => s.status === filterStatus.value)
   }
   if (searchQuery.value) {
     const q = searchQuery.value.toLowerCase()
@@ -35,7 +38,7 @@ const filteredSkills = computed(() => {
 
 const skillCount = computed(() => skills.value.length)
 const enabledCount = computed(() => skills.value.filter(s => s.status === 'ENABLED').length)
-const errorCount = computed(() => skills.value.filter(s => s.status === 'INVALID').length)
+const errorCount = computed(() => skills.value.filter(s => s.validationStatus !== 'VALID').length)
 
 const statusColorMap: Record<string, string> = {
   ENABLED: 'var(--success)',
@@ -65,6 +68,19 @@ async function handleUpload(event: Event) {
     await loadSkills()
   } catch (e: any) {
     error.value = e.message || '上传失败'
+  }
+  input.value = ''
+}
+
+async function handleUpdateSkillZip(event: Event, skill: RuntimeSkillDetailDto) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  try {
+    await skillApi.updateZip(props.projectId, skill.id, file)
+    await loadSkills()
+  } catch (e: any) {
+    error.value = e.message || '更新失败'
   }
   input.value = ''
 }
@@ -184,7 +200,7 @@ onMounted(loadSkills)
         <div v-if="skill.description" class="skill-management__item-desc">{{ skill.description }}</div>
         <div class="skill-management__item-actions">
           <label class="skill-management__item-action">
-            <input type="file" accept=".zip" @change="handleUpload" hidden />
+            <input type="file" accept=".zip" @change="handleUpdateSkillZip($event, skill)" hidden />
             更新
           </label>
           <button class="skill-management__item-action" @click="handleToggleSkill(skill)">

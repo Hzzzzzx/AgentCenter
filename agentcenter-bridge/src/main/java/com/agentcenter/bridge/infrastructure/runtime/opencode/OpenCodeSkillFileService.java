@@ -146,12 +146,10 @@ public class OpenCodeSkillFileService {
         try {
             String content = Files.readString(skillFile, StandardCharsets.UTF_8);
             String directoryName = skillDir.getFileName().toString();
-            // OpenCode loads skills by directory. Treat the directory as the
-            // stable identity so editing SKILL.md metadata does not create a
-            // second logical skill in AgentCenter.
-            String name = directoryName;
+            String declaredName = firstFrontmatterValue(content, "name", directoryName);
+            String name = SAFE_SKILL_NAME.matcher(declaredName).matches() ? declaredName : directoryName;
             String description = firstFrontmatterValue(content, "description", "");
-            String checksum = sha256(content);
+            String checksum = checksumDirectory(skillDir);
             OffsetDateTime updatedAt = OffsetDateTime.ofInstant(
                     Files.getLastModifiedTime(skillFile).toInstant(),
                     ZoneId.systemDefault()
@@ -176,10 +174,15 @@ public class OpenCodeSkillFileService {
         return fallback;
     }
 
-    private String sha256(String content) {
+    private String checksumDirectory(Path dir) throws IOException {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(content.getBytes(StandardCharsets.UTF_8));
+            try (Stream<Path> walk = Files.walk(dir)) {
+                for (Path path : walk.filter(Files::isRegularFile).sorted().toList()) {
+                    digest.update(Files.readAllBytes(path));
+                }
+            }
+            byte[] hash = digest.digest();
             return HexFormat.of().formatHex(hash);
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 is not available", e);

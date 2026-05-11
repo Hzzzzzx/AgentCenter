@@ -177,7 +177,34 @@
     </select>
 
     <select id="countNodeDefinitionsBySkillName" resultType="int">
-        SELECT COUNT(*) FROM workflow_node_definition WHERE skill_name = #{skillName}
+        SELECT COUNT(*)
+        FROM workflow_node_definition
+        WHERE skill_name = #{skillName}
+           OR recommended_skill_names_json LIKE '%"' || #{skillName} || '"%'
     </select>
+
+    <update id="renameSkillReferences">
+        UPDATE workflow_node_definition
+        SET skill_name = CASE
+                WHEN skill_name = #{oldSkillName} THEN #{newSkillName}
+                ELSE skill_name
+            END,
+            recommended_skill_names_json = CASE
+                WHEN recommended_skill_names_json IS NULL THEN NULL
+                ELSE REPLACE(
+                    recommended_skill_names_json,
+                    '"' || #{oldSkillName} || '"',
+                    '"' || #{newSkillName} || '"'
+                )
+            END
+        WHERE skill_name = #{oldSkillName}
+           OR recommended_skill_names_json LIKE '%"' || #{oldSkillName} || '"%'
+    </update>
+
+    <update id="renameNodeInstanceSkillName">
+        UPDATE workflow_node_instance
+        SET skill_name = #{newSkillName}
+        WHERE skill_name = #{oldSkillName}
+    </update>
 
 </mapper>

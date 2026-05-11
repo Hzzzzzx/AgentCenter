@@ -60,11 +60,9 @@ import com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowDefiniti
 import com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowInstanceEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowNodeDefinitionEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowNodeInstanceEntity;
-import com.agentcenter.bridge.infrastructure.persistence.entity.RuntimeSkillEntity;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.AgentMessageMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.ArtifactMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.ConfirmationMapper;
-import com.agentcenter.bridge.infrastructure.persistence.mapper.RuntimeSkillMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.WorkItemMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.WorkflowMapper;
 
@@ -88,7 +86,7 @@ public class WorkflowCommandService {
     private final AgentSessionService agentSessionService;
     private final RuntimeEventService runtimeEventService;
     private final RuntimeGateway runtimeGateway;
-    private final RuntimeSkillMapper runtimeSkillMapper;
+    private final SkillRegistryService skillRegistryService;
     private final IdGenerator idGenerator;
     private final RuntimeType workflowRuntimeType;
     private final ExecutorService workflowExecutor;
@@ -103,7 +101,7 @@ public class WorkflowCommandService {
                                    AgentSessionService agentSessionService,
                                    RuntimeEventService runtimeEventService,
                                    RuntimeGateway runtimeGateway,
-                                   RuntimeSkillMapper runtimeSkillMapper,
+                                   SkillRegistryService skillRegistryService,
                                    IdGenerator idGenerator,
                                    @Value("${agentcenter.runtime.default-type:OPENCODE}") String defaultRuntimeType,
                                    @Qualifier("workflowExecutor") ExecutorService workflowExecutor) {
@@ -115,7 +113,7 @@ public class WorkflowCommandService {
         this.agentSessionService = agentSessionService;
         this.runtimeEventService = runtimeEventService;
         this.runtimeGateway = runtimeGateway;
-        this.runtimeSkillMapper = runtimeSkillMapper;
+        this.skillRegistryService = skillRegistryService;
         this.idGenerator = idGenerator;
         this.workflowRuntimeType = RuntimeType.valueOf(defaultRuntimeType.toUpperCase());
         this.workflowExecutor = workflowExecutor;
@@ -154,6 +152,7 @@ public class WorkflowCommandService {
         List<WorkflowNodeDefinitionEntity> nodeDefs =
                 workflowMapper.findNodeDefinitionsByWorkflowDefinitionId(definition.getId());
         nodeDefs.sort(Comparator.comparingInt(WorkflowNodeDefinitionEntity::getOrderNo));
+        validateDefinitionSkillsRunnable(workItem, nodeDefs);
 
         String now = LocalDateTime.now().format(SQLITE_DATETIME);
 
@@ -882,23 +881,25 @@ public class WorkflowCommandService {
     }
 
     private SkillRunResult validateSkillRunnable(WorkItemEntity workItem, String skillName) {
-        RuntimeSkillEntity skill = runtimeSkillMapper.findByProjectIdAndName(workItem.getProjectId(), skillName);
-        if (skill == null) {
-            if (runtimeSkillMapper.countByProjectId(workItem.getProjectId()) == 0) {
-                log.debug("Runtime skill registry is empty for project {}; allowing legacy skill execution: {}",
-                        workItem.getProjectId(), skillName);
-                return null;
-            }
+        String validationError = skillRegistryService.validateRunnableSkill(workItem.getProjectId(), skillName);
+        if (validationError != null) {
             return new SkillRunResult(false, null, null,
-                    "Skill is not registered for project " + workItem.getProjectId() + ": " + skillName, false);
-        }
-        if (!"ENABLED".equals(skill.getStatus()) || !"VALID".equals(skill.getValidationStatus())) {
-            String status = skill.getStatus() == null ? "UNKNOWN" : skill.getStatus();
-            String validation = skill.getValidationStatus() == null ? "UNKNOWN" : skill.getValidationStatus();
-            return new SkillRunResult(false, null, null,
-                    "Skill is not runnable: " + skillName + " status=" + status + ", validation=" + validation, false);
+                    validationError, false);
         }
         return null;
+    }
+
+    private void validateDefinitionSkillsRunnable(WorkItemEntity workItem, List<WorkflowNodeDefinitionEntity> nodeDefs) {
+        skillRegistryService.syncSkillsFromFilesystem(workItem.getProjectId());
+        for (WorkflowNodeDefinitionEntity nodeDef : nodeDefs) {
+            String validationError = skillRegistryService.validateRegisteredRunnableSkill(
+                    workItem.getProjectId(), nodeDef.getSkillName());
+            if (validationError != null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Workflow definition references unavailable Skill at node "
+                                + nodeDef.getName() + ": " + validationError);
+            }
+        }
     }
 
     private String workflowToolCallId(WorkflowNodeInstanceEntity node, String skillName) {

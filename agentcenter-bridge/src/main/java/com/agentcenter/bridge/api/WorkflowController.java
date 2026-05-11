@@ -5,6 +5,8 @@ import com.agentcenter.bridge.api.dto.UpdateWorkflowDefinitionRequest;
 import com.agentcenter.bridge.api.dto.WorkflowDefinitionDto;
 import com.agentcenter.bridge.api.dto.WorkflowInstanceDto;
 import com.agentcenter.bridge.api.dto.WorkflowNodeDefinitionDto;
+import com.agentcenter.bridge.application.ProjectDefaults;
+import com.agentcenter.bridge.application.SkillRegistryService;
 import com.agentcenter.bridge.application.WorkflowCommandService;
 import com.agentcenter.bridge.domain.artifact.ArtifactType;
 import com.agentcenter.bridge.domain.workflow.InputPolicy;
@@ -28,15 +30,18 @@ import java.util.List;
 public class WorkflowController {
 
     private final WorkflowCommandService workflowCommandService;
+    private final SkillRegistryService skillRegistryService;
     private final WorkflowMapper workflowMapper;
     private final IdGenerator idGenerator;
     private final ObjectMapper objectMapper;
 
     public WorkflowController(WorkflowCommandService workflowCommandService,
+                               SkillRegistryService skillRegistryService,
                                WorkflowMapper workflowMapper,
                                IdGenerator idGenerator,
                                ObjectMapper objectMapper) {
         this.workflowCommandService = workflowCommandService;
+        this.skillRegistryService = skillRegistryService;
         this.workflowMapper = workflowMapper;
         this.idGenerator = idGenerator;
         this.objectMapper = objectMapper;
@@ -59,6 +64,16 @@ public class WorkflowController {
         }
         if (request.nodes() == null || request.nodes().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Workflow definition must contain at least one node");
+        }
+        String projectId = ProjectDefaults.resolveProjectId(request.projectId());
+        skillRegistryService.syncSkillsFromFilesystem(projectId);
+        for (var node : request.nodes()) {
+            requireRegisteredRunnableSkill(projectId, node.skillName());
+            if (node.recommendedSkillNames() != null) {
+                for (String recommendedSkillName : node.recommendedSkillNames()) {
+                    requireRegisteredRunnableSkill(projectId, recommendedSkillName);
+                }
+            }
         }
 
         boolean isDefault = request.isDefault() != null
@@ -194,6 +209,13 @@ public class WorkflowController {
 
     private String nonBlank(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value.trim();
+    }
+
+    private void requireRegisteredRunnableSkill(String projectId, String skillName) {
+        String validationError = skillRegistryService.validateRegisteredRunnableSkill(projectId, skillName);
+        if (validationError != null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, validationError);
+        }
     }
 
     private String slugify(String value, int order) {

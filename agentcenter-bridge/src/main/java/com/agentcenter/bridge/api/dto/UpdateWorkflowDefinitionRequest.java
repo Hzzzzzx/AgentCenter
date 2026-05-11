@@ -8,6 +8,7 @@ import java.util.List;
 public record UpdateWorkflowDefinitionRequest(
         String name,
         Boolean isDefault,
+        String projectId,
         List<Node> nodes
 ) {
     public record Node(

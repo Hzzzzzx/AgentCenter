@@ -45,6 +45,11 @@ public class ProjectRuntimeResourceController {
         return skillRegistryService.listSkills(projectId);
     }
 
+    @GetMapping("/skills/catalog")
+    public List<RuntimeSkillDetailDto> listProjectSkillCatalog(@PathVariable String projectId) {
+        return skillRegistryService.listProjectSkillCatalog(projectId);
+    }
+
     @GetMapping("/skills/{skillId}")
     public RuntimeSkillDetailDto getSkill(@PathVariable String projectId,
                                           @PathVariable String skillId) {

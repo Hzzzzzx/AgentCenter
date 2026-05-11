@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { skillApi } from '../api/runtimeResources'
 import { useWorkflowStore } from '../stores/workflows'
 import MarkdownContent from '../components/conversation/MarkdownContent.vue'
+import { DEFAULT_PROJECT_ID } from '../constants/projects'
 import type {
   ArtifactType,
   RuntimeSkillDetailDto,
@@ -10,8 +11,6 @@ import type {
   WorkflowDefinitionDto,
   WorkflowNodeDefinitionDto,
 } from '../api/types'
-
-const DEFAULT_PROJECT_ID = '01DEFAULTPROJECT0000000000001'
 
 type NodeDraft = {
   nodeKey: string
@@ -72,12 +71,32 @@ const enabledDefinitions = computed(() =>
 const availableSkillNames = computed(() => {
   const names = new Set<string>()
   for (const skill of skills.value) {
-    if (skill.status === 'ENABLED') names.add(skill.name)
+    if (skill.status === 'ENABLED' && skill.validationStatus === 'VALID') names.add(skill.name)
   }
+  return [...names].sort((a, b) => a.localeCompare(b))
+})
+
+const definitionSkillNames = computed(() => {
+  const names = new Set<string>()
   for (const definition of workflowStore.definitions) {
     for (const node of definition.nodes) {
       if (node.skillName) names.add(node.skillName)
       for (const name of recommendedSkillNames(node)) names.add(name)
+    }
+  }
+  return [...names].sort((a, b) => a.localeCompare(b))
+})
+
+const unavailableDefinitionSkillNames = computed(() => {
+  const available = new Set(availableSkillNames.value)
+  return definitionSkillNames.value.filter((name) => !available.has(name))
+})
+
+const stageSkillOptions = computed(() => {
+  const names = new Set(availableSkillNames.value)
+  if (draft.value) {
+    for (const node of draft.value.nodes) {
+      if (node.skillName) names.add(node.skillName)
     }
   }
   return [...names].sort((a, b) => a.localeCompare(b))
@@ -113,10 +132,12 @@ onMounted(() => {
 
 async function loadSkills() {
   skillLoading.value = true
+  error.value = null
   try {
-    skills.value = await skillApi.list(DEFAULT_PROJECT_ID)
-  } catch {
+    skills.value = await skillApi.catalog(DEFAULT_PROJECT_ID)
+  } catch (loadError) {
     skills.value = []
+    error.value = loadError instanceof Error ? loadError.message : '加载项目 Skill 失败'
   } finally {
     skillLoading.value = false
   }
@@ -139,6 +160,14 @@ function recommendedSkillNames(node: WorkflowNodeDefinitionDto): string[] {
 function recommendedSkills(node: WorkflowNodeDefinitionDto): string {
   const names = recommendedSkillNames(node)
   return names.length > 0 ? names.join('、') : node.skillName
+}
+
+function isSkillUnavailable(skillName: string): boolean {
+  return Boolean(skillName) && !availableSkillNames.value.includes(skillName)
+}
+
+function skillOptionLabel(skillName: string): string {
+  return isSkillUnavailable(skillName) ? `${skillName}（当前不可用）` : skillName
 }
 
 function blueprintSummary(definition: WorkflowDefinitionDto): string {
@@ -362,10 +391,16 @@ async function saveDraft() {
     error.value = '每个阶段都需要阶段名称和 Skill'
     return
   }
+  const unavailableNode = draft.value.nodes.find((node) => isSkillUnavailable(node.skillName.trim()))
+  if (unavailableNode) {
+    error.value = `Skill "${unavailableNode.skillName}" 当前未在 Skill 管理中启用，刷新或重新选择后再保存`
+    return
+  }
 
   const request: UpdateWorkflowDefinitionRequest = {
     name: draft.value.name.trim(),
     isDefault: draft.value.isDefault,
+    projectId: DEFAULT_PROJECT_ID,
     nodes: draft.value.nodes.map((node) => ({
       nodeKey: node.nodeKey.trim() || null,
       name: node.name.trim(),
@@ -425,6 +460,12 @@ async function saveDraft() {
 
     <div v-if="error" class="workflow-config__notice workflow-config__notice--error">{{ error }}</div>
     <div v-if="savedMessage" class="workflow-config__notice workflow-config__notice--success">{{ savedMessage }}</div>
+    <div
+      v-if="!skillLoading && unavailableDefinitionSkillNames.length > 0"
+      class="workflow-config__notice workflow-config__notice--warning"
+    >
+      编排引用的 Skill 当前不可用：{{ unavailableDefinitionSkillNames.join('、') }}。请先刷新 Skill 或重新选择。
+    </div>
 
     <div v-if="workflowStore.loading" class="workflow-config__loading">加载中...</div>
     <div v-else-if="enabledDefinitions.length === 0" class="workflow-config__empty">
@@ -560,6 +601,9 @@ async function saveDraft() {
                 <span>{{ skillName }}</span>
                 <small>加入</small>
               </button>
+              <div v-if="!skillLoading && availableSkillNames.length === 0" class="workflow-editor__skill-empty">
+                暂无已启用 Skill
+              </div>
             </aside>
 
             <div class="workflow-editor__stages" aria-label="阶段草案">
@@ -589,11 +633,12 @@ async function saveDraft() {
                     <select v-model="node.skillName" aria-label="选择 Skill">
                       <option value="" disabled>选择 Skill</option>
                       <option
-                        v-for="skillName in availableSkillNames"
+                        v-for="skillName in stageSkillOptions"
                         :key="skillName"
                         :value="skillName"
+                        :disabled="isSkillUnavailable(skillName)"
                       >
-                        {{ skillName }}
+                        {{ skillOptionLabel(skillName) }}
                       </option>
                     </select>
                   </label>
@@ -620,6 +665,9 @@ async function saveDraft() {
                 <div class="workflow-editor__runtime">
                   <strong>运行时交互交给 Agent</strong>
                   <p>{{ interactionHint(node) }}</p>
+                  <p v-if="isSkillUnavailable(node.skillName)" class="workflow-editor__skill-warning">
+                    当前 Skill 不在 Skill 管理的启用列表中，保存会被拒绝
+                  </p>
                 </div>
               </article>
 
@@ -650,7 +698,9 @@ async function saveDraft() {
                   </div>
                   <p>{{ stageGoal(node) }}</p>
                   <div class="workflow-route__meta">
-                    <span>Skill：{{ recommendedSkills(node) }}</span>
+                    <span :class="{ 'workflow-route__skill--missing': isSkillUnavailable(node.skillName) }">
+                      Skill：{{ recommendedSkills(node) }}
+                    </span>
                     <span>输入：{{ inputPolicyLabel(node.inputPolicy) }}</span>
                     <span>产物：{{ node.outputArtifactType }}</span>
                   </div>
@@ -780,6 +830,12 @@ async function saveDraft() {
   border: 1px solid rgba(16, 185, 129, 0.2);
   background-color: rgba(16, 185, 129, 0.08);
   color: var(--success);
+}
+
+.workflow-config__notice--warning {
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  background-color: rgba(245, 158, 11, 0.1);
+  color: var(--warning);
 }
 
 .workflow-config__loading,
@@ -1251,6 +1307,20 @@ async function saveDraft() {
   color: var(--accent-blue);
   font-size: 11px;
   font-weight: 900;
+}
+
+.workflow-editor__skill-empty {
+  padding: 10px;
+  border: 1px dashed var(--border-color);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.workflow-editor__skill-warning,
+.workflow-route__skill--missing {
+  color: var(--warning);
 }
 
 .workflow-editor__stage-card {

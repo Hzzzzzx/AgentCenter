@@ -73,6 +73,39 @@ class PersistenceMapperIntegrationTest {
     }
 
     @Test
+    void countsRecommendedSkillReferences() {
+        WorkflowDefinitionEntity definition = new WorkflowDefinitionEntity();
+        definition.setId(idGenerator.nextId());
+        definition.setWorkItemType("FE");
+        definition.setName("Recommended Skill Reference Test");
+        definition.setVersionNo(1);
+        definition.setStatus("DISABLED");
+        definition.setIsDefault(false);
+        workflowMapper.insertDefinition(definition);
+
+        WorkflowNodeDefinitionEntity node = new WorkflowNodeDefinitionEntity();
+        node.setId(idGenerator.nextId());
+        node.setWorkflowDefinitionId(definition.getId());
+        node.setNodeKey("recommended_only");
+        node.setName("Recommended Only");
+        node.setOrderNo(1);
+        node.setSkillName("primary-skill");
+        node.setInputPolicy("WORK_ITEM_ONLY");
+        node.setOutputArtifactType("MARKDOWN");
+        node.setRetryLimit(3);
+        node.setTimeoutSeconds(300);
+        node.setRequiredConfirmation(false);
+        node.setStageKey("recommended_only");
+        node.setStageGoal("Recommended Only");
+        node.setRecommendedSkillNamesJson("[\"recommended-only-skill\"]");
+        node.setAllowDynamicActions(true);
+        node.setConfirmationPolicy("EVENT_DRIVEN");
+        workflowMapper.insertNodeDefinition(node);
+
+        assertThat(workflowMapper.countNodeDefinitionsBySkillName("recommended-only-skill")).isEqualTo(1);
+    }
+
+    @Test
     void canInsertAndReadSession() {
         AgentSessionEntity session = new AgentSessionEntity();
         session.setId(idGenerator.nextId());

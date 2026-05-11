@@ -64,8 +64,23 @@ class OpenCodeSkillFileServiceTest {
         var skills = service.scanSkills();
 
         assertThat(skills).hasSize(2);
-        assertThat(skills.get(0).name()).isEqualTo("alpha-skill");
-        assertThat(skills.get(1).name()).isEqualTo("beta-skill");
+        assertThat(skills.get(0).name()).isEqualTo("Alpha");
+        assertThat(skills.get(1).name()).isEqualTo("Beta");
+    }
+
+    @Test
+    void scanChecksumIncludesSkillDirectoryFiles() throws IOException {
+        Path skillDir = tempDir.resolve(".opencode").resolve("skills").resolve("my-skill");
+        Files.createDirectories(skillDir);
+        Files.writeString(skillDir.resolve("SKILL.md"),
+                "---\nname: my-skill\ndescription: A test skill\n---\n# My Skill");
+        Files.writeString(skillDir.resolve("prompt.md"), "Version 1");
+
+        String initialChecksum = service.scanSkills().get(0).checksum();
+
+        Files.writeString(skillDir.resolve("prompt.md"), "Version 2");
+
+        assertThat(service.scanSkills().get(0).checksum()).isNotEqualTo(initialChecksum);
     }
 
     @Test

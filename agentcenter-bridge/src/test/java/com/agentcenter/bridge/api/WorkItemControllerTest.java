@@ -171,7 +171,8 @@ class WorkItemControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.code").exists())
                 .andExpect(jsonPath("$.title").value("New Feature"))
-                .andExpect(jsonPath("$.status").value("BACKLOG"));
+                .andExpect(jsonPath("$.status").value("BACKLOG"))
+                .andExpect(jsonPath("$.projectId").value("01DEFAULTPROJECT0000000000001"));
     }
 
     @Test

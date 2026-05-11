@@ -75,7 +75,25 @@ public class SkillRegistryService {
     }
 
     public List<RuntimeSkillDetailDto> listSkills(String projectId) {
-        return skillMapper.findByProjectId(projectId).stream()
+        String resolvedProjectId = ProjectDefaults.resolveProjectId(projectId);
+        syncSkillsFromFilesystem(resolvedProjectId);
+        return skillMapper.findByProjectId(resolvedProjectId).stream()
+                .map(this::toDetailDto)
+                .toList();
+    }
+
+    public List<RuntimeSkillDetailDto> listProjectSkillCatalog(String projectId) {
+        String resolvedProjectId = ProjectDefaults.resolveProjectId(projectId);
+        List<RuntimeSkillDto> scannedSkills = scanAndSyncProjectSkills(resolvedProjectId);
+        java.util.Set<String> scannedNames = scannedSkills.stream()
+                .map(RuntimeSkillDto::name)
+                .collect(java.util.stream.Collectors.toSet());
+        java.util.Set<String> scannedPaths = scannedSkills.stream()
+                .map(RuntimeSkillDto::relativePath)
+                .collect(java.util.stream.Collectors.toSet());
+        return skillMapper.findByProjectId(resolvedProjectId).stream()
+                .filter(skill -> scannedNames.contains(skill.getName())
+                        || scannedPaths.contains(skill.getRelativePath()))
                 .map(this::toDetailDto)
                 .toList();
     }
@@ -89,6 +107,7 @@ public class SkillRegistryService {
     }
 
     public RuntimeSkillDetailDto uploadSkill(String projectId, MultipartFile file, String createdBy) {
+        String resolvedProjectId = ProjectDefaults.resolveProjectId(projectId);
         validateZipFile(file);
         try {
             Path tempDir = Files.createTempDirectory("skill-upload-");
@@ -139,18 +158,18 @@ public class SkillRegistryService {
                 String checksum = computeDirectoryChecksum(skillRoot);
                 String skillMdSummary = extractSkillMdSummary(skillRoot);
 
-                RuntimeSkillEntity existing = skillMapper.findByProjectIdAndName(projectId, skillName);
+                RuntimeSkillEntity existing = skillMapper.findByProjectIdAndName(resolvedProjectId, skillName);
                 if (existing != null) {
                     if (checksum.equals(existing.getChecksum())) {
-                        auditService.recordAudit(projectId, "SKILL", existing.getId(), "UPLOAD",
+                        auditService.recordAudit(resolvedProjectId, "SKILL", existing.getId(), "UPLOAD",
                                 "NOOP", "Same checksum, skipped", null, createdBy);
                         return toDetailDto(existing);
                     }
-                    return updateExistingSkill(projectId, existing, skillRoot, checksum, fileCount,
+                    return updateExistingSkill(resolvedProjectId, existing, skillRoot, checksum, fileCount,
                             totalSize, skillMdSummary, createdBy);
                 }
 
-                return installNewSkill(projectId, skillName, skillRoot, checksum, fileCount,
+                return installNewSkill(resolvedProjectId, skillName, skillRoot, checksum, fileCount,
                         totalSize, skillMdSummary, createdBy);
             } finally {
                 deleteRecursively(tempDir);
@@ -164,8 +183,9 @@ public class SkillRegistryService {
 
     public RuntimeSkillDetailDto updateSkillZip(String projectId, String skillId,
                                                  MultipartFile file, String createdBy) {
+        String resolvedProjectId = ProjectDefaults.resolveProjectId(projectId);
         RuntimeSkillEntity existing = skillMapper.findById(skillId);
-        if (existing == null || !existing.getProjectId().equals(projectId)) {
+        if (existing == null || !existing.getProjectId().equals(resolvedProjectId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Skill not found: " + skillId);
         }
         validateZipFile(file);
@@ -175,24 +195,42 @@ public class SkillRegistryService {
             try {
                 extractZip(file, tempDir);
                 Path skillRoot = resolveSkillPackageRoot(tempDir);
+                String nextSkillName = extractSkillNameFromSkillMd(skillRoot);
+                if (nextSkillName == null || nextSkillName.isBlank()) {
+                    nextSkillName = existing.getName();
+                }
+                validateSkillName(nextSkillName);
+                RuntimeSkillEntity nameOwner = skillMapper.findByProjectIdAndName(resolvedProjectId, nextSkillName);
+                if (nameOwner != null && !nameOwner.getId().equals(existing.getId())) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Skill name already exists in project: " + nextSkillName);
+                }
+
                 String checksum = computeDirectoryChecksum(skillRoot);
                 String skillMdSummary = extractSkillMdSummary(skillRoot);
                 long totalSize = computeDirectorySize(skillRoot);
                 int fileCount = countFiles(skillRoot);
+                String previousName = existing.getName();
+                String previousRelativePath = existing.getRelativePath();
+                String relativePath = installViaGateway(resolvedProjectId, nextSkillName, skillRoot);
+                deleteRenamedSkillFiles(resolvedProjectId, previousName, previousRelativePath, nextSkillName, relativePath);
 
                 RuntimeSkillVersionEntity version = createVersion(existing.getId(), checksum, totalSize,
-                        fileCount, existing.getRelativePath(), skillMdSummary, createdBy);
+                        fileCount, relativePath, skillMdSummary, createdBy);
 
+                existing.setName(nextSkillName);
+                existing.setDisplayName(nextSkillName);
                 existing.setChecksum(checksum);
                 existing.setCurrentVersionId(version.getId());
+                existing.setRelativePath(relativePath);
                 existing.setValidationStatus("VALID");
                 existing.setValidationMessage(null);
                 skillMapper.update(existing);
+                renameWorkflowSkillReferences(previousName, nextSkillName);
 
-                installViaGateway(projectId, existing.getName(), skillRoot);
-                runtimeResourceService.refreshSkills(projectId);
+                runtimeResourceService.refreshSkills(resolvedProjectId);
 
-                auditService.recordAudit(projectId, "SKILL", skillId, "UPDATE_ZIP",
+                auditService.recordAudit(resolvedProjectId, "SKILL", skillId, "UPDATE_ZIP",
                         "SUCCESS", "Updated skill ZIP", null, createdBy);
                 return toDetailDto(existing);
             } finally {
@@ -206,47 +244,95 @@ public class SkillRegistryService {
     }
 
     public RuntimeSkillDetailDto enableSkill(String projectId, String skillId, String createdBy) {
-        return setSkillStatus(projectId, skillId, "ENABLED", "ENABLE", createdBy);
+        return setSkillStatus(ProjectDefaults.resolveProjectId(projectId), skillId, "ENABLED", "ENABLE", createdBy);
     }
 
     public RuntimeSkillDetailDto disableSkill(String projectId, String skillId, String createdBy) {
-        return setSkillStatus(projectId, skillId, "DISABLED", "DISABLE", createdBy);
+        return setSkillStatus(ProjectDefaults.resolveProjectId(projectId), skillId, "DISABLED", "DISABLE", createdBy);
     }
 
     public void deleteSkill(String projectId, String skillId, String createdBy) {
+        String resolvedProjectId = ProjectDefaults.resolveProjectId(projectId);
         RuntimeSkillEntity existing = skillMapper.findById(skillId);
-        if (existing == null || !existing.getProjectId().equals(projectId)) {
+        if (existing == null || !existing.getProjectId().equals(resolvedProjectId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Skill not found: " + skillId);
         }
 
         int refCount = workflowMapper.countNodeDefinitionsBySkillName(existing.getName());
         if (refCount > 0) {
-            auditService.recordAudit(projectId, "SKILL", skillId, "DELETE",
+            auditService.recordAudit(resolvedProjectId, "SKILL", skillId, "DELETE",
                     "REJECTED", "Skill referenced by " + refCount + " workflow node(s)", null, createdBy);
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Cannot delete skill: referenced by " + refCount + " workflow node definition(s)");
         }
 
         try {
-            runtimeGateway.deleteSkillFiles(RuntimeType.OPENCODE, workspaceResolver.resolve(projectId),
+            runtimeGateway.deleteSkillFiles(RuntimeType.OPENCODE, workspaceResolver.resolve(resolvedProjectId),
                     existing.getRelativePath(), existing.getName());
         } catch (Exception e) {
-            auditService.recordAudit(projectId, "SKILL", skillId, "DELETE",
+            auditService.recordAudit(resolvedProjectId, "SKILL", skillId, "DELETE",
                     "FAILED", "Failed to delete installed skill files: " + e.getMessage(), null, createdBy);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "Failed to delete installed skill files: " + e.getMessage(), e);
         }
 
         skillMapper.deleteById(skillId);
-        runtimeResourceService.refreshSkills(projectId);
-        auditService.recordAudit(projectId, "SKILL", skillId, "DELETE",
+        runtimeResourceService.refreshSkills(resolvedProjectId);
+        auditService.recordAudit(resolvedProjectId, "SKILL", skillId, "DELETE",
                 "SUCCESS", "Deleted skill", null, createdBy);
     }
 
     public RuntimeSkillRefreshResponse refreshSkills(String projectId) {
-        RuntimeSkillRefreshResponse response = runtimeResourceService.refreshSkills(projectId);
-        scanAndSyncSkillsToDb(projectId, response.skills());
+        String resolvedProjectId = ProjectDefaults.resolveProjectId(projectId);
+        RuntimeSkillRefreshResponse response = runtimeResourceService.refreshSkills(resolvedProjectId);
+        scanAndSyncSkillsToDb(resolvedProjectId, response.skills());
         return response;
+    }
+
+    public synchronized void syncSkillsFromFilesystem(String projectId) {
+        scanAndSyncProjectSkills(ProjectDefaults.resolveProjectId(projectId));
+    }
+
+    public synchronized List<RuntimeSkillDto> scanAndSyncProjectSkills(String projectId) {
+        String resolvedProjectId = ProjectDefaults.resolveProjectId(projectId);
+        List<RuntimeSkillDto> scannedSkills = runtimeGateway.scanSkills(
+                RuntimeType.OPENCODE, workspaceResolver.resolve(resolvedProjectId));
+        scanAndSyncSkillsToDb(resolvedProjectId, scannedSkills);
+        return scannedSkills;
+    }
+
+    public String validateRunnableSkill(String projectId, String skillName) {
+        if (skillName == null || skillName.isBlank()) {
+            return "Workflow node skill is required";
+        }
+        String resolvedProjectId = ProjectDefaults.resolveProjectId(projectId);
+        try {
+            syncSkillsFromFilesystem(resolvedProjectId);
+        } catch (Exception e) {
+            return "Failed to sync runtime skills for project " + resolvedProjectId + ": " + e.getMessage();
+        }
+        return validateRegisteredRunnableSkill(resolvedProjectId, skillName);
+    }
+
+    public String validateRegisteredRunnableSkill(String projectId, String skillName) {
+        String resolvedProjectId = ProjectDefaults.resolveProjectId(projectId);
+        RuntimeSkillEntity skill = skillMapper.findByProjectIdAndName(resolvedProjectId, skillName);
+        if (skill == null) {
+            return "Skill is not registered for project " + resolvedProjectId + ": " + skillName;
+        }
+        if (!"ENABLED".equals(skill.getStatus()) || !"VALID".equals(skill.getValidationStatus())) {
+            String status = skill.getStatus() == null ? "UNKNOWN" : skill.getStatus();
+            String validation = skill.getValidationStatus() == null ? "UNKNOWN" : skill.getValidationStatus();
+            return "Skill is not runnable: " + skillName + " status=" + status + ", validation=" + validation;
+        }
+        return null;
+    }
+
+    public void requireRunnableSkill(String projectId, String skillName) {
+        String validationError = validateRunnableSkill(projectId, skillName);
+        if (validationError != null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, validationError);
+        }
     }
 
     private void scanAndSyncSkillsToDb(String projectId, List<RuntimeSkillDto> scannedSkills) {
@@ -266,6 +352,13 @@ public class SkillRegistryService {
                         Function.identity(),
                         (first, ignored) -> first
                 ));
+        Map<String, RuntimeSkillEntity> existingByChecksum = existingSkills.stream()
+                .filter(skill -> skill.getChecksum() != null && !skill.getChecksum().isBlank())
+                .collect(java.util.stream.Collectors.toMap(
+                        RuntimeSkillEntity::getChecksum,
+                        Function.identity(),
+                        (first, ignored) -> first
+                ));
         java.util.Set<String> scannedPaths = new java.util.HashSet<>();
         java.util.Set<String> scannedNames = new java.util.HashSet<>();
 
@@ -275,6 +368,9 @@ public class SkillRegistryService {
             RuntimeSkillEntity existing = existingByPath.get(scanned.relativePath());
             if (existing == null) {
                 existing = existingByName.get(scanned.name());
+            }
+            if (existing == null && scanned.checksum() != null && !scanned.checksum().isBlank()) {
+                existing = existingByChecksum.get(scanned.checksum());
             }
 
             if (existing == null) {
@@ -317,9 +413,20 @@ public class SkillRegistryService {
                 synced++;
             } else {
                 boolean changed = false;
-                if (!Objects.equals(existing.getName(), scanned.name())) {
-                    existing.setName(scanned.name());
-                    existing.setDisplayName(scanned.name());
+                boolean wasMissing = "MISSING".equals(existing.getValidationStatus());
+                boolean nameConflict = false;
+                String previousName = existing.getName();
+                if (!Objects.equals(previousName, scanned.name())) {
+                    RuntimeSkillEntity nameOwner = existingByName.get(scanned.name());
+                    if (nameOwner != null && !nameOwner.getId().equals(existing.getId())) {
+                        existing.setValidationStatus("INVALID");
+                        existing.setValidationMessage("Skill name conflicts with another project skill: " + scanned.name());
+                        nameConflict = true;
+                    } else {
+                        existing.setName(scanned.name());
+                        existing.setDisplayName(scanned.name());
+                        renameWorkflowSkillReferences(previousName, scanned.name());
+                    }
                     changed = true;
                 }
                 if (!Objects.equals(existing.getRelativePath(), scanned.relativePath())) {
@@ -330,11 +437,17 @@ public class SkillRegistryService {
                     existing.setChecksum(scanned.checksum());
                     changed = true;
                 }
-                if (!"ENABLED".equals(existing.getStatus()) || !"VALID".equals(existing.getValidationStatus())
-                        || existing.getValidationMessage() != null) {
-                    existing.setStatus("ENABLED");
+                if (!nameConflict && (!"VALID".equals(existing.getValidationStatus()) || existing.getValidationMessage() != null)) {
                     existing.setValidationStatus("VALID");
                     existing.setValidationMessage(null);
+                    changed = true;
+                }
+                if (wasMissing && "DISABLED".equals(existing.getStatus())) {
+                    existing.setStatus("ENABLED");
+                    changed = true;
+                } else if (existing.getStatus() == null || existing.getStatus().isBlank()
+                        || "INVALID".equals(existing.getStatus()) || "UPDATING".equals(existing.getStatus())) {
+                    existing.setStatus("ENABLED");
                     changed = true;
                 }
                 if (changed) {
@@ -435,10 +548,9 @@ public class SkillRegistryService {
             versionMapper.updateStatus(prevVersion.getId(), "SUPERSEDED");
         }
 
-        RuntimeSkillVersionEntity version = createVersion(existing.getId(), checksum, totalSize,
-                fileCount, existing.getRelativePath(), skillMdSummary, createdBy);
-
         String newRelativePath = installViaGateway(projectId, existing.getName(), tempDir);
+        RuntimeSkillVersionEntity version = createVersion(existing.getId(), checksum, totalSize,
+                fileCount, newRelativePath, skillMdSummary, createdBy);
 
         existing.setChecksum(checksum);
         existing.setCurrentVersionId(version.getId());
@@ -482,6 +594,38 @@ public class SkillRegistryService {
     private String installViaGateway(String projectId, String skillName, Path sourceDir) {
         return runtimeGateway.installSkill(RuntimeType.OPENCODE,
                 workspaceResolver.resolve(projectId), skillName, sourceDir);
+    }
+
+    private void renameWorkflowSkillReferences(String previousName, String nextName) {
+        if (previousName == null || nextName == null || previousName.equals(nextName)) {
+            return;
+        }
+        int definitionCount = workflowMapper.renameSkillReferences(previousName, nextName);
+        int instanceCount = workflowMapper.renameNodeInstanceSkillName(previousName, nextName);
+        if (definitionCount > 0 || instanceCount > 0) {
+            log.info("Renamed workflow skill references from '{}' to '{}' (definitions={}, instances={})",
+                    previousName, nextName, definitionCount, instanceCount);
+        }
+    }
+
+    private void deleteRenamedSkillFiles(String projectId,
+                                         String previousName,
+                                         String previousRelativePath,
+                                         String nextName,
+                                         String nextRelativePath) {
+        if (previousRelativePath == null || previousRelativePath.isBlank()) {
+            return;
+        }
+        if (Objects.equals(previousName, nextName) && Objects.equals(previousRelativePath, nextRelativePath)) {
+            return;
+        }
+        try {
+            runtimeGateway.deleteSkillFiles(RuntimeType.OPENCODE, workspaceResolver.resolve(projectId),
+                    previousRelativePath, previousName);
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Failed to delete previous skill files after rename: " + e.getMessage(), e);
+        }
     }
 
     private Path resolveSkillPackageRoot(Path extractedDir) throws IOException {

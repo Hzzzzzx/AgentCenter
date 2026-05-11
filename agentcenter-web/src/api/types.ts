@@ -139,6 +139,7 @@ export interface WorkflowNodeDefinitionDto {
 export interface UpdateWorkflowDefinitionRequest {
   name: string
   isDefault: boolean
+  projectId?: string
   nodes: UpdateWorkflowNodeDefinitionRequest[]
 }
 
@@ -331,7 +332,7 @@ export interface RuntimeSkillDetailDto {
   source: SkillSource
   relativePath: string
   checksum: string | null
-  validationStatus: 'VALID' | 'INVALID'
+  validationStatus: 'VALID' | 'INVALID' | 'MISSING'
   validationMessage: string | null
   createdBy: string | null
   createdAt: string

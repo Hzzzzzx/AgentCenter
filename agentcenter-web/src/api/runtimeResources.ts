@@ -13,6 +13,7 @@ import type {
 // ===== Skill APIs =====
 export const skillApi = {
   list: (projectId: string) => get<RuntimeSkillDetailDto[]>(`/projects/${projectId}/runtime/skills`),
+  catalog: (projectId: string) => get<RuntimeSkillDetailDto[]>(`/projects/${projectId}/runtime/skills/catalog`),
   get: (projectId: string, skillId: string) => get<RuntimeSkillDetailDto>(`/projects/${projectId}/runtime/skills/${skillId}`),
   upload: (projectId: string, file: File) => uploadFile<SkillUploadResponse>(`/projects/${projectId}/runtime/skills/upload`, file),
   updateZip: (projectId: string, skillId: string, file: File) => uploadFilePut<SkillUploadResponse>(`/projects/${projectId}/runtime/skills/${skillId}/zip`, file),

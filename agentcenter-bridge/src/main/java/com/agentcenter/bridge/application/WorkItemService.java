@@ -91,7 +91,7 @@ public class WorkItemService {
         entity.setDescription(request.description());
         entity.setStatus("BACKLOG");
         entity.setPriority(request.priority() != null ? request.priority().name() : "MEDIUM");
-        entity.setProjectId(request.projectId());
+        entity.setProjectId(ProjectDefaults.resolveProjectId(request.projectId()));
         entity.setSpaceId(request.spaceId());
         entity.setIterationId(request.iterationId());
         entity.setAssigneeUserId(request.assigneeUserId());

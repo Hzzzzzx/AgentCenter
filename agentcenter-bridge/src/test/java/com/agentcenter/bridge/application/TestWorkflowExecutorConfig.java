@@ -216,7 +216,21 @@ public class TestWorkflowExecutorConfig {
             }
 
             @Override
-            public java.util.List<com.agentcenter.bridge.api.dto.RuntimeSkillDto> scanSkills(RuntimeType rt) { return java.util.List.of(); }
+            public java.util.List<com.agentcenter.bridge.api.dto.RuntimeSkillDto> scanSkills(RuntimeType rt) {
+                java.time.OffsetDateTime now = java.time.OffsetDateTime.now();
+                return java.util.List.of(
+                        new com.agentcenter.bridge.api.dto.RuntimeSkillDto(
+                                "prd-desingn", "PRD test skill", ".opencode/skills/prd-desingn", "test-prd", now),
+                        new com.agentcenter.bridge.api.dto.RuntimeSkillDto(
+                                "hld-design", "HLD test skill", ".opencode/skills/hld-design", "test-hld", now),
+                        new com.agentcenter.bridge.api.dto.RuntimeSkillDto(
+                                "lld-design", "LLD test skill", ".opencode/skills/lld-design", "test-lld", now),
+                        new com.agentcenter.bridge.api.dto.RuntimeSkillDto(
+                                "fe.requirement.refine", "Legacy PRD test skill", ".opencode/skills/fe.requirement.refine", "test-fe-prd", now),
+                        new com.agentcenter.bridge.api.dto.RuntimeSkillDto(
+                                "fe.solution.design", "Legacy HLD test skill", ".opencode/skills/fe.solution.design", "test-fe-hld", now)
+                );
+            }
             @Override
             public String installSkill(RuntimeType rt, String name, java.nio.file.Path dir) { return ".opencode/skills/" + name; }
             @Override
