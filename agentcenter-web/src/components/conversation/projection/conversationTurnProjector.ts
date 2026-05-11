@@ -205,7 +205,7 @@ function buildToolPart(lifecycle: ToolLifecycle): ToolInvocationPart {
   // Scan ALL lifecycle events for output — don't rely on last payload only,
   // because a trailing PROCESS_TRACE (without output) would overwrite the real tool output.
   const outputSummary = sorted
-    .map(e => e.payload.output || e.payload.result)
+    .map(e => e.payload.output || e.payload.result || e.payload.errorMessage || e.payload.reason || e.payload.detail)
     .find(v => v !== undefined && v !== null && v !== '') ?? undefined
   const inputSummary = sorted
     .map(e => e.payload.input || e.payload.command)

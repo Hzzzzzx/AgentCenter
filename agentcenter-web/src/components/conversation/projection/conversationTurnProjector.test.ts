@@ -205,6 +205,7 @@ describe('projectConversationTurns', () => {
     expect(toolParts).toHaveLength(1)
     expect(toolParts[0].status).toBe('failed')
     expect(toolParts[0].rawName).toBe('deploy')
+    expect(toolParts[0].outputSummary).toBe('Connection refused')
   })
 
   // ── 5. Waiting user input: CONFIRMATION_CREATED → InteractionProjection present ──

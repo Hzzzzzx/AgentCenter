@@ -3,6 +3,8 @@ package com.agentcenter.bridge.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.never;
@@ -16,6 +18,7 @@ import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.sqlite.SQLiteErrorCode;
 import org.springframework.jdbc.UncategorizedSQLException;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -97,12 +100,13 @@ class ConfirmationServiceTest {
         ConfirmationRequestEntity entity = questionConfirmation();
         when(confirmationMapper.findById(entity.getId())).thenReturn(entity);
         when(agentMessageMapper.findBySessionId(entity.getAgentSessionId())).thenReturn(List.of());
-        when(confirmationMapper.update(entity))
-                .thenThrow(new UncategorizedSQLException(
+        doThrow(new UncategorizedSQLException(
                         "update",
                         null,
-                        new org.sqlite.SQLiteException("[SQLITE_BUSY_SNAPSHOT] database is locked", 5)))
-                .thenReturn(1);
+                        new org.sqlite.SQLiteException("[SQLITE_BUSY_SNAPSHOT] database is locked",
+                                SQLiteErrorCode.SQLITE_BUSY_SNAPSHOT)))
+                .doNothing()
+                .when(confirmationMapper).update(entity);
 
         ResolveConfirmationRequest request = new ResolveConfirmationRequest(
                 ConfirmationActionType.CHOOSE,
@@ -113,6 +117,27 @@ class ConfirmationServiceTest {
 
         assertThat(result.status()).isEqualTo(ConfirmationStatus.RESOLVED);
         verify(confirmationMapper, times(2)).update(entity);
+    }
+
+    @Test
+    void resolveExceptionSupplementResumesWorkflowNode() {
+        ConfirmationRequestEntity entity = exceptionConfirmation();
+        when(confirmationMapper.findById(entity.getId())).thenReturn(entity);
+        when(agentMessageMapper.findBySessionId(entity.getAgentSessionId())).thenReturn(List.of());
+
+        ResolveConfirmationRequest request = new ResolveConfirmationRequest(
+                ConfirmationActionType.SUPPLEMENT,
+                "请继续，但只做只读检查",
+                Map.of("input", "请继续，但只做只读检查"));
+
+        var result = service.resolve(entity.getId(), request);
+        TransactionSynchronizationManager.getSynchronizations()
+                .forEach(TransactionSynchronization::afterCommit);
+
+        assertThat(result.status()).isEqualTo(ConfirmationStatus.RESOLVED);
+        verify(workflowCommandService).resumeNodeAfterInteraction("node-1");
+        verify(workflowCommandService, never()).retryNode("node-1");
+        verify(workflowCommandService, never()).skipNode("node-1");
     }
 
     private ConfirmationRequestEntity questionConfirmation() {
@@ -128,6 +153,24 @@ class ConfirmationServiceTest {
         entity.setInteractionType(QuestionConfirmationHandler.INTERACTION_TYPE);
         entity.setTitle("选择方案");
         entity.setContent("请选择推进方案");
+        entity.setPriority("HIGH");
+        entity.setCreatedAt("2026-05-11 12:00:00");
+        entity.setUpdatedAt("2026-05-11 12:00:00");
+        return entity;
+    }
+
+    private ConfirmationRequestEntity exceptionConfirmation() {
+        ConfirmationRequestEntity entity = new ConfirmationRequestEntity();
+        entity.setId("exception_rt_session_1");
+        entity.setRequestType(ConfirmationRequestType.EXCEPTION.name());
+        entity.setStatus(ConfirmationStatus.PENDING.name());
+        entity.setWorkflowNodeInstanceId("node-1");
+        entity.setAgentSessionId("agent-session-1");
+        entity.setRuntimeType("OPENCODE");
+        entity.setRuntimeSessionId("rt-session");
+        entity.setSkillName("lld-design");
+        entity.setTitle("节点执行异常");
+        entity.setContent("Agent Runtime 超时，没有返回可用输出");
         entity.setPriority("HIGH");
         entity.setCreatedAt("2026-05-11 12:00:00");
         entity.setUpdatedAt("2026-05-11 12:00:00");

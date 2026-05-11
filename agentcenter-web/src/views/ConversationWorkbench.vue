@@ -141,6 +141,8 @@ const workflowNodeStateReason = computed<string | null>(() => {
 
 const inputPlaceholder = computed(() => {
   if (isConversationRunning.value) return '对话运行中，可点击右侧按钮暂停...'
+  if (composerRecoveryInteraction.value?.requestType === 'EXCEPTION') return '补充异常处理信息后继续当前节点...'
+  if (composerRecoveryInteraction.value?.requestType === 'INPUT_REQUIRED') return '补充输入后返回给 Agent...'
   if (isWorkflowCompleted.value) return '流程已完成，可查看产物或输入新的补充指令...'
   const state = workflowNodeState.value
   if (state === 'NEEDS_USER_INPUT') return '补充输入后返回给 Agent...'
@@ -244,11 +246,15 @@ const nodeStateInfo = computed<NodeStateInfo>(() => {
 })
 
 const isConversationRunning = computed(() =>
-  runtimeStore.busy
-  || Boolean(runtimeStore.streamingText.trim())
-  || (
-    nodeStateInfo.value.type === 'RUNNING'
-    && nodeStateInfo.value.nodeId !== pausedRunningNodeId.value
+  !composerRecoveryInteraction.value
+  && nodeStateInfo.value.type !== 'FAILED'
+  && (
+    runtimeStore.busy
+    || Boolean(runtimeStore.streamingText.trim())
+    || (
+      nodeStateInfo.value.type === 'RUNNING'
+      && nodeStateInfo.value.nodeId !== pausedRunningNodeId.value
+    )
   )
 )
 
@@ -302,6 +308,14 @@ const currentInteractions = computed(() => {
     )
   })
 })
+
+function canSubmitInteractionFromComposer(item: { requestType: ConfirmationRequestType }): boolean {
+  return item.requestType === 'EXCEPTION' || item.requestType === 'INPUT_REQUIRED'
+}
+
+const composerRecoveryInteraction = computed(() =>
+  currentInteractions.value.find(canSubmitInteractionFromComposer) ?? null
+)
 
 const shouldShowWorkflowNodeControl = computed(() =>
   !isWorkflowCompleted.value
@@ -577,6 +591,12 @@ watch(
 async function handleSend() {
   const text = inputText.value.trim()
   if (!text || isConversationRunning.value) return
+  const recoveryInteraction = composerRecoveryInteraction.value
+  if (recoveryInteraction) {
+    await resolveComposerRecoveryInteraction(recoveryInteraction.id, text)
+    return
+  }
+
   const blockingInteraction = currentInteractions.value[0]
   if (blockingInteraction) {
     notificationStore.push({
@@ -597,6 +617,28 @@ async function handleSend() {
   runtimeStore.markBusy()
   await sessionStore.sendMessage(text)
   inputText.value = ''
+}
+
+async function resolveComposerRecoveryInteraction(confirmationId: string, text: string) {
+  runtimeStore.markBusy()
+  try {
+    await confirmationStore.resolveConfirmation(confirmationId, {
+      actionType: 'SUPPLEMENT',
+      comment: text,
+      payload: { input: text },
+    }, { remove: true })
+    inputText.value = ''
+    await handleInteractionChanged(confirmationId)
+  } catch (error) {
+    runtimeStore.markIdle()
+    notificationStore.push({
+      anchor: 'right-panel',
+      tone: 'error',
+      title: '补充提交失败',
+      message: error instanceof Error ? error.message : '异常补充提交失败，请稍后重试。',
+      durationMs: 5200,
+    })
+  }
 }
 
 async function handleCancelReply() {

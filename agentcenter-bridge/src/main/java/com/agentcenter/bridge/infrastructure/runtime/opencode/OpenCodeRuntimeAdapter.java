@@ -612,7 +612,55 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
                 return null;
             }
         }
+        publishAssistantTimeout(opencodeSessionId);
         return null;
+    }
+
+    private void publishAssistantTimeout(String opencodeSessionId) {
+        String agentSessionId = eventSubscriber.getAgentSessionId(opencodeSessionId);
+        if (agentSessionId == null || agentSessionId.isBlank()) {
+            return;
+        }
+        String message = "Agent Runtime 已接收请求，但在 " + responseTimeoutSeconds + " 秒内没有返回可用输出。";
+        try {
+            ObjectNode errorPayload = objectMapper.createObjectNode();
+            errorPayload.put("kind", "error");
+            errorPayload.put("status", "failed");
+            errorPayload.put("title", "Runtime 响应超时");
+            errorPayload.put("summary", message);
+            errorPayload.put("reason", "RUNTIME_TIMEOUT");
+            errorPayload.put("errorCode", "RUNTIME_TIMEOUT");
+            errorPayload.put("errorMessage", message);
+            errorPayload.put("recoverable", true);
+            errorPayload.put("rawEventType", "session.messages.timeout");
+            runtimeEventService.publishEvent(new RuntimeEventDto(
+                    null,
+                    agentSessionId,
+                    eventSubscriber.getWorkItemId(agentSessionId),
+                    eventSubscriber.getWorkflowInstanceId(agentSessionId),
+                    eventSubscriber.getWorkflowNodeInstanceId(agentSessionId),
+                    RuntimeEventType.ERROR,
+                    RuntimeEventSource.OPENCODE,
+                    errorPayload.toString(),
+                    null
+            ));
+
+            ObjectNode tracePayload = errorPayload.deepCopy();
+            tracePayload.put("visibility", "public_summary");
+            runtimeEventService.publishEvent(new RuntimeEventDto(
+                    null,
+                    agentSessionId,
+                    eventSubscriber.getWorkItemId(agentSessionId),
+                    eventSubscriber.getWorkflowInstanceId(agentSessionId),
+                    eventSubscriber.getWorkflowNodeInstanceId(agentSessionId),
+                    RuntimeEventType.PROCESS_TRACE,
+                    RuntimeEventSource.OPENCODE,
+                    tracePayload.toString(),
+                    null
+            ));
+        } catch (Exception e) {
+            log.debug("Failed to publish timeout event for opencode session {}", opencodeSessionId, e);
+        }
     }
 
     private void publishAssistantTextSnapshotDeltas(String opencodeSessionId,

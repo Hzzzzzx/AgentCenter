@@ -119,6 +119,10 @@ class OpenCodeRuntimeAdapterCreateSessionTest {
                 true, null, ackPayload, null);
 
         when(commandTransport.send(any())).thenReturn(ack);
+        when(eventSubscriber.getAgentSessionId("ses_test_tool")).thenReturn("agent-timeout");
+        when(eventSubscriber.getWorkItemId("agent-timeout")).thenReturn("work-timeout");
+        when(eventSubscriber.getWorkflowInstanceId("agent-timeout")).thenReturn("workflow-timeout");
+        when(eventSubscriber.getWorkflowNodeInstanceId("agent-timeout")).thenReturn("node-timeout");
         AtomicInteger fetchCount = new AtomicInteger();
         when(commandTransport.fetchMessages(anyString(), anyString(), eq("ses_test_tool")))
                 .thenAnswer(invocation -> fetchCount.getAndIncrement() == 0
@@ -145,6 +149,17 @@ class OpenCodeRuntimeAdapterCreateSessionTest {
         assertFalse(result.success());
         assertNull(result.outputContent());
         assertTrue(result.errorMessage().contains("没有返回可用输出"));
+
+        ArgumentCaptor<RuntimeEventDto> eventCaptor = ArgumentCaptor.forClass(RuntimeEventDto.class);
+        verify(runtimeEventService, atLeastOnce()).publishEvent(eventCaptor.capture());
+        var timeoutEvents = eventCaptor.getAllValues().stream()
+                .filter(event -> event.payloadJson() != null
+                        && event.payloadJson().contains("\"errorCode\":\"RUNTIME_TIMEOUT\""))
+                .toList();
+        assertEquals(2, timeoutEvents.size());
+        assertTrue(timeoutEvents.stream().anyMatch(event -> event.eventType() == RuntimeEventType.ERROR));
+        assertTrue(timeoutEvents.stream().anyMatch(event -> event.eventType() == RuntimeEventType.PROCESS_TRACE));
+        assertTrue(timeoutEvents.stream().allMatch(event -> "agent-timeout".equals(event.sessionId())));
     }
 
     @Test

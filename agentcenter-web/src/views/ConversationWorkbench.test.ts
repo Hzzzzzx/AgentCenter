@@ -5,10 +5,11 @@ import { nextTick } from 'vue'
 import ConversationWorkbench from './ConversationWorkbench.vue'
 import MessageList from '../components/conversation/MessageList.vue'
 import { sessionApi } from '../api/sessions'
+import { workflowApi } from '../api/workflows'
 import { confirmationApi } from '../api/confirmations'
 import { useRuntimeStore } from '../stores/runtime'
 import { useRuntimeSettingsStore } from '../stores/runtimeSettings'
-import type { AgentSessionDto, ConfirmationRequestDto } from '../api/types'
+import type { AgentSessionDto, ConfirmationRequestDto, WorkflowInstanceDto } from '../api/types'
 
 const mocks = vi.hoisted(() => {
   const runningWorkItem = {
@@ -88,7 +89,7 @@ const mocks = vi.hoisted(() => {
     ],
     startedAt: null,
     completedAt: null,
-  }
+  } satisfies WorkflowInstanceDto
 
   const workflowDefinition = {
     id: 'wf-def-1',
@@ -154,6 +155,17 @@ vi.mock('../api/sessions', () => ({
     list: vi.fn().mockResolvedValue([mocks.runningSession]),
     getById: vi.fn().mockResolvedValue(mocks.runningSession),
     getMessages: vi.fn().mockResolvedValue([]),
+    sendMessage: vi.fn().mockResolvedValue({
+      id: 'msg-user-1',
+      sessionId: 'session-1',
+      role: 'USER',
+      content: '补充信息',
+      contentFormat: 'TEXT',
+      status: 'COMPLETED',
+      seqNo: 1,
+      createdAt: '2026-05-08T10:02:00Z',
+      workflowNodeInstanceId: 'node-1',
+    }),
     create: vi.fn(),
     cancel: vi.fn().mockResolvedValue(undefined),
   },
@@ -193,6 +205,18 @@ describe('ConversationWorkbench.vue', () => {
     vi.mocked(sessionApi.list).mockResolvedValue([mocks.runningSession])
     vi.mocked(sessionApi.getById).mockResolvedValue(mocks.runningSession)
     vi.mocked(sessionApi.getMessages).mockResolvedValue([])
+    vi.mocked(sessionApi.sendMessage).mockResolvedValue({
+      id: 'msg-user-1',
+      sessionId: 'session-1',
+      role: 'USER',
+      content: '补充信息',
+      contentFormat: 'TEXT',
+      status: 'COMPLETED',
+      seqNo: 1,
+      createdAt: '2026-05-08T10:02:00Z',
+      workflowNodeInstanceId: 'node-1',
+    })
+    vi.mocked(workflowApi.getInstance).mockResolvedValue(mocks.runningWorkflow)
     vi.mocked(confirmationApi.list).mockImplementation((status?: string) =>
       Promise.resolve(status === 'PENDING' ? [mocks.pendingConfirmation] : [])
     )
@@ -303,6 +327,76 @@ describe('ConversationWorkbench.vue', () => {
 
     expect(wrapper.find('.interaction-bar').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('确认继续下一步')
+  })
+
+  it('submits exception recovery from the composer with SUPPLEMENT', async () => {
+    const failedWorkflow: WorkflowInstanceDto = {
+      ...mocks.runningWorkflow,
+      status: 'FAILED',
+      nodes: [
+        {
+          ...mocks.runningWorkflow.nodes[0],
+          status: 'FAILED',
+          errorMessage: 'Agent Runtime 超时，没有返回可用输出',
+        },
+      ],
+    }
+    const exceptionConfirmation: ConfirmationRequestDto = {
+      ...mocks.pendingConfirmation,
+      id: 'exception-1',
+      requestType: 'EXCEPTION',
+      title: '节点执行异常',
+      content: 'Agent Runtime 超时，没有返回可用输出',
+      optionsJson: JSON.stringify([
+        { value: 'RETRY', label: '重试当前节点' },
+        { value: 'SUPPLEMENT', label: '补充信息后继续' },
+        { value: 'SKIP', label: '跳过该节点继续' },
+      ]),
+    }
+    vi.mocked(workflowApi.getInstance).mockResolvedValue(failedWorkflow)
+    vi.mocked(confirmationApi.list).mockImplementation((status?: string) =>
+      Promise.resolve(status === 'PENDING' ? [exceptionConfirmation] : [])
+    )
+    vi.mocked(confirmationApi.resolve).mockResolvedValue({
+      ...exceptionConfirmation,
+      status: 'RESOLVED',
+    })
+
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(ConversationWorkbench, {
+      props: {
+        workItemId: 'work-1',
+        targetSessionId: 'session-1',
+      },
+      global: {
+        plugins: [pinia],
+      },
+    })
+
+    await flushPromises()
+
+    const input = wrapper.find<HTMLInputElement>('.conversation-workbench__input')
+    expect(input.attributes('disabled')).toBeUndefined()
+    expect(input.attributes('placeholder')).toBe('补充异常处理信息后继续当前节点...')
+
+    const sendButton = wrapper.find('.conversation-workbench__send')
+    expect(sendButton.classes()).not.toContain('conversation-workbench__send--pause')
+    expect(sendButton.attributes('aria-label')).toBe('发送消息')
+
+    await input.setValue('请继续，但先限制在只读检查范围内')
+    await wrapper.find('form.conversation-workbench__input-area').trigger('submit')
+    await flushPromises()
+
+    expect(confirmationApi.resolve).toHaveBeenCalledWith(
+      exceptionConfirmation.id,
+      expect.objectContaining({
+        actionType: 'SUPPLEMENT',
+        comment: '请继续，但先限制在只读检查范围内',
+        payload: { input: '请继续，但先限制在只读检查范围内' },
+      }),
+    )
+    expect(sessionApi.sendMessage).not.toHaveBeenCalled()
   })
 
   it('does not show the workflow advance control while an interaction is active', async () => {

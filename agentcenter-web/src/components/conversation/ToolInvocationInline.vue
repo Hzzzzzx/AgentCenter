@@ -57,7 +57,7 @@ function formatStructuredOutput(value: string | undefined): string {
         </div>
 
         <div v-if="!part.inputSummary && !part.outputSummary" class="tool-invocation__empty">
-          {{ part.status === 'running' ? '正在执行，详细信息会在返回后更新。' : '暂无详细输出' }}
+          {{ part.status === 'running' ? '正在执行，详细信息会在返回后更新。' : part.status === 'failed' ? '执行失败，暂无更多错误详情。' : '暂无详细输出' }}
         </div>
       </div>
     </details>

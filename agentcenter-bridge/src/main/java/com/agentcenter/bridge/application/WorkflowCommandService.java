@@ -748,7 +748,9 @@ public class WorkflowCommandService {
         confirmation.setContent(buildFailureConfirmationContent(detail));
         confirmation.setContextSummary("工作流节点 %s（Skill：%s）执行失败，流程已暂停等待处理。"
                 .formatted(nodeDef.getName(), skillName));
-        confirmation.setOptionsJson("[\"重试当前节点\",\"跳过该节点继续\"]");
+        confirmation.setOptionsJson("[{\"value\":\"RETRY\",\"label\":\"重试当前节点\"},"
+                + "{\"value\":\"SUPPLEMENT\",\"label\":\"补充信息后继续\"},"
+                + "{\"value\":\"SKIP\",\"label\":\"跳过该节点继续\"}]");
         confirmation.setPriority(Priority.HIGH.name());
         confirmation.setCreatedAt(now);
         confirmation.setUpdatedAt(now);
@@ -770,7 +772,7 @@ public class WorkflowCommandService {
 
                 失败原因：%s
 
-                可选择重试当前节点；如果确认该节点暂时不阻塞后续流程，也可以跳过。
+                可选择重试当前节点；也可以补充信息后继续当前节点。如果确认该节点暂时不阻塞后续流程，也可以跳过。
                 """.formatted(detail).trim();
     }
 
@@ -916,7 +918,13 @@ public class WorkflowCommandService {
         sb.append(",\"toolCallId\":\"").append(escapeJson(toolCallId)).append("\"");
         sb.append(",\"success\":").append(result.success());
         if (!result.success() && result.errorMessage() != null && !result.errorMessage().isBlank()) {
-            sb.append(",\"errorMessage\":\"").append(escapeJson(result.errorMessage())).append("\"");
+            String errorMessage = result.errorMessage();
+            sb.append(",\"isError\":true");
+            sb.append(",\"recoverable\":true");
+            sb.append(",\"errorCode\":\"").append(escapeJson(errorCodeFor(errorMessage))).append("\"");
+            sb.append(",\"errorMessage\":\"").append(escapeJson(errorMessage)).append("\"");
+            sb.append(",\"output\":\"").append(escapeJson(errorMessage)).append("\"");
+            sb.append(",\"recommendedActions\":[\"RETRY\",\"SUPPLEMENT\",\"SKIP\"]");
         }
         sb.append(",\"nodeState\":\"").append(escapeJson(nodeState)).append("\"");
         if (nodeStateReason != null && !nodeStateReason.isBlank()) {
@@ -924,6 +932,14 @@ public class WorkflowCommandService {
         }
         sb.append("}");
         return sb.toString();
+    }
+
+    private String errorCodeFor(String errorMessage) {
+        String normalized = errorMessage == null ? "" : errorMessage.toLowerCase();
+        if (normalized.contains("timeout") || normalized.contains("超时") || normalized.contains("没有返回可用输出")) {
+            return "RUNTIME_TIMEOUT";
+        }
+        return "RUNTIME_ERROR";
     }
 
     private String escapeJson(String value) {

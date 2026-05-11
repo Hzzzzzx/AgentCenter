@@ -63,6 +63,21 @@ describe('ToolInvocationInline', () => {
     expect(wrapper.text()).not.toContain('Runtime')
   })
 
+  it('shows a clear failed empty state before error details return', () => {
+    const wrapper = mount(ToolInvocationInline, {
+      props: {
+        part: makePart({
+          status: 'failed',
+          inputSummary: undefined,
+          outputSummary: undefined,
+        }),
+      },
+    })
+
+    expect(wrapper.text()).toContain('执行失败，暂无更多错误详情。')
+    expect(wrapper.text()).not.toContain('暂无详细输出')
+  })
+
   it('replaces unicode replacement characters with readable fallback text', () => {
     const wrapper = mount(ToolInvocationInline, {
       props: {

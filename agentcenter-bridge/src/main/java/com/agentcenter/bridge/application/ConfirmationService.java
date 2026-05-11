@@ -137,6 +137,7 @@ public class ConfirmationService {
         boolean validAction = switch (requestType) {
             case EXCEPTION -> ConfirmationActionType.RETRY.equals(actionType)
                     || ConfirmationActionType.SKIP.equals(actionType)
+                    || ConfirmationActionType.SUPPLEMENT.equals(actionType)
                     || ConfirmationActionType.REJECT.equals(actionType);
             case APPROVAL, CONFIRM, PERMISSION -> ConfirmationActionType.APPROVE.equals(actionType)
                     || ConfirmationActionType.REJECT.equals(actionType);
@@ -216,7 +217,9 @@ public class ConfirmationService {
                     // Non-WORKFLOW_ADVANCE DECISION: treat as normal confirmation
                     workflowCommandService.resumeNodeAfterInteraction(nodeInstanceId);
                 } else if (isException) {
-                    if (isSkip) {
+                    if (ConfirmationActionType.SUPPLEMENT.equals(actionType)) {
+                        workflowCommandService.resumeNodeAfterInteraction(nodeInstanceId);
+                    } else if (isSkip) {
                         workflowCommandService.skipNode(nodeInstanceId);
                     } else {
                         workflowCommandService.retryNode(nodeInstanceId);
@@ -276,7 +279,7 @@ public class ConfirmationService {
 
     private String validActionsFor(ConfirmationRequestType requestType) {
         return switch (requestType) {
-            case EXCEPTION -> "RETRY, SKIP, REJECT";
+            case EXCEPTION -> "RETRY, SUPPLEMENT, SKIP, REJECT";
             case APPROVAL, CONFIRM, PERMISSION -> "APPROVE, REJECT";
             case DECISION -> "CHOOSE, REJECT (ADVANCE/SUPPLEMENT/RETRY only for WORKFLOW_ADVANCE)";
             case INPUT_REQUIRED -> "SUPPLEMENT, REJECT";

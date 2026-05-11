@@ -97,6 +97,7 @@ describe('useRuntimeStore — SSE event handlers', () => {
 
     runtimeStore.connectSSE('sess-1')
     expect(capturedOnEvent).toBeTruthy()
+    runtimeStore.markBusy()
 
     capturedOnEvent!(makeEvent({
       eventType: 'SKILL_COMPLETED',
@@ -108,6 +109,7 @@ describe('useRuntimeStore — SSE event handlers', () => {
 
     expect(workflowApi.getInstance).toHaveBeenCalledWith('inst-42')
     expect(workItemApi.getById).toHaveBeenCalledWith('work-1')
+    expect(runtimeStore.busy).toBe(false)
     const workflowStore = useWorkflowStore()
     expect(workflowStore.activeWorkflowInstance?.id).toBe('inst-1')
   })
