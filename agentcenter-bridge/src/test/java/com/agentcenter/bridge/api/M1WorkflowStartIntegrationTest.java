@@ -130,6 +130,11 @@ class M1WorkflowStartIntegrationTest {
                 .map(e -> e.get("eventType").asText())
                 .toList();
         assertThat(eventTypes).contains("SKILL_STARTED", "SKILL_COMPLETED");
+        for (var event : events) {
+            if (event.get("eventType").asText().startsWith("SKILL_")) {
+                assertThat(objectMapper.readTree(event.get("payloadJson").asText()).hasNonNull("toolCallId")).isTrue();
+            }
+        }
         assertThat(java.util.stream.StreamSupport.stream(events.spliterator(), false)
                 .allMatch(e -> instanceId.equals(e.get("workflowInstanceId").asText()))).isTrue();
 

@@ -476,13 +476,14 @@ public class WorkflowCommandService {
 
         String inputContext = buildInputContext(workItem, node, nodeDef);
         String skillName = nodeDef.getSkillName();
+        String toolCallId = workflowToolCallId(node, skillName);
         insertWorkflowContextMessageIfAbsent(node.getAgentSessionId(), node, nodeDef, workItem, inputContext);
 
         runtimeEventService.publishEvent(new RuntimeEventDto(
                 null, node.getAgentSessionId(), workItem.getId(),
                 instance.getId(), node.getId(),
                 RuntimeEventType.SKILL_STARTED, RuntimeEventSource.WORKFLOW,
-                "{\"skillName\":\"" + skillName + "\"}", null
+                buildSkillStartedPayload(skillName, toolCallId), null
         ));
 
         SkillRunResult result = validateSkillRunnable(workItem, skillName);
@@ -645,7 +646,7 @@ public class WorkflowCommandService {
                 null, node.getAgentSessionId(), workItem.getId(),
                 instance.getId(), node.getId(),
                 RuntimeEventType.SKILL_COMPLETED, RuntimeEventSource.WORKFLOW,
-                buildSkillCompletedPayload(skillName, result, statePayload, stateReason),
+                buildSkillCompletedPayload(skillName, toolCallId, result, statePayload, stateReason),
                 null
         ));
 
@@ -891,9 +892,18 @@ public class WorkflowCommandService {
         return null;
     }
 
-    private String buildSkillCompletedPayload(String skillName, SkillRunResult result, String nodeState, String nodeStateReason) {
+    private String workflowToolCallId(WorkflowNodeInstanceEntity node, String skillName) {
+        return "workflow:" + node.getId() + ":" + skillName;
+    }
+
+    private String buildSkillStartedPayload(String skillName, String toolCallId) {
+        return "{\"skillName\":\"" + escapeJson(skillName) + "\",\"toolCallId\":\"" + escapeJson(toolCallId) + "\"}";
+    }
+
+    private String buildSkillCompletedPayload(String skillName, String toolCallId, SkillRunResult result, String nodeState, String nodeStateReason) {
         StringBuilder sb = new StringBuilder();
         sb.append("{\"skillName\":\"").append(escapeJson(skillName)).append("\"");
+        sb.append(",\"toolCallId\":\"").append(escapeJson(toolCallId)).append("\"");
         sb.append(",\"success\":").append(result.success());
         if (!result.success() && result.errorMessage() != null && !result.errorMessage().isBlank()) {
             sb.append(",\"errorMessage\":\"").append(escapeJson(result.errorMessage())).append("\"");
@@ -1137,13 +1147,6 @@ public class WorkflowCommandService {
 
         String now = LocalDateTime.now().format(SQLITE_DATETIME);
         prepareWorkflowSession(instance, nextPending, nodeDefs, workItem, now);
-        WorkflowNodeDefinitionEntity nextNodeDef = nodeDefs.stream()
-                .filter(d -> d.getId().equals(nextPending.getNodeDefinitionId()))
-                .findFirst().orElseThrow();
-        insertWorkflowContextMessageIfAbsent(
-                nextPending.getAgentSessionId(), nextPending, nextNodeDef, workItem,
-                buildInputContext(workItem, nextPending, nextNodeDef));
-
         WorkflowInstanceEntity preparedInstance = workflowMapper.findInstanceById(instance.getId());
         WorkflowNodeInstanceEntity preparedNode = workflowMapper.findNodeInstanceById(nextPending.getId());
         return new PreparedWorkflowNode(
