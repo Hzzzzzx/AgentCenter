@@ -447,6 +447,124 @@ class M1WorkflowStartIntegrationTest {
     }
 
     @Test
+    void restartWorkflow_supersedesOldVersionAndCreatesCleanCurrentVersion() throws Exception {
+        String fe1234Id = findWorkItemIdByCode("FE1234");
+
+        MvcResult startResult = mockMvc.perform(
+                        post("/api/work-items/" + fe1234Id + "/start-workflow")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"mode\": \"START_OR_CONTINUE\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        var startJson = objectMapper.readTree(startResult.getResponse().getContentAsString());
+        String oldInstanceId = startJson.at("/workflowInstance/id").asText();
+        String oldNodeId = startJson.at("/workflowInstance/nodes/0/id").asText();
+        String oldSessionId = startJson.at("/session/id").asText();
+        Integer oldMessageCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM agent_message WHERE session_id = ?",
+                Integer.class, oldSessionId);
+        Integer oldArtifactCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM artifact WHERE workflow_instance_id = ?",
+                Integer.class, oldInstanceId);
+        assertThat(oldMessageCount).isGreaterThan(0);
+        assertThat(oldArtifactCount).isGreaterThan(0);
+
+        MvcResult restartResult = mockMvc.perform(
+                        post("/api/work-items/" + fe1234Id + "/restart-workflow")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"mode\": \"START_OR_CONTINUE\", \"reason\": \"用户不满意，重新开始\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.workflowInstance.status").value("BLOCKED"))
+                .andReturn();
+
+        var restartJson = objectMapper.readTree(restartResult.getResponse().getContentAsString());
+        String newInstanceId = restartJson.at("/workflowInstance/id").asText();
+        String newSessionId = restartJson.at("/session/id").asText();
+        assertThat(newInstanceId).isNotEqualTo(oldInstanceId);
+        assertThat(newSessionId).isNotEqualTo(oldSessionId);
+
+        String oldStatus = jdbcTemplate.queryForObject(
+                "SELECT status FROM workflow_instance WHERE id = ?",
+                String.class, oldInstanceId);
+        assertThat(oldStatus).isEqualTo("SUPERSEDED");
+
+        String oldSessionStatus = jdbcTemplate.queryForObject(
+                "SELECT status FROM agent_session WHERE id = ?",
+                String.class, oldSessionId);
+        assertThat(oldSessionStatus).isEqualTo("ARCHIVED");
+
+        Integer cancelledConfirmations = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM confirmation_request
+                WHERE workflow_instance_id = ?
+                  AND status = 'CANCELLED'
+                """, Integer.class, oldInstanceId);
+        assertThat(cancelledConfirmations).isGreaterThan(0);
+
+        String currentWorkflowInstanceId = jdbcTemplate.queryForObject(
+                "SELECT current_workflow_instance_id FROM work_item WHERE id = ?",
+                String.class, fe1234Id);
+        assertThat(currentWorkflowInstanceId).isEqualTo(newInstanceId);
+
+        Integer oldMessagesAfterRestart = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM agent_message WHERE session_id = ?",
+                Integer.class, oldSessionId);
+        Integer oldArtifactsAfterRestart = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM artifact WHERE workflow_instance_id = ?",
+                Integer.class, oldInstanceId);
+        assertThat(oldMessagesAfterRestart).isEqualTo(oldMessageCount);
+        assertThat(oldArtifactsAfterRestart).isEqualTo(oldArtifactCount);
+
+        mockMvc.perform(post("/api/workflow-node-instances/" + oldNodeId + "/retry"))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void listWorkflowVersions_returnsCurrentAndSupersededHistory() throws Exception {
+        String fe1234Id = findWorkItemIdByCode("FE1234");
+
+        MvcResult first = mockMvc.perform(
+                        post("/api/work-items/" + fe1234Id + "/start-workflow")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"mode\": \"START_OR_CONTINUE\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        String oldInstanceId = objectMapper.readTree(first.getResponse().getContentAsString())
+                .at("/workflowInstance/id").asText();
+
+        MvcResult second = mockMvc.perform(
+                        post("/api/work-items/" + fe1234Id + "/restart-workflow")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"mode\": \"START_OR_CONTINUE\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        String newInstanceId = objectMapper.readTree(second.getResponse().getContentAsString())
+                .at("/workflowInstance/id").asText();
+
+        MvcResult versionsResult = mockMvc.perform(get("/api/work-items/" + fe1234Id + "/workflow-versions"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andReturn();
+
+        var versions = objectMapper.readTree(versionsResult.getResponse().getContentAsString());
+        var oldVersion = java.util.stream.StreamSupport.stream(versions.spliterator(), false)
+                .filter(node -> oldInstanceId.equals(node.at("/workflowInstance/id").asText()))
+                .findFirst()
+                .orElseThrow();
+        var newVersion = java.util.stream.StreamSupport.stream(versions.spliterator(), false)
+                .filter(node -> newInstanceId.equals(node.at("/workflowInstance/id").asText()))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(oldVersion.at("/current").asBoolean()).isFalse();
+        assertThat(oldVersion.at("/workflowInstance/status").asText()).isEqualTo("SUPERSEDED");
+        assertThat(oldVersion.at("/session/status").asText()).isEqualTo("ARCHIVED");
+        assertThat(newVersion.at("/current").asBoolean()).isTrue();
+        assertThat(newVersion.at("/workflowInstance/status").asText()).isEqualTo("BLOCKED");
+        assertThat(newVersion.at("/session/status").asText()).isEqualTo("ACTIVE");
+    }
+
+    @Test
     void listWorkflowDefinitions_returnsSeedData() throws Exception {
         mockMvc.perform(get("/api/workflow-definitions"))
                 .andExpect(status().isOk())

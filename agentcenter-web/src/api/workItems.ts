@@ -2,9 +2,11 @@ import { get, post, put } from './client'
 import type {
   WorkItemDto,
   CreateWorkItemRequest,
+  RestartWorkflowRequest,
   StartWorkflowRequest,
   StartWorkflowResponse,
   WorkItemOverviewDto,
+  WorkflowVersionDto,
 } from './types'
 
 export interface WorkItemScopeQuery {
@@ -31,4 +33,6 @@ export const workItemApi = {
   create: (data: CreateWorkItemRequest) => post<WorkItemDto>('/work-items', data),
   update: (id: string, data: Partial<CreateWorkItemRequest>) => put<WorkItemDto>(`/work-items/${id}`, data),
   startWorkflow: (id: string, data?: StartWorkflowRequest) => post<StartWorkflowResponse>(`/work-items/${id}/start-workflow`, data),
+  restartWorkflow: (id: string, data?: RestartWorkflowRequest) => post<StartWorkflowResponse>(`/work-items/${id}/restart-workflow`, data),
+  listWorkflowVersions: (id: string) => get<WorkflowVersionDto[]>(`/work-items/${id}/workflow-versions`),
 }

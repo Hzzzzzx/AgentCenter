@@ -10,6 +10,7 @@ import { workflowApi } from '../api/workflows'
 import { artifactApi } from '../api/artifacts'
 import { confirmationApi } from '../api/confirmations'
 import { eventApi } from '../api/events'
+import { workItemApi } from '../api/workItems'
 import { useRuntimeStore } from '../stores/runtime'
 import { useRuntimeSettingsStore } from '../stores/runtimeSettings'
 import { useSessionStore } from '../stores/sessions'
@@ -179,6 +180,22 @@ vi.mock('../api/workItems', () => ({
   workItemApi: {
     list: vi.fn().mockResolvedValue([mocks.runningWorkItem]),
     getById: vi.fn().mockResolvedValue(mocks.runningWorkItem),
+    restartWorkflow: vi.fn().mockResolvedValue({
+      workflowInstance: mocks.runningWorkflow,
+      session: mocks.runningSession,
+      artifacts: [],
+      events: [],
+      confirmation: null,
+    }),
+    listWorkflowVersions: vi.fn().mockResolvedValue([
+      {
+        versionNo: 1,
+        current: true,
+        workflowInstance: mocks.runningWorkflow,
+        session: mocks.runningSession,
+        artifactCount: 0,
+      },
+    ]),
   },
 }))
 
@@ -253,6 +270,22 @@ describe('ConversationWorkbench.vue', () => {
     vi.mocked(sessionApi.getMessages).mockResolvedValue([])
     vi.mocked(artifactApi.get).mockResolvedValue(mocks.capturedArtifact)
     vi.mocked(artifactApi.listByWorkItem).mockResolvedValue([])
+    vi.mocked(workItemApi.restartWorkflow).mockResolvedValue({
+      workflowInstance: mocks.runningWorkflow,
+      session: mocks.runningSession,
+      artifacts: [],
+      events: [],
+      confirmation: null,
+    })
+    vi.mocked(workItemApi.listWorkflowVersions).mockResolvedValue([
+      {
+        versionNo: 1,
+        current: true,
+        workflowInstance: mocks.runningWorkflow,
+        session: mocks.runningSession,
+        artifactCount: 0,
+      },
+    ])
     vi.mocked(sessionApi.sendMessage).mockResolvedValue({
       id: 'msg-user-1',
       sessionId: 'session-1',
@@ -295,6 +328,61 @@ describe('ConversationWorkbench.vue', () => {
     expect(sendButton.classes()).toContain('conversation-workbench__send--pause')
     expect(sendButton.attributes('aria-label')).toBe('暂停当前回复')
     expect(wrapper.find('.node-state-area--running').exists()).toBe(false)
+  })
+
+  it('restarts the current workflow after explicit confirmation', async () => {
+    vi.mocked(confirmationApi.list).mockResolvedValue([])
+    const restartedWorkflow: WorkflowInstanceDto = {
+      ...mocks.runningWorkflow,
+      id: 'wf-2',
+      currentNodeInstanceId: 'node-2',
+      nodes: [
+        {
+          ...mocks.runningWorkflow.nodes[0],
+          id: 'node-2',
+          agentSessionId: 'session-2',
+        },
+      ],
+    }
+    const restartedSession: AgentSessionDto = {
+      ...mocks.runningSession,
+      id: 'session-2',
+      workflowInstanceId: 'wf-2',
+    }
+    vi.mocked(workItemApi.restartWorkflow).mockResolvedValue({
+      workflowInstance: restartedWorkflow,
+      session: restartedSession,
+      artifacts: [],
+      events: [],
+      confirmation: null,
+    })
+    vi.mocked(sessionApi.getById).mockImplementation((id: string) =>
+      Promise.resolve(id === 'session-2' ? restartedSession : mocks.runningSession)
+    )
+    vi.mocked(sessionApi.getMessages).mockResolvedValue([])
+
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(ConversationWorkbench, {
+      props: {
+        workItemId: 'work-1',
+        targetSessionId: 'session-1',
+      },
+      global: {
+        plugins: [pinia],
+      },
+    })
+
+    await flushPromises()
+    await wrapper.find('.conversation-workbench__restart-button').trigger('click')
+    await wrapper.find('.conversation-workbench__restart-actions button:last-child').trigger('click')
+    await flushPromises()
+
+    expect(workItemApi.restartWorkflow).toHaveBeenCalledWith('work-1', expect.objectContaining({
+      reason: '用户选择重新开始当前工作流',
+    }))
+    expect(sessionApi.cancel).toHaveBeenCalledWith('session-1')
+    expect(useSessionStore().activeSession?.id).toBe('session-2')
   })
 
   it('does not reconnect stale SSE after switching target sessions', async () => {

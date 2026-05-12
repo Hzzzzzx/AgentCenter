@@ -1,13 +1,15 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { workflowApi } from '../api/workflows'
-import type { UpdateWorkflowDefinitionRequest, WorkflowDefinitionDto, WorkflowInstanceDto } from '../api/types'
+import { workItemApi } from '../api/workItems'
+import type { RestartWorkflowRequest, StartWorkflowResponse, UpdateWorkflowDefinitionRequest, WorkflowDefinitionDto, WorkflowInstanceDto, WorkflowVersionDto } from '../api/types'
 
 export const useWorkflowStore = defineStore('workflows', () => {
   const definitions = ref<WorkflowDefinitionDto[]>([])
   const activeWorkflowInstance = ref<WorkflowInstanceDto | null>(null)
   const loading = ref(false)
   const instancesByWorkItemId = ref<Record<string, WorkflowInstanceDto>>({})
+  const versionsByWorkItemId = ref<Record<string, WorkflowVersionDto[]>>({})
 
   async function loadDefinitions(projectId?: string | null) {
     loading.value = true
@@ -49,6 +51,25 @@ export const useWorkflowStore = defineStore('workflows', () => {
     return response
   }
 
+  async function restartWorkflow(workItemId: string, request?: RestartWorkflowRequest): Promise<StartWorkflowResponse> {
+    const response = await workItemApi.restartWorkflow(workItemId, request)
+    activeWorkflowInstance.value = response.workflowInstance
+    if (response.workflowInstance.workItemId) {
+      instancesByWorkItemId.value[response.workflowInstance.workItemId] = response.workflowInstance
+    }
+    await loadVersions(workItemId)
+    return response
+  }
+
+  async function loadVersions(workItemId: string): Promise<WorkflowVersionDto[]> {
+    const versions = await workItemApi.listWorkflowVersions(workItemId)
+    versionsByWorkItemId.value = {
+      ...versionsByWorkItemId.value,
+      [workItemId]: versions,
+    }
+    return versions
+  }
+
   function setActiveInstance(instance: WorkflowInstanceDto | null) {
     activeWorkflowInstance.value = instance
   }
@@ -71,5 +92,5 @@ export const useWorkflowStore = defineStore('workflows', () => {
     return instance
   }
 
-  return { definitions, activeWorkflowInstance, loading, instancesByWorkItemId, loadDefinitions, saveDefinition, loadInstance, continueWorkflow, retryNode, skipNode, setActiveInstance, upsertInstance, loadInstanceForWorkItem, refreshInstance }
+  return { definitions, activeWorkflowInstance, loading, instancesByWorkItemId, versionsByWorkItemId, loadDefinitions, saveDefinition, loadInstance, continueWorkflow, retryNode, skipNode, restartWorkflow, loadVersions, setActiveInstance, upsertInstance, loadInstanceForWorkItem, refreshInstance }
 })

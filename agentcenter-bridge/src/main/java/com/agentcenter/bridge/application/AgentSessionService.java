@@ -177,6 +177,16 @@ public class AgentSessionService {
         return toSessionDto(entity);
     }
 
+    public AgentSessionDto updateSessionStatus(String sessionId, SessionStatus status) {
+        AgentSessionEntity entity = sessionMapper.findById(sessionId);
+        if (entity == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found: " + sessionId);
+        }
+        entity.setStatus(status.name());
+        sessionMapper.update(entity);
+        return toSessionDto(entity);
+    }
+
     public List<AgentMessageDto> getMessages(String sessionId) {
         return messageMapper.findBySessionId(sessionId).stream()
                 .map(this::toMessageDto)

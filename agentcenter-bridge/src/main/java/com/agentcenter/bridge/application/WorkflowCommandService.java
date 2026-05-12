@@ -24,11 +24,13 @@ import org.springframework.web.server.ResponseStatusException;
 import com.agentcenter.bridge.api.dto.AgentSessionDto;
 import com.agentcenter.bridge.api.dto.ArtifactDto;
 import com.agentcenter.bridge.api.dto.ConfirmationRequestDto;
+import com.agentcenter.bridge.api.dto.RestartWorkflowRequest;
 import com.agentcenter.bridge.api.dto.RuntimeEventDto;
 import com.agentcenter.bridge.api.dto.StartWorkflowRequest;
 import com.agentcenter.bridge.api.dto.StartWorkflowResponse;
 import com.agentcenter.bridge.api.dto.WorkflowInstanceDto;
 import com.agentcenter.bridge.api.dto.WorkflowNodeInstanceDto;
+import com.agentcenter.bridge.api.dto.WorkflowVersionDto;
 import com.agentcenter.bridge.application.artifact.ArtifactBlockParser;
 import com.agentcenter.bridge.application.runtime.RuntimeGateway;
 import com.agentcenter.bridge.application.runtime.SkillInvocationRequest;
@@ -216,11 +218,117 @@ public class WorkflowCommandService {
         return buildResponse(instance);
     }
 
+    public synchronized StartWorkflowResponse restartWorkflow(String workItemId, RestartWorkflowRequest request) {
+        WorkItemEntity workItem = workItemMapper.findById(workItemId);
+        if (workItem == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Work item not found: " + workItemId);
+        }
+
+        String now = LocalDateTime.now().format(SQLITE_DATETIME);
+        WorkflowInstanceEntity existing = findRestartTargetInstance(workItem);
+        if (existing != null) {
+            supersedeWorkflowInstance(existing, now, request != null ? request.reason() : null);
+        }
+
+        StartWorkflowRequest startRequest = new StartWorkflowRequest(
+                request != null ? request.workflowDefinitionId() : null,
+                request != null ? request.mode() : null);
+        return startWorkflow(workItemId, startRequest);
+    }
+
+    public List<WorkflowVersionDto> listWorkflowVersions(String workItemId) {
+        WorkItemEntity workItem = workItemMapper.findById(workItemId);
+        if (workItem == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Work item not found: " + workItemId);
+        }
+
+        List<WorkflowInstanceEntity> instances = workflowMapper.findInstancesByWorkItemId(workItemId);
+        List<WorkflowInstanceEntity> chronological = new ArrayList<>(instances);
+        chronological.sort(Comparator.comparing(instance -> nonBlank(instance.getCreatedAt(), "")));
+
+        Map<String, Integer> versionByInstanceId = new java.util.HashMap<>();
+        for (int index = 0; index < chronological.size(); index++) {
+            versionByInstanceId.put(chronological.get(index).getId(), index + 1);
+        }
+
+        List<ArtifactEntity> artifacts = artifactMapper.findByWorkItemId(workItemId);
+        return instances.stream()
+                .map(instance -> new WorkflowVersionDto(
+                        versionByInstanceId.getOrDefault(instance.getId(), 1),
+                        instance.getId().equals(workItem.getCurrentWorkflowInstanceId()),
+                        toInstanceDto(instance),
+                        findWorkflowSession(instance),
+                        (int) artifacts.stream()
+                                .filter(artifact -> instance.getId().equals(artifact.getWorkflowInstanceId()))
+                                .count()))
+                .toList();
+    }
+
+    private void supersedeWorkflowInstance(WorkflowInstanceEntity instance, String now, String reason) {
+        AgentSessionDto session = findWorkflowSession(instance);
+        if (session != null) {
+            try {
+                agentSessionService.cancelRuntime(session.id());
+            } catch (Exception e) {
+                log.debug("Failed to cancel runtime before superseding workflow instance {}", instance.getId(), e);
+            }
+            try {
+                agentSessionService.updateSessionStatus(session.id(), SessionStatus.ARCHIVED);
+            } catch (Exception e) {
+                log.debug("Failed to archive superseded workflow session {}", session.id(), e);
+            }
+        }
+
+        cancelActiveConfirmationsForWorkflow(instance, now);
+
+        instance.setStatus(WorkflowStatus.SUPERSEDED.name());
+        instance.setCompletedAt(now);
+        instance.setUpdatedAt(now);
+        workflowMapper.updateInstance(instance);
+
+        runtimeEventService.publishEvent(new RuntimeEventDto(
+                null, session != null ? session.id() : null, instance.getWorkItemId(),
+                instance.getId(), instance.getCurrentNodeInstanceId(),
+                RuntimeEventType.STATUS, RuntimeEventSource.WORKFLOW,
+                buildWorkflowSupersededPayload(instance.getId(), reason), null
+        ));
+    }
+
+    private void cancelActiveConfirmationsForWorkflow(WorkflowInstanceEntity instance, String now) {
+        for (ConfirmationRequestEntity confirmation : confirmationMapper.findByWorkItemId(instance.getWorkItemId())) {
+            boolean belongsToWorkflow = instance.getId().equals(confirmation.getWorkflowInstanceId());
+            boolean active = ConfirmationStatus.PENDING.name().equals(confirmation.getStatus())
+                    || ConfirmationStatus.IN_CONVERSATION.name().equals(confirmation.getStatus());
+            if (!belongsToWorkflow || !active) {
+                continue;
+            }
+
+            confirmation.setStatus(ConfirmationStatus.CANCELLED.name());
+            confirmation.setResolvedAt(now);
+            confirmation.setResolvedBy("system");
+            confirmation.setResolutionComment("Workflow version superseded by restart");
+            confirmation.setUpdatedAt(now);
+            confirmationMapper.update(confirmation);
+        }
+    }
+
+    private String buildWorkflowSupersededPayload(String workflowInstanceId, String reason) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("{\"workflowStatus\":\"").append(WorkflowStatus.SUPERSEDED.name()).append("\"");
+        sb.append(",\"workflowInstanceId\":\"").append(escapeJson(workflowInstanceId)).append("\"");
+        if (reason != null && !reason.isBlank()) {
+            sb.append(",\"reason\":\"").append(escapeJson(reason.trim())).append("\"");
+        }
+        sb.append("}");
+        return sb.toString();
+    }
+
     public StartWorkflowResponse continueWorkflow(String instanceId) {
         WorkflowInstanceEntity instance = workflowMapper.findInstanceById(instanceId);
         if (instance == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Workflow instance not found: " + instanceId);
         }
+        ensureWorkflowMutable(instance);
 
         List<WorkflowNodeInstanceEntity> nodes = getOrderedNodeInstances(instanceId);
 
@@ -268,6 +376,7 @@ public class WorkflowCommandService {
     public StartWorkflowResponse retryNode(String nodeInstanceId) {
         WorkflowNodeInstanceEntity node = findNodeInstanceOrThrow(nodeInstanceId);
         WorkflowInstanceEntity instance = workflowMapper.findInstanceById(node.getWorkflowInstanceId());
+        ensureWorkflowMutable(instance);
 
         String now = LocalDateTime.now().format(SQLITE_DATETIME);
         resolveActiveExceptionConfirmations(node, now);
@@ -319,6 +428,7 @@ public class WorkflowCommandService {
     public StartWorkflowResponse skipNode(String nodeInstanceId) {
         WorkflowNodeInstanceEntity node = findNodeInstanceOrThrow(nodeInstanceId);
         WorkflowInstanceEntity instance = workflowMapper.findInstanceById(node.getWorkflowInstanceId());
+        ensureWorkflowMutable(instance);
 
         String now = LocalDateTime.now().format(SQLITE_DATETIME);
         instance.setStatus(WorkflowStatus.RUNNING.name());
@@ -338,6 +448,7 @@ public class WorkflowCommandService {
     public StartWorkflowResponse completeNodeAndAdvance(String nodeInstanceId) {
         WorkflowNodeInstanceEntity node = findNodeInstanceOrThrow(nodeInstanceId);
         WorkflowInstanceEntity instance = workflowMapper.findInstanceById(node.getWorkflowInstanceId());
+        ensureWorkflowMutable(instance);
 
         String now = LocalDateTime.now().format(SQLITE_DATETIME);
         instance.setStatus(WorkflowStatus.RUNNING.name());
@@ -357,6 +468,7 @@ public class WorkflowCommandService {
     public StartWorkflowResponse completeNodeAndScheduleAdvance(String nodeInstanceId) {
         WorkflowNodeInstanceEntity node = findNodeInstanceOrThrow(nodeInstanceId);
         WorkflowInstanceEntity instance = workflowMapper.findInstanceById(node.getWorkflowInstanceId());
+        ensureWorkflowMutable(instance);
 
         String now = LocalDateTime.now().format(SQLITE_DATETIME);
         instance.setStatus(WorkflowStatus.RUNNING.name());
@@ -381,6 +493,7 @@ public class WorkflowCommandService {
     public StartWorkflowResponse resumeNodeAfterInteraction(String nodeInstanceId, String supplementalInput) {
         WorkflowNodeInstanceEntity node = findNodeInstanceOrThrow(nodeInstanceId);
         WorkflowInstanceEntity instance = workflowMapper.findInstanceById(node.getWorkflowInstanceId());
+        ensureWorkflowMutable(instance);
 
         String now = LocalDateTime.now().format(SQLITE_DATETIME);
         instance.setStatus(WorkflowStatus.RUNNING.name());
@@ -419,6 +532,9 @@ public class WorkflowCommandService {
                          List<WorkflowNodeDefinitionEntity> nodeDefs,
                          WorkItemEntity workItem,
                          String supplementalInput) {
+        if (isWorkflowSuperseded(instance.getId())) {
+            return;
+        }
         String now = LocalDateTime.now().format(SQLITE_DATETIME);
 
         prepareWorkflowSession(instance, node, nodeDefs, workItem, now);
@@ -502,6 +618,9 @@ public class WorkflowCommandService {
                                     List<WorkflowNodeDefinitionEntity> nodeDefs,
                                     WorkItemEntity workItem,
                                     String supplementalInput) {
+        if (isWorkflowSuperseded(instance.getId())) {
+            return;
+        }
         WorkflowNodeDefinitionEntity nodeDef = nodeDefs.stream()
                 .filter(d -> d.getId().equals(node.getNodeDefinitionId()))
                 .findFirst().orElseThrow();
@@ -535,6 +654,11 @@ public class WorkflowCommandService {
                 result = runtimeGateway.runSkill(
                         workflowRuntimeType, node.getRuntimeSessionId(), request);
             }
+        }
+        if (isWorkflowSuperseded(instance.getId())) {
+            log.info("Workflow node result ignored because instance was superseded: instance={}, node={}",
+                    instance.getId(), node.getId());
+            return;
         }
 
         WorkflowNodeState nodeState = result.success()
@@ -1256,6 +1380,9 @@ public class WorkflowCommandService {
                 if (instance == null || node == null) {
                     return;
                 }
+                if (WorkflowStatus.SUPERSEDED.name().equals(instance.getStatus())) {
+                    return;
+                }
                 WorkItemEntity workItem = workItemMapper.findById(instance.getWorkItemId());
                 List<WorkflowNodeDefinitionEntity> nodeDefs =
                         workflowMapper.findNodeDefinitionsByWorkflowDefinitionId(instance.getWorkflowDefinitionId());
@@ -1284,6 +1411,9 @@ public class WorkflowCommandService {
     private PreparedWorkflowNode prepareNextPendingNode(String instanceId) {
         WorkflowInstanceEntity instance = workflowMapper.findInstanceById(instanceId);
         if (instance == null) {
+            return null;
+        }
+        if (WorkflowStatus.SUPERSEDED.name().equals(instance.getStatus())) {
             return null;
         }
 
@@ -1334,6 +1464,9 @@ public class WorkflowCommandService {
 
     private void executePreparedNode(PreparedWorkflowNode prepared) {
         try {
+            if (isWorkflowSuperseded(prepared.instance().getId())) {
+                return;
+            }
             executeSkillOnNode(prepared.instance(), prepared.node(), prepared.nodeDefs(), prepared.workItem());
             if (WorkflowNodeStatus.COMPLETED.name().equals(prepared.node().getStatus())) {
                 scheduleResume(prepared.instance().getId());
@@ -1479,6 +1612,16 @@ public class WorkflowCommandService {
                         || WorkflowStatus.BLOCKED.name().equals(i.getStatus()))
                 .findFirst()
                 .orElse(null);
+    }
+
+    private WorkflowInstanceEntity findRestartTargetInstance(WorkItemEntity workItem) {
+        if (workItem.getCurrentWorkflowInstanceId() != null && !workItem.getCurrentWorkflowInstanceId().isBlank()) {
+            WorkflowInstanceEntity current = workflowMapper.findInstanceById(workItem.getCurrentWorkflowInstanceId());
+            if (current != null && !WorkflowStatus.SUPERSEDED.name().equals(current.getStatus())) {
+                return current;
+            }
+        }
+        return findActiveInstance(workItem.getId());
     }
 
     private WorkflowDefinitionEntity resolveDefinition(WorkItemEntity workItem, StartWorkflowRequest request) {
@@ -1813,6 +1956,21 @@ public class WorkflowCommandService {
                     "Workflow node instance not found: " + nodeInstanceId);
         }
         return node;
+    }
+
+    private void ensureWorkflowMutable(WorkflowInstanceEntity instance) {
+        if (instance == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Workflow instance not found");
+        }
+        if (WorkflowStatus.SUPERSEDED.name().equals(instance.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Workflow instance has been superseded by a newer version.");
+        }
+    }
+
+    private boolean isWorkflowSuperseded(String workflowInstanceId) {
+        WorkflowInstanceEntity latest = workflowMapper.findInstanceById(workflowInstanceId);
+        return latest != null && WorkflowStatus.SUPERSEDED.name().equals(latest.getStatus());
     }
 
     private WorkflowInstanceDto toInstanceDto(WorkflowInstanceEntity e) {

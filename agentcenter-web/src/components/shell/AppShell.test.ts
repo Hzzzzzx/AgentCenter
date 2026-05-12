@@ -37,6 +37,8 @@ vi.mock('../../api/workItems', () => ({
     list: vi.fn().mockResolvedValue([]),
     getById: vi.fn(),
     create: vi.fn(),
+    restartWorkflow: vi.fn(),
+    listWorkflowVersions: vi.fn().mockResolvedValue([]),
   },
 }))
 

@@ -2,7 +2,7 @@
 export type WorkItemType = 'FE' | 'US' | 'TASK' | 'WORK' | 'BUG' | 'VULN'
 export type WorkItemStatus = 'BACKLOG' | 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'DONE'
 export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'
-export type WorkflowStatus = 'PENDING' | 'RUNNING' | 'BLOCKED' | 'FAILED' | 'COMPLETED' | 'CANCELLED'
+export type WorkflowStatus = 'PENDING' | 'RUNNING' | 'BLOCKED' | 'FAILED' | 'COMPLETED' | 'CANCELLED' | 'SUPERSEDED'
 export type WorkflowNodeStatus = 'PENDING' | 'RUNNING' | 'READY' | 'WAITING_CONFIRMATION' | 'FAILED' | 'COMPLETED' | 'SKIPPED'
 export type ConfirmationStatus = 'PENDING' | 'IN_CONVERSATION' | 'RESOLVED' | 'REJECTED' | 'CANCELLED' | 'EXPIRED'
 export type SessionType = 'GENERAL' | 'WORK_ITEM'
@@ -391,12 +391,26 @@ export interface StartWorkflowRequest {
   mode?: 'AUTO' | 'MANUAL_CONFIRM' | 'START_OR_CONTINUE'
 }
 
+export interface RestartWorkflowRequest {
+  workflowDefinitionId?: string
+  mode?: StartWorkflowRequest['mode']
+  reason?: string
+}
+
 export interface StartWorkflowResponse {
   workflowInstance: WorkflowInstanceDto
   session: AgentSessionDto | null
   artifacts: ArtifactDto[]
   events: RuntimeEventDto[]
   confirmation: ConfirmationRequestDto | null
+}
+
+export interface WorkflowVersionDto {
+  versionNo: number
+  current: boolean
+  workflowInstance: WorkflowInstanceDto
+  session: AgentSessionDto | null
+  artifactCount: number
 }
 
 export interface SendMessageRequest {

@@ -75,6 +75,7 @@ onMounted(() => {
 watch(() => props.selectedWorkItem, (item) => {
   if (item && !props.selectedArtifact) {
     activeTab.value = 'details'
+    workflowStore.loadVersions(item.id).catch(() => undefined)
   }
 })
 
@@ -101,6 +102,10 @@ const selectedProjection = computed(() => {
 
 const workflowNodes = computed(() => selectedProjection.value?.nodes ?? [])
 const hasActiveWorkflow = computed(() => selectedProjection.value?.hasWorkflow ?? false)
+const workflowVersions = computed(() =>
+  props.selectedWorkItem ? workflowStore.versionsByWorkItemId[props.selectedWorkItem.id] ?? [] : []
+)
+const hasWorkflowVersions = computed(() => workflowVersions.value.length > 0)
 
 const isSelectedWorkItemConversationOpen = computed(() =>
   props.activeView === 'conversation' && Boolean(props.selectedWorkItem)
@@ -146,6 +151,25 @@ function nodeMeta(node: ProjectedWorkflowNode): string {
 
 function nodeMetaText(node: ProjectedWorkflowNode): string {
   return nodeMeta(node) || node.latestSummary || ''
+}
+
+function versionTime(value: string | null | undefined): string {
+  if (!value) return '暂无时间'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '暂无时间'
+  return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+function versionStatusText(status: string): string {
+  const labels: Record<string, string> = {
+    RUNNING: '运行中',
+    BLOCKED: '等待中',
+    COMPLETED: '已完成',
+    FAILED: '失败',
+    CANCELLED: '已取消',
+    SUPERSEDED: '已重开',
+  }
+  return labels[status] ?? status
 }
 
 function handleStartWorkflow() {
@@ -311,6 +335,27 @@ function handleToggleExpanded() {
                     </span>
                   </span>
                   <span class="detail__node-status">{{ statusLabels[node.status] }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="hasWorkflowVersions" class="detail__workflow detail__versions">
+              <h4>工作流历史</h4>
+              <div class="detail__version-list">
+                <div
+                  v-for="version in workflowVersions"
+                  :key="version.workflowInstance.id"
+                  class="detail__version"
+                  :class="{ 'detail__version--current': version.current }"
+                >
+                  <div>
+                    <strong>v{{ version.versionNo }}</strong>
+                    <span>{{ version.current ? '当前版本' : versionStatusText(version.workflowInstance.status) }}</span>
+                  </div>
+                  <small>
+                    {{ versionTime(version.workflowInstance.completedAt ?? version.workflowInstance.startedAt) }}
+                    · {{ version.artifactCount }} 个产物
+                  </small>
                 </div>
               </div>
             </div>
@@ -715,6 +760,57 @@ function handleToggleExpanded() {
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 600;
+}
+
+.detail__versions {
+  padding-top: 10px;
+}
+
+.detail__version-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.detail__version {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-card);
+}
+
+.detail__version--current {
+  border-color: var(--brand-border);
+  background: var(--brand-soft);
+}
+
+.detail__version div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.detail__version strong {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.detail__version span,
+.detail__version small {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.detail__version small {
+  flex: 0 0 auto;
 }
 
 .detail__actions {

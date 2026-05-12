@@ -117,6 +117,9 @@ const refreshingSkills = ref(false)
 const sessionResourceStatus = ref<SessionRuntimeResourceDto | null>(null)
 const loadingSession = ref(false)
 const cancellingSessionId = ref<string | null>(null)
+const selectedWorkflowVersionId = ref<string | null>(null)
+const restartingWorkflow = ref(false)
+const restartConfirmOpen = ref(false)
 const pausedRunningNodeId = ref<string | null>(null)
 const promptDebugOpen = ref(false)
 const promptDebugFullscreen = ref(false)
@@ -167,6 +170,7 @@ const workflowNodeStateReason = computed<string | null>(() => {
 })
 
 const inputPlaceholder = computed(() => {
+  if (isHistoricalVersion.value) return '历史版本只读，切回当前版本后可继续输入...'
   if (isConversationRunning.value) return '对话运行中，可点击右侧按钮暂停...'
   if (composerRecoveryInteraction.value?.requestType === 'EXCEPTION') return '输入你的恢复指令，Agent 会按这句话继续当前节点...'
   if (composerRecoveryInteraction.value) return '输入你的补充、调整或继续指令，介入当前节点...'
@@ -210,6 +214,28 @@ const currentWorkflowInstance = computed(() => {
   if (sessionStore.activeSession?.workflowInstanceId && instance.id !== sessionStore.activeSession.workflowInstanceId) return null
   return instance
 })
+
+const workflowVersions = computed(() =>
+  props.workItemId ? workflowStore.versionsByWorkItemId[props.workItemId] ?? [] : []
+)
+
+const currentDisplayedVersionId = computed(() =>
+  selectedWorkflowVersionId.value
+    ?? currentWorkflowInstance.value?.id
+    ?? sessionStore.activeSession?.workflowInstanceId
+    ?? selectedWorkItem.value?.currentWorkflowInstanceId
+    ?? ''
+)
+
+const selectedWorkflowVersion = computed(() =>
+  workflowVersions.value.find((version) => version.workflowInstance.id === currentDisplayedVersionId.value) ?? null
+)
+
+const isHistoricalVersion = computed(() =>
+  Boolean(selectedWorkflowVersion.value && !selectedWorkflowVersion.value.current)
+  || currentWorkflowInstance.value?.status === 'SUPERSEDED'
+  || sessionStore.activeSession?.status === 'ARCHIVED'
+)
 
 const isWorkflowCompleted = computed(() =>
   currentWorkflowInstance.value?.status === 'COMPLETED'
@@ -380,6 +406,13 @@ function userFacingAgentReason(reason: string | null): string {
 }
 
 const agentStateLabel = computed<{ dot: string; text: string; reason: string } | null>(() => {
+  if (isHistoricalVersion.value) {
+    return {
+      dot: 'v',
+      text: '历史版本',
+      reason: '只读',
+    }
+  }
   if (isWorkflowCompleted.value) {
     const completedNodes = currentWorkflowInstance.value?.nodes.filter(node => node.status === 'COMPLETED').length ?? 0
     return {
@@ -402,6 +435,7 @@ const agentStateLabel = computed<{ dot: string; text: string; reason: string } |
 })
 
 const currentInteractions = computed(() => {
+  if (isHistoricalVersion.value) return []
   const session = sessionStore.activeSession
   const workflowInstanceId = session?.workflowInstanceId ?? currentWorkflowInstance.value?.id ?? null
   const nodeId = nodeStateInfo.value.nodeId ?? null
@@ -427,11 +461,13 @@ const composerRecoveryInteraction = computed(() =>
 )
 
 const shouldShowInputArea = computed(() =>
-  currentInteractions.value.length === 0 || Boolean(composerRecoveryInteraction.value)
+  !isHistoricalVersion.value
+  && (currentInteractions.value.length === 0 || Boolean(composerRecoveryInteraction.value))
 )
 
 const shouldShowWorkflowNodeControl = computed(() =>
-  !isWorkflowCompleted.value
+  !isHistoricalVersion.value
+  && !isWorkflowCompleted.value
   && nodeStateInfo.value.type !== 'WAITING_CONFIRMATION'
   && workflowNodeState.value !== 'READY_TO_ADVANCE'
   && !isConversationRunning.value
@@ -579,11 +615,13 @@ onMounted(async () => {
     await workflowStore.loadDefinitions()
   }
   await ensureActiveSession()
+  await loadWorkflowVersions()
   await confirmationStore.loadPending()
 })
 
 watch([() => props.workItemId, () => props.targetSessionId], async () => {
   await ensureActiveSession()
+  await loadWorkflowVersions()
   await confirmationStore.loadPending()
 })
 
@@ -728,6 +766,101 @@ async function ensureActiveSession(): Promise<AgentSessionDto | null> {
   }
 }
 
+async function loadWorkflowVersions() {
+  if (!props.workItemId) return
+  const versions = await workflowStore.loadVersions(props.workItemId)
+  if (!selectedWorkflowVersionId.value) {
+    selectedWorkflowVersionId.value = versions.find((version) => version.current)?.workflowInstance.id
+      ?? versions[0]?.workflowInstance.id
+      ?? null
+  }
+}
+
+async function handleWorkflowVersionChange(nextWorkflowInstanceId: string) {
+  selectedWorkflowVersionId.value = nextWorkflowInstanceId
+  const version = workflowVersions.value.find((item) => item.workflowInstance.id === nextWorkflowInstanceId)
+  if (!version) return
+
+  workflowStore.setActiveInstance(version.workflowInstance)
+  if (version.current) {
+    if (version.workflowInstance.workItemId) {
+      workflowStore.upsertInstance(version.workflowInstance)
+    }
+    if (version.session) {
+      await sessionStore.selectSession(version.session.id)
+      runtimeStore.connectSSE(version.session.id)
+    } else {
+      await ensureActiveSession()
+    }
+    return
+  }
+
+  runtimeStore.disconnectSSE()
+  runtimeStore.resetStreamingOutput()
+  runtimeStore.markIdle()
+  if (version.session) {
+    await sessionStore.selectSession(version.session.id)
+  }
+}
+
+function workflowVersionLabel(versionNo: number, current: boolean): string {
+  return current ? `v${versionNo} · 当前版本` : `v${versionNo} · 历史版本`
+}
+
+function workflowVersionMeta(version: { workflowInstance: { startedAt: string | null; completedAt: string | null }, artifactCount: number }): string {
+  const time = version.workflowInstance.completedAt ?? version.workflowInstance.startedAt
+  const date = time ? new Date(time) : null
+  const formatted = date && !Number.isNaN(date.getTime())
+    ? date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+    : '暂无时间'
+  return `${formatted} · ${version.artifactCount} 个产物`
+}
+
+async function handleRestartWorkflow() {
+  if (!props.workItemId || restartingWorkflow.value) return
+  restartingWorkflow.value = true
+  try {
+    if (isConversationRunning.value) {
+      await handleCancelReply()
+    }
+    const response = await workflowStore.restartWorkflow(props.workItemId, {
+      mode: runtimeSettingsStore.workflowRunMode,
+      reason: '用户选择重新开始当前工作流',
+    })
+    if (response.session) {
+      sessionStore.upsertSession(response.session)
+      await sessionStore.selectSession(response.session.id)
+      runtimeStore.connectSSE(response.session.id)
+    }
+    if (response.workflowInstance) {
+      workflowStore.setActiveInstance(response.workflowInstance)
+      workflowStore.upsertInstance(response.workflowInstance)
+      selectedWorkflowVersionId.value = response.workflowInstance.id
+    }
+    await workflowProjectionStore.syncWorkItem(props.workItemId)
+    await confirmationStore.loadPending()
+    await loadWorkflowVersions()
+    restartConfirmOpen.value = false
+    notificationStore.push({
+      anchor: 'right-panel',
+      tone: 'success',
+      title: '已重新开始',
+      message: '旧版本已保留为只读历史，当前工作项已切到新的工作流版本。',
+      durationMs: 4200,
+    })
+  } catch (error) {
+    notificationStore.push({
+      anchor: 'right-panel',
+      tone: 'error',
+      title: '重新开始失败',
+      message: error instanceof Error ? error.message : '请稍后重试',
+      durationMs: 5200,
+    })
+  } finally {
+    restartingWorkflow.value = false
+  }
+}
+
 onUnmounted(() => {
   stopPromptDebugDrag()
   cancelPendingScroll()
@@ -801,6 +934,7 @@ watch(
 
 async function handleSend() {
   const text = inputText.value.trim()
+  if (isHistoricalVersion.value) return
   if (!text || isConversationRunning.value) return
   const recoveryInteraction = composerRecoveryInteraction.value
   if (recoveryInteraction) {
@@ -885,6 +1019,7 @@ async function handleCancelReply() {
 }
 
 async function handleWorkflowAction(action: string, nodeInstanceId: string) {
+  if (isHistoricalVersion.value) return
   if (!sessionStore.activeSession) return
   armArtifactAutoPreview()
   if (action === 'CONTINUE_CURRENT') {
@@ -1480,6 +1615,24 @@ function timestamp(value: string | null | undefined): number {
           </button>
           <div>
             <h2>{{ activeTitle }}</h2>
+            <div v-if="workflowVersions.length" class="conversation-workbench__versions">
+              <label class="conversation-workbench__version-select">
+                <span>版本</span>
+                <select
+                  :value="currentDisplayedVersionId"
+                  @change="handleWorkflowVersionChange(($event.target as HTMLSelectElement).value)"
+                >
+                  <option
+                    v-for="version in workflowVersions"
+                    :key="version.workflowInstance.id"
+                    :value="version.workflowInstance.id"
+                  >
+                    {{ workflowVersionLabel(version.versionNo, version.current) }} · {{ workflowVersionMeta(version) }}
+                  </option>
+                </select>
+              </label>
+              <span v-if="isHistoricalVersion" class="conversation-workbench__readonly-badge">只读</span>
+            </div>
           </div>
         </div>
         <div class="conversation-workbench__header-actions">
@@ -1512,11 +1665,33 @@ function timestamp(value: string | null | undefined): number {
           >
             {{ refreshingSkills ? '刷新中...' : '刷新 Skill' }}
           </button>
+          <div v-if="props.workItemId && !isHistoricalVersion" class="conversation-workbench__restart">
+            <button
+              type="button"
+              class="conversation-workbench__refresh conversation-workbench__restart-button"
+              :disabled="restartingWorkflow"
+              @click="restartConfirmOpen = !restartConfirmOpen"
+            >
+              {{ restartingWorkflow ? '重开中...' : '重新开始' }}
+            </button>
+            <div v-if="restartConfirmOpen" class="conversation-workbench__restart-popover">
+              <strong>重新开始当前工作流？</strong>
+              <p>旧会话、产物和节点记录会保留为只读历史版本，当前工作项会切到全新会话。</p>
+              <div class="conversation-workbench__restart-actions">
+                <button type="button" @click="restartConfirmOpen = false">取消</button>
+                <button type="button" :disabled="restartingWorkflow" @click="handleRestartWorkflow">确认重开</button>
+              </div>
+            </div>
+          </div>
         </div>
       </header>
 
       <div v-if="skillRefreshStatus" class="conversation-workbench__notice">
         {{ skillRefreshStatus }}
+      </div>
+
+      <div v-if="isHistoricalVersion" class="conversation-workbench__notice conversation-workbench__notice--history">
+        当前查看的是历史版本，只能阅读旧对话、产物和节点记录。切回当前版本后可继续操作。
       </div>
 
       <Teleport to="body">
@@ -1799,7 +1974,50 @@ function timestamp(value: string | null | undefined): number {
   white-space: nowrap;
 }
 
+.conversation-workbench__versions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  min-width: 0;
+}
+
+.conversation-workbench__version-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.conversation-workbench__version-select select {
+  max-width: min(440px, 48vw);
+  height: 30px;
+  padding: 0 28px 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.conversation-workbench__readonly-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-size: 11px;
+  font-weight: 900;
+}
+
 .conversation-workbench__header-actions {
+  position: relative;
   display: flex;
   flex: 0 1 auto;
   align-items: center;
@@ -1915,6 +2133,67 @@ function timestamp(value: string | null | undefined): number {
   cursor: not-allowed;
 }
 
+.conversation-workbench__restart {
+  position: relative;
+}
+
+.conversation-workbench__restart-button {
+  color: var(--error);
+}
+
+.conversation-workbench__restart-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  width: min(320px, calc(100vw - 32px));
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.16);
+}
+
+.conversation-workbench__restart-popover strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.conversation-workbench__restart-popover p {
+  margin: 8px 0 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.5;
+  white-space: normal;
+}
+
+.conversation-workbench__restart-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.conversation-workbench__restart-actions button {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.conversation-workbench__restart-actions button:last-child {
+  border-color: var(--error);
+  background: var(--error);
+  color: var(--on-brand);
+}
+
 .conversation-workbench__messages {
   flex: 1;
   min-height: 0;
@@ -1943,6 +2222,12 @@ function timestamp(value: string | null | undefined): number {
   color: var(--accent-blue);
   font-size: 12px;
   font-weight: 800;
+}
+
+.conversation-workbench__notice--history {
+  border-color: var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
 }
 
 .conversation-workbench__loading {

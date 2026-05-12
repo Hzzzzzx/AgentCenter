@@ -52,6 +52,7 @@ const workflowStatusLabels: Record<WorkflowStatus, string> = {
   FAILED: '异常',
   COMPLETED: '已完成',
   CANCELLED: '已取消',
+  SUPERSEDED: '已替代',
 }
 
 const defaultStageLabels: Record<WorkItemDto['type'], string[]> = {

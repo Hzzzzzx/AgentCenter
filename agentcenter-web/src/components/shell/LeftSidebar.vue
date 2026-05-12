@@ -39,11 +39,11 @@ const navItems: NavItem[] = [
 ]
 
 const generalSessions = computed(() =>
-  sessionStore.sessions.filter((session) => session.sessionType === 'GENERAL')
+  sessionStore.sessions.filter((session) => session.sessionType === 'GENERAL' && session.status === 'ACTIVE')
 )
 
 const taskSessions = computed(() =>
-  sessionStore.sessions.filter((session) => session.sessionType === 'WORK_ITEM')
+  sessionStore.sessions.filter((session) => session.sessionType === 'WORK_ITEM' && session.status === 'ACTIVE')
 )
 
 onMounted(() => {
