@@ -133,4 +133,45 @@
         WHERE id = #{id}
     </update>
 
+    <insert id="insertSyncHistory">
+        INSERT INTO project_data_sync_history (
+            id, provider_id, status, context_count, work_item_count,
+            active_project_context_id, active_project_space_id, active_project_iteration_id,
+            result_json, error_message, started_at, completed_at
+        )
+        VALUES (
+            #{id}, #{providerId}, #{status}, COALESCE(#{contextCount}, 0), COALESCE(#{workItemCount}, 0),
+            #{activeProjectContextId}, #{activeProjectSpaceId}, #{activeProjectIterationId},
+            #{resultJson}, #{errorMessage}, #{startedAt}, #{completedAt}
+        )
+    </insert>
+
+    <update id="updateSyncHistory">
+        UPDATE project_data_sync_history
+        SET status = #{status},
+            context_count = COALESCE(#{contextCount}, context_count),
+            work_item_count = COALESCE(#{workItemCount}, work_item_count),
+            active_project_context_id = #{activeProjectContextId},
+            active_project_space_id = #{activeProjectSpaceId},
+            active_project_iteration_id = #{activeProjectIterationId},
+            result_json = #{resultJson},
+            error_message = #{errorMessage},
+            completed_at = #{completedAt}
+        WHERE id = #{id}
+    </update>
+
+    <select id="findSyncHistory" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.ProjectDataSyncHistoryEntity">
+        SELECT id, provider_id, status, context_count, work_item_count,
+               active_project_context_id, active_project_space_id, active_project_iteration_id,
+               result_json, error_message, started_at, completed_at
+        FROM project_data_sync_history
+        <where>
+            <if test="providerId != null and providerId != ''">
+                provider_id = #{providerId}
+            </if>
+        </where>
+        ORDER BY started_at DESC
+        LIMIT #{limit}
+    </select>
+
 </mapper>

@@ -9,7 +9,8 @@ import java.util.List;
 @Mapper
 public interface WorkItemMapper {
     List<WorkItemEntity> findAll();
-    List<WorkItemEntity> findByScope(@Param("projectId") String projectId,
+    List<WorkItemEntity> findByScope(@Param("providerId") String providerId,
+                                     @Param("projectId") String projectId,
                                      @Param("spaceId") String spaceId,
                                      @Param("iterationId") String iterationId);
     WorkItemEntity findById(@Param("id") String id);

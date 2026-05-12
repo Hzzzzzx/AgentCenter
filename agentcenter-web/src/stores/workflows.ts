@@ -9,7 +9,7 @@ export const useWorkflowStore = defineStore('workflows', () => {
   const loading = ref(false)
   const instancesByWorkItemId = ref<Record<string, WorkflowInstanceDto>>({})
 
-  async function loadDefinitions(projectId?: string) {
+  async function loadDefinitions(projectId?: string | null) {
     loading.value = true
     try {
       definitions.value = await workflowApi.listDefinitions(projectId)

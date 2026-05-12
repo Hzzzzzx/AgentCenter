@@ -8,6 +8,7 @@ import type {
 } from './types'
 
 export interface WorkItemScopeQuery {
+  providerId?: string | null
   projectId?: string | null
   spaceId?: string | null
   iterationId?: string | null
@@ -15,6 +16,7 @@ export interface WorkItemScopeQuery {
 
 function scopedPath(path: string, scope?: WorkItemScopeQuery): string {
   const params = new URLSearchParams()
+  if (scope?.providerId) params.set('providerId', scope.providerId)
   if (scope?.projectId) params.set('projectId', scope.projectId)
   if (scope?.spaceId) params.set('spaceId', scope.spaceId)
   if (scope?.iterationId) params.set('iterationId', scope.iterationId)

@@ -50,31 +50,47 @@ public class FixtureAlphaProjectDataProvider implements ProjectDataProvider {
         return List.of(
                 new ProjectContextDto(
                         "ctx-alpha-agentcenter",
+                        "alpha-project-agentcenter",
                         "AgentCenter",
+                        "alpha-cloudereq-rd",
                         "CloudeReq 研发项目",
+                        "alpha-space-rd",
                         "研发中台",
+                        "alpha-sprint-14",
                         "Sprint 14",
-                        true
+                        null,
+                        null,
+                        null,
+                        true,
+                        null
                 ),
                 new ProjectContextDto(
                         "ctx-alpha-platform",
+                        "alpha-project-platform",
                         "平台接入",
+                        "alpha-cloudereq-delivery",
                         "CloudeReq 交付空间",
+                        "alpha-space-platform",
                         "平台工程",
+                        "alpha-sprint-15",
                         "Sprint 15",
-                        false
+                        null,
+                        null,
+                        null,
+                        false,
+                        null
                 )
         );
     }
 
     private List<ProjectProviderWorkItemDto> workItems() {
         return List.of(
-                item("A-FE001", WorkItemType.FE, "项目上下文标题栏串联", "标题栏切换当前项目后刷新首页与看板数据。", WorkItemStatus.TODO, Priority.HIGH, "AgentCenter", "研发中台", "Sprint 14"),
-                item("A-FE002", WorkItemType.FE, "项目管理配置持久化", "把项目配置从前端本地状态迁移到 Bridge API。", WorkItemStatus.IN_PROGRESS, Priority.URGENT, "AgentCenter", "研发中台", "Sprint 14"),
-                item("A-US001", WorkItemType.US, "同步源切换验证", "作为平台负责人，我可以切换测试同步源并看到不同迭代数据。", WorkItemStatus.TODO, Priority.HIGH, "AgentCenter", "研发中台", "Sprint 14"),
-                item("A-TASK001", WorkItemType.TASK, "补齐上下文过滤测试", "验证 work-items overview 和列表使用同一上下文过滤条件。", WorkItemStatus.BACKLOG, Priority.MEDIUM, "AgentCenter", "研发中台", "Sprint 14"),
-                item("A-WORK001", WorkItemType.WORK, "平台工程同步演练", "验证另一个项目空间的工作项不会混入 AgentCenter。", WorkItemStatus.TODO, Priority.MEDIUM, "平台接入", "平台工程", "Sprint 15"),
-                item("A-FE101", WorkItemType.FE, "平台接入运行资源页", "平台接入项目专属的 Runtime Skill/MCP 管理入口。", WorkItemStatus.BACKLOG, Priority.LOW, "平台接入", "平台工程", "Sprint 15")
+                item("A-FE001", WorkItemType.FE, "项目上下文标题栏串联", "标题栏切换当前项目后刷新首页与看板数据。", WorkItemStatus.TODO, Priority.HIGH, "ctx-alpha-agentcenter", "alpha-project-agentcenter", "AgentCenter", "alpha-space-rd", "研发中台", "alpha-sprint-14", "Sprint 14"),
+                item("A-FE002", WorkItemType.FE, "项目管理配置持久化", "把项目配置从前端本地状态迁移到 Bridge API。", WorkItemStatus.IN_PROGRESS, Priority.URGENT, "ctx-alpha-agentcenter", "alpha-project-agentcenter", "AgentCenter", "alpha-space-rd", "研发中台", "alpha-sprint-14", "Sprint 14"),
+                item("A-US001", WorkItemType.US, "同步源切换验证", "作为平台负责人，我可以切换测试同步源并看到不同迭代数据。", WorkItemStatus.TODO, Priority.HIGH, "ctx-alpha-agentcenter", "alpha-project-agentcenter", "AgentCenter", "alpha-space-rd", "研发中台", "alpha-sprint-14", "Sprint 14"),
+                item("A-TASK001", WorkItemType.TASK, "补齐上下文过滤测试", "验证 work-items overview 和列表使用同一上下文过滤条件。", WorkItemStatus.BACKLOG, Priority.MEDIUM, "ctx-alpha-agentcenter", "alpha-project-agentcenter", "AgentCenter", "alpha-space-rd", "研发中台", "alpha-sprint-14", "Sprint 14"),
+                item("A-WORK001", WorkItemType.WORK, "平台工程同步演练", "验证另一个项目空间的工作项不会混入 AgentCenter。", WorkItemStatus.TODO, Priority.MEDIUM, "ctx-alpha-platform", "alpha-project-platform", "平台接入", "alpha-space-platform", "平台工程", "alpha-sprint-15", "Sprint 15"),
+                item("A-FE101", WorkItemType.FE, "平台接入运行资源页", "平台接入项目专属的 Runtime Skill/MCP 管理入口。", WorkItemStatus.BACKLOG, Priority.LOW, "ctx-alpha-platform", "alpha-project-platform", "平台接入", "alpha-space-platform", "平台工程", "alpha-sprint-15", "Sprint 15")
         );
     }
 
@@ -84,10 +100,15 @@ public class FixtureAlphaProjectDataProvider implements ProjectDataProvider {
                                             String description,
                                             WorkItemStatus status,
                                             Priority priority,
+                                            String projectContextId,
+                                            String externalProjectId,
                                             String project,
+                                            String externalSpaceId,
                                             String space,
+                                            String externalIterationId,
                                             String iteration) {
         return new ProjectProviderWorkItemDto(
+                code,
                 code,
                 type,
                 title,
@@ -97,7 +118,12 @@ public class FixtureAlphaProjectDataProvider implements ProjectDataProvider {
                 project,
                 space,
                 iteration,
-                "01DEFAULTUSER00000000000000001"
+                projectContextId,
+                externalProjectId,
+                externalSpaceId,
+                externalIterationId,
+                "01DEFAULTUSER00000000000000001",
+                null
         );
     }
 }

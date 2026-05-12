@@ -173,11 +173,30 @@ export interface ProjectDataSnapshotDto {
   syncedAt: string
 }
 
+export interface ProjectDataSyncHistoryDto {
+  id: string
+  providerId: string
+  status: 'RUNNING' | 'SUCCESS' | 'FAILED'
+  contextCount: number
+  workItemCount: number
+  activeProjectContextId?: string | null
+  activeProjectSpaceId?: string | null
+  activeProjectIterationId?: string | null
+  resultJson?: string | null
+  errorMessage?: string | null
+  startedAt: string
+  completedAt?: string | null
+}
+
 export interface CreateWorkItemRequest {
   type: WorkItemType
   title: string
   description?: string
   priority?: Priority
+  projectId?: string | null
+  spaceId?: string | null
+  iterationId?: string | null
+  assigneeUserId?: string | null
 }
 
 export interface WorkflowDefinitionDto {

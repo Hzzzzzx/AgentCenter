@@ -30,35 +30,29 @@ const selectedArtifact = ref<ArtifactDto | null>(null)
 const conversationReturnView = ref('home')
 const settingsTab = ref<string>('skills')
 const appShellRef = ref<InstanceType<typeof AppShell> | null>(null)
+const emptyProjectContext: ProjectContextSelection = {
+  id: '',
+  project: '',
+  cloudeReqProject: '',
+  space: '',
+  iteration: '',
+}
 const projectContextOptions = reactive<ProjectContextOptions>({
-  cloudeReqProjects: ['CloudeReq 需求平台', 'CloudeReq 研发项目', 'CloudeReq 交付空间'],
-  spaces: ['研发中台', '平台工程', '安全治理'],
-  iterations: ['Sprint 14', 'Sprint 15', '长期演进'],
+  cloudeReqProjects: [],
+  spaces: [],
+  iterations: [],
 })
-const projectContexts = ref<ProjectContextSelection[]>([
-  {
-    id: 'ctx-agentcenter',
-    project: 'AgentCenter',
-    cloudeReqProject: 'CloudeReq 研发项目',
-    space: '研发中台',
-    iteration: 'Sprint 14',
-  },
-  {
-    id: 'ctx-platform',
-    project: '平台接入',
-    cloudeReqProject: 'CloudeReq 交付空间',
-    space: '平台工程',
-    iteration: 'Sprint 15',
-  },
-])
+const projectContexts = ref<ProjectContextSelection[]>([])
 const activeProjectContextId = ref(projectContexts.value[0]?.id ?? '')
 const projectContextSyncing = ref(false)
 const projectContext = computed<ProjectContextSelection>({
   get: () => (
     projectContexts.value.find((item) => item.id === activeProjectContextId.value)
     ?? projectContexts.value[0]
+    ?? emptyProjectContext
   ),
   set: (value) => {
+    if (!value.id) return
     const existingIndex = projectContexts.value.findIndex((item) => item.id === value.id)
     if (existingIndex >= 0) {
       projectContexts.value.splice(existingIndex, 1, value)
@@ -68,7 +62,19 @@ const projectContext = computed<ProjectContextSelection>({
     activeProjectContextId.value = value.id
   },
 })
-const activeProjectId = computed(() => projectContext.value?.project?.trim() || DEFAULT_PROJECT_ID)
+const activeProjectId = computed(() => scopeProjectIdFor(projectContext.value) || DEFAULT_PROJECT_ID)
+const activeIterationOptions = computed(() => {
+  const context = projectContext.value
+  const scopedIterations = projectContexts.value
+    .filter((item) => item.project === context.project && item.space === context.space)
+    .map((item) => item.iteration)
+  return unique(scopedIterations).length > 0 ? unique(scopedIterations) : projectContextOptions.iterations
+})
+const shellProjectContextOptions = computed<ProjectContextOptions>(() => ({
+  cloudeReqProjects: projectContextOptions.cloudeReqProjects,
+  spaces: projectContextOptions.spaces,
+  iterations: activeIterationOptions.value,
+}))
 const sessionStore = useSessionStore()
 const workflowStore = useWorkflowStore()
 const confirmationStore = useConfirmationStore()
@@ -80,8 +86,18 @@ const refreshTimerIds = new Set<number>()
 
 onMounted(async () => {
   runtimeSettingsStore.initFromStorage()
-  await runtimeSettingsStore.loadProjectDataProviders()
-  await loadProjectDataSnapshot(true)
+  try {
+    await runtimeSettingsStore.loadProjectDataProviders()
+    await loadProjectDataSnapshot(true)
+  } catch (e) {
+    notificationStore.push({
+      anchor: 'right-panel',
+      tone: 'error',
+      title: '项目数据加载失败',
+      message: e instanceof Error ? e.message : '请检查 Bridge 项目数据同步接口',
+      durationMs: 5200,
+    })
+  }
   await refreshWorkItemState()
 })
 
@@ -109,10 +125,26 @@ async function refreshOneWorkItemState(workItemId: string) {
 function scopeForProjectContext() {
   const context = projectContext.value
   return {
-    projectId: activeProjectId.value,
-    spaceId: context?.space ?? null,
-    iterationId: context?.iteration ?? null,
+    providerId: runtimeSettingsStore.activeProjectDataProviderId || null,
+    projectId: scopeProjectIdFor(context),
+    spaceId: firstNonBlank(context.externalSpaceId, context.space),
+    iterationId: firstNonBlank(context.externalIterationId, context.iteration),
   }
+}
+
+function scopeProjectIdFor(context: ProjectContextSelection) {
+  const providerId = runtimeSettingsStore.activeProjectDataProviderId
+  const externalProjectId = firstNonBlank(context.externalProjectId, context.project)
+  if (!providerId || !externalProjectId) return externalProjectId
+  return `${providerId}:${externalProjectId}`
+}
+
+function firstNonBlank(...values: Array<string | null | undefined>) {
+  return values.find((value) => value && value.trim().length > 0)?.trim() ?? null
+}
+
+function unique(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean)))
 }
 
 function queueWorkflowRefresh(workItemId?: string | null) {
@@ -227,13 +259,6 @@ function handleNavigateSettings(tab: string) {
   activeView.value = 'settings'
 }
 
-function handleProjectContextsUpdate(nextContexts: ProjectContextSelection[]) {
-  projectContexts.value = nextContexts
-  if (!nextContexts.some((item) => item.id === activeProjectContextId.value)) {
-    activeProjectContextId.value = nextContexts[0]?.id ?? ''
-  }
-}
-
 function handleSyncProjectContextData() {
   if (projectContextSyncing.value) return
   projectContextSyncing.value = true
@@ -244,7 +269,7 @@ function handleSyncProjectContextData() {
         anchor: 'right-panel',
         tone: 'success',
         title: '同步完成',
-        message: '已按当前同步源刷新项目上下文、工作项与首页节点统计。',
+        message: '已按当前同步源刷新项目、空间、迭代、工作项与首页节点统计。',
         durationMs: 3600,
       })
     })
@@ -274,8 +299,7 @@ function applyProjectDataSnapshot(snapshot: ProjectDataSnapshotDto) {
   projectContextOptions.spaces = snapshot.options.spaces
   projectContextOptions.iterations = snapshot.options.iterations
 
-  if (snapshot.contexts.length === 0) return
-  projectContexts.value = snapshot.contexts.map(context => ({
+  projectContexts.value = snapshot.contexts.map((context) => ({
     id: context.id,
     externalProjectId: context.externalProjectId,
     project: context.project,
@@ -291,10 +315,10 @@ function applyProjectDataSnapshot(snapshot: ProjectDataSnapshotDto) {
     active: context.active,
     extraJson: context.extraJson,
   }))
-  activeProjectContextId.value = snapshot.contexts.find(context => context.active)?.id
-    ?? snapshot.contexts[0].id
-  projectContext.value = projectContexts.value.find(context => context.id === activeProjectContextId.value)
-    ?? projectContexts.value[0]
+  activeProjectContextId.value = projectContexts.value.find((context) => context.active)?.id
+    ?? projectContexts.value.find((context) => context.id === activeProjectContextId.value)?.id
+    ?? projectContexts.value[0]?.id
+    ?? ''
 }
 
 function rememberConversationReturnView() {
@@ -328,7 +352,7 @@ watch(
         anchor: 'right-panel',
         tone: 'success',
         title: '同步源已切换',
-        message: '项目、空间、迭代和工作项数据已按新的同步源刷新。',
+        message: '项目、空间、迭代和 FE/US 等工作项数据已按新的同步源刷新。',
         durationMs: 3600,
       })
     } catch (e) {
@@ -346,7 +370,7 @@ watch(
 )
 
 watch(
-  () => `${activeProjectContextId.value}:${projectContext.value?.project}:${projectContext.value?.space}:${projectContext.value?.iteration}`,
+  () => `${activeProjectContextId.value}:${projectContext.value.project}:${projectContext.value.space}:${projectContext.value.iteration}`,
   (next, previous) => {
     if (!previous || next === previous) return
     void refreshWorkItemState()
@@ -361,7 +385,7 @@ watch(
     :selected-work-item="selectedWorkItem"
     :selected-artifact="selectedArtifact"
     :project-context="projectContext"
-    :project-context-options="projectContextOptions"
+    :project-context-options="shellProjectContextOptions"
     @handle-confirmation="handleConfirmation"
     @select-session="handleSelectSession"
     @create-general-session="handleCreateGeneralSession"
@@ -392,7 +416,6 @@ watch(
         :active-context-id="activeProjectContextId"
         :options="projectContextOptions"
         :syncing="projectContextSyncing"
-        @update:contexts="handleProjectContextsUpdate"
         @update:active-context-id="activeProjectContextId = $event"
         @sync-data="handleSyncProjectContextData"
       />

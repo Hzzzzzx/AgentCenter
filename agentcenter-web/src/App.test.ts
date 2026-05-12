@@ -56,6 +56,59 @@ const mocks = vi.hoisted(() => {
   return { sessionStore, confirmationStore, workItemStore, workflowStore, runtimeSettingsStore }
 })
 
+vi.mock('./api/projectDataProviders', () => ({
+  projectDataProviderApi: {
+    settings: vi.fn().mockResolvedValue({
+      providers: [
+        { id: 'fixture-alpha', name: '测试源 A', description: 'fixture', active: true },
+      ],
+      activeProviderId: 'fixture-alpha',
+      activeProjectContextId: null,
+      activeProjectSpaceId: null,
+      activeProjectIterationId: null,
+    }),
+    sync: vi.fn().mockResolvedValue({
+      providerId: 'fixture-alpha',
+      contexts: [
+        {
+          id: 'ctx-agentcenter',
+          externalProjectId: 'alpha-project-agentcenter',
+          project: 'AgentCenter',
+          externalCloudeReqProjectId: 'alpha-cloudereq-rd',
+          cloudeReqProject: 'CloudeReq 研发项目',
+          externalSpaceId: 'alpha-space-rd',
+          space: '研发中台',
+          externalIterationId: 'alpha-sprint-14',
+          iteration: 'Sprint 14',
+          active: true,
+        },
+        {
+          id: 'ctx-platform',
+          externalProjectId: 'alpha-project-platform',
+          project: '平台接入',
+          externalCloudeReqProjectId: 'alpha-cloudereq-delivery',
+          cloudeReqProject: 'CloudeReq 交付空间',
+          externalSpaceId: 'alpha-space-platform',
+          space: '平台工程',
+          externalIterationId: 'alpha-sprint-15',
+          iteration: 'Sprint 15',
+          active: false,
+        },
+      ],
+      options: {
+        cloudeReqProjects: ['CloudeReq 研发项目', 'CloudeReq 交付空间'],
+        spaces: ['研发中台', '平台工程'],
+        iterations: ['Sprint 14', 'Sprint 15'],
+      },
+      workItems: [],
+      syncedAt: '2026-05-12T00:00:00Z',
+    }),
+    snapshot: vi.fn(),
+    setActive: vi.fn(),
+    syncHistory: vi.fn(),
+  },
+}))
+
 // Mock stores that trigger API calls on mount
 vi.mock('./stores/sessions', () => ({
   useSessionStore: vi.fn(() => mocks.sessionStore)
@@ -75,31 +128,6 @@ vi.mock('./stores/workflows', () => ({
 
 vi.mock('./stores/runtimeSettings', () => ({
   useRuntimeSettingsStore: vi.fn(() => mocks.runtimeSettingsStore)
-}))
-
-vi.mock('./api/projectDataProviders', () => ({
-  projectDataProviderApi: {
-    sync: vi.fn().mockResolvedValue({
-      providerId: 'fixture-alpha',
-      contexts: [
-        {
-          id: 'ctx-agentcenter',
-          project: 'AgentCenter',
-          cloudeReqProject: 'CloudeReq 研发项目',
-          space: '研发中台',
-          iteration: 'Sprint 14',
-          active: true,
-        },
-      ],
-      options: {
-        cloudeReqProjects: ['CloudeReq 研发项目'],
-        spaces: ['研发中台'],
-        iterations: ['Sprint 14', 'Sprint 15'],
-      },
-      workItems: [],
-      syncedAt: '2026-05-12T00:00:00Z',
-    }),
-  },
 }))
 
 describe('App.vue', () => {
@@ -144,16 +172,21 @@ describe('App.vue', () => {
     await flushPromises()
 
     expect(wrapper.find('.project-context').exists()).toBe(true)
-    const projectInput = wrapper.find('.project-context input[aria-label="填写项目名称"]')
-    await projectInput.setValue('TianYuan')
+    const projectSelect = wrapper.find('.project-context select[aria-label="选择项目"]')
+    await projectSelect.setValue('平台接入')
+    await flushPromises()
 
-    expect(wrapper.find('.title-bar__context-project').text()).toBe('TianYuan')
+    expect(wrapper.find('.title-bar__context-project').text()).toBe('平台接入')
 
     const iterationSelect = wrapper.find('.title-bar__iteration')
-    ;(iterationSelect.element as HTMLSelectElement).value = 'Sprint 15'
-    await iterationSelect.trigger('change')
-
-    expect((wrapper.find('.title-bar__iteration').element as HTMLSelectElement).value).toBe('Sprint 15')
+    expect((iterationSelect.element as HTMLSelectElement).value).toBe('Sprint 15')
+    await flushPromises()
+    expect(mocks.workItemStore.setScope).toHaveBeenLastCalledWith({
+      providerId: 'fixture-alpha',
+      projectId: 'fixture-alpha:alpha-project-platform',
+      spaceId: 'alpha-space-platform',
+      iterationId: 'alpha-sprint-15',
+    })
   })
 
   it('refreshes only the affected work item after workflow actions', async () => {

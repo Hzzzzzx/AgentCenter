@@ -11,13 +11,13 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   searchValue: '',
   projectContext: () => ({
-    id: 'default',
-    project: 'AgentCenter',
-    cloudeReqProject: '研发中台',
-    space: '研发中台',
-    iteration: 'Sprint 14',
+    id: '',
+    project: '',
+    cloudeReqProject: '',
+    space: '',
+    iteration: '',
   }),
-  iterationOptions: () => ['Sprint 14', 'Sprint 15', '长期演进'],
+  iterationOptions: () => [],
 })
 
 const emit = defineEmits<{
@@ -50,13 +50,15 @@ function updateIteration(event: Event) {
 
     <div class="title-bar__context" aria-label="当前项目空间迭代">
       <span class="title-bar__context-label">当前项目</span>
-      <strong class="title-bar__context-project">{{ props.projectContext.project }}</strong>
+      <strong class="title-bar__context-project">{{ props.projectContext.project || '未同步' }}</strong>
       <select
         class="title-bar__iteration"
         aria-label="选择当前迭代"
         :value="props.projectContext.iteration"
+        :disabled="props.iterationOptions.length === 0"
         @change="updateIteration"
       >
+        <option v-if="props.iterationOptions.length === 0" value="">暂无迭代</option>
         <option v-for="iteration in props.iterationOptions" :key="iteration" :value="iteration">
           {{ iteration }}
         </option>

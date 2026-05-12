@@ -45,6 +45,13 @@ class ProjectDataProviderControllerTest {
                     .andExpect(jsonPath("$.providerId").value("fixture-beta"))
                     .andExpect(jsonPath("$.contexts[0].project").value("企业中台"));
 
+            mockMvc.perform(get("/api/project-data-providers/sync-history")
+                            .param("providerId", "fixture-beta"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[0].providerId").value("fixture-beta"))
+                    .andExpect(jsonPath("$[0].status").value("SUCCESS"))
+                    .andExpect(jsonPath("$[0].workItemCount").value(6));
+
             mockMvc.perform(get("/api/project-data-providers"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.activeProviderId").value("fixture-beta"))
@@ -53,18 +60,20 @@ class ProjectDataProviderControllerTest {
                     .andExpect(jsonPath("$.activeProjectIterationId").isNotEmpty());
 
             mockMvc.perform(get("/api/work-items")
-                            .param("projectId", "企业中台")
-                            .param("spaceId", "企业中台")
-                            .param("iterationId", "Sprint 21"))
+                            .param("providerId", "fixture-beta")
+                            .param("projectId", "fixture-beta:beta-project-enterprise")
+                            .param("spaceId", "beta-space-enterprise")
+                            .param("iterationId", "beta-sprint-21"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$[?(@.code == 'B-FE201')]").exists())
                     .andExpect(jsonPath("$[?(@.code == 'B-US201')]").exists())
                     .andExpect(jsonPath("$[?(@.code == 'B-WORK201')]").doesNotExist());
 
             mockMvc.perform(get("/api/work-items/overview")
-                            .param("projectId", "企业中台")
-                            .param("spaceId", "企业中台")
-                            .param("iterationId", "Sprint 21"))
+                            .param("providerId", "fixture-beta")
+                            .param("projectId", "fixture-beta:beta-project-enterprise")
+                            .param("spaceId", "beta-space-enterprise")
+                            .param("iterationId", "beta-sprint-21"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.stats[?(@.type == 'FE' && @.total == 1)]").exists())
                     .andExpect(jsonPath("$.stats[?(@.type == 'WORK' && @.total == 0)]").exists());

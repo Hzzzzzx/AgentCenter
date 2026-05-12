@@ -22,17 +22,19 @@ public class WorkItemController {
     }
 
     @GetMapping
-    public List<WorkItemDto> list(@RequestParam(required = false) String projectId,
+    public List<WorkItemDto> list(@RequestParam(required = false) String providerId,
+                                  @RequestParam(required = false) String projectId,
                                   @RequestParam(required = false) String spaceId,
                                   @RequestParam(required = false) String iterationId) {
-        return workItemService.listWorkItems(projectId, spaceId, iterationId);
+        return workItemService.listWorkItems(providerId, projectId, spaceId, iterationId);
     }
 
     @GetMapping("/overview")
-    public WorkItemOverviewDto overview(@RequestParam(required = false) String projectId,
+    public WorkItemOverviewDto overview(@RequestParam(required = false) String providerId,
+                                        @RequestParam(required = false) String projectId,
                                         @RequestParam(required = false) String spaceId,
                                         @RequestParam(required = false) String iterationId) {
-        return workItemService.getOverview(projectId, spaceId, iterationId);
+        return workItemService.getOverview(providerId, projectId, spaceId, iterationId);
     }
 
     @GetMapping("/{id}")

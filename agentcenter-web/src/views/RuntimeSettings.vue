@@ -92,7 +92,7 @@ onMounted(() => {
         <div class="runtime-settings__section-main">
           <h2>项目数据同步源</h2>
           <p>
-            选择当前全局使用的数据同步实现位。项目管理页、项目/空间/迭代选项，以及同步后的 FE、US、Task、Work 数据都会使用这个来源。
+            选择当前全局使用的数据同步实现位。项目管理页、项目/空间/迭代选项，以及同步后的 FE、US、Task、Work、缺陷、漏洞数据都会使用这个来源。
           </p>
         </div>
         <select
@@ -102,6 +102,7 @@ onMounted(() => {
           :disabled="runtimeSettings.projectDataProviderLoading || runtimeSettings.projectDataProviders.length === 0"
           @change="runtimeSettings.setProjectDataProvider(($event.target as HTMLSelectElement).value)"
         >
+          <option v-if="runtimeSettings.projectDataProviders.length === 0" value="">暂无同步源</option>
           <option
             v-for="provider in runtimeSettings.projectDataProviders"
             :key="provider.id"
@@ -270,6 +271,27 @@ onMounted(() => {
   transition: background-color 0.16s ease, border-color 0.16s ease;
 }
 
+.runtime-settings__toggle span {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-card);
+  transition: transform 0.16s ease;
+}
+
+.runtime-settings__toggle--on {
+  border-color: var(--accent-blue);
+  background: var(--accent-blue);
+}
+
+.runtime-settings__toggle--on span {
+  transform: translateX(22px);
+}
+
 .runtime-settings__select {
   flex: 0 0 220px;
   min-width: 180px;
@@ -292,25 +314,9 @@ onMounted(() => {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-blue) 14%, transparent);
 }
 
-.runtime-settings__toggle span {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  background: var(--bg-card);
-  box-shadow: var(--shadow-card);
-  transition: transform 0.16s ease;
-}
-
-.runtime-settings__toggle--on {
-  border-color: var(--accent-blue);
-  background: var(--accent-blue);
-}
-
-.runtime-settings__toggle--on span {
-  transform: translateX(22px);
+.runtime-settings__select:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
 }
 
 .runtime-settings__summary {

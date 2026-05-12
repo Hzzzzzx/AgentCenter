@@ -14,6 +14,7 @@ export const useWorkItemStore = defineStore('workItems', () => {
 
   function setScope(scope: WorkItemScopeQuery) {
     activeScope.value = {
+      providerId: scope.providerId || null,
       projectId: scope.projectId || null,
       spaceId: scope.spaceId || null,
       iterationId: scope.iterationId || null,

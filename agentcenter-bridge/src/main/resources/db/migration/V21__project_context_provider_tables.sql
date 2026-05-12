@@ -55,6 +55,21 @@ CREATE TABLE project_provider_setting (
 INSERT INTO project_provider_setting (id, active_provider_id)
 VALUES ('global', 'fixture-alpha');
 
+CREATE TABLE project_data_sync_history (
+    id TEXT PRIMARY KEY,
+    provider_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    context_count INTEGER NOT NULL DEFAULT 0,
+    work_item_count INTEGER NOT NULL DEFAULT 0,
+    active_project_context_id TEXT,
+    active_project_space_id TEXT,
+    active_project_iteration_id TEXT,
+    result_json TEXT,
+    error_message TEXT,
+    started_at TEXT NOT NULL,
+    completed_at TEXT
+);
+
 ALTER TABLE work_item ADD COLUMN provider_id TEXT;
 ALTER TABLE work_item ADD COLUMN external_work_item_id TEXT;
 ALTER TABLE work_item ADD COLUMN project_context_id TEXT;
@@ -66,6 +81,8 @@ CREATE INDEX idx_project_context_provider ON project_context(provider_id);
 CREATE INDEX idx_project_space_context ON project_space(project_context_id);
 CREATE INDEX idx_project_iteration_space ON project_iteration(project_space_id);
 CREATE INDEX idx_project_provider_setting_provider ON project_provider_setting(active_provider_id);
+CREATE INDEX idx_project_data_sync_history_provider
+    ON project_data_sync_history(provider_id, started_at DESC);
 CREATE INDEX idx_work_item_provider ON work_item(provider_id);
 CREATE INDEX idx_work_item_context_scope ON work_item(project_context_id, project_space_id, project_iteration_id);
 CREATE UNIQUE INDEX idx_work_item_provider_external

@@ -23,8 +23,11 @@
                extra_json, version, created_at, updated_at
         FROM work_item
         <where>
+            <if test="providerId != null and providerId != ''">
+                provider_id = #{providerId}
+            </if>
             <if test="projectId != null and projectId != ''">
-                project_id = #{projectId}
+                AND project_id = #{projectId}
             </if>
             <if test="spaceId != null and spaceId != ''">
                 AND space_id = #{spaceId}

@@ -245,8 +245,6 @@ public class WorkflowCommandService {
             instance.setCompletedAt(now);
             instance.setUpdatedAt(now);
             workflowMapper.updateInstance(instance);
-            touchWorkItem(instance.getWorkItemId(), now);
-            publishWorkflowCompletedEvent(instance, nodes);
             return buildResponse(instance);
         }
 
@@ -574,10 +572,8 @@ public class WorkflowCommandService {
                     node.setAgentState(nodeState.getStatus().name());
                     node.setAgentStateReason(nodeState.getReason());
                     node.setAgentStateUpdatedAt(now);
-                    if (artifact != null) {
-                        node.setAgentStateArtifactTitle(artifact.getTitle());
-                    } else if (nodeState.getArtifactTitle() != null) {
-                        node.setAgentStateArtifactTitle(normalizeWorkItemReference(nodeState.getArtifactTitle(), workItem));
+                    if (nodeState.getArtifactTitle() != null) {
+                        node.setAgentStateArtifactTitle(nodeState.getArtifactTitle());
                     }
 
                     if (isAutoRun(instance)) {
@@ -1164,7 +1160,6 @@ public class WorkflowCommandService {
             instance.setUpdatedAt(now);
             workflowMapper.updateInstance(instance);
             touchWorkItem(instance.getWorkItemId(), now);
-            publishWorkflowCompletedEvent(instance, nodes);
             return null;
         }
 
@@ -1272,7 +1267,6 @@ public class WorkflowCommandService {
             instance.setUpdatedAt(now);
             workflowMapper.updateInstance(instance);
             touchWorkItem(instance.getWorkItemId(), now);
-            publishWorkflowCompletedEvent(instance, nodes);
             return;
         }
 
@@ -1300,14 +1294,13 @@ public class WorkflowCommandService {
     }
 
     private WorkflowDefinitionEntity resolveDefinition(WorkItemEntity workItem, StartWorkflowRequest request) {
-        String projectId = ProjectDefaults.resolveProjectId(workItem.getProjectId());
         if (request.workflowDefinitionId() != null) {
             WorkflowDefinitionEntity def = workflowMapper.findDefinitionById(request.workflowDefinitionId());
-            if (def != null && "ENABLED".equals(def.getStatus())
-                    && definitionAvailableForProject(def, projectId)) {
+            if (def != null && "ENABLED".equals(def.getStatus())) {
                 return def;
             }
         }
+        String projectId = ProjectDefaults.resolveProjectId(workItem.getProjectId());
         List<WorkflowDefinitionEntity> defs =
                 workflowMapper.findDefinitionsByProjectIdAndWorkItemType(projectId, workItem.getType());
         if (defs.isEmpty() && !ProjectDefaults.DEFAULT_PROJECT_ID.equals(projectId)) {
@@ -1323,18 +1316,8 @@ public class WorkflowCommandService {
                     if (projectDefault != null) {
                         return projectDefault;
                     }
-                    WorkflowDefinitionEntity defaultProjectDefault =
-                            workflowMapper.findDefaultEnabledDefinitionByProjectId(ProjectDefaults.DEFAULT_PROJECT_ID);
-                    return defaultProjectDefault != null
-                            ? defaultProjectDefault
-                            : workflowMapper.findDefaultEnabledDefinition();
+                    return workflowMapper.findDefaultEnabledDefinition();
                 });
-    }
-
-    private boolean definitionAvailableForProject(WorkflowDefinitionEntity definition, String projectId) {
-        String definitionProjectId = ProjectDefaults.resolveProjectId(definition.getProjectId());
-        return definitionProjectId.equals(projectId)
-                || ProjectDefaults.DEFAULT_PROJECT_ID.equals(definitionProjectId);
     }
 
     private void applyRequestedExecutionMode(WorkflowInstanceEntity instance,
@@ -1371,38 +1354,6 @@ public class WorkflowCommandService {
         workItemMapper.update(workItem);
     }
 
-    private void publishWorkflowCompletedEvent(WorkflowInstanceEntity instance,
-                                               List<WorkflowNodeInstanceEntity> nodes) {
-        String currentNodeId = instance.getCurrentNodeInstanceId();
-        String sessionId = nodes.stream()
-                .filter(node -> currentNodeId != null && currentNodeId.equals(node.getId()))
-                .map(WorkflowNodeInstanceEntity::getAgentSessionId)
-                .filter(id -> id != null && !id.isBlank())
-                .findFirst()
-                .orElseGet(() -> nodes.stream()
-                        .map(WorkflowNodeInstanceEntity::getAgentSessionId)
-                        .filter(id -> id != null && !id.isBlank())
-                        .reduce((first, second) -> second)
-                        .orElse(null));
-        if (sessionId == null || sessionId.isBlank()) {
-            return;
-        }
-        runtimeEventService.publishEvent(new RuntimeEventDto(
-                null, sessionId, instance.getWorkItemId(), instance.getId(), currentNodeId,
-                RuntimeEventType.STATUS, RuntimeEventSource.WORKFLOW,
-                buildWorkflowCompletedPayload(instance), null
-        ));
-    }
-
-    private String buildWorkflowCompletedPayload(WorkflowInstanceEntity instance) {
-        return "{\"status\":\"idle\""
-                + ",\"kind\":\"workflow_completed\""
-                + ",\"workflowStatus\":\"" + escapeJson(instance.getStatus()) + "\""
-                + ",\"title\":\"工作流已完成\""
-                + ",\"summary\":\"所有工作流节点已完成\""
-                + ",\"workflowInstanceId\":\"" + escapeJson(instance.getId()) + "\"}";
-    }
-
     private String buildNodeStatusMessage(SkillRunResult result,
                                           WorkflowNodeDefinitionEntity nodeDef,
                                           String skillName,
@@ -1425,39 +1376,6 @@ public class WorkflowCommandService {
                 ? "：" + result.errorMessage()
                 : "";
         return "执行失败 %s（Skill：%s）%s".formatted(nodeDef.getName(), skillName, reason);
-    }
-
-    private String resolveArtifactTitle(WorkflowNodeState nodeState,
-                                        WorkItemEntity workItem,
-                                        WorkflowNodeDefinitionEntity nodeDef) {
-        String fallbackCode = workItem != null ? nonBlank(workItem.getCode(), workItem.getId()) : "artifact";
-        String title = nonBlank(nodeState.getArtifactTitle(), "%s-%s.md".formatted(fallbackCode, nodeDef.getName()));
-        return normalizeWorkItemReference(title.trim(), workItem);
-    }
-
-    private String normalizeGeneratedArtifactContent(String outputContent, WorkItemEntity workItem) {
-        return normalizeWorkItemReference(WorkflowNodeStateParser.stripStateBlock(outputContent), workItem);
-    }
-
-    private String normalizeWorkItemReference(String value, WorkItemEntity workItem) {
-        if (value == null || value.isBlank() || workItem == null) {
-            return value;
-        }
-        String workItemId = workItem.getId();
-        String workItemCode = workItem.getCode();
-        if (workItemId == null || workItemId.isBlank()
-                || workItemCode == null || workItemCode.isBlank()
-                || workItemId.equals(workItemCode)) {
-            return value;
-        }
-        return value.replace(workItemId, workItemCode);
-    }
-
-    private String artifactReferenceMarker(ArtifactEntity artifact) {
-        if (artifact == null || artifact.getId() == null || artifact.getId().isBlank()) {
-            return "";
-        }
-        return "\n<!-- AGENTCENTER_ARTIFACT artifactId: " + artifact.getId().trim() + " -->";
     }
 
     private String buildInputContext(WorkItemEntity workItem,
@@ -1546,6 +1464,39 @@ public class WorkflowCommandService {
 
     private void appendField(StringBuilder sb, String label, String value) {
         sb.append("- ").append(label).append("：").append(nonBlank(value, "未提供")).append("\n");
+    }
+
+    private String resolveArtifactTitle(WorkflowNodeState nodeState,
+                                        WorkItemEntity workItem,
+                                        WorkflowNodeDefinitionEntity nodeDef) {
+        String fallbackCode = workItem != null ? nonBlank(workItem.getCode(), workItem.getId()) : "artifact";
+        String title = nonBlank(nodeState.getArtifactTitle(), "%s-%s.md".formatted(fallbackCode, nodeDef.getName()));
+        return normalizeWorkItemReference(title.trim(), workItem);
+    }
+
+    private String normalizeGeneratedArtifactContent(String outputContent, WorkItemEntity workItem) {
+        return normalizeWorkItemReference(WorkflowNodeStateParser.stripStateBlock(outputContent), workItem);
+    }
+
+    private String normalizeWorkItemReference(String value, WorkItemEntity workItem) {
+        if (value == null || value.isBlank() || workItem == null) {
+            return value;
+        }
+        String workItemId = workItem.getId();
+        String workItemCode = workItem.getCode();
+        if (workItemId == null || workItemId.isBlank()
+                || workItemCode == null || workItemCode.isBlank()
+                || workItemId.equals(workItemCode)) {
+            return value;
+        }
+        return value.replace(workItemId, workItemCode);
+    }
+
+    private String artifactReferenceMarker(ArtifactEntity artifact) {
+        if (artifact == null || artifact.getId() == null || artifact.getId().isBlank()) {
+            return "";
+        }
+        return "\n<!-- AGENTCENTER_ARTIFACT artifactId: " + artifact.getId().trim() + " -->";
     }
 
     private String nonBlank(String value, String fallback) {

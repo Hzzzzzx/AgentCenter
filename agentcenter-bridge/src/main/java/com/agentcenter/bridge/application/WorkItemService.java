@@ -61,16 +61,20 @@ public class WorkItemService {
     }
 
     public List<WorkItemDto> listWorkItems() {
-        return listWorkItems(null, null, null);
+        return listWorkItems(null, null, null, null);
     }
 
     public List<WorkItemDto> listWorkItems(String projectId, String spaceId, String iterationId) {
-        if (isBlank(projectId) && isBlank(spaceId) && isBlank(iterationId)) {
+        return listWorkItems(null, projectId, spaceId, iterationId);
+    }
+
+    public List<WorkItemDto> listWorkItems(String providerId, String projectId, String spaceId, String iterationId) {
+        if (isBlank(providerId) && isBlank(projectId) && isBlank(spaceId) && isBlank(iterationId)) {
             return workItemMapper.findAll().stream()
                     .map(this::toDto)
                     .toList();
         }
-        return workItemMapper.findByScope(clean(projectId), clean(spaceId), clean(iterationId)).stream()
+        return workItemMapper.findByScope(clean(providerId), clean(projectId), clean(spaceId), clean(iterationId)).stream()
                 .map(this::toDto)
                 .toList();
     }
@@ -80,7 +84,11 @@ public class WorkItemService {
     }
 
     public WorkItemOverviewDto getOverview(String projectId, String spaceId, String iterationId) {
-        var workItems = listWorkItems(projectId, spaceId, iterationId);
+        return getOverview(null, projectId, spaceId, iterationId);
+    }
+
+    public WorkItemOverviewDto getOverview(String providerId, String projectId, String spaceId, String iterationId) {
+        var workItems = listWorkItems(providerId, projectId, spaceId, iterationId);
         var stats = Arrays.stream(WorkItemType.values())
                 .map(type -> buildOverviewTypeStat(type, workItems))
                 .toList();

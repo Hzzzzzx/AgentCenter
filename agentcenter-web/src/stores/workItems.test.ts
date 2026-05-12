@@ -57,6 +57,7 @@ describe('useWorkItemStore', () => {
       stats: [],
     }
     const scope = { projectId: 'AgentCenter', spaceId: '研发中台', iterationId: 'Sprint 14' }
+    const normalizedScope = { providerId: null, ...scope }
     vi.mocked(workItemApi.list).mockResolvedValueOnce([mockWorkItem])
     vi.mocked(workItemApi.overview).mockResolvedValueOnce(overview)
 
@@ -65,8 +66,8 @@ describe('useWorkItemStore', () => {
     await store.loadItems()
     await store.loadOverview()
 
-    expect(workItemApi.list).toHaveBeenCalledWith(scope)
-    expect(workItemApi.overview).toHaveBeenCalledWith(scope)
+    expect(workItemApi.list).toHaveBeenCalledWith(normalizedScope)
+    expect(workItemApi.overview).toHaveBeenCalledWith(normalizedScope)
   })
 
   it('loadOverview populates database-backed overview stats', async () => {

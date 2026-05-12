@@ -1,21 +1,24 @@
 package com.agentcenter.bridge.application.projectcontext;
 
 import com.agentcenter.bridge.api.dto.ProjectDataSnapshotDto;
+import com.agentcenter.bridge.api.dto.ProjectDataSyncHistoryDto;
 import com.agentcenter.bridge.api.dto.ProjectProviderWorkItemDto;
 import com.agentcenter.bridge.api.dto.ProjectContextDto;
 import com.agentcenter.bridge.infrastructure.id.IdGenerator;
 import com.agentcenter.bridge.infrastructure.persistence.entity.ProjectContextEntity;
+import com.agentcenter.bridge.infrastructure.persistence.entity.ProjectDataSyncHistoryEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.ProjectIterationEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.ProjectSpaceEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.WorkItemEntity;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.ProjectContextMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.WorkItemMapper;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -27,15 +30,21 @@ public class ProjectDataSyncService {
     private final ProjectDataProviderSettingsService settingsService;
     private final WorkItemMapper workItemMapper;
     private final ProjectContextMapper projectContextMapper;
+    private final ProjectDataSyncHistoryService historyService;
+    private final TransactionTemplate transactionTemplate;
     private final IdGenerator idGenerator;
 
     public ProjectDataSyncService(ProjectDataProviderSettingsService settingsService,
                                   WorkItemMapper workItemMapper,
                                   ProjectContextMapper projectContextMapper,
+                                  ProjectDataSyncHistoryService historyService,
+                                  TransactionTemplate transactionTemplate,
                                   IdGenerator idGenerator) {
         this.settingsService = settingsService;
         this.workItemMapper = workItemMapper;
         this.projectContextMapper = projectContextMapper;
+        this.historyService = historyService;
+        this.transactionTemplate = transactionTemplate;
         this.idGenerator = idGenerator;
     }
 
@@ -43,9 +52,34 @@ public class ProjectDataSyncService {
         return settingsService.activeProvider().snapshot();
     }
 
-    @Transactional
     public ProjectDataSnapshotDto sync() {
-        ProjectDataSnapshotDto snapshot = snapshot();
+        ProjectDataProvider provider = settingsService.activeProvider();
+        ProjectDataSyncHistoryEntity history = historyService.start(provider.id());
+        try {
+            ProjectDataSnapshotDto snapshot = provider.snapshot();
+            if (!provider.id().equals(snapshot.providerId())) {
+                throw new IllegalStateException("Project data provider returned mismatched providerId: "
+                        + snapshot.providerId());
+            }
+            SyncResult result = transactionTemplate.execute(status -> syncSnapshot(snapshot));
+            SyncedScope activeScope = result != null ? result.activeScope() : null;
+            historyService.markSuccess(
+                    history,
+                    snapshot.contexts().size(),
+                    snapshot.workItems().size(),
+                    activeScope != null ? activeScope.context().getId() : null,
+                    activeScope != null ? activeScope.space().getId() : null,
+                    activeScope != null ? activeScope.iteration().getId() : null,
+                    syncResultJson(snapshot, activeScope)
+            );
+            return snapshot;
+        } catch (RuntimeException e) {
+            historyService.markFailed(history, e.getMessage());
+            throw e;
+        }
+    }
+
+    private SyncResult syncSnapshot(ProjectDataSnapshotDto snapshot) {
         String providerId = snapshot.providerId();
         String now = LocalDateTime.now().format(SQLITE_DATETIME);
         Map<String, ProjectContextDto> contextByProviderContextId = new HashMap<>();
@@ -77,7 +111,25 @@ public class ProjectDataSyncService {
                     activeScope.iteration().getId()
             );
         }
-        return snapshot;
+        return new SyncResult(activeScope);
+    }
+
+    public List<ProjectDataSyncHistoryDto> listHistory(String providerId, int limit) {
+        return historyService.list(providerId, limit);
+    }
+
+    private String syncResultJson(ProjectDataSnapshotDto snapshot, SyncedScope activeScope) {
+        return "{"
+                + "\"providerId\":\"" + snapshot.providerId() + "\","
+                + "\"contextCount\":" + snapshot.contexts().size() + ","
+                + "\"workItemCount\":" + snapshot.workItems().size() + ","
+                + "\"activeProjectContextId\":"
+                + quote(activeScope != null ? activeScope.context().getId() : null)
+                + "}";
+    }
+
+    private String quote(String value) {
+        return value == null ? "null" : "\"" + value.replace("\"", "\\\"") + "\"";
     }
 
     private SyncedScope upsertScopeFromContext(String providerId, ProjectContextDto context, String now) {
@@ -335,9 +387,9 @@ public class ProjectDataSyncService {
         entity.setPriority(item.priority().name());
         entity.setProviderId(providerId);
         entity.setExternalWorkItemId(externalWorkItemId);
-        entity.setProjectId(scope.context().getProjectName());
-        entity.setSpaceId(scope.space().getSpaceName());
-        entity.setIterationId(scope.iteration().getIterationName());
+        entity.setProjectId(projectScopeId(providerId, scope.context().getExternalProjectId()));
+        entity.setSpaceId(scope.space().getExternalSpaceId());
+        entity.setIterationId(scope.iteration().getExternalIterationId());
         entity.setProjectContextId(scope.context().getId());
         entity.setProjectSpaceId(scope.space().getId());
         entity.setProjectIterationId(scope.iteration().getId());
@@ -356,6 +408,10 @@ public class ProjectDataSyncService {
         return value.trim();
     }
 
+    private String projectScopeId(String providerId, String externalProjectId) {
+        return providerId + ":" + requireNonBlank(externalProjectId, "externalProjectId");
+    }
+
     private String clean(String value) {
         return isBlank(value) ? null : value.trim();
     }
@@ -369,4 +425,6 @@ public class ProjectDataSyncService {
             ProjectSpaceEntity space,
             ProjectIterationEntity iteration
     ) {}
+
+    private record SyncResult(SyncedScope activeScope) {}
 }
