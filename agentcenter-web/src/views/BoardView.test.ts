@@ -76,6 +76,7 @@ async function mountBoardView() {
   workflowStore.definitions = [
     {
       id: 'wf-def-fe',
+      projectId: '01DEFAULTPROJECT0000000000001',
       workItemType: 'FE',
       name: 'FE 标准工作流',
       versionNo: 1,

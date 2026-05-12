@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.agentcenter.bridge.infrastructure.persistence.mapper.ProjectContextMapper">
+
+    <select id="findSetting" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.ProjectProviderSettingEntity">
+        SELECT id, active_provider_id, active_project_context_id,
+               active_project_space_id, active_project_iteration_id, updated_at
+        FROM project_provider_setting
+        WHERE id = #{id}
+    </select>
+
+    <insert id="insertSetting">
+        INSERT INTO project_provider_setting (
+            id, active_provider_id, active_project_context_id,
+            active_project_space_id, active_project_iteration_id, updated_at
+        )
+        VALUES (
+            #{id}, #{activeProviderId}, #{activeProjectContextId},
+            #{activeProjectSpaceId}, #{activeProjectIterationId}, #{updatedAt}
+        )
+    </insert>
+
+    <update id="updateSetting">
+        UPDATE project_provider_setting
+        SET active_provider_id = #{activeProviderId},
+            active_project_context_id = #{activeProjectContextId},
+            active_project_space_id = #{activeProjectSpaceId},
+            active_project_iteration_id = #{activeProjectIterationId},
+            updated_at = #{updatedAt}
+        WHERE id = #{id}
+    </update>
+
+    <select id="findContextByProviderAndExternalProjectId" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.ProjectContextEntity">
+        SELECT id, provider_id, external_project_id, project_name,
+               external_cloude_req_project_id, cloude_req_project_name,
+               active, extra_json, created_at, updated_at
+        FROM project_context
+        WHERE provider_id = #{providerId}
+          AND external_project_id = #{externalProjectId}
+    </select>
+
+    <update id="clearActiveContexts">
+        UPDATE project_context
+        SET active = 0,
+            updated_at = (datetime('now'))
+        WHERE provider_id = #{providerId}
+    </update>
+
+    <insert id="insertContext">
+        INSERT INTO project_context (
+            id, provider_id, external_project_id, project_name,
+            external_cloude_req_project_id, cloude_req_project_name,
+            active, extra_json, created_at, updated_at
+        )
+        VALUES (
+            #{id}, #{providerId}, #{externalProjectId}, #{projectName},
+            #{externalCloudeReqProjectId}, #{cloudeReqProjectName},
+            #{active}, #{extraJson}, #{createdAt}, #{updatedAt}
+        )
+    </insert>
+
+    <update id="updateContext">
+        UPDATE project_context
+        SET project_name = #{projectName},
+            external_cloude_req_project_id = #{externalCloudeReqProjectId},
+            cloude_req_project_name = #{cloudeReqProjectName},
+            active = #{active},
+            extra_json = #{extraJson},
+            updated_at = #{updatedAt}
+        WHERE id = #{id}
+    </update>
+
+    <select id="findSpaceByProviderAndExternalSpaceId" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.ProjectSpaceEntity">
+        SELECT id, provider_id, project_context_id, external_space_id,
+               space_name, extra_json, created_at, updated_at
+        FROM project_space
+        WHERE provider_id = #{providerId}
+          AND project_context_id = #{projectContextId}
+          AND external_space_id = #{externalSpaceId}
+    </select>
+
+    <insert id="insertSpace">
+        INSERT INTO project_space (
+            id, provider_id, project_context_id, external_space_id,
+            space_name, extra_json, created_at, updated_at
+        )
+        VALUES (
+            #{id}, #{providerId}, #{projectContextId}, #{externalSpaceId},
+            #{spaceName}, #{extraJson}, #{createdAt}, #{updatedAt}
+        )
+    </insert>
+
+    <update id="updateSpace">
+        UPDATE project_space
+        SET space_name = #{spaceName},
+            extra_json = #{extraJson},
+            updated_at = #{updatedAt}
+        WHERE id = #{id}
+    </update>
+
+    <select id="findIterationByProviderAndExternalIterationId" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.ProjectIterationEntity">
+        SELECT id, provider_id, project_context_id, project_space_id,
+               external_iteration_id, iteration_name, status,
+               start_at, end_at, extra_json, created_at, updated_at
+        FROM project_iteration
+        WHERE provider_id = #{providerId}
+          AND project_space_id = #{projectSpaceId}
+          AND external_iteration_id = #{externalIterationId}
+    </select>
+
+    <insert id="insertIteration">
+        INSERT INTO project_iteration (
+            id, provider_id, project_context_id, project_space_id,
+            external_iteration_id, iteration_name, status,
+            start_at, end_at, extra_json, created_at, updated_at
+        )
+        VALUES (
+            #{id}, #{providerId}, #{projectContextId}, #{projectSpaceId},
+            #{externalIterationId}, #{iterationName}, #{status},
+            #{startAt}, #{endAt}, #{extraJson}, #{createdAt}, #{updatedAt}
+        )
+    </insert>
+
+    <update id="updateIteration">
+        UPDATE project_iteration
+        SET iteration_name = #{iterationName},
+            status = #{status},
+            start_at = #{startAt},
+            end_at = #{endAt},
+            extra_json = #{extraJson},
+            updated_at = #{updatedAt}
+        WHERE id = #{id}
+    </update>
+
+    <insert id="insertSyncHistory">
+        INSERT INTO project_data_sync_history (
+            id, provider_id, status, context_count, work_item_count,
+            active_project_context_id, active_project_space_id, active_project_iteration_id,
+            result_json, error_message, started_at, completed_at
+        )
+        VALUES (
+            #{id}, #{providerId}, #{status}, COALESCE(#{contextCount}, 0), COALESCE(#{workItemCount}, 0),
+            #{activeProjectContextId}, #{activeProjectSpaceId}, #{activeProjectIterationId},
+            #{resultJson}, #{errorMessage}, #{startedAt}, #{completedAt}
+        )
+    </insert>
+
+    <update id="updateSyncHistory">
+        UPDATE project_data_sync_history
+        SET status = #{status},
+            context_count = COALESCE(#{contextCount}, context_count),
+            work_item_count = COALESCE(#{workItemCount}, work_item_count),
+            active_project_context_id = #{activeProjectContextId},
+            active_project_space_id = #{activeProjectSpaceId},
+            active_project_iteration_id = #{activeProjectIterationId},
+            result_json = #{resultJson},
+            error_message = #{errorMessage},
+            completed_at = #{completedAt}
+        WHERE id = #{id}
+    </update>
+
+    <select id="findSyncHistory" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.ProjectDataSyncHistoryEntity">
+        SELECT id, provider_id, status, context_count, work_item_count,
+               active_project_context_id, active_project_space_id, active_project_iteration_id,
+               result_json, error_message, started_at, completed_at
+        FROM project_data_sync_history
+        <where>
+            <if test="providerId != null and providerId != ''">
+                provider_id = #{providerId}
+            </if>
+        </where>
+        ORDER BY started_at DESC
+        LIMIT #{limit}
+    </select>
+
+</mapper>

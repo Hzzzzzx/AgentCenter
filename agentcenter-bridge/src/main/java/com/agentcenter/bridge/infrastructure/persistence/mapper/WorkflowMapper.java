@@ -13,13 +13,19 @@ import java.util.List;
 public interface WorkflowMapper {
     // Definitions
     List<WorkflowDefinitionEntity> findAllDefinitions();
+    List<WorkflowDefinitionEntity> findDefinitionsByProjectId(@Param("projectId") String projectId);
     WorkflowDefinitionEntity findDefinitionById(@Param("id") String id);
     List<WorkflowDefinitionEntity> findDefinitionsByWorkItemType(@Param("workItemType") String type);
+    List<WorkflowDefinitionEntity> findDefinitionsByProjectIdAndWorkItemType(@Param("projectId") String projectId,
+                                                                              @Param("workItemType") String type);
     WorkflowDefinitionEntity findDefaultEnabledDefinition();
+    WorkflowDefinitionEntity findDefaultEnabledDefinitionByProjectId(@Param("projectId") String projectId);
     List<WorkflowNodeDefinitionEntity> findNodeDefinitionsByWorkflowDefinitionId(@Param("workflowDefinitionId") String id);
     void insertDefinition(WorkflowDefinitionEntity entity);
     void updateDefinition(WorkflowDefinitionEntity entity);
     void clearDefaultDefinitionsByWorkItemType(@Param("workItemType") String workItemType);
+    void clearDefaultDefinitionsByProjectIdAndWorkItemType(@Param("projectId") String projectId,
+                                                           @Param("workItemType") String workItemType);
     void insertNodeDefinition(WorkflowNodeDefinitionEntity entity);
 
     // Instances

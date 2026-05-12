@@ -65,9 +65,14 @@ export interface WorkItemDto {
   description: string | null
   status: WorkItemStatus
   priority: Priority
+  providerId?: string | null
+  externalWorkItemId?: string | null
   projectId: string | null
   spaceId: string | null
   iterationId: string | null
+  projectContextId?: string | null
+  projectSpaceId?: string | null
+  projectIterationId?: string | null
   assigneeUserId: string | null
   currentWorkflowInstanceId: string | null
   workflowSummary: WorkflowSummaryDto | null
@@ -103,15 +108,100 @@ export interface WorkItemOverviewDto {
   stats: WorkItemOverviewTypeStatDto[]
 }
 
+export interface ProjectDataProviderDto {
+  id: string
+  name: string
+  description: string
+  active: boolean
+}
+
+export interface ProjectDataProviderSettingsDto {
+  providers: ProjectDataProviderDto[]
+  activeProviderId: string
+  activeProjectContextId?: string | null
+  activeProjectSpaceId?: string | null
+  activeProjectIterationId?: string | null
+}
+
+export interface UpdateProjectDataProviderRequest {
+  providerId: string
+}
+
+export interface ProjectProviderWorkItemDto {
+  externalId?: string | null
+  code: string
+  type: WorkItemType
+  title: string
+  description: string | null
+  status: WorkItemStatus
+  priority: Priority
+  project: string
+  space: string
+  iteration: string
+  projectContextId?: string | null
+  externalProjectId?: string | null
+  externalSpaceId?: string | null
+  externalIterationId?: string | null
+  assigneeUserId: string | null
+  extraJson?: string | null
+}
+
+export interface ProjectDataSnapshotDto {
+  providerId: string
+  contexts: Array<{
+    id: string
+    externalProjectId?: string | null
+    project: string
+    externalCloudeReqProjectId?: string | null
+    cloudeReqProject: string
+    externalSpaceId?: string | null
+    space: string
+    externalIterationId?: string | null
+    iteration: string
+    iterationStatus?: string | null
+    iterationStartAt?: string | null
+    iterationEndAt?: string | null
+    active: boolean
+    extraJson?: string | null
+  }>
+  options: {
+    cloudeReqProjects: string[]
+    spaces: string[]
+    iterations: string[]
+  }
+  workItems: ProjectProviderWorkItemDto[]
+  syncedAt: string
+}
+
+export interface ProjectDataSyncHistoryDto {
+  id: string
+  providerId: string
+  status: 'RUNNING' | 'SUCCESS' | 'FAILED'
+  contextCount: number
+  workItemCount: number
+  activeProjectContextId?: string | null
+  activeProjectSpaceId?: string | null
+  activeProjectIterationId?: string | null
+  resultJson?: string | null
+  errorMessage?: string | null
+  startedAt: string
+  completedAt?: string | null
+}
+
 export interface CreateWorkItemRequest {
   type: WorkItemType
   title: string
   description?: string
   priority?: Priority
+  projectId?: string | null
+  spaceId?: string | null
+  iterationId?: string | null
+  assigneeUserId?: string | null
 }
 
 export interface WorkflowDefinitionDto {
   id: string
+  projectId: string
   workItemType: string
   name: string
   versionNo: number

@@ -4,25 +4,50 @@
 <mapper namespace="com.agentcenter.bridge.infrastructure.persistence.mapper.WorkflowMapper">
 
     <select id="findAllDefinitions" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowDefinitionEntity">
-        SELECT id, work_item_type, name, version_no, status, is_default, created_at, updated_at
+        SELECT id, project_id, work_item_type, name, version_no, status, is_default, created_at, updated_at
         FROM workflow_definition
         ORDER BY created_at DESC
     </select>
 
+    <select id="findDefinitionsByProjectId" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowDefinitionEntity">
+        SELECT id, project_id, work_item_type, name, version_no, status, is_default, created_at, updated_at
+        FROM workflow_definition
+        WHERE project_id = #{projectId}
+        ORDER BY created_at DESC
+    </select>
+
     <select id="findDefinitionById" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowDefinitionEntity">
-        SELECT id, work_item_type, name, version_no, status, is_default, created_at, updated_at
+        SELECT id, project_id, work_item_type, name, version_no, status, is_default, created_at, updated_at
         FROM workflow_definition WHERE id = #{id}
     </select>
 
     <select id="findDefinitionsByWorkItemType" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowDefinitionEntity">
-        SELECT id, work_item_type, name, version_no, status, is_default, created_at, updated_at
+        SELECT id, project_id, work_item_type, name, version_no, status, is_default, created_at, updated_at
         FROM workflow_definition WHERE work_item_type = #{workItemType}
     </select>
 
+    <select id="findDefinitionsByProjectIdAndWorkItemType" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowDefinitionEntity">
+        SELECT id, project_id, work_item_type, name, version_no, status, is_default, created_at, updated_at
+        FROM workflow_definition
+        WHERE project_id = #{projectId}
+          AND work_item_type = #{workItemType}
+        ORDER BY created_at DESC
+    </select>
+
     <select id="findDefaultEnabledDefinition" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowDefinitionEntity">
-        SELECT id, work_item_type, name, version_no, status, is_default, created_at, updated_at
+        SELECT id, project_id, work_item_type, name, version_no, status, is_default, created_at, updated_at
         FROM workflow_definition
         WHERE status = 'ENABLED' AND is_default = 1
+        ORDER BY CASE WHEN work_item_type = 'FE' THEN 0 ELSE 1 END, created_at DESC
+        LIMIT 1
+    </select>
+
+    <select id="findDefaultEnabledDefinitionByProjectId" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowDefinitionEntity">
+        SELECT id, project_id, work_item_type, name, version_no, status, is_default, created_at, updated_at
+        FROM workflow_definition
+        WHERE project_id = #{projectId}
+          AND status = 'ENABLED'
+          AND is_default = 1
         ORDER BY CASE WHEN work_item_type = 'FE' THEN 0 ELSE 1 END, created_at DESC
         LIMIT 1
     </select>
@@ -39,8 +64,9 @@
     </select>
 
     <insert id="insertDefinition">
-        INSERT INTO workflow_definition (id, work_item_type, name, version_no, status, is_default)
-        VALUES (#{id}, #{workItemType}, #{name}, #{versionNo}, #{status}, #{isDefault})
+        INSERT INTO workflow_definition (id, project_id, work_item_type, name, version_no, status, is_default)
+        VALUES (#{id}, COALESCE(#{projectId}, '01DEFAULTPROJECT0000000000001'),
+                #{workItemType}, #{name}, #{versionNo}, #{status}, #{isDefault})
     </insert>
 
     <update id="updateDefinition">
@@ -58,6 +84,14 @@
         SET is_default = 0,
             updated_at = datetime('now')
         WHERE work_item_type = #{workItemType}
+    </update>
+
+    <update id="clearDefaultDefinitionsByProjectIdAndWorkItemType">
+        UPDATE workflow_definition
+        SET is_default = 0,
+            updated_at = datetime('now')
+        WHERE project_id = #{projectId}
+          AND work_item_type = #{workItemType}
     </update>
 
     <insert id="insertNodeDefinition">

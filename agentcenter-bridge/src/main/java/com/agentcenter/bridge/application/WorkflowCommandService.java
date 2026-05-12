@@ -1301,12 +1301,24 @@ public class WorkflowCommandService {
                 return def;
             }
         }
+        String projectId = ProjectDefaults.resolveProjectId(workItem.getProjectId());
         List<WorkflowDefinitionEntity> defs =
-                workflowMapper.findDefinitionsByWorkItemType(workItem.getType());
+                workflowMapper.findDefinitionsByProjectIdAndWorkItemType(projectId, workItem.getType());
+        if (defs.isEmpty() && !ProjectDefaults.DEFAULT_PROJECT_ID.equals(projectId)) {
+            defs = workflowMapper.findDefinitionsByProjectIdAndWorkItemType(
+                    ProjectDefaults.DEFAULT_PROJECT_ID, workItem.getType());
+        }
         return defs.stream()
                 .filter(d -> Boolean.TRUE.equals(d.getIsDefault()) && "ENABLED".equals(d.getStatus()))
                 .findFirst()
-                .orElseGet(workflowMapper::findDefaultEnabledDefinition);
+                .orElseGet(() -> {
+                    WorkflowDefinitionEntity projectDefault =
+                            workflowMapper.findDefaultEnabledDefinitionByProjectId(projectId);
+                    if (projectDefault != null) {
+                        return projectDefault;
+                    }
+                    return workflowMapper.findDefaultEnabledDefinition();
+                });
     }
 
     private void applyRequestedExecutionMode(WorkflowInstanceEntity instance,

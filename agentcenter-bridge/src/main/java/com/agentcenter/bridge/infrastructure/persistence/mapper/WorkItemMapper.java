@@ -9,8 +9,15 @@ import java.util.List;
 @Mapper
 public interface WorkItemMapper {
     List<WorkItemEntity> findAll();
+    List<WorkItemEntity> findByScope(@Param("providerId") String providerId,
+                                     @Param("projectId") String projectId,
+                                     @Param("spaceId") String spaceId,
+                                     @Param("iterationId") String iterationId);
     WorkItemEntity findById(@Param("id") String id);
     WorkItemEntity findByCode(@Param("code") String code);
+    WorkItemEntity findByProviderAndExternalId(@Param("providerId") String providerId,
+                                               @Param("externalWorkItemId") String externalWorkItemId);
     void insert(WorkItemEntity entity);
     void update(WorkItemEntity entity);
+    void updateFromSync(WorkItemEntity entity);
 }

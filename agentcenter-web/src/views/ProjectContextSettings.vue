@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { ProjectContextOptions, ProjectContextSelection } from '../types/projectContext'
 
 const props = defineProps<{
@@ -11,26 +12,29 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: ProjectContextSelection]
-  'update:contexts': [value: ProjectContextSelection[]]
   'update:activeContextId': [value: string]
   'sync-data': []
 }>()
 
 type ProjectContextField = keyof Omit<ProjectContextSelection, 'id'>
 
-function updateSelection(field: ProjectContextField, event: Event) {
-  updateContext({
-    ...props.modelValue,
-    [field]: (event.target as HTMLInputElement | HTMLSelectElement).value,
-  })
-}
+const projectOptions = computed(() => unique(props.contexts.map((context) => context.project)))
+const cloudeReqProjectOptions = computed(() =>
+  unique(contextsForProject().map((context) => context.cloudeReqProject))
+)
+const spaceOptions = computed(() =>
+  unique(contextsForProject().map((context) => context.space))
+)
+const iterationOptions = computed(() =>
+  unique(contextsForProjectAndSpace().map((context) => context.iteration))
+)
 
-function updateContext(nextContext: ProjectContextSelection) {
-  const nextContexts = props.contexts.map((item) =>
-    item.id === nextContext.id ? nextContext : item
-  )
-  emit('update:contexts', nextContexts)
-  emit('update:modelValue', nextContext)
+function updateSelection(field: ProjectContextField, event: Event) {
+  const value = (event.target as HTMLInputElement | HTMLSelectElement).value
+  const matched = findContextFor(field, value)
+  if (matched) {
+    selectContext(matched)
+  }
 }
 
 function selectContext(context: ProjectContextSelection) {
@@ -38,28 +42,42 @@ function selectContext(context: ProjectContextSelection) {
   emit('update:modelValue', context)
 }
 
-function addContext() {
-  const nextContext: ProjectContextSelection = {
-    id: `ctx-${Date.now()}`,
-    project: '新项目',
-    cloudeReqProject: props.options.cloudeReqProjects[0] ?? '',
-    space: props.options.spaces[0] ?? '',
-    iteration: props.options.iterations[0] ?? '',
+function findContextFor(field: ProjectContextField, value: string) {
+  if (field === 'project') {
+    return props.contexts.find((context) => context.project === value)
   }
-  emit('update:contexts', [...props.contexts, nextContext])
-  emit('update:activeContextId', nextContext.id)
-  emit('update:modelValue', nextContext)
+  if (field === 'cloudeReqProject') {
+    return contextsForProject().find((context) => context.cloudeReqProject === value)
+      ?? props.contexts.find((context) => context.cloudeReqProject === value)
+  }
+  if (field === 'space') {
+    return contextsForProject().find((context) => context.space === value)
+      ?? props.contexts.find((context) => context.space === value)
+  }
+  if (field === 'iteration') {
+    return contextsForProjectAndSpace().find((context) => context.iteration === value)
+      ?? props.contexts.find((context) => context.iteration === value)
+  }
+  return props.contexts.find((context) => context[field] === value)
 }
 
-function deleteContext(context: ProjectContextSelection) {
-  if (props.contexts.length <= 1) return
-  const nextContexts = props.contexts.filter((item) => item.id !== context.id)
-  emit('update:contexts', nextContexts)
-  if (context.id === props.activeContextId) {
-    const nextActive = nextContexts[0]
-    emit('update:activeContextId', nextActive.id)
-    emit('update:modelValue', nextActive)
-  }
+function contextsForProject() {
+  const project = props.modelValue.project
+  const matches = props.contexts.filter((context) => context.project === project)
+  return matches.length > 0 ? matches : props.contexts
+}
+
+function contextsForProjectAndSpace() {
+  const project = props.modelValue.project
+  const space = props.modelValue.space
+  const matches = props.contexts.filter((context) =>
+    context.project === project && context.space === space
+  )
+  return matches.length > 0 ? matches : contextsForProject()
+}
+
+function unique(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.filter((value): value is string => Boolean(value))))
 }
 </script>
 
@@ -82,8 +100,9 @@ function deleteContext(context: ProjectContextSelection) {
             <strong>项目配置</strong>
             <span>{{ props.contexts.length }} 个配置</span>
           </div>
-          <button class="project-context__add" type="button" @click="addContext">新增</button>
+          <em>来自同步源</em>
         </div>
+        <p v-if="props.contexts.length === 0" class="project-context__empty">暂无后端同步配置</p>
         <article
           v-for="context in props.contexts"
           :key="context.id"
@@ -103,14 +122,6 @@ function deleteContext(context: ProjectContextSelection) {
           </button>
           <span class="project-context__item-actions">
             <button type="button" @click="selectContext(context)">编辑</button>
-            <button
-              class="project-context__item-delete"
-              type="button"
-              :disabled="props.contexts.length <= 1"
-              @click="deleteContext(context)"
-            >
-              删除
-            </button>
           </span>
         </article>
       </aside>
@@ -118,20 +129,25 @@ function deleteContext(context: ProjectContextSelection) {
       <div class="project-context__panel">
         <div class="project-context__panel-head">
           <div>
-            <strong>当前配置</strong>
-            <span>保存后作为当前工作台上下文生效</span>
+            <strong>当前生效上下文</strong>
+            <span>从后端同步源选择，切换后立即影响工作台筛选</span>
           </div>
         </div>
 
         <div class="project-context__fields">
           <label class="project-context__field project-context__field--wide">
             <span>项目</span>
-            <input
-              aria-label="填写项目名称"
+            <select
+              aria-label="选择项目"
               :value="props.modelValue.project"
-              placeholder="输入自定义项目名称"
-              @input="updateSelection('project', $event)"
-            />
+              :disabled="projectOptions.length === 0"
+              @change="updateSelection('project', $event)"
+            >
+              <option v-if="projectOptions.length === 0" value="">暂无项目</option>
+              <option v-for="project in projectOptions" :key="project" :value="project">
+                {{ project }}
+              </option>
+            </select>
           </label>
 
           <label class="project-context__field">
@@ -139,9 +155,11 @@ function deleteContext(context: ProjectContextSelection) {
             <select
               aria-label="选择 CloudeReq 项目"
               :value="props.modelValue.cloudeReqProject"
+              :disabled="cloudeReqProjectOptions.length === 0"
               @change="updateSelection('cloudeReqProject', $event)"
             >
-              <option v-for="project in props.options.cloudeReqProjects" :key="project" :value="project">
+              <option v-if="cloudeReqProjectOptions.length === 0" value="">暂无项目</option>
+              <option v-for="project in cloudeReqProjectOptions" :key="project" :value="project">
                 {{ project }}
               </option>
             </select>
@@ -149,8 +167,14 @@ function deleteContext(context: ProjectContextSelection) {
 
           <label class="project-context__field">
             <span>空间</span>
-            <select aria-label="选择空间" :value="props.modelValue.space" @change="updateSelection('space', $event)">
-              <option v-for="space in props.options.spaces" :key="space" :value="space">
+            <select
+              aria-label="选择空间"
+              :value="props.modelValue.space"
+              :disabled="spaceOptions.length === 0"
+              @change="updateSelection('space', $event)"
+            >
+              <option v-if="spaceOptions.length === 0" value="">暂无空间</option>
+              <option v-for="space in spaceOptions" :key="space" :value="space">
                 {{ space }}
               </option>
             </select>
@@ -158,8 +182,14 @@ function deleteContext(context: ProjectContextSelection) {
 
           <label class="project-context__field">
             <span>迭代</span>
-            <select aria-label="选择迭代" :value="props.modelValue.iteration" @change="updateSelection('iteration', $event)">
-              <option v-for="iteration in props.options.iterations" :key="iteration" :value="iteration">
+            <select
+              aria-label="选择迭代"
+              :value="props.modelValue.iteration"
+              :disabled="iterationOptions.length === 0"
+              @change="updateSelection('iteration', $event)"
+            >
+              <option v-if="iterationOptions.length === 0" value="">暂无迭代</option>
+              <option v-for="iteration in iterationOptions" :key="iteration" :value="iteration">
                 {{ iteration }}
               </option>
             </select>
@@ -265,6 +295,23 @@ function deleteContext(context: ProjectContextSelection) {
   margin-top: 2px;
   color: var(--text-muted);
   font-size: 11px;
+}
+
+.project-context__list-head em {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: var(--brand-soft);
+  color: var(--accent-blue);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.project-context__empty {
+  margin: 8px 0;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .project-context__item {

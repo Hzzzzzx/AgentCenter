@@ -2,7 +2,10 @@ import { get, post, put } from './client'
 import type { WorkflowDefinitionDto, WorkflowInstanceDto, StartWorkflowResponse, UpdateWorkflowDefinitionRequest } from './types'
 
 export const workflowApi = {
-  listDefinitions: () => get<WorkflowDefinitionDto[]>('/workflow-definitions'),
+  listDefinitions: (projectId?: string | null) => {
+    const query = projectId ? `?projectId=${encodeURIComponent(projectId)}` : ''
+    return get<WorkflowDefinitionDto[]>(`/workflow-definitions${query}`)
+  },
   updateDefinition: (id: string, request: UpdateWorkflowDefinitionRequest) =>
     put<WorkflowDefinitionDto>(`/workflow-definitions/${id}`, request),
   getInstance: (id: string) => get<WorkflowInstanceDto>(`/workflow-instances/${id}`),

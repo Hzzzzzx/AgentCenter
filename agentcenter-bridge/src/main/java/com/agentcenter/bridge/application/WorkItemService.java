@@ -61,17 +61,46 @@ public class WorkItemService {
     }
 
     public List<WorkItemDto> listWorkItems() {
-        return workItemMapper.findAll().stream()
+        return listWorkItems(null, null, null, null);
+    }
+
+    public List<WorkItemDto> listWorkItems(String projectId, String spaceId, String iterationId) {
+        return listWorkItems(null, projectId, spaceId, iterationId);
+    }
+
+    public List<WorkItemDto> listWorkItems(String providerId, String projectId, String spaceId, String iterationId) {
+        if (isBlank(providerId) && isBlank(projectId) && isBlank(spaceId) && isBlank(iterationId)) {
+            return workItemMapper.findAll().stream()
+                    .map(this::toDto)
+                    .toList();
+        }
+        return workItemMapper.findByScope(clean(providerId), clean(projectId), clean(spaceId), clean(iterationId)).stream()
                 .map(this::toDto)
                 .toList();
     }
 
     public WorkItemOverviewDto getOverview() {
-        var workItems = listWorkItems();
+        return getOverview(null, null, null);
+    }
+
+    public WorkItemOverviewDto getOverview(String projectId, String spaceId, String iterationId) {
+        return getOverview(null, projectId, spaceId, iterationId);
+    }
+
+    public WorkItemOverviewDto getOverview(String providerId, String projectId, String spaceId, String iterationId) {
+        var workItems = listWorkItems(providerId, projectId, spaceId, iterationId);
         var stats = Arrays.stream(WorkItemType.values())
                 .map(type -> buildOverviewTypeStat(type, workItems))
                 .toList();
         return new WorkItemOverviewDto("DATABASE", OffsetDateTime.now(ZoneOffset.UTC), stats);
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    private String clean(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     public WorkItemDto getWorkItem(String id) {
@@ -127,9 +156,14 @@ public class WorkItemService {
                 e.getDescription(),
                 WorkItemStatus.valueOf(e.getStatus()),
                 Priority.valueOf(e.getPriority()),
+                e.getProviderId(),
+                e.getExternalWorkItemId(),
                 e.getProjectId(),
                 e.getSpaceId(),
                 e.getIterationId(),
+                e.getProjectContextId(),
+                e.getProjectSpaceId(),
+                e.getProjectIterationId(),
                 e.getAssigneeUserId(),
                 e.getCurrentWorkflowInstanceId(),
                 buildWorkflowSummary(e.getCurrentWorkflowInstanceId()),
@@ -225,18 +259,24 @@ public class WorkItemService {
                             0))
                     .toList();
         }
-        return defaultStageNamesFor(item.type()).stream()
+        return defaultStageNamesFor(item.projectId(), item.type()).stream()
                 .map(label -> new OverviewStage(label, "PENDING", 0))
                 .toList();
     }
 
-    private List<String> defaultStageNamesFor(WorkItemType type) {
-        var definitions = workflowMapper.findDefinitionsByWorkItemType(type.name());
-        var definition = definitions.stream()
+    private List<String> defaultStageNamesFor(String projectId, WorkItemType type) {
+        String resolvedProjectId = ProjectDefaults.resolveProjectId(projectId);
+        var definitions = workflowMapper.findDefinitionsByProjectIdAndWorkItemType(resolvedProjectId, type.name());
+        if (definitions.isEmpty() && !ProjectDefaults.DEFAULT_PROJECT_ID.equals(resolvedProjectId)) {
+            definitions = workflowMapper.findDefinitionsByProjectIdAndWorkItemType(
+                    ProjectDefaults.DEFAULT_PROJECT_ID, type.name());
+        }
+        var availableDefinitions = definitions;
+        var definition = availableDefinitions.stream()
                 .filter(candidate -> "ENABLED".equals(candidate.getStatus()))
                 .filter(candidate -> Boolean.TRUE.equals(candidate.getIsDefault()))
                 .findFirst()
-                .orElseGet(() -> definitions.stream()
+                .orElseGet(() -> availableDefinitions.stream()
                         .filter(candidate -> "ENABLED".equals(candidate.getStatus()))
                         .findFirst()
                         .orElse(null));

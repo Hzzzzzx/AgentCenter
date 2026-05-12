@@ -2,6 +2,7 @@ package com.agentcenter.bridge.infrastructure.persistence.entity;
 
 public class WorkflowDefinitionEntity {
     private String id;
+    private String projectId;
     private String workItemType;
     private String name;
     private Integer versionNo;
@@ -14,6 +15,8 @@ public class WorkflowDefinitionEntity {
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
+    public String getProjectId() { return projectId; }
+    public void setProjectId(String projectId) { this.projectId = projectId; }
     public String getWorkItemType() { return workItemType; }
     public void setWorkItemType(String workItemType) { this.workItemType = workItemType; }
     public String getName() { return name; }

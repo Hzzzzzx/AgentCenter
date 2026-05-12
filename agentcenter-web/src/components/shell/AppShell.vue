@@ -19,16 +19,16 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   activeView: 'home',
   projectContext: () => ({
-    id: 'default',
-    project: 'AgentCenter',
-    cloudeReqProject: '研发中台',
-    space: '研发中台',
-    iteration: 'Sprint 14',
+    id: '',
+    project: '',
+    cloudeReqProject: '',
+    space: '',
+    iteration: '',
   }),
   projectContextOptions: () => ({
-    cloudeReqProjects: ['研发中台', '平台工程', '安全治理'],
-    spaces: ['研发中台', '平台工程', '安全治理'],
-    iterations: ['Sprint 14', 'Sprint 15', '长期演进'],
+    cloudeReqProjects: [],
+    spaces: [],
+    iterations: [],
   }),
 })
 
