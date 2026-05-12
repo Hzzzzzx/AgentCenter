@@ -74,6 +74,15 @@ public class RuntimeResourceService {
                 new RuntimeSkillSnapshot(null, null, List.of()));
     }
 
+    public OffsetDateTime lastSkillRefreshAt(String projectId) {
+        return currentSkillSnapshot(projectId).refreshedAt();
+    }
+
+    public boolean reloadRequiredSince(String projectId, OffsetDateTime baseline) {
+        OffsetDateTime refreshedAt = lastSkillRefreshAt(projectId);
+        return refreshedAt != null && (baseline == null || refreshedAt.isAfter(baseline));
+    }
+
     private RuntimeSkillRefreshResponse toResponse(OffsetDateTime refreshedAt,
                                                     String projectRoot,
                                                     String skillsPath,

@@ -1,5 +1,6 @@
 package com.agentcenter.bridge.application;
 
+import com.agentcenter.bridge.api.dto.RuntimeSkillRefreshResponse;
 import com.agentcenter.bridge.infrastructure.persistence.entity.RuntimeSkillEntity;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.RuntimeSkillMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.RuntimeSkillVersionMapper;
@@ -10,19 +11,23 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.time.OffsetDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class SkillRegistryServiceTest {
 
     private RuntimeSkillMapper skillMapper;
+    private RuntimeResourceService runtimeResourceService;
     private SkillRegistryService service;
 
     @BeforeEach
     void setUp() {
         skillMapper = mock(RuntimeSkillMapper.class);
+        runtimeResourceService = mock(RuntimeResourceService.class);
         service = new SkillRegistryService(
                 skillMapper,
                 mock(RuntimeSkillVersionMapper.class),
@@ -30,7 +35,7 @@ class SkillRegistryServiceTest {
                 mock(WorkflowMapper.class),
                 mock(IdGenerator.class),
                 mock(RuntimeGateway.class),
-                mock(RuntimeResourceService.class),
+                runtimeResourceService,
                 mock(ProjectRuntimeWorkspaceResolver.class)
         );
     }
@@ -69,6 +74,26 @@ class SkillRegistryServiceTest {
         String error = service.validateRegisteredRunnableSkill("01DEFAULTPROJECT0000000000001", "prd-design");
 
         assertThat(error).isNull();
+    }
+
+    @Test
+    void enableSkillRefreshesRuntimeSkillSnapshot() {
+        RuntimeSkillEntity entity = runnableSkill("prd-design");
+        entity.setId("skill-1");
+        entity.setProjectId("01DEFAULTPROJECT0000000000001");
+        when(skillMapper.findById("skill-1")).thenReturn(entity);
+        when(runtimeResourceService.refreshSkills("01DEFAULTPROJECT0000000000001"))
+                .thenReturn(new RuntimeSkillRefreshResponse(
+                        OffsetDateTime.now(),
+                        "/tmp/project",
+                        "/tmp/project/.opencode/skills",
+                        0,
+                        List.of()
+                ));
+
+        service.enableSkill("01DEFAULTPROJECT0000000000001", "skill-1", "tester");
+
+        verify(runtimeResourceService).refreshSkills("01DEFAULTPROJECT0000000000001");
     }
 
     private RuntimeSkillEntity runnableSkill(String name) {

@@ -11,7 +11,7 @@ import { useNotificationStore } from '../stores/notifications'
 import MessageList from '../components/conversation/MessageList.vue'
 import WorkflowNodeControlBar from '../components/conversation/WorkflowNodeControlBar.vue'
 import ConversationInteractionBar from '../components/conversation/ConversationInteractionBar.vue'
-import { skillApi } from '../api/runtimeResources'
+import { sessionResourceApi, skillApi } from '../api/runtimeResources'
 import { DEFAULT_PROJECT_ID } from '../constants/projects'
 import { artifactApi } from '../api/artifacts'
 import type {
@@ -22,6 +22,7 @@ import type {
   ConfirmationActionType,
   ConfirmationRequestType,
   RuntimeEventDto,
+  SessionRuntimeResourceDto,
   WorkflowNodeInstanceDto,
   WorkflowNodeStatus,
 } from '../api/types'
@@ -113,6 +114,7 @@ const inputRef = ref<HTMLInputElement | null>(null)
 const messagesRef = ref<HTMLElement | null>(null)
 const skillRefreshStatus = ref('')
 const refreshingSkills = ref(false)
+const sessionResourceStatus = ref<SessionRuntimeResourceDto | null>(null)
 const loadingSession = ref(false)
 const cancellingSessionId = ref<string | null>(null)
 const pausedRunningNodeId = ref<string | null>(null)
@@ -339,6 +341,31 @@ const isConversationRunning = computed(() =>
     )
   )
 )
+
+const sessionResourceLabel = computed(() => {
+  const status = sessionResourceStatus.value
+  if (!status) return ''
+  const parts = [`${status.skillCount} Skill`]
+  if (status.enabledMcpCount > 0) {
+    parts.push(`${status.enabledMcpCount} MCP`)
+  }
+  return parts.join(' · ')
+})
+
+const sessionResourceSyncLabel = computed(() => {
+  const status = sessionResourceStatus.value
+  if (!status) return ''
+  return status.reloadRequired ? '下次消息重载' : '已同步'
+})
+
+const sessionResourceTooltip = computed(() => {
+  const status = sessionResourceStatus.value
+  if (!status) return ''
+  const refreshText = status.lastRefreshedAt
+    ? new Date(status.lastRefreshedAt).toLocaleString()
+    : '未刷新'
+  return `项目 ${status.projectId} · Skill 刷新时间 ${refreshText}`
+})
 
 function userFacingAgentReason(reason: string | null): string {
   if (!reason) return ''
@@ -671,12 +698,15 @@ async function ensureActiveSession(): Promise<AgentSessionDto | null> {
     }
 
     if (!session) {
+      sessionResourceStatus.value = null
       return null
     }
 
     await sessionStore.selectSession(session.id)
     if (!isCurrentRequest() || sessionStore.activeSession?.id !== session.id) return null
     runtimeStore.connectSSE(session.id)
+    await refreshSessionResourceStatus(session.id)
+    if (!isCurrentRequest()) return null
 
     if (session.workflowInstanceId) {
       await workflowStore.loadInstance(session.workflowInstanceId)
@@ -1080,11 +1110,33 @@ async function refreshSkills() {
   skillRefreshStatus.value = ''
   try {
     const result = await skillApi.refresh(props.projectId || DEFAULT_PROJECT_ID)
-    skillRefreshStatus.value = `已刷新 ${result.skillCount} 个 Skill`
+    await refreshSessionResourceStatus()
+    const reloadText = sessionResourceStatus.value?.reloadRequired
+      ? '，当前会话下次消息会自动重载 Runtime'
+      : ''
+    skillRefreshStatus.value = `已刷新 ${result.skillCount} 个 Skill${reloadText}`
   } catch (error) {
     skillRefreshStatus.value = error instanceof Error ? error.message : '刷新 Skill 失败'
   } finally {
     refreshingSkills.value = false
+  }
+}
+
+async function refreshSessionResourceStatus(sessionId = sessionStore.activeSession?.id ?? null) {
+  if (!sessionId) {
+    sessionResourceStatus.value = null
+    return
+  }
+  try {
+    const status = await sessionResourceApi.getStatus(sessionId)
+    if (sessionStore.activeSession?.id === sessionId) {
+      sessionResourceStatus.value = status
+    }
+  } catch (error) {
+    if (sessionStore.activeSession?.id === sessionId) {
+      sessionResourceStatus.value = null
+    }
+    console.debug('Failed to load session runtime resources', error)
   }
 }
 
@@ -1443,6 +1495,15 @@ function timestamp(value: string | null | undefined): number {
             :class="{ 'conversation-workbench__socket--online': runtimeStore.connected }"
           >
             {{ runtimeStore.connected ? '已连接' : '连接中' }}
+          </span>
+          <span
+            v-if="sessionResourceStatus"
+            class="conversation-workbench__resource"
+            :class="{ 'conversation-workbench__resource--reload': sessionResourceStatus.reloadRequired }"
+            :title="sessionResourceTooltip"
+          >
+            {{ sessionResourceLabel }}
+            <small>{{ sessionResourceSyncLabel }}</small>
           </span>
           <button
             class="conversation-workbench__refresh"
@@ -1803,6 +1864,38 @@ function timestamp(value: string | null | undefined): number {
 
 .conversation-workbench__socket--online::before {
   background: var(--success);
+}
+
+.conversation-workbench__resource {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  max-width: 180px;
+  padding: 0 10px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.conversation-workbench__resource small {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+}
+
+.conversation-workbench__resource--reload {
+  border-color: var(--warning-border, var(--border-color));
+  background: var(--warning-soft, var(--bg-tertiary));
+  color: var(--warning, var(--text-secondary));
 }
 
 .conversation-workbench__refresh {

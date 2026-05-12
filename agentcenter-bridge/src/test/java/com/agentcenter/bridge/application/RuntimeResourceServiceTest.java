@@ -154,6 +154,20 @@ class RuntimeResourceServiceTest {
         assertThat(service.currentSkillSnapshot("Project-B").skills().get(0).name()).isEqualTo("project-b");
     }
 
+    @Test
+    void reloadRequiredSinceComparesAgainstLatestSkillRefresh() {
+        RuntimeResourceService service = new RuntimeResourceService(
+                STUB_GATEWAY,
+                resolver("/tmp/test-project")
+        );
+
+        var response = service.refreshSkills("Project-A");
+
+        assertThat(service.lastSkillRefreshAt("Project-A")).isEqualTo(response.refreshedAt());
+        assertThat(service.reloadRequiredSince("Project-A", response.refreshedAt().minusSeconds(1))).isTrue();
+        assertThat(service.reloadRequiredSince("Project-A", response.refreshedAt().plusSeconds(1))).isFalse();
+    }
+
     private static ProjectRuntimeWorkspaceResolver resolver(String defaultWorkingDirectory) {
         return new ProjectRuntimeWorkspaceResolver(new MockEnvironment(), defaultWorkingDirectory);
     }

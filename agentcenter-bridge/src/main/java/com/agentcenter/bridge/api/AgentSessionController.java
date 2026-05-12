@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.agentcenter.bridge.api.dto.AgentMessageDto;
 import com.agentcenter.bridge.api.dto.AgentSessionDto;
 import com.agentcenter.bridge.api.dto.SendMessageRequest;
+import com.agentcenter.bridge.api.dto.SessionRuntimeResourceDto;
 import com.agentcenter.bridge.application.AgentSessionService;
 
 @RestController
@@ -59,6 +60,11 @@ public class AgentSessionController {
     @GetMapping("/{id}/messages")
     public List<AgentMessageDto> getMessages(@PathVariable String id) {
         return sessionService.getMessages(id);
+    }
+
+    @GetMapping("/{id}/runtime-resources")
+    public SessionRuntimeResourceDto getRuntimeResources(@PathVariable String id) {
+        return sessionService.getRuntimeResources(id);
     }
 
     @PostMapping("/{id}/messages")

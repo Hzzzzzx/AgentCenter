@@ -18,8 +18,11 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.agentcenter.bridge.api.dto.AgentMessageDto;
 import com.agentcenter.bridge.api.dto.AgentSessionDto;
+import com.agentcenter.bridge.api.dto.ProjectMcpServerDto;
 import com.agentcenter.bridge.api.dto.RuntimeEventDto;
+import com.agentcenter.bridge.api.dto.RuntimeSkillDetailDto;
 import com.agentcenter.bridge.api.dto.SendMessageRequest;
+import com.agentcenter.bridge.api.dto.SessionRuntimeResourceDto;
 import com.agentcenter.bridge.application.runtime.RuntimeGateway;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationRequestType;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationStatus;
@@ -40,11 +43,13 @@ import com.agentcenter.bridge.infrastructure.persistence.entity.AgentMessageEnti
 import com.agentcenter.bridge.infrastructure.persistence.entity.AgentSessionEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.ConfirmationRequestEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.RuntimeEventEntity;
+import com.agentcenter.bridge.infrastructure.persistence.entity.WorkItemEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowInstanceEntity;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.AgentMessageMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.AgentSessionMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.ConfirmationMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.RuntimeEventMapper;
+import com.agentcenter.bridge.infrastructure.persistence.mapper.WorkItemMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.WorkflowMapper;
 
 import jakarta.annotation.PreDestroy;
@@ -61,6 +66,7 @@ public class AgentSessionService {
     private static final int DEFAULT_SAFE_AUTO_RETRY_LIMIT = 2;
     private static final long DEFAULT_SAFE_AUTO_RETRY_BACKOFF_MS = 700L;
     private static final String RUNTIME_EXCEPTION_INTERACTION = "RUNTIME_EXCEPTION";
+    private static final int MAX_SKILL_CONTEXT_ITEMS = 25;
 
     private final AgentSessionMapper sessionMapper;
     private final AgentMessageMapper messageMapper;
@@ -72,6 +78,10 @@ public class AgentSessionService {
     private final RuntimeEventService runtimeEventService;
     private final WorkflowCommandService workflowCommandService;
     private final WorkflowMapper workflowMapper;
+    private final SkillRegistryService skillRegistryService;
+    private final RuntimeResourceService runtimeResourceService;
+    private final McpRegistryService mcpRegistryService;
+    private final WorkItemMapper workItemMapper;
     private final int safeAutoRetryLimit;
     private final long safeAutoRetryBackoffMs;
     private final ExecutorService messageExecutor = Executors.newCachedThreadPool(runnable -> {
@@ -90,6 +100,10 @@ public class AgentSessionService {
                                RuntimeEventService runtimeEventService,
                                @Lazy WorkflowCommandService workflowCommandService,
                                WorkflowMapper workflowMapper,
+                               SkillRegistryService skillRegistryService,
+                               RuntimeResourceService runtimeResourceService,
+                               McpRegistryService mcpRegistryService,
+                               WorkItemMapper workItemMapper,
                                @Value("${agentcenter.runtime.guard.retry-limit:2}") int safeAutoRetryLimit,
                                @Value("${agentcenter.runtime.guard.retry-backoff-ms:700}") long safeAutoRetryBackoffMs) {
         this.sessionMapper = sessionMapper;
@@ -102,6 +116,10 @@ public class AgentSessionService {
         this.runtimeEventService = runtimeEventService;
         this.workflowCommandService = workflowCommandService;
         this.workflowMapper = workflowMapper;
+        this.skillRegistryService = skillRegistryService;
+        this.runtimeResourceService = runtimeResourceService;
+        this.mcpRegistryService = mcpRegistryService;
+        this.workItemMapper = workItemMapper;
         this.safeAutoRetryLimit = normalizeRetryLimit(safeAutoRetryLimit);
         this.safeAutoRetryBackoffMs = normalizeRetryBackoffMs(safeAutoRetryBackoffMs);
     }
@@ -163,6 +181,35 @@ public class AgentSessionService {
         return messageMapper.findBySessionId(sessionId).stream()
                 .map(this::toMessageDto)
                 .toList();
+    }
+
+    public SessionRuntimeResourceDto getRuntimeResources(String sessionId) {
+        AgentSessionEntity session = sessionMapper.findById(sessionId);
+        if (session == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found: " + sessionId);
+        }
+        String projectId = resolveSessionProjectId(session);
+        List<RuntimeSkillDetailDto> skills = runnableSkillCatalog(projectId);
+        int enabledMcpCount = 0;
+        int mcpToolCount = 0;
+        try {
+            for (ProjectMcpServerDto mcp : mcpRegistryService.listMcps(projectId)) {
+                if ("ENABLED".equals(mcp.status())) {
+                    enabledMcpCount++;
+                    mcpToolCount += mcp.toolCount() != null ? mcp.toolCount() : 0;
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Failed to load MCP status for session {}", sessionId, e);
+        }
+        return new SessionRuntimeResourceDto(
+                projectId,
+                skills.size(),
+                enabledMcpCount,
+                mcpToolCount,
+                runtimeResourceService.lastSkillRefreshAt(projectId),
+                sessionReloadRequired(session, projectId)
+        );
     }
 
     public AgentMessageDto sendMessage(String sessionId, SendMessageRequest request) {
@@ -317,7 +364,15 @@ public class AgentSessionService {
     private RuntimeDispatchResult dispatchToRuntimeWithGuard(AgentSessionEntity session,
                                                              RuntimeType runtimeType,
                                                              String content) {
+        String projectId = resolveSessionProjectId(session);
         String runtimeSessionId = session.getRuntimeSessionId();
+        boolean reloadRequired = sessionReloadRequired(session, projectId);
+        if (reloadRequired) {
+            log.info("Runtime skill catalog refreshed after session {}, recreating runtime session before next message",
+                    session.getId());
+            runtimeSessionId = null;
+        }
+        String outboundContent = withSkillCatalogContextIfNeeded(session, projectId, content);
         int retryCount = 0;
         String lastError = null;
 
@@ -333,7 +388,7 @@ public class AgentSessionService {
                     session.setRuntimeSessionId(runtimeSessionId);
                     sessionMapper.update(session);
                 }
-                runtimeGateway.sendMessage(runtimeType, runtimeSessionId, content);
+                runtimeGateway.sendMessage(runtimeType, runtimeSessionId, outboundContent);
                 return RuntimeDispatchResult.ok(runtimeSessionId, retryCount);
             } catch (Exception error) {
                 lastError = errorMessage(error);
@@ -354,6 +409,98 @@ public class AgentSessionService {
                 "Runtime sendMessage failed after " + retryCount + " guarded retry attempt(s): " + lastError,
                 retryCount,
                 retryCount > 0 ? "SAFE_AUTO_EXHAUSTED" : "USER_INTERVENTION_REQUIRED");
+    }
+
+    private String withSkillCatalogContextIfNeeded(AgentSessionEntity session, String projectId, String content) {
+        if (!isPlainConversation(session)) {
+            return content;
+        }
+        try {
+            List<RuntimeSkillDetailDto> skills = runnableSkillCatalog(projectId);
+            if (skills.isEmpty()) {
+                return content;
+            }
+            return buildSkillCatalogContext(projectId, skills) + "\n\n--- 用户消息 ---\n" + safeText(content);
+        } catch (Exception e) {
+            log.warn("Failed to build runtime skill catalog context for session {}", session.getId(), e);
+            return content;
+        }
+    }
+
+    private boolean isPlainConversation(AgentSessionEntity session) {
+        return session.getWorkflowInstanceId() == null || session.getWorkflowInstanceId().isBlank();
+    }
+
+    private List<RuntimeSkillDetailDto> runnableSkillCatalog(String projectId) {
+        return skillRegistryService.listProjectSkillCatalog(projectId).stream()
+                .filter(skill -> "ENABLED".equals(skill.status()))
+                .filter(skill -> "VALID".equals(skill.validationStatus()))
+                .toList();
+    }
+
+    private String buildSkillCatalogContext(String projectId, List<RuntimeSkillDetailDto> skills) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("【AgentCenter Skill 同步上下文】\n");
+        builder.append("项目 ID: ").append(projectId).append("\n");
+        builder.append("以下 Skill 来自用户已上传并刷新后的项目 Runtime Skill catalog。");
+        builder.append("当用户请求相关能力时，请优先使用这些精确 Skill 名称；不要假设 catalog 之外的项目 Skill 已可用。\n");
+
+        int limit = Math.min(skills.size(), MAX_SKILL_CONTEXT_ITEMS);
+        for (int i = 0; i < limit; i++) {
+            RuntimeSkillDetailDto skill = skills.get(i);
+            builder.append("- ").append(skill.name());
+            String description = compactText(skill.description(), 160);
+            if (!description.isBlank()) {
+                builder.append(": ").append(description);
+            }
+            if (skill.relativePath() != null && !skill.relativePath().isBlank()) {
+                builder.append(" [").append(skill.relativePath()).append("]");
+            }
+            builder.append("\n");
+        }
+        if (skills.size() > limit) {
+            builder.append("- ... 另有 ").append(skills.size() - limit).append(" 个 Skill 已省略\n");
+        }
+        return builder.toString().trim();
+    }
+
+    private boolean sessionReloadRequired(AgentSessionEntity session, String projectId) {
+        String runtimeSessionId = session.getRuntimeSessionId();
+        if (runtimeSessionId == null || runtimeSessionId.isBlank()) {
+            return false;
+        }
+        return runtimeResourceService.reloadRequiredSince(projectId, sessionResourceBaseline(session));
+    }
+
+    private OffsetDateTime sessionResourceBaseline(AgentSessionEntity session) {
+        OffsetDateTime updatedAt = parseDateTime(session.getUpdatedAt());
+        return updatedAt != null ? updatedAt : parseDateTime(session.getCreatedAt());
+    }
+
+    private String resolveSessionProjectId(AgentSessionEntity session) {
+        if (session.getWorkItemId() != null && !session.getWorkItemId().isBlank()) {
+            try {
+                WorkItemEntity workItem = workItemMapper.findById(session.getWorkItemId());
+                if (workItem != null) {
+                    return ProjectDefaults.resolveProjectId(workItem.getProjectId());
+                }
+            } catch (Exception e) {
+                log.debug("Failed to resolve project id for session {}", session.getId(), e);
+            }
+        }
+        return ProjectDefaults.DEFAULT_PROJECT_ID;
+    }
+
+    private String compactText(String value, int maxLength) {
+        String normalized = safeText(value).replaceAll("\\s+", " ").trim();
+        if (normalized.length() <= maxLength) {
+            return normalized;
+        }
+        return normalized.substring(0, maxLength - 3) + "...";
+    }
+
+    private String safeText(String value) {
+        return value == null ? "" : value;
     }
 
     private void recordSendMessageEvent(String sessionId,

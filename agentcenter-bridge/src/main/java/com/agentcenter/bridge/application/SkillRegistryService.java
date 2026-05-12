@@ -549,6 +549,7 @@ public class SkillRegistryService {
         }
         existing.setStatus(status);
         skillMapper.update(existing);
+        refreshSkills(projectId);
         auditService.recordAudit(projectId, "SKILL", skillId, action,
                 "SUCCESS", "Status changed to " + status, null, createdBy);
         return toDetailDto(existing);

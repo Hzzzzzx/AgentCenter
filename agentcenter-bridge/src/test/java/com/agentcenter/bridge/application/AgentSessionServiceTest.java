@@ -16,6 +16,7 @@ import com.agentcenter.bridge.infrastructure.persistence.mapper.AgentMessageMapp
 import com.agentcenter.bridge.infrastructure.persistence.mapper.AgentSessionMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.ConfirmationMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.RuntimeEventMapper;
+import com.agentcenter.bridge.infrastructure.persistence.mapper.WorkItemMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.WorkflowMapper;
 
 class AgentSessionServiceTest {
@@ -89,6 +90,10 @@ class AgentSessionServiceTest {
                 mock(RuntimeEventService.class),
                 mock(WorkflowCommandService.class),
                 mock(WorkflowMapper.class),
+                mock(SkillRegistryService.class),
+                mock(RuntimeResourceService.class),
+                mock(McpRegistryService.class),
+                mock(WorkItemMapper.class),
                 2,
                 0);
     }
