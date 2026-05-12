@@ -273,14 +273,42 @@ class OpenCodeHttpCommandTransportTest {
     }
 
     @Test
-    void conversationCancelReturnsAckWithoutHttp() {
+    void conversationCancelPostsToAbortEndpoint() throws Exception {
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("baseUrl", "http://localhost:4097");
+        payload.put("workingDirectory", "/tmp/work");
+
         RuntimeCommandEnvelope command = RuntimeCommandEnvelope.of(
                 RuntimeCommandTypes.CONVERSATION_CANCEL, RuntimeType.OPENCODE,
-                "ses_abc123", objectMapper.createObjectNode());
+                "ses_abc123", payload);
 
         RuntimeAckEnvelope ack = transport.send(command);
 
         assertTrue(ack.success());
+        ArgumentCaptor<HttpRequest> captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(httpClient).send(captor.capture(), any());
+        HttpRequest request = captor.getValue();
+        assertEquals("POST", request.method());
+        assertEquals("http://localhost:4097/session/ses_abc123/abort", request.uri().toString());
+        assertEquals("/tmp/work", request.headers().firstValue("x-opencode-directory").orElse(""));
+        assertTrue(request.headers().firstValue("Content-Type").isEmpty());
+    }
+
+    @Test
+    void conversationCancelReturnsNackWithoutSessionId() throws Exception {
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("baseUrl", "http://localhost:4097");
+        payload.put("workingDirectory", "/tmp/work");
+
+        RuntimeCommandEnvelope command = RuntimeCommandEnvelope.of(
+                RuntimeCommandTypes.CONVERSATION_CANCEL, RuntimeType.OPENCODE,
+                null, payload);
+
+        RuntimeAckEnvelope ack = transport.send(command);
+
+        assertFalse(ack.success());
+        assertTrue(ack.message().contains("runtimeSessionId is required"));
+        verify(httpClient, never()).send(any(HttpRequest.class), any());
     }
 
     @Test

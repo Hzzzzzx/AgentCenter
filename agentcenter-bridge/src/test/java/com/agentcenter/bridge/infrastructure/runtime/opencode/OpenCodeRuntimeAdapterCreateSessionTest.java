@@ -5,6 +5,9 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import java.nio.file.Path;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -273,5 +276,73 @@ class OpenCodeRuntimeAdapterCreateSessionTest {
         assertTrue(event.payloadJson().contains("请检查当前 prompt 组装"));
         assertTrue(event.payloadJson().contains("本轮用户消息内包含 Runtime 工作目录边界约束"));
         assertTrue(event.payloadJson().contains("\"opencodePromptAsyncBody\""));
+    }
+
+    @Test
+    void cancelSendsAbortCommandAndKeepsSessionMapping() {
+        ObjectNode createAckPayload = objectMapper.createObjectNode();
+        createAckPayload.put("sessionId", "ses_cancel");
+        RuntimeAckEnvelope createAck = new RuntimeAckEnvelope(
+                null, "agentcenter.runtime.v1", null,
+                "ack-create-id", "corr-id", null,
+                RuntimeType.OPENCODE, null, "ses_cancel",
+                true, null, createAckPayload, null);
+
+        RuntimeAckEnvelope cancelAck = new RuntimeAckEnvelope(
+                null, "agentcenter.runtime.v1", null,
+                "ack-cancel-id", "corr-id", null,
+                RuntimeType.OPENCODE, null, "ses_cancel",
+                true, null, objectMapper.createObjectNode(), null);
+
+        ArgumentCaptor<RuntimeCommandEnvelope> envelopeCaptor =
+                ArgumentCaptor.forClass(RuntimeCommandEnvelope.class);
+        when(commandTransport.send(envelopeCaptor.capture())).thenReturn(createAck, cancelAck);
+
+        adapter.createSession("work-cancel", "agent-cancel");
+        adapter.cancel("agent-cancel");
+
+        RuntimeCommandEnvelope cancelCommand = envelopeCaptor.getAllValues().get(1);
+        assertEquals("conversation.cancel", cancelCommand.type());
+        assertEquals("ses_cancel", cancelCommand.runtimeSessionId());
+        assertEquals("http://127.0.0.1:4097", cancelCommand.payload().path("baseUrl").asText(""));
+        assertEquals("/tmp/project", cancelCommand.payload().path("workingDirectory").asText(""));
+        assertEquals("ses_cancel", adapter.getOpencodeSessionId("agent-cancel"));
+        verify(eventSubscriber, never()).unregisterSession(anyString());
+    }
+
+    @Test
+    void cancelInterruptsWaitingSkillAndLeavesNodeInProgress() throws Exception {
+        adapter = new OpenCodeRuntimeAdapter(
+                processManager, eventSubscriber, objectMapper,
+                skillFileService, mcpFileService, commandTransport, runtimeEventService,
+                "build", 30);
+
+        RuntimeAckEnvelope ack = new RuntimeAckEnvelope(
+                null, "agentcenter.runtime.v1", null,
+                "ack-id", "corr-id", null,
+                RuntimeType.OPENCODE, null, "ses_wait_cancel",
+                true, null, objectMapper.createObjectNode(), null);
+
+        when(commandTransport.send(any())).thenReturn(ack);
+        CountDownLatch pollingStarted = new CountDownLatch(1);
+        AtomicInteger fetchCount = new AtomicInteger();
+        when(commandTransport.fetchMessages(anyString(), anyString(), eq("ses_wait_cancel")))
+                .thenAnswer(invocation -> {
+                    if (fetchCount.incrementAndGet() > 1) {
+                        pollingStarted.countDown();
+                    }
+                    return objectMapper.createArrayNode();
+                });
+
+        CompletableFuture<SkillRunResult> resultFuture = CompletableFuture.supplyAsync(
+                () -> adapter.runSkill("ses_wait_cancel", "prd-design", "ctx"));
+
+        assertTrue(pollingStarted.await(2, TimeUnit.SECONDS));
+        adapter.cancel("ses_wait_cancel");
+
+        SkillRunResult result = resultFuture.get(2, TimeUnit.SECONDS);
+        assertTrue(result.success());
+        assertTrue(result.outputContent().contains("status: IN_PROGRESS"));
+        assertTrue(result.outputContent().contains("用户已暂停当前回复"));
     }
 }

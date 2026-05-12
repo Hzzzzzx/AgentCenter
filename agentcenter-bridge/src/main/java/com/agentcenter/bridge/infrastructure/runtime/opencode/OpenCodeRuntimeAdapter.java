@@ -67,6 +67,12 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
             -->
             这里放最终产物正文。
             <!-- AGENTCENTER_ARTIFACT_END -->""";
+    private static final String USER_CANCELLED_NODE_STATE = """
+            <!-- AGENTCENTER_NODE_STATE
+            status: IN_PROGRESS
+            reason: 用户已暂停当前回复，可补充输入后继续。
+            -->
+            """.trim();
     private final OpenCodeProcessManager processManager;
     private final OpenCodeEventSubscriber eventSubscriber;
     private final ObjectMapper objectMapper;
@@ -81,6 +87,7 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
     private boolean conversationLogEnabled;
 
     private final Map<String, String> agentToOpencodeSession = new ConcurrentHashMap<>();
+    private final Map<String, Long> cancelGenerations = new ConcurrentHashMap<>();
 
     public OpenCodeRuntimeAdapter(
             OpenCodeProcessManager processManager,
@@ -330,7 +337,8 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
                 context.cwd(),
                 context.opencodeSessionId(),
                 context.knownMessageIds(),
-                allowToolOutputFallback);
+                allowToolOutputFallback,
+                context.cancelGeneration());
     }
 
     private String dispatchMultiPartPromptAndWait(String sessionId, ArrayNode parts, String skillName) {
@@ -340,21 +348,19 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
                 context.cwd(),
                 context.opencodeSessionId(),
                 context.knownMessageIds(),
-                false);
+                false,
+                context.cancelGeneration());
     }
 
     private DispatchContext dispatchPrompt(String sessionId, String userMessage, boolean includeArtifactInstruction) {
         if (sessionId == null || sessionId.isBlank()) {
             throw new IllegalArgumentException("Agent session id is required before dispatching to opencode");
         }
-        String opencodeSessionId = agentToOpencodeSession.get(sessionId);
-        if (opencodeSessionId == null && sessionId.startsWith("ses_")) {
-            opencodeSessionId = sessionId;
-            agentToOpencodeSession.put(sessionId, sessionId);
-        }
+        String opencodeSessionId = resolveOpencodeSessionId(sessionId);
         if (opencodeSessionId == null) {
             throw new IllegalArgumentException("No opencode session mapped for agent session: " + sessionId);
         }
+        long cancelGeneration = cancelGeneration(opencodeSessionId);
 
         String baseUrl = processManager.ensureRunning();
         Path cwd = processManager.resolveWorkingDirectory();
@@ -381,7 +387,7 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         }
 
         log.debug("Sent message to opencode session {} (agent session {})", opencodeSessionId, sessionId);
-        return new DispatchContext(baseUrl, cwd.toString(), opencodeSessionId, knownMessageIds);
+        return new DispatchContext(baseUrl, cwd.toString(), opencodeSessionId, knownMessageIds, cancelGeneration);
     }
 
     private String withConversationArtifactInstruction(String userMessage) {
@@ -395,14 +401,11 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         if (sessionId == null || sessionId.isBlank()) {
             throw new IllegalArgumentException("Agent session id is required before dispatching skill " + skillName);
         }
-        String opencodeSessionId = agentToOpencodeSession.get(sessionId);
-        if (opencodeSessionId == null && sessionId.startsWith("ses_")) {
-            opencodeSessionId = sessionId;
-            agentToOpencodeSession.put(sessionId, sessionId);
-        }
+        String opencodeSessionId = resolveOpencodeSessionId(sessionId);
         if (opencodeSessionId == null) {
             throw new IllegalArgumentException("No opencode session mapped for agent session: " + sessionId);
         }
+        long cancelGeneration = cancelGeneration(opencodeSessionId);
 
         String baseUrl = processManager.ensureRunning();
         Path cwd = processManager.resolveWorkingDirectory();
@@ -427,27 +430,47 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         }
 
         log.debug("Sent multi-part skill prompt to opencode session {} (agent session {})", opencodeSessionId, sessionId);
-        return new DispatchContext(baseUrl, cwd.toString(), opencodeSessionId, knownMessageIds);
+        return new DispatchContext(baseUrl, cwd.toString(), opencodeSessionId, knownMessageIds, cancelGeneration);
     }
 
     @Override
     public void cancel(String sessionId) {
-        String opencodeSessionId = agentToOpencodeSession.remove(sessionId);
-        if (opencodeSessionId != null) {
-            eventSubscriber.unregisterSession(opencodeSessionId);
-            log.info("Cancelled opencode session {} (agent session {})", opencodeSessionId, sessionId);
+        String opencodeSessionId = resolveOpencodeSessionId(sessionId);
+        if (opencodeSessionId == null) {
+            log.info("Cancel ignored because no opencode session is mapped for {}", sessionId);
+            return;
         }
+
+        String baseUrl = processManager.ensureRunning();
+        Path cwd = processManager.resolveWorkingDirectory();
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("baseUrl", baseUrl);
+        payload.put("workingDirectory", cwd.toString());
+
+        markCancellation(opencodeSessionId);
+
+        RuntimeCommandEnvelope command = RuntimeCommandEnvelope.of(
+                RuntimeCommandTypes.CONVERSATION_CANCEL, RuntimeType.OPENCODE,
+                opencodeSessionId, payload);
+        RuntimeAckEnvelope ack = commandTransport.send(command);
+        if (!ack.success()) {
+            throw new RuntimeException("opencode abort failed: " + ack.message());
+        }
+
+        log.info("Requested abort for opencode session {} (dispatch session {})", opencodeSessionId, sessionId);
     }
 
     @Override
     public void refreshMcps() {
         agentToOpencodeSession.clear();
+        cancelGenerations.clear();
         processManager.restartIfRunning();
     }
 
     @Override
     public void refreshSkills(RuntimeSkillSnapshot snapshot) {
         agentToOpencodeSession.clear();
+        cancelGenerations.clear();
         processManager.restartIfRunning();
     }
 
@@ -487,6 +510,27 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
     public String getOpencodeSessionId(String agentSessionId) {
         return agentToOpencodeSession.get(agentSessionId);
+    }
+
+    private String resolveOpencodeSessionId(String sessionId) {
+        String opencodeSessionId = agentToOpencodeSession.get(sessionId);
+        if (opencodeSessionId == null && sessionId != null && sessionId.startsWith("ses_")) {
+            opencodeSessionId = sessionId;
+            agentToOpencodeSession.put(sessionId, sessionId);
+        }
+        return opencodeSessionId;
+    }
+
+    private long cancelGeneration(String opencodeSessionId) {
+        return cancelGenerations.getOrDefault(opencodeSessionId, 0L);
+    }
+
+    private void markCancellation(String opencodeSessionId) {
+        cancelGenerations.merge(opencodeSessionId, 1L, Long::sum);
+    }
+
+    private boolean wasCancelled(String opencodeSessionId, long expectedGeneration) {
+        return cancelGeneration(opencodeSessionId) != expectedGeneration;
     }
 
     public void respondPermission(String opencodeSessionId, String permissionId, boolean approved) {
@@ -633,10 +677,14 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
     private String waitForAssistantText(String baseUrl, String cwd,
                                         String opencodeSessionId,
                                         Set<String> knownMessageIds,
-                                        boolean allowToolOutputFallback) {
+                                        boolean allowToolOutputFallback,
+                                        long cancelGeneration) {
         long deadline = System.nanoTime() + Duration.ofSeconds(responseTimeoutSeconds).toNanos();
         Map<String, Integer> streamedTextLengths = new HashMap<>();
         while (System.nanoTime() < deadline) {
+            if (wasCancelled(opencodeSessionId, cancelGeneration)) {
+                return USER_CANCELLED_NODE_STATE;
+            }
             JsonNode messages = commandTransport.fetchMessages(baseUrl, cwd, opencodeSessionId);
             publishAssistantTextSnapshotDeltas(opencodeSessionId, messages, knownMessageIds, streamedTextLengths);
             String text = extractNewAssistantText(messages, knownMessageIds);
@@ -949,5 +997,6 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
     private record DispatchContext(String baseUrl, String cwd,
                                    String opencodeSessionId,
-                                   Set<String> knownMessageIds) {}
+                                   Set<String> knownMessageIds,
+                                   long cancelGeneration) {}
 }

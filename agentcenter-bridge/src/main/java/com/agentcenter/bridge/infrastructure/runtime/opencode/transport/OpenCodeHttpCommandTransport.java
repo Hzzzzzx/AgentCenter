@@ -57,7 +57,7 @@ public class OpenCodeHttpCommandTransport implements RuntimeCommandTransport {
         return switch (command.type()) {
             case RuntimeCommandTypes.SESSION_ENSURE -> handleSessionCreate(command, timeout);
             case RuntimeCommandTypes.CONVERSATION_MESSAGE_SEND -> handleConversationSend(command, timeout);
-            case RuntimeCommandTypes.CONVERSATION_CANCEL -> buildAck(command, null);
+            case RuntimeCommandTypes.CONVERSATION_CANCEL -> handleConversationCancel(command, timeout);
             case RuntimeCommandTypes.PERMISSION_RESPOND -> handlePermissionRespond(command, timeout);
             case RuntimeCommandTypes.QUESTION_REPLY -> handleQuestionReply(command, timeout);
             case RuntimeCommandTypes.QUESTION_REJECT -> handleQuestionReject(command, timeout);
@@ -108,6 +108,22 @@ public class OpenCodeHttpCommandTransport implements RuntimeCommandTransport {
         HttpRequest request = buildPost(baseUrl, "/session/" + sessionId + "/prompt_async", body, cwd, timeout);
         execute(request);
 
+        return buildAck(command, null);
+    }
+
+    private RuntimeAckEnvelope handleConversationCancel(RuntimeCommandEnvelope command, Duration timeout) {
+        String sessionId = command.runtimeSessionId();
+        if (sessionId == null || sessionId.isBlank()) {
+            return RuntimeAckEnvelope.nack(command.messageId(), RuntimeType.OPENCODE,
+                    "runtimeSessionId is required for CONVERSATION_CANCEL");
+        }
+
+        JsonNode payload = command.payload();
+        String baseUrl = payload.path("baseUrl").asText("");
+        String cwd = payload.path("workingDirectory").asText("");
+
+        HttpRequest request = buildPostNoBody(baseUrl, "/session/" + sessionId + "/abort", cwd, timeout);
+        execute(request);
         return buildAck(command, null);
     }
 
