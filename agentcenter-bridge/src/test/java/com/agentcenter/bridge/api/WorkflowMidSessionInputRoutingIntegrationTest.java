@@ -118,6 +118,30 @@ class WorkflowMidSessionInputRoutingIntegrationTest {
         String lastInputContext = TestWorkflowExecutorConfig.CAPTURED_INPUT_CONTEXTS.get(
                 TestWorkflowExecutorConfig.CAPTURED_INPUT_CONTEXTS.size() - 1);
         assertThat(lastInputContext).contains("方案设计 (HLD)");
+        assertThat(lastInputContext).contains("## 用户本轮输入");
+        assertThat(lastInputContext).contains("补充信息：需要支持移动端");
+        assertThat(lastInputContext).contains("不要用“可在适当时机推进”");
+    }
+
+    @Test
+    void plainContinueIsPassedAsCurrentNodeInput() throws Exception {
+        StartedWorkflow wf = startWorkflowAndWait("FE1234");
+
+        int skillCountBefore = TestWorkflowExecutorConfig.CAPTURED_SKILL_NAMES.size();
+
+        mockMvc.perform(post("/api/agent-sessions/" + wf.sessionId() + "/messages")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"继续\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.role").value("USER"));
+
+        assertThat(TestWorkflowExecutorConfig.CAPTURED_SKILL_NAMES.size())
+                .isGreaterThan(skillCountBefore);
+        String lastInputContext = TestWorkflowExecutorConfig.CAPTURED_INPUT_CONTEXTS.get(
+                TestWorkflowExecutorConfig.CAPTURED_INPUT_CONTEXTS.size() - 1);
+        assertThat(lastInputContext).contains("## 用户本轮输入");
+        assertThat(lastInputContext).contains("继续");
+        assertThat(lastInputContext).contains("不要把它解读为推进确认");
     }
 
     @Test

@@ -9,6 +9,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -27,6 +29,7 @@ import com.agentcenter.bridge.api.dto.StartWorkflowRequest;
 import com.agentcenter.bridge.api.dto.StartWorkflowResponse;
 import com.agentcenter.bridge.api.dto.WorkflowInstanceDto;
 import com.agentcenter.bridge.api.dto.WorkflowNodeInstanceDto;
+import com.agentcenter.bridge.application.artifact.ArtifactBlockParser;
 import com.agentcenter.bridge.application.runtime.RuntimeGateway;
 import com.agentcenter.bridge.application.runtime.SkillInvocationRequest;
 import com.agentcenter.bridge.application.runtime.SkillRunResult;
@@ -77,6 +80,10 @@ public class WorkflowCommandService {
     private static final String WORKFLOW_MODE_AUTO = "AUTO";
     private static final String WORKFLOW_MODE_MANUAL_CONFIRM = "MANUAL_CONFIRM";
     private static final String WORKFLOW_MODE_START_OR_CONTINUE = "START_OR_CONTINUE";
+    private static final Pattern MARKDOWN_DOCUMENT_HEADING =
+            Pattern.compile("(?m)^#{1,6}\\s+\\S.*$");
+    private static final Pattern MARKDOWN_FENCE =
+            Pattern.compile("(?s)```(?:markdown|md)?\\s*\\R([\\s\\S]*?)\\R```");
 
     private final WorkflowMapper workflowMapper;
     private final WorkItemMapper workItemMapper;
@@ -365,6 +372,10 @@ public class WorkflowCommandService {
     }
 
     public StartWorkflowResponse resumeNodeAfterInteraction(String nodeInstanceId) {
+        return resumeNodeAfterInteraction(nodeInstanceId, null);
+    }
+
+    public StartWorkflowResponse resumeNodeAfterInteraction(String nodeInstanceId, String supplementalInput) {
         WorkflowNodeInstanceEntity node = findNodeInstanceOrThrow(nodeInstanceId);
         WorkflowInstanceEntity instance = workflowMapper.findInstanceById(node.getWorkflowInstanceId());
 
@@ -378,7 +389,7 @@ public class WorkflowCommandService {
         workflowMapper.updateNodeInstance(node);
         touchWorkItem(instance.getWorkItemId(), now);
 
-        scheduleRunNode(instance.getId(), node.getId());
+        scheduleRunNode(instance.getId(), node.getId(), supplementalInput);
 
         instance = workflowMapper.findInstanceById(instance.getId());
         return buildResponse(instance);
@@ -397,11 +408,19 @@ public class WorkflowCommandService {
                           WorkflowNodeInstanceEntity node,
                           List<WorkflowNodeDefinitionEntity> nodeDefs,
                           WorkItemEntity workItem) {
+        runNode(instance, node, nodeDefs, workItem, null);
+    }
+
+    private void runNode(WorkflowInstanceEntity instance,
+                         WorkflowNodeInstanceEntity node,
+                         List<WorkflowNodeDefinitionEntity> nodeDefs,
+                         WorkItemEntity workItem,
+                         String supplementalInput) {
         String now = LocalDateTime.now().format(SQLITE_DATETIME);
 
         prepareWorkflowSession(instance, node, nodeDefs, workItem, now);
 
-        executeSkillOnNode(instance, node, nodeDefs, workItem);
+        executeSkillOnNode(instance, node, nodeDefs, workItem, supplementalInput);
 
         if (WorkflowNodeStatus.COMPLETED.name().equals(node.getStatus())) {
             advanceToNextNode(instance);
@@ -472,11 +491,19 @@ public class WorkflowCommandService {
                                      WorkflowNodeInstanceEntity node,
                                      List<WorkflowNodeDefinitionEntity> nodeDefs,
                                      WorkItemEntity workItem) {
+        executeSkillOnNode(instance, node, nodeDefs, workItem, null);
+    }
+
+    private void executeSkillOnNode(WorkflowInstanceEntity instance,
+                                    WorkflowNodeInstanceEntity node,
+                                    List<WorkflowNodeDefinitionEntity> nodeDefs,
+                                    WorkItemEntity workItem,
+                                    String supplementalInput) {
         WorkflowNodeDefinitionEntity nodeDef = nodeDefs.stream()
                 .filter(d -> d.getId().equals(node.getNodeDefinitionId()))
                 .findFirst().orElseThrow();
 
-        String inputContext = buildInputContext(workItem, node, nodeDef);
+        String inputContext = buildInputContext(workItem, node, nodeDef, supplementalInput);
         String skillName = nodeDef.getSkillName();
         String toolCallId = workflowToolCallId(node, skillName);
         insertWorkflowContextMessageIfAbsent(node.getAgentSessionId(), node, nodeDef, workItem, inputContext);
@@ -1100,6 +1127,10 @@ public class WorkflowCommandService {
     }
 
     private void scheduleRunNode(String instanceId, String nodeInstanceId) {
+        scheduleRunNode(instanceId, nodeInstanceId, null);
+    }
+
+    private void scheduleRunNode(String instanceId, String nodeInstanceId, String supplementalInput) {
         workflowExecutor.submit(() -> {
             try {
                 WorkflowInstanceEntity instance = workflowMapper.findInstanceById(instanceId);
@@ -1110,7 +1141,7 @@ public class WorkflowCommandService {
                 WorkItemEntity workItem = workItemMapper.findById(instance.getWorkItemId());
                 List<WorkflowNodeDefinitionEntity> nodeDefs =
                         workflowMapper.findNodeDefinitionsByWorkflowDefinitionId(instance.getWorkflowDefinitionId());
-                runNode(instance, node, nodeDefs, workItem);
+                runNode(instance, node, nodeDefs, workItem, supplementalInput);
             } catch (Exception e) {
                 log.error("Workflow node execution failed: instance={}, node={}", instanceId, nodeInstanceId, e);
                 markNodeFailed(nodeInstanceId, e);
@@ -1420,6 +1451,13 @@ public class WorkflowCommandService {
     private String buildInputContext(WorkItemEntity workItem,
                                      WorkflowNodeInstanceEntity node,
                                      WorkflowNodeDefinitionEntity nodeDef) {
+        return buildInputContext(workItem, node, nodeDef, null);
+    }
+
+    private String buildInputContext(WorkItemEntity workItem,
+                                     WorkflowNodeInstanceEntity node,
+                                     WorkflowNodeDefinitionEntity nodeDef,
+                                     String supplementalInput) {
         StringBuilder sb = new StringBuilder();
         sb.append("# 工作流节点执行输入\n\n");
         sb.append("## 工作项\n");
@@ -1471,10 +1509,14 @@ public class WorkflowCommandService {
         }
 
         appendResolvedInteractionHistory(sb, workItem.getId(), node.getId());
+        appendSupplementalInput(sb, supplementalInput);
 
         sb.append("## 执行方式\n");
         sb.append("- 请按 Skill 自身说明处理上述输入。\n");
         sb.append("- 工作流只提供调用顺序、当前输入和上游输出，不替代 Skill 的判断。\n");
+        sb.append("- 如果存在“用户本轮输入”，它是当前节点的自然多轮指令；优先围绕这句话继续、修正或扩展当前输出。\n");
+        sb.append("- 用户说“继续”通常表示继续当前 Skill 的未完成内容；除非用户明确要求进入下一节点，不要把它解读为推进确认。\n");
+        sb.append("- 不要用“可在适当时机推进”这类流程占位话术替代对用户本轮输入的实际响应。\n");
         sb.append("- 如果还需要用户澄清、选择、确认或授权，优先使用 OpenCode 原生 Question 交互；AgentCenter Bridge 会将 Question 翻译为平台待确认。\n");
         sb.append("- 如果当前 Runtime 不能使用 Question，再在输出末尾按 AgentCenter 节点状态协议声明 NEEDS_USER_INPUT。\n");
         sb.append("- 如果信息已经足够，请输出当前 Skill 的最终 Markdown 结果。\n");
@@ -1501,6 +1543,16 @@ public class WorkflowCommandService {
         }
     }
 
+    private void appendSupplementalInput(StringBuilder sb, String supplementalInput) {
+        if (supplementalInput == null || supplementalInput.isBlank()) {
+            return;
+        }
+        sb.append("## 用户本轮输入\n\n");
+        sb.append("```text\n");
+        sb.append(supplementalInput.trim());
+        sb.append("\n```\n\n");
+    }
+
     private void appendField(StringBuilder sb, String label, String value) {
         sb.append("- ").append(label).append("：").append(nonBlank(value, "未提供")).append("\n");
     }
@@ -1514,7 +1566,39 @@ public class WorkflowCommandService {
     }
 
     private String normalizeGeneratedArtifactContent(String outputContent, WorkItemEntity workItem) {
-        return normalizeWorkItemReference(WorkflowNodeStateParser.stripStateBlock(outputContent), workItem);
+        String content = WorkflowNodeStateParser.stripStateBlock(outputContent);
+        List<ArtifactBlockParser.ArtifactBlock> artifactBlocks = ArtifactBlockParser.parse(content);
+        if (!artifactBlocks.isEmpty()) {
+            content = artifactBlocks.get(0).content();
+        } else {
+            content = extractFirstMarkdownFence(content);
+            content = stripConversationalPrelude(content);
+        }
+        return normalizeWorkItemReference(content, workItem);
+    }
+
+    private String extractFirstMarkdownFence(String content) {
+        if (content == null || content.isBlank()) {
+            return content;
+        }
+        Matcher matcher = MARKDOWN_FENCE.matcher(content.trim());
+        return matcher.find() ? matcher.group(1).trim() : content;
+    }
+
+    private String stripConversationalPrelude(String content) {
+        if (content == null || content.isBlank()) {
+            return content;
+        }
+        String trimmed = content.trim();
+        Matcher matcher = MARKDOWN_DOCUMENT_HEADING.matcher(trimmed);
+        if (!matcher.find() || matcher.start() == 0) {
+            return trimmed;
+        }
+        String prelude = trimmed.substring(0, matcher.start()).trim();
+        if (prelude.isBlank()) {
+            return trimmed.substring(matcher.start()).trim();
+        }
+        return trimmed.substring(matcher.start()).trim();
     }
 
     private String normalizeWorkItemReference(String value, WorkItemEntity workItem) {

@@ -286,7 +286,10 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
                 工作方式：
                 - 优先遵循 Skill 自身说明和当前会话上下文。
                 - AgentCenter 工作流只提供调用顺序、工作项信息、上游产物和用户交互回答，不替代 Skill 的判断。
+                - 用户说“继续”、补充、调整或追问时，把它当作当前 Skill 的自然多轮输入，直接继续产出、修正或提问。
+                - 不要用“可在适当时机推进”这类流程占位话术替代对用户本轮输入的实际响应。
                 - 如果需要用户继续澄清、选择、确认或授权，优先使用 OpenCode 原生 Question 交互；AgentCenter Bridge 会将 Question 翻译为平台待确认。
+                - 有限方案选择必须给出 2-3 个选项；只有开放式补充信息才让用户自由输入。
                 - 如果当前 Runtime 不能使用 Question，再在输出末尾按 AgentCenter 节点状态协议声明 NEEDS_USER_INPUT。
                 - 如果信息已经足够，请输出当前 Skill 的最终结果。
 
@@ -319,7 +322,10 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
                 工作方式：
                 - 优先遵循 Skill 自身说明和当前会话上下文。
                 - AgentCenter 工作流只提供调用顺序、工作项信息、上游产物和用户交互回答，不替代 Skill 的判断。
+                - 用户说“继续”、补充、调整或追问时，把它当作当前 Skill 的自然多轮输入，直接继续产出、修正或提问。
+                - 不要用“可在适当时机推进”这类流程占位话术替代对用户本轮输入的实际响应。
                 - 如果需要用户继续澄清、选择、确认或授权，优先使用 OpenCode 原生 Question 交互；AgentCenter Bridge 会将 Question 翻译为平台待确认。
+                - 有限方案选择必须给出 2-3 个选项；只有开放式补充信息才让用户自由输入。
                 - 如果当前 Runtime 不能使用 Question，再在输出末尾按 AgentCenter 节点状态协议声明 NEEDS_USER_INPUT。
                 - 如果信息已经足够，请输出当前 Skill 的最终结果。
 

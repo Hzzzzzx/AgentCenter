@@ -286,6 +286,10 @@ class WorkflowPromptComposerTest {
             assertTrue(instruction.contains("AgentCenter Bridge 会将 Question 翻译为平台待确认"), "should explain question bridge");
             assertTrue(instruction.contains("只有 READY_TO_ADVANCE 才会保存"), "should explain advance rule");
             assertTrue(instruction.contains("NEEDS_USER_INPUT 下用户回答后"), "should explain feedback loop");
+            assertTrue(instruction.contains("自然多轮输入"), "should preserve flexible user interaction");
+            assertTrue(instruction.contains("可在适当时机推进"), "should warn against placeholder advance wording");
+            assertTrue(instruction.contains("type: DECISION"), "should require structured decision choices");
+            assertTrue(instruction.contains("2-3 个互斥选择"), "should prefer options for finite choices");
         }
     }
 

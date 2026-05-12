@@ -224,7 +224,7 @@ public class AgentSessionService {
             }
         } else {
             if (nodeInstanceId != null) {
-                workflowCommandService.resumeNodeAfterInteraction(nodeInstanceId);
+                workflowCommandService.resumeNodeAfterInteraction(nodeInstanceId, request.content());
             } else {
                 messageExecutor.submit(() -> dispatchToRuntime(session.getId(), request.content()));
             }
