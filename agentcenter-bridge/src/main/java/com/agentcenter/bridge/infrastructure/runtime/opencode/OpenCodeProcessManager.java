@@ -4,7 +4,6 @@ import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -107,7 +106,7 @@ public class OpenCodeProcessManager {
         Path cwd = normalizeWorkingDirectory(requiredWorkingDirectory);
         try {
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(baseUrl + "/path"))
+                    .uri(OpenCodeEndpoint.uri(baseUrl, "/path"))
                     .header("x-opencode-directory", cwd.toString())
                     .timeout(Duration.ofSeconds(3))
                     .GET()
@@ -184,6 +183,7 @@ public class OpenCodeProcessManager {
 
     private void startProcess(Path requiredWorkingDirectory) {
         baseUrl = "http://" + hostname + ":" + port;
+        OpenCodeEndpoint.uri(baseUrl, "/path");
         Path cwd = normalizeWorkingDirectory(requiredWorkingDirectory);
 
         // First, check if opencode serve is already running on the target port.
@@ -267,7 +267,7 @@ public class OpenCodeProcessManager {
         Path cwd = normalizeWorkingDirectory(requiredWorkingDirectory);
         try {
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(baseUrl + "/path"))
+                    .uri(OpenCodeEndpoint.uri(baseUrl, "/path"))
                     .header("x-opencode-directory", cwd.toString())
                     .timeout(Duration.ofSeconds(2))
                     .GET()
@@ -286,7 +286,7 @@ public class OpenCodeProcessManager {
         while (System.currentTimeMillis() < deadline) {
             try {
                 HttpRequest request = HttpRequest.newBuilder()
-                        .uri(URI.create(baseUrl + "/path"))
+                        .uri(OpenCodeEndpoint.uri(baseUrl, "/path"))
                         .header("x-opencode-directory", cwd.toString())
                         .timeout(Duration.ofSeconds(2))
                         .GET()

@@ -423,9 +423,31 @@ public class ConfirmationService {
             logRuntimeIntervention(confirmation, actionType,
                     "send_failed:" + errorMessage(e), true);
             publishRuntimeInterventionStatus(confirmation,
-                    "Runtime 恢复指令发送失败：" + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()),
+                    runtimeRecoveryFailureMessage(e),
                     true);
         }
+    }
+
+    private String runtimeRecoveryFailureMessage(Throwable error) {
+        if (isInvalidOpenCodeEndpoint(error)) {
+            return "Runtime 地址配置异常，无法发送恢复指令。请检查 OpenCode serve hostname/port 或 Runtime payload。";
+        }
+        return "Runtime 恢复指令发送失败：" + errorMessage(error);
+    }
+
+    private boolean isInvalidOpenCodeEndpoint(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            String message = current.getMessage();
+            if (message != null
+                    && (message.contains("Invalid OpenCode serve endpoint")
+                    || message.contains("Illegal char")
+                    || message.contains("Illegal character"))) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     private String buildRuntimeRecoveryPrompt(ConfirmationRequestEntity confirmation,
@@ -945,7 +967,7 @@ public class ConfirmationService {
                                         String status,
                                         boolean error) {
         if (error) {
-            log.warn("conversation.runtime_intervention confirmation={} action={} status={} session={} workItem={} workflow={} node={} runtimeSession={}",
+            log.warn("conversation.runtime_intervention confirmation={} action={} status={} session={} workItem={} workflow={} node={} runtimeType={} runtimeSession={}",
                     confirmation.getId(),
                     actionType,
                     clipForLog(status),
@@ -953,10 +975,11 @@ public class ConfirmationService {
                     confirmation.getWorkItemId(),
                     confirmation.getWorkflowInstanceId(),
                     confirmation.getWorkflowNodeInstanceId(),
+                    confirmation.getRuntimeType(),
                     confirmation.getRuntimeSessionId());
             return;
         }
-        traceInfo("conversation.runtime_intervention confirmation={} action={} status={} session={} workItem={} workflow={} node={} runtimeSession={}",
+        traceInfo("conversation.runtime_intervention confirmation={} action={} status={} session={} workItem={} workflow={} node={} runtimeType={} runtimeSession={}",
                 confirmation.getId(),
                 actionType,
                 clipForLog(status),
@@ -964,6 +987,7 @@ public class ConfirmationService {
                 confirmation.getWorkItemId(),
                 confirmation.getWorkflowInstanceId(),
                 confirmation.getWorkflowNodeInstanceId(),
+                confirmation.getRuntimeType(),
                 confirmation.getRuntimeSessionId());
     }
 

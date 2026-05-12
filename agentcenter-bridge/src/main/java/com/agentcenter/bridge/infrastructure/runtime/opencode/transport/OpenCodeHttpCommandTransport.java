@@ -1,7 +1,6 @@
 package com.agentcenter.bridge.infrastructure.runtime.opencode.transport;
 
 import java.io.IOException;
-import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -21,6 +20,7 @@ import com.agentcenter.bridge.application.runtime.protocol.RuntimeProtocolVersio
 import com.agentcenter.bridge.application.runtime.transport.RuntimeCommandTransport;
 import com.agentcenter.bridge.application.runtime.transport.RuntimeTransportException;
 import com.agentcenter.bridge.domain.runtime.RuntimeType;
+import com.agentcenter.bridge.infrastructure.runtime.opencode.OpenCodeEndpoint;
 import com.agentcenter.bridge.infrastructure.runtime.opencode.OpenCodeTextEncoding;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -191,7 +191,7 @@ public class OpenCodeHttpCommandTransport implements RuntimeCommandTransport {
 
     public JsonNode fetchMessages(String baseUrl, String workingDirectory, String opencodeSessionId) {
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/session/" + opencodeSessionId + "/message"))
+                .uri(OpenCodeEndpoint.uri(baseUrl, "/session/" + opencodeSessionId + "/message"))
                 .header("x-opencode-directory", workingDirectory)
                 .timeout(Duration.ofSeconds(10))
                 .GET()
@@ -222,7 +222,7 @@ public class OpenCodeHttpCommandTransport implements RuntimeCommandTransport {
             throw new RuntimeTransportException("JSON serialization failed: " + e.getMessage(), e, false);
         }
         return HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + path))
+                .uri(OpenCodeEndpoint.uri(baseUrl, path))
                 .header("Content-Type", "application/json; charset=utf-8")
                 .header("x-opencode-directory", workingDirectory)
                 .timeout(timeout)
@@ -233,7 +233,7 @@ public class OpenCodeHttpCommandTransport implements RuntimeCommandTransport {
     private HttpRequest buildPostNoBody(String baseUrl, String path,
                                         String workingDirectory, Duration timeout) {
         return HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + path))
+                .uri(OpenCodeEndpoint.uri(baseUrl, path))
                 .header("x-opencode-directory", workingDirectory)
                 .timeout(timeout)
                 .POST(HttpRequest.BodyPublishers.noBody())

@@ -80,6 +80,8 @@ const PROMPT_DEBUG_EDGE_GAP = 16
 const PROMPT_DEBUG_RUNTIME_EVENT_LIMIT = 24
 const CONTINUE_CURRENT_MESSAGE = '请继续当前节点未完成的回答，不要重新开始节点，也不要重复发送或复述工作流节点提示词。'
 const AUTO_SCROLL_BOTTOM_THRESHOLD = 180
+const INTERACTION_FALLBACK_ATTEMPTS = 5
+const INTERACTION_FALLBACK_INTERVAL_MS = 900
 
 const props = defineProps<{
   workItemId?: string
@@ -118,6 +120,7 @@ const promptDebugDragging = ref(false)
 const promptDebugDragOffset = ref({ x: 0, y: 0 })
 const promptDebugSize = ref({ width: 0, height: 0 })
 const promptDebugCopiedId = ref<string | null>(null)
+const interactionFallbackTimers = new Set<number>()
 let ensureActiveSessionSeq = 0
 let pendingScrollFrame: number | null = null
 let pendingScrollBehavior: ScrollBehavior = 'smooth'
@@ -655,6 +658,7 @@ async function ensureActiveSession(): Promise<AgentSessionDto | null> {
 onUnmounted(() => {
   stopPromptDebugDrag()
   cancelPendingScroll()
+  clearInteractionFallbackTimers()
   runtimeStore.disconnectSSE()
 })
 
@@ -761,6 +765,7 @@ async function handleSend() {
 async function resolveComposerRecoveryInteraction(confirmationId: string, text: string) {
   runtimeStore.markBusy()
   try {
+    notifyInteractionSubmitted()
     await confirmationStore.resolveConfirmation(confirmationId, {
       actionType: 'SUPPLEMENT',
       comment: text,
@@ -768,6 +773,7 @@ async function resolveComposerRecoveryInteraction(confirmationId: string, text: 
     }, { remove: true })
     inputText.value = ''
     await handleInteractionChanged(confirmationId)
+    scheduleInteractionFallbackSync(confirmationId)
   } catch (error) {
     runtimeStore.markIdle()
     notificationStore.push({
@@ -842,14 +848,18 @@ async function handleInteractionChanged(_confirmationId?: string) {
 
 async function handleResolveConfirmation(confirmationId: string, value: string, meta?: { requestType?: string; interactionType?: string }) {
   const actionType = actionTypeForInteraction(meta?.requestType, value, meta?.interactionType)
+  runtimeStore.markBusy()
   try {
+    notifyInteractionSubmitted()
     await confirmationStore.resolveConfirmation(confirmationId, {
       actionType,
       payload: { choice: value },
       comment: value,
     })
     await handleInteractionChanged()
+    scheduleInteractionFallbackSync(confirmationId)
   } catch (error) {
+    runtimeStore.markIdle()
     notificationStore.push({
       anchor: 'right-panel',
       tone: 'error',
@@ -858,6 +868,39 @@ async function handleResolveConfirmation(confirmationId: string, value: string, 
       durationMs: 5200,
     })
   }
+}
+
+function notifyInteractionSubmitted() {
+  notificationStore.push({
+    anchor: 'right-panel',
+    tone: 'info',
+    title: '交互已提交',
+    message: 'Bridge 正在恢复执行；如果事件流短暂断开，页面会继续补拉状态。',
+    durationMs: 2400,
+  })
+}
+
+function scheduleInteractionFallbackSync(confirmationId: string, attempt = 1) {
+  if (attempt > INTERACTION_FALLBACK_ATTEMPTS) return
+  const timer = window.setTimeout(async () => {
+    interactionFallbackTimers.delete(timer)
+    try {
+      await handleInteractionChanged(confirmationId)
+      if (sessionStore.activeSession?.id) {
+        await sessionStore.selectSession(sessionStore.activeSession.id)
+      }
+    } catch (error) {
+      console.error('Interaction fallback sync failed:', error)
+    } finally {
+      scheduleInteractionFallbackSync(confirmationId, attempt + 1)
+    }
+  }, INTERACTION_FALLBACK_INTERVAL_MS)
+  interactionFallbackTimers.add(timer)
+}
+
+function clearInteractionFallbackTimers() {
+  interactionFallbackTimers.forEach((timer) => window.clearTimeout(timer))
+  interactionFallbackTimers.clear()
 }
 
 function actionTypeForInteraction(

@@ -351,6 +351,20 @@ class OpenCodeHttpCommandTransportTest {
     }
 
     @Test
+    void invalidBaseUrlThrowsFriendlyNonRecoverableErrorBeforeSending() throws Exception {
+        RuntimeCommandEnvelope command = RuntimeCommandEnvelope.of(
+                RuntimeCommandTypes.SESSION_ENSURE, RuntimeType.OPENCODE, null,
+                createSessionPayload("?C:\\Program Files\\opencode", "/tmp/work"));
+
+        RuntimeTransportException ex = assertThrows(RuntimeTransportException.class,
+                () -> transport.send(command));
+
+        assertFalse(ex.isRecoverable());
+        assertTrue(ex.getMessage().contains("Invalid OpenCode serve endpoint"));
+        verify(httpClient, never()).send(any(HttpRequest.class), any());
+    }
+
+    @Test
     void htmlFallbackThrowsNonRecoverable() throws Exception {
         when(httpResponse.statusCode()).thenReturn(200);
         when(httpResponse.body()).thenReturn("<!doctype html><html></html>");

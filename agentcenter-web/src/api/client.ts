@@ -58,7 +58,12 @@ export async function uploadFilePut<T>(path: string, file: File, fieldName: stri
   return response.json()
 }
 
-export function sseStream(path: string, onEvent: (data: unknown) => void, onError?: (event: Event) => void): EventSource {
+export function sseStream(
+  path: string,
+  onEvent: (data: unknown) => void,
+  onError?: (event: Event) => void,
+  onOpen?: (event: Event) => void,
+): EventSource {
   const source = new EventSource(`${API_BASE}${path}`)
   source.onmessage = (event) => {
     try {
@@ -69,6 +74,9 @@ export function sseStream(path: string, onEvent: (data: unknown) => void, onErro
   }
   if (onError) {
     source.onerror = onError
+  }
+  if (onOpen) {
+    source.onopen = onOpen
   }
   return source
 }

@@ -27,6 +27,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import com.agentcenter.bridge.api.dto.ResolveConfirmationRequest;
 import com.agentcenter.bridge.application.runtime.RuntimeGateway;
+import com.agentcenter.bridge.application.runtime.transport.RuntimeTransportException;
 import com.agentcenter.bridge.application.runtime.translation.PermissionConfirmationHandler;
 import com.agentcenter.bridge.application.runtime.translation.QuestionConfirmationHandler;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationActionType;
@@ -237,6 +238,34 @@ class ConfirmationServiceTest {
         verify(agentSessionMapper).update(session);
         verify(runtimeGateway).sendMessage(eq(RuntimeType.OPENCODE), eq("ses-new"),
                 org.mockito.ArgumentMatchers.contains("原始用户请求"));
+    }
+
+    @Test
+    void resolveRuntimeExceptionPublishesFriendlyMessageForInvalidEndpoint() {
+        ConfirmationRequestEntity entity = runtimeExceptionConfirmation();
+        AgentSessionEntity session = agentSession("agent-session-1", "ses-old");
+        when(confirmationMapper.findById(entity.getId())).thenReturn(entity);
+        when(agentMessageMapper.findBySessionId(entity.getAgentSessionId())).thenReturn(List.of());
+        when(agentSessionMapper.findById("agent-session-1")).thenReturn(session);
+        when(runtimeGateway.ensureSession(RuntimeType.OPENCODE, null, "agent-session-1", "ses-old"))
+                .thenThrow(new RuntimeTransportException(
+                        "Invalid OpenCode serve endpoint: baseUrl='?C:\\Program Files\\opencode'",
+                        null,
+                        false));
+
+        ResolveConfirmationRequest request = new ResolveConfirmationRequest(
+                ConfirmationActionType.RETRY,
+                "重试",
+                Map.of());
+
+        service.resolve(entity.getId(), request);
+        TransactionSynchronizationManager.getSynchronizations()
+                .forEach(TransactionSynchronization::afterCommit);
+
+        verify(runtimeGateway, never()).sendMessage(any(), any(), any());
+        verify(runtimeEventService).publishEvent(argThat(event ->
+                RuntimeEventType.ERROR.equals(event.eventType())
+                        && event.payloadJson().contains("Runtime 地址配置异常")));
     }
 
     private ConfirmationRequestEntity questionConfirmation() {

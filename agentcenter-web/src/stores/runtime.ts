@@ -32,16 +32,17 @@ export const useRuntimeStore = defineStore('runtime', () => {
   let lastUserSeqNo = 0
   let connectedAtMs = 0
   let lastSseErrorMs = 0
+  let lastEventSeqNo: number | null = null
 
   function connectSSE(sessionId: string) {
     if (activeSessionId.value === sessionId && activeSse.value) {
-      connected.value = true
       return
     }
     disconnectSSE()
     activeSessionId.value = sessionId
-    connected.value = true
+    connected.value = false
     connectedAtMs = Date.now()
+    lastEventSeqNo = null
     events.value = []
     seenEventIds.clear()
     seenEventIdOrder.length = 0
@@ -58,6 +59,7 @@ export const useRuntimeStore = defineStore('runtime', () => {
       (event: RuntimeEventDto) => {
         if (activeSessionId.value !== subscribedSessionId) return
         if (event.sessionId !== subscribedSessionId) return
+        rememberEventSeqNo(event)
         if (hasSeenEvent(event)) return
         if (shouldKeepTimelineEvent(event)) {
           pushTimelineEvent(event)
@@ -65,7 +67,8 @@ export const useRuntimeStore = defineStore('runtime', () => {
         applyRuntimeEvent(event)
       },
       () => handleSseError(subscribedSessionId),
-      { limit: EVENT_BUFFER_LIMIT },
+      { afterSeq: lastEventSeqNo, limit: EVENT_BUFFER_LIMIT },
+      () => handleSseOpen(subscribedSessionId),
     )
   }
 
@@ -364,6 +367,17 @@ export const useRuntimeStore = defineStore('runtime', () => {
     }
     pushTimelineEvent(event)
     applyRuntimeEvent(event)
+  }
+
+  function handleSseOpen(sessionId: string) {
+    if (activeSessionId.value !== sessionId) return
+    connected.value = true
+    lastSseErrorMs = 0
+  }
+
+  function rememberEventSeqNo(event: RuntimeEventDto) {
+    if (typeof event.seqNo !== 'number') return
+    lastEventSeqNo = Math.max(lastEventSeqNo ?? 0, event.seqNo)
   }
 
   function splitDeltas(text: string): string[] {

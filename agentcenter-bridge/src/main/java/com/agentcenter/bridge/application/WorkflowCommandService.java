@@ -241,10 +241,7 @@ public class WorkflowCommandService {
 
         if (nextPending == null) {
             String now = LocalDateTime.now().format(SQLITE_DATETIME);
-            instance.setStatus(WorkflowStatus.COMPLETED.name());
-            instance.setCompletedAt(now);
-            instance.setUpdatedAt(now);
-            workflowMapper.updateInstance(instance);
+            completeWorkflow(instance, currentNode, now);
             return buildResponse(instance);
         }
 
@@ -1155,11 +1152,7 @@ public class WorkflowCommandService {
                 .findFirst().orElse(null);
         if (nextPending == null) {
             String now = LocalDateTime.now().format(SQLITE_DATETIME);
-            instance.setStatus(WorkflowStatus.COMPLETED.name());
-            instance.setCompletedAt(now);
-            instance.setUpdatedAt(now);
-            workflowMapper.updateInstance(instance);
-            touchWorkItem(instance.getWorkItemId(), now);
+            completeWorkflow(instance, lastCompletedNode(nodes), now);
             return null;
         }
 
@@ -1262,11 +1255,7 @@ public class WorkflowCommandService {
 
         if (nextPending == null) {
             String now = LocalDateTime.now().format(SQLITE_DATETIME);
-            instance.setStatus(WorkflowStatus.COMPLETED.name());
-            instance.setCompletedAt(now);
-            instance.setUpdatedAt(now);
-            workflowMapper.updateInstance(instance);
-            touchWorkItem(instance.getWorkItemId(), now);
+            completeWorkflow(instance, lastCompletedNode(nodes), now);
             return;
         }
 
@@ -1282,6 +1271,56 @@ public class WorkflowCommandService {
                 workflowMapper.findNodeDefinitionsByWorkflowDefinitionId(instance.getWorkflowDefinitionId());
 
         runNode(instance, nextPending, nodeDefs, workItem);
+    }
+
+    private void completeWorkflow(WorkflowInstanceEntity instance,
+                                  WorkflowNodeInstanceEntity terminalNode,
+                                  String now) {
+        boolean alreadyCompleted = WorkflowStatus.COMPLETED.name().equals(instance.getStatus());
+        instance.setStatus(WorkflowStatus.COMPLETED.name());
+        instance.setCompletedAt(now);
+        instance.setUpdatedAt(now);
+        workflowMapper.updateInstance(instance);
+        touchWorkItem(instance.getWorkItemId(), now);
+        if (!alreadyCompleted) {
+            publishWorkflowCompletedStatus(instance, terminalNode);
+        }
+    }
+
+    private WorkflowNodeInstanceEntity lastCompletedNode(List<WorkflowNodeInstanceEntity> nodes) {
+        return nodes.stream()
+                .filter(n -> WorkflowNodeStatus.COMPLETED.name().equals(n.getStatus()))
+                .reduce((first, second) -> second)
+                .orElse(nodes.isEmpty() ? null : nodes.get(nodes.size() - 1));
+    }
+
+    private void publishWorkflowCompletedStatus(WorkflowInstanceEntity instance,
+                                                WorkflowNodeInstanceEntity terminalNode) {
+        String sessionId = terminalNode != null ? terminalNode.getAgentSessionId() : null;
+        if (sessionId == null || sessionId.isBlank()) {
+            AgentSessionDto workflowSession = findWorkflowSession(instance);
+            sessionId = workflowSession != null ? workflowSession.id() : null;
+        }
+        String nodeId = terminalNode != null ? terminalNode.getId() : instance.getCurrentNodeInstanceId();
+        runtimeEventService.publishEvent(new RuntimeEventDto(
+                null, sessionId, instance.getWorkItemId(),
+                instance.getId(), nodeId,
+                RuntimeEventType.STATUS, RuntimeEventSource.WORKFLOW,
+                buildWorkflowCompletedPayload(instance.getId(), nodeId), null
+        ));
+    }
+
+    private String buildWorkflowCompletedPayload(String workflowInstanceId, String workflowNodeInstanceId) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("{\"workflowStatus\":\"").append(WorkflowStatus.COMPLETED.name()).append("\"");
+        if (workflowInstanceId != null && !workflowInstanceId.isBlank()) {
+            sb.append(",\"workflowInstanceId\":\"").append(escapeJson(workflowInstanceId)).append("\"");
+        }
+        if (workflowNodeInstanceId != null && !workflowNodeInstanceId.isBlank()) {
+            sb.append(",\"workflowNodeInstanceId\":\"").append(escapeJson(workflowNodeInstanceId)).append("\"");
+        }
+        sb.append("}");
+        return sb.toString();
     }
 
     private WorkflowInstanceEntity findActiveInstance(String workItemId) {

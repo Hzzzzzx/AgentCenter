@@ -1,6 +1,5 @@
 package com.agentcenter.bridge.application;
 
-import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -13,6 +12,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.agentcenter.bridge.api.dto.RuntimeEnvironmentStatusDto;
+import com.agentcenter.bridge.infrastructure.runtime.opencode.OpenCodeEndpoint;
 import com.agentcenter.bridge.infrastructure.runtime.opencode.RuntimeWorkspace;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -92,7 +92,7 @@ public class RuntimeEnvironmentStatusService {
 
         try {
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(serverUrl + "/path"))
+                    .uri(OpenCodeEndpoint.uri(serverUrl, "/path"))
                     .header("x-opencode-directory", workingDirectoryValue)
                     .timeout(Duration.ofSeconds(3))
                     .GET()

@@ -36,23 +36,15 @@ public class RuntimeEventStreamController {
 
         for (RuntimeEventDto event : eventService.getEventsBySession(id, cursor, limit)) {
             try {
-                emitter.send(sseEvent(event));
+                emitter.send(emitterRegistry.sseEvent(event));
             } catch (Exception e) {
+                emitterRegistry.removeEmitter(id, emitter);
                 emitter.completeWithError(e);
                 break;
             }
         }
 
         return emitter;
-    }
-
-    private SseEmitter.SseEventBuilder sseEvent(RuntimeEventDto event) {
-        SseEmitter.SseEventBuilder builder = SseEmitter.event()
-                .data(event, MediaType.APPLICATION_JSON);
-        if (event.seqNo() != null) {
-            builder.id(String.valueOf(event.seqNo()));
-        }
-        return builder;
     }
 
     private Long parseLastEventId(String lastEventId) {

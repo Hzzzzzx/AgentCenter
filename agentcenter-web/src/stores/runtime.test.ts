@@ -8,6 +8,7 @@ import type { AgentMessageDto, RuntimeEventDto } from '../api/types'
 
 let capturedOnEvent: ((event: RuntimeEventDto) => void) | null = null
 let capturedOnError: (() => void) | null = null
+let capturedOnOpen: (() => void) | null = null
 let capturedOnEvents: Array<(event: RuntimeEventDto) => void> = []
 
 vi.mock('../api/events', () => ({
@@ -16,9 +17,12 @@ vi.mock('../api/events', () => ({
       _sessionId: string,
       onEvent: (event: RuntimeEventDto) => void,
       onError?: () => void,
+      _options?: { afterSeq?: number | null; limit?: number | null },
+      onOpen?: () => void,
     ) => {
       capturedOnEvent = onEvent
       capturedOnError = onError ?? null
+      capturedOnOpen = onOpen ?? null
       capturedOnEvents.push(onEvent)
       return { close: vi.fn() }
     }),
@@ -90,6 +94,7 @@ describe('useRuntimeStore — SSE event handlers', () => {
     vi.clearAllMocks()
     capturedOnEvent = null
     capturedOnError = null
+    capturedOnOpen = null
     capturedOnEvents = []
   })
 
@@ -431,6 +436,18 @@ describe('useRuntimeStore — SSE event handlers', () => {
     expect(runtimeStore.events).toHaveLength(1)
     expect(runtimeStore.events[0].eventType).toBe('ERROR')
     expect(runtimeStore.events[0].payloadJson).toContain('browser.sse.error')
+  })
+
+  it('marks the SSE connection online when the browser stream opens', () => {
+    const runtimeStore = useRuntimeStore()
+
+    runtimeStore.connectSSE('sess-1')
+    expect(runtimeStore.connected).toBe(false)
+    expect(capturedOnOpen).toBeTruthy()
+
+    capturedOnOpen!()
+
+    expect(runtimeStore.connected).toBe(true)
   })
 
   it('syncs persisted assistant message when assistant completed event arrives', async () => {

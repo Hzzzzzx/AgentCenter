@@ -2,7 +2,6 @@ package com.agentcenter.bridge.infrastructure.runtime.opencode.transport;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
-import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -20,6 +19,7 @@ import com.agentcenter.bridge.application.runtime.transport.RuntimeEventStreamTr
 import com.agentcenter.bridge.application.runtime.transport.RuntimeTransportException;
 import com.agentcenter.bridge.application.runtime.transport.SubscriptionHandle;
 import com.agentcenter.bridge.domain.runtime.RuntimeType;
+import com.agentcenter.bridge.infrastructure.runtime.opencode.OpenCodeEndpoint;
 import com.agentcenter.bridge.infrastructure.runtime.opencode.OpenCodeTextEncoding;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -98,7 +98,7 @@ public class OpenCodeSseEventStreamTransport implements RuntimeEventStreamTransp
 
     private void connectAndRead(RuntimeEventSink sink, AtomicBoolean running) throws Exception {
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/event"))
+                .uri(OpenCodeEndpoint.uri(baseUrl, "/event"))
                 .header("x-opencode-directory", workingDirectory)
                 .timeout(Duration.ofMinutes(30))
                 .GET()

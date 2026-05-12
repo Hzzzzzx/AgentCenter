@@ -7,8 +7,9 @@ export const eventApi = {
     onEvent: (event: RuntimeEventDto) => void,
     onError?: (event: Event) => void,
     options?: { afterSeq?: number | null; limit?: number | null },
+    onOpen?: (event: Event) => void,
   ) =>
-    sseStream(sessionEventsPath(sessionId, options), onEvent as (data: unknown) => void, onError),
+    sseStream(sessionEventsPath(sessionId, options), onEvent as (data: unknown) => void, onError, onOpen),
 }
 
 function sessionEventsPath(sessionId: string, options?: { afterSeq?: number | null; limit?: number | null }): string {
