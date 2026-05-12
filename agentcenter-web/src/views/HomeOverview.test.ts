@@ -5,6 +5,7 @@ import HomeOverview from './HomeOverview.vue'
 import { useWorkItemStore } from '../stores/workItems'
 import { useWorkflowStore } from '../stores/workflows'
 import { useWorkItemWorkflowProjectionStore } from '../stores/workItemWorkflowProjection'
+import { useRuntimeSettingsStore } from '../stores/runtimeSettings'
 import type { WorkItemDto } from '../api/types'
 
 vi.mock('../api/workItems', () => ({
@@ -12,6 +13,7 @@ vi.mock('../api/workItems', () => ({
     list: vi.fn().mockResolvedValue([]),
     overview: vi.fn().mockResolvedValue({ source: 'DATABASE', refreshedAt: '2026-01-01T00:00:00Z', stats: [] }),
     startWorkflow: vi.fn().mockResolvedValue({}),
+    startWorkflows: vi.fn().mockResolvedValue({ results: [] }),
   },
 }))
 
@@ -199,6 +201,37 @@ describe('HomeOverview.vue', () => {
     const cards = wrapper.findAll('.work-item-card')
     expect(cards.length).toBe(1)
     expect(cards[0].text()).toContain('US-001')
+  })
+
+  it('requires a type filter before batch starting initial work items', async () => {
+    const wrapper = mountHomeOverview()
+    await flushPromises()
+    const store = useWorkItemStore()
+    const runtimeSettings = useRuntimeSettingsStore()
+    runtimeSettings.batchStartWorkflowLimit = 2
+    store.items = makePaginationItems(4)
+    store.loading = false
+    await wrapper.vm.$nextTick()
+
+    const batchButton = wrapper.find('.home-overview__batch-launch')
+    expect(batchButton.attributes('disabled')).toBeDefined()
+    expect(batchButton.text()).toBe('选择类型后批量开始')
+
+    await wrapper.findAll('.home-overview__stat')[0].trigger('click')
+    await wrapper.vm.$nextTick()
+
+    const activeBatchButton = wrapper.find('.home-overview__batch-launch')
+    expect(activeBatchButton.attributes('disabled')).toBeUndefined()
+    expect(activeBatchButton.text()).toBe('开始处理全部 2/4')
+
+    await activeBatchButton.trigger('click')
+    expect(wrapper.emitted('start-workflows')).toBeTruthy()
+    expect(wrapper.emitted('start-workflows')![0]).toEqual([
+      {
+        workItemType: 'FE',
+        workItemIds: ['page-4', 'page-3'],
+      },
+    ])
   })
 
   it('shows loading state', async () => {

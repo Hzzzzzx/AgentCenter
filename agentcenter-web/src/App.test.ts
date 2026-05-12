@@ -50,6 +50,7 @@ const mocks = vi.hoisted(() => {
   }
   const runtimeSettingsStore = {
     activeProjectDataProviderId: 'fixture-alpha',
+    batchStartWorkflowLimit: 5,
     initFromStorage: vi.fn(),
     loadProjectDataProviders: vi.fn().mockResolvedValue(undefined),
   }

@@ -15,6 +15,10 @@ const runtimeStatusLabel = computed(() => {
   return runtimeStatus.value.workspaceAligned ? '正常' : '需检查'
 })
 
+function updateBatchStartWorkflowLimit(event: Event) {
+  runtimeSettings.setBatchStartWorkflowLimit(Number((event.target as HTMLInputElement).value))
+}
+
 async function loadRuntimeStatus() {
   isLoadingRuntimeStatus.value = true
   runtimeStatusError.value = ''
@@ -86,6 +90,25 @@ onMounted(() => {
         >
           <span></span>
         </button>
+      </section>
+
+      <section class="runtime-settings__section">
+        <div class="runtime-settings__section-main">
+          <h2>批量启动上限</h2>
+          <p>
+            首页选中 FE、US 等任务类型后，单次最多启动多少个仍处于初始阶段的工作项。
+          </p>
+        </div>
+        <input
+          class="runtime-settings__number"
+          type="number"
+          min="1"
+          max="20"
+          step="1"
+          aria-label="批量启动上限"
+          :value="runtimeSettings.batchStartWorkflowLimit"
+          @input="updateBatchStartWorkflowLimit"
+        >
       </section>
 
       <section class="runtime-settings__section">
@@ -317,6 +340,25 @@ onMounted(() => {
 .runtime-settings__select:disabled {
   cursor: not-allowed;
   opacity: 0.62;
+}
+
+.runtime-settings__number {
+  flex: 0 0 96px;
+  width: 96px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 800;
+  outline: none;
+}
+
+.runtime-settings__number:focus {
+  border-color: var(--brand-border);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-blue) 14%, transparent);
 }
 
 .runtime-settings__summary {

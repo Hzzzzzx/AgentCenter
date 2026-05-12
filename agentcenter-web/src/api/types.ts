@@ -413,6 +413,34 @@ export interface WorkflowVersionDto {
   artifactCount: number
 }
 
+export interface BatchStartWorkflowsRequest {
+  workItemType: WorkItemType
+  workItemIds: string[]
+  limit?: number
+  mode?: StartWorkflowRequest['mode']
+}
+
+export type BatchStartWorkflowItemStatus = 'STARTED' | 'SKIPPED' | 'FAILED'
+
+export interface BatchStartWorkflowItemResult {
+  workItemId: string
+  code: string | null
+  status: BatchStartWorkflowItemStatus
+  reason: string | null
+  response: StartWorkflowResponse | null
+}
+
+export interface BatchStartWorkflowsResponse {
+  workItemType: WorkItemType
+  requestedCount: number
+  requestedLimit: number
+  effectiveLimit: number
+  startedCount: number
+  skippedCount: number
+  failedCount: number
+  results: BatchStartWorkflowItemResult[]
+}
+
 export interface SendMessageRequest {
   content: string
   contentFormat?: string

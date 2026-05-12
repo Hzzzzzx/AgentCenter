@@ -20,8 +20,13 @@ import { useWorkItemStore } from './stores/workItems'
 import { useRuntimeSettingsStore } from './stores/runtimeSettings'
 import { useWorkItemWorkflowProjectionStore } from './stores/workItemWorkflowProjection'
 import { DEFAULT_PROJECT_ID } from './constants/projects'
-import type { AgentSessionDto, ArtifactDto, ProjectDataSnapshotDto, StartWorkflowResponse } from './api/types'
+import type { AgentSessionDto, ArtifactDto, ProjectDataSnapshotDto, StartWorkflowResponse, WorkItemType } from './api/types'
 import type { ProjectContextOptions, ProjectContextSelection } from './types/projectContext'
+
+type BatchStartWorkflowsPayload = {
+  workItemType: WorkItemType
+  workItemIds: string[]
+}
 
 const activeView = ref('home')
 const selectedWorkItemId = ref<string | undefined>(undefined)
@@ -192,6 +197,42 @@ async function handleStartWorkflow(workItemId: string, response?: StartWorkflowR
     queueWorkflowRefresh(workItemId)
   } catch (e) {
     console.error('Failed to start workflow:', e)
+  }
+}
+
+async function handleStartWorkflows(payload: BatchStartWorkflowsPayload) {
+  selectedArtifact.value = null
+  try {
+    const result = await workflowProjectionStore.startWorkflowsBatch(payload.workItemType, payload.workItemIds)
+    const startedWorkItemIds: string[] = []
+    for (const item of result.results) {
+      if (item.response?.workflowInstance) {
+        workflowStore.upsertInstance(item.response.workflowInstance)
+        startedWorkItemIds.push(item.workItemId)
+      }
+      if (item.response?.session) {
+        sessionStore.upsertSession(item.response.session)
+      }
+    }
+    await workItemStore.loadOverview()
+    await confirmationStore.loadPending()
+    startedWorkItemIds.forEach((workItemId) => queueWorkflowRefresh(workItemId))
+    notificationStore.push({
+      anchor: 'right-panel',
+      tone: result.failedCount > 0 ? 'warning' : 'success',
+      title: `${payload.workItemType} 批量启动完成`,
+      message: `已启动 ${result.startedCount} 个，跳过 ${result.skippedCount} 个，失败 ${result.failedCount} 个。`,
+      durationMs: 5200,
+    })
+  } catch (e) {
+    console.error('Failed to batch start workflows:', e)
+    notificationStore.push({
+      anchor: 'right-panel',
+      tone: 'error',
+      title: '批量启动失败',
+      message: e instanceof Error ? e.message : '请稍后重试',
+      durationMs: 5200,
+    })
   }
 }
 
@@ -401,6 +442,7 @@ watch(
         v-if="activeView === 'home'"
         @select-work-item="handleSelectWorkItem"
         @start-workflow="handleStartWorkflow"
+        @start-workflows="handleStartWorkflows"
         @enter-conversation="handleEnterWorkItemConversation"
       />
       <BoardView

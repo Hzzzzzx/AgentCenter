@@ -5,8 +5,10 @@ import { useRuntimeSettingsStore } from './runtimeSettings'
 import { useWorkItemStore } from './workItems'
 import { useWorkflowStore } from './workflows'
 import type {
+  BatchStartWorkflowsResponse,
   StartWorkflowResponse,
   WorkItemDto,
+  WorkItemType,
   WorkflowInstanceDto,
   WorkflowNodeStatus,
   WorkflowStatus,
@@ -106,6 +108,59 @@ export const useWorkItemWorkflowProjectionStore = defineStore('workItemWorkflowP
     } finally {
       const next = new Set(startingIds.value)
       next.delete(workItemId)
+      startingIds.value = next
+    }
+  }
+
+  async function startWorkflowsBatch(
+    workItemType: WorkItemType,
+    workItemIds: string[],
+  ): Promise<BatchStartWorkflowsResponse> {
+    const uniqueIds = [...new Set(workItemIds.filter((id) => id.trim().length > 0))]
+    const pendingIds = uniqueIds.filter((id) => !isStarting(id))
+    if (pendingIds.length === 0) {
+      throw new Error('没有可启动的工作项')
+    }
+
+    startingIds.value = new Set([...startingIds.value, ...pendingIds])
+    startErrors.value = Object.fromEntries(
+      Object.entries(startErrors.value).filter(([id]) => !pendingIds.includes(id))
+    )
+
+    try {
+      const result = await workItemApi.startWorkflows({
+        workItemType,
+        workItemIds: pendingIds,
+        limit: runtimeSettingsStore.batchStartWorkflowLimit,
+        mode: runtimeSettingsStore.workflowRunMode,
+      })
+      for (const item of result.results) {
+        if (item.response?.workflowInstance) {
+          workflowStore.upsertInstance(item.response.workflowInstance)
+        }
+        if (item.status === 'FAILED') {
+          startErrors.value = {
+            ...startErrors.value,
+            [item.workItemId]: item.reason || '批量启动失败',
+          }
+        }
+      }
+      await Promise.all(
+        result.results
+          .filter((item) => item.status === 'STARTED' || item.reason === '工作项已开始或不在初始阶段')
+          .map((item) => syncWorkItem(item.workItemId))
+      )
+      return result
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '批量启动工作流失败'
+      startErrors.value = pendingIds.reduce<Record<string, string>>((next, id) => {
+        next[id] = message
+        return next
+      }, { ...startErrors.value })
+      throw error
+    } finally {
+      const next = new Set(startingIds.value)
+      pendingIds.forEach((id) => next.delete(id))
       startingIds.value = next
     }
   }
@@ -387,6 +442,7 @@ export const useWorkItemWorkflowProjectionStore = defineStore('workItemWorkflowP
     isStarting,
     errorFor,
     startWorkflow,
+    startWorkflowsBatch,
     syncWorkItem,
     syncWorkItemsFromList,
     projectionFor,

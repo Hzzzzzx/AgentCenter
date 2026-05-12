@@ -51,4 +51,19 @@ describe('useRuntimeSettingsStore', () => {
     expect(store.activeProjectDataProviderId).toBe('fixture-beta')
     expect(store.projectDataProviders[1].active).toBe(true)
   })
+
+  it('normalizes the batch start workflow limit', () => {
+    const store = useRuntimeSettingsStore()
+
+    expect(store.batchStartWorkflowLimit).toBe(5)
+
+    store.setBatchStartWorkflowLimit(0)
+    expect(store.batchStartWorkflowLimit).toBe(1)
+
+    store.setBatchStartWorkflowLimit(9.8)
+    expect(store.batchStartWorkflowLimit).toBe(9)
+
+    store.setBatchStartWorkflowLimit(100)
+    expect(store.batchStartWorkflowLimit).toBe(20)
+  })
 })

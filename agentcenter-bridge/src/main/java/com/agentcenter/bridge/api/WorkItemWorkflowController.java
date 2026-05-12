@@ -1,5 +1,7 @@
 package com.agentcenter.bridge.api;
 
+import com.agentcenter.bridge.api.dto.BatchStartWorkflowsRequest;
+import com.agentcenter.bridge.api.dto.BatchStartWorkflowsResponse;
 import com.agentcenter.bridge.api.dto.RestartWorkflowRequest;
 import com.agentcenter.bridge.api.dto.StartWorkflowRequest;
 import com.agentcenter.bridge.api.dto.StartWorkflowResponse;
@@ -35,5 +37,10 @@ public class WorkItemWorkflowController {
     @GetMapping("/{id}/workflow-versions")
     public List<WorkflowVersionDto> listWorkflowVersions(@PathVariable String id) {
         return workflowCommandService.listWorkflowVersions(id);
+    }
+
+    @PostMapping("/start-workflows")
+    public BatchStartWorkflowsResponse startWorkflows(@RequestBody @Valid BatchStartWorkflowsRequest request) {
+        return workflowCommandService.startWorkflows(request);
     }
 }

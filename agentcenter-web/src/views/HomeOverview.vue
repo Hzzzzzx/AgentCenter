@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useWorkItemStore } from '../stores/workItems'
 import { useWorkflowStore } from '../stores/workflows'
 import { useWorkItemWorkflowProjectionStore } from '../stores/workItemWorkflowProjection'
+import { useRuntimeSettingsStore } from '../stores/runtimeSettings'
 import type { ProjectedWorkflowNode } from '../stores/workItemWorkflowProjection'
 import type {
   Priority,
@@ -17,6 +18,7 @@ import type {
 const store = useWorkItemStore()
 const workflowStore = useWorkflowStore()
 const workflowProjectionStore = useWorkItemWorkflowProjectionStore()
+const runtimeSettingsStore = useRuntimeSettingsStore()
 const selectedType = ref<WorkItemType | 'ALL'>('ALL')
 const selectedStatus = ref<WorkItemStatus | 'ALL'>('ALL')
 const currentPage = ref(1)
@@ -24,6 +26,7 @@ const currentPage = ref(1)
 const emit = defineEmits<{
   'select-work-item': [id: string]
   'start-workflow': [workItemId: string]
+  'start-workflows': [payload: { workItemType: WorkItemType; workItemIds: string[] }]
   'enter-conversation': [workItemId: string]
 }>()
 
@@ -136,6 +139,31 @@ const paginatedItems = computed(() => filteredItems.value.slice(pageStartIndex.v
 const paginationRangeLabel = computed(() => {
   if (filteredItems.value.length === 0) return '0 / 0'
   return `${pageStartIndex.value + 1}-${pageEndIndex.value} / ${filteredItems.value.length}`
+})
+const batchStartCandidateItems = computed(() => {
+  if (selectedType.value === 'ALL') return []
+  return filteredItems.value.filter(isBatchStartCandidate)
+})
+const batchStartItems = computed(() =>
+  batchStartCandidateItems.value.slice(0, runtimeSettingsStore.batchStartWorkflowLimit)
+)
+const batchStartDisabled = computed(() =>
+  selectedType.value === 'ALL'
+  || batchStartItems.value.length === 0
+  || batchStartItems.value.some((item) => workflowProjectionStore.isStarting(item.id))
+)
+const batchStartLabel = computed(() => {
+  if (selectedType.value === 'ALL') return '选择类型后批量开始'
+  if (batchStartCandidateItems.value.length === 0) return '无可开始任务'
+  const visibleCount = batchStartItems.value.length
+  const totalCount = batchStartCandidateItems.value.length
+  return totalCount > visibleCount
+    ? `开始处理全部 ${visibleCount}/${totalCount}`
+    : `开始处理全部 ${visibleCount}`
+})
+const batchStartTitle = computed(() => {
+  if (selectedType.value === 'ALL') return '请先选择 FE、US、TASK、WORK、缺陷或漏洞'
+  return `单次最多启动 ${runtimeSettingsStore.batchStartWorkflowLimit} 个 ${typeConfig[selectedType.value].label} 初始任务`
 })
 
 watch([selectedType, selectedStatus], () => {
@@ -349,6 +377,12 @@ function launchDisabled(item: WorkItemDto): boolean {
   return workflowProjectionStore.projectionFor(item).actionDisabled
 }
 
+function isBatchStartCandidate(item: WorkItemDto): boolean {
+  if (selectedType.value === 'ALL' || item.type !== selectedType.value) return false
+  const projection = workflowProjectionStore.projectionFor(item)
+  return projection.commandState === 'IDLE' && !projection.hasWorkflow && !projection.actionDisabled
+}
+
 function handleSelectItem(id: string) {
   emit('select-work-item', id)
 }
@@ -367,6 +401,15 @@ function handleStartWorkflow(workItemId: string) {
   if (item && !workflowProjectionStore.projectionFor(item).actionDisabled) {
     emit('start-workflow', workItemId)
   }
+}
+
+function handleBatchStart() {
+  const workItemType = selectedType.value
+  if (workItemType === 'ALL' || batchStartDisabled.value) return
+  emit('start-workflows', {
+    workItemType,
+    workItemIds: batchStartItems.value.map((item) => item.id),
+  })
 }
 </script>
 
@@ -412,16 +455,27 @@ function handleStartWorkflow(workItemId: string) {
 
       <div class="home-overview__toolbar">
         <h3>工作项列表</h3>
-        <div class="home-overview__filters">
-          <span>{{ selectedType === 'ALL' ? '全部类型' : typeConfig[selectedType].label }}</span>
-          <label class="home-overview__filter">
-            <span>状态</span>
-            <select v-model="selectedStatus" aria-label="按状态筛选工作项">
-              <option v-for="option in statusFilterOptions" :key="option.value" :value="option.value">
-                {{ option.label }}
-              </option>
-            </select>
-          </label>
+        <div class="home-overview__toolbar-actions">
+          <button
+            type="button"
+            class="home-overview__batch-launch"
+            :disabled="batchStartDisabled"
+            :title="batchStartTitle"
+            @click="handleBatchStart"
+          >
+            {{ batchStartLabel }}
+          </button>
+          <div class="home-overview__filters">
+            <span>{{ selectedType === 'ALL' ? '全部类型' : typeConfig[selectedType].label }}</span>
+            <label class="home-overview__filter">
+              <span>状态</span>
+              <select v-model="selectedStatus" aria-label="按状态筛选工作项">
+                <option v-for="option in statusFilterOptions" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
+            </label>
+          </div>
         </div>
       </div>
 
@@ -779,14 +833,24 @@ function handleStartWorkflow(workItemId: string) {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   padding: 7px 18px 8px;
 }
 
 .home-overview__toolbar h3 {
+  flex: 0 0 auto;
   margin: 0;
   color: var(--text-primary);
   font-size: 16px;
   font-weight: 900;
+}
+
+.home-overview__toolbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
 }
 
 .home-overview__filters {
@@ -794,6 +858,35 @@ function handleStartWorkflow(workItemId: string) {
   align-items: center;
   gap: 10px;
   min-width: 0;
+}
+
+.home-overview__batch-launch {
+  flex: 0 1 auto;
+  min-width: 0;
+  min-height: 28px;
+  padding: 0 10px;
+  overflow: hidden;
+  border: 1px solid var(--brand-border);
+  border-radius: 7px;
+  background: var(--brand-soft);
+  color: var(--brand-primary);
+  font-size: 13px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.home-overview__batch-launch:not(:disabled):hover {
+  background: color-mix(in srgb, var(--brand-primary) 14%, var(--surface-card));
+}
+
+.home-overview__batch-launch:disabled {
+  border-color: var(--border-color);
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  cursor: default;
+  opacity: 0.72;
 }
 
 .home-overview__filters > span,

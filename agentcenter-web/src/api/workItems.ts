@@ -5,6 +5,8 @@ import type {
   RestartWorkflowRequest,
   StartWorkflowRequest,
   StartWorkflowResponse,
+  BatchStartWorkflowsRequest,
+  BatchStartWorkflowsResponse,
   WorkItemOverviewDto,
   WorkflowVersionDto,
 } from './types'
@@ -35,4 +37,5 @@ export const workItemApi = {
   startWorkflow: (id: string, data?: StartWorkflowRequest) => post<StartWorkflowResponse>(`/work-items/${id}/start-workflow`, data),
   restartWorkflow: (id: string, data?: RestartWorkflowRequest) => post<StartWorkflowResponse>(`/work-items/${id}/restart-workflow`, data),
   listWorkflowVersions: (id: string) => get<WorkflowVersionDto[]>(`/work-items/${id}/workflow-versions`),
+  startWorkflows: (data: BatchStartWorkflowsRequest) => post<BatchStartWorkflowsResponse>('/work-items/start-workflows', data),
 }

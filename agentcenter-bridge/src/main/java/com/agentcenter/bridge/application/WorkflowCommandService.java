@@ -23,6 +23,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.agentcenter.bridge.api.dto.AgentSessionDto;
 import com.agentcenter.bridge.api.dto.ArtifactDto;
+import com.agentcenter.bridge.api.dto.BatchStartWorkflowsRequest;
+import com.agentcenter.bridge.api.dto.BatchStartWorkflowsResponse;
 import com.agentcenter.bridge.api.dto.ConfirmationRequestDto;
 import com.agentcenter.bridge.api.dto.RestartWorkflowRequest;
 import com.agentcenter.bridge.api.dto.RuntimeEventDto;
@@ -52,6 +54,7 @@ import com.agentcenter.bridge.application.workflow.WorkflowPromptComposer;
 import com.agentcenter.bridge.application.workflow.WorkflowResumeState;
 import com.agentcenter.bridge.application.workflow.WorkflowTransitionDecision;
 import com.agentcenter.bridge.domain.workitem.Priority;
+import com.agentcenter.bridge.domain.workitem.WorkItemStatus;
 import com.agentcenter.bridge.domain.workitem.WorkItemType;
 import com.agentcenter.bridge.domain.workflow.WorkflowNodeStatus;
 import com.agentcenter.bridge.domain.workflow.WorkflowStatus;
@@ -84,6 +87,11 @@ public class WorkflowCommandService {
     private static final String WORKFLOW_MODE_AUTO = "AUTO";
     private static final String WORKFLOW_MODE_MANUAL_CONFIRM = "MANUAL_CONFIRM";
     private static final String WORKFLOW_MODE_START_OR_CONTINUE = "START_OR_CONTINUE";
+    private static final int DEFAULT_BATCH_START_LIMIT = 5;
+    private static final int MAX_BATCH_START_LIMIT = 20;
+    private static final String BATCH_STATUS_STARTED = "STARTED";
+    private static final String BATCH_STATUS_SKIPPED = "SKIPPED";
+    private static final String BATCH_STATUS_FAILED = "FAILED";
     private static final String FALLBACK_DECISION_OPTIONS_JSON = "["
             + "{\"id\":\"REQUEST_OPTIONS\",\"label\":\"请 Agent 给出 2-3 个选项\"},"
             + "{\"id\":\"CUSTOM_ANSWER\",\"label\":\"我直接补充答案\"}"
@@ -140,7 +148,65 @@ public class WorkflowCommandService {
         workflowExecutor.shutdownNow();
     }
 
-    public StartWorkflowResponse startWorkflow(String workItemId, StartWorkflowRequest request) {
+    public synchronized BatchStartWorkflowsResponse startWorkflows(BatchStartWorkflowsRequest request) {
+        if (request == null || request.workItemType() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "workItemType is required");
+        }
+
+        List<String> workItemIds = request.workItemIds().stream()
+                .filter(id -> id != null && !id.isBlank())
+                .map(String::trim)
+                .distinct()
+                .toList();
+        int requestedLimit = request.limit() != null ? request.limit() : DEFAULT_BATCH_START_LIMIT;
+        int effectiveLimit = normalizeBatchStartLimit(requestedLimit);
+        StartWorkflowRequest startRequest = new StartWorkflowRequest(null, request.mode());
+        List<BatchStartWorkflowsResponse.ItemResult> results = new ArrayList<>();
+        int startedAttempts = 0;
+
+        for (String workItemId : workItemIds) {
+            WorkItemEntity workItem = workItemMapper.findById(workItemId);
+            if (workItem == null) {
+                results.add(batchResult(workItemId, null, BATCH_STATUS_SKIPPED, "工作项不存在", null));
+                continue;
+            }
+            if (!request.workItemType().name().equals(workItem.getType())) {
+                results.add(batchResult(workItemId, workItem.getCode(), BATCH_STATUS_SKIPPED, "工作项类型与当前筛选类型不一致", null));
+                continue;
+            }
+            if (!isInitialStartCandidate(workItem)) {
+                results.add(batchResult(workItemId, workItem.getCode(), BATCH_STATUS_SKIPPED, "工作项已开始或不在初始阶段", null));
+                continue;
+            }
+            if (startedAttempts >= effectiveLimit) {
+                results.add(batchResult(workItemId, workItem.getCode(), BATCH_STATUS_SKIPPED, "已达到单次批量启动上限", null));
+                continue;
+            }
+
+            startedAttempts += 1;
+            try {
+                StartWorkflowResponse response = startWorkflow(workItemId, startRequest);
+                results.add(batchResult(workItemId, workItem.getCode(), BATCH_STATUS_STARTED, null, response));
+            } catch (ResponseStatusException e) {
+                results.add(batchResult(workItemId, workItem.getCode(), BATCH_STATUS_FAILED, e.getReason(), null));
+            } catch (RuntimeException e) {
+                results.add(batchResult(workItemId, workItem.getCode(), BATCH_STATUS_FAILED, e.getMessage(), null));
+            }
+        }
+
+        return new BatchStartWorkflowsResponse(
+                request.workItemType(),
+                workItemIds.size(),
+                requestedLimit,
+                effectiveLimit,
+                countBatchStatus(results, BATCH_STATUS_STARTED),
+                countBatchStatus(results, BATCH_STATUS_SKIPPED),
+                countBatchStatus(results, BATCH_STATUS_FAILED),
+                results
+        );
+    }
+
+    public synchronized StartWorkflowResponse startWorkflow(String workItemId, StartWorkflowRequest request) {
         WorkItemEntity workItem = workItemMapper.findById(workItemId);
         if (workItem == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Work item not found: " + workItemId);
@@ -325,6 +391,38 @@ public class WorkflowCommandService {
         }
         sb.append("}");
         return sb.toString();
+    }
+
+    private boolean isInitialStartCandidate(WorkItemEntity workItem) {
+        if (workItem.getCurrentWorkflowInstanceId() != null && !workItem.getCurrentWorkflowInstanceId().isBlank()) {
+            return false;
+        }
+        if (WorkItemStatus.DONE.name().equals(workItem.getStatus())) {
+            return false;
+        }
+        return findActiveInstance(workItem.getId()) == null;
+    }
+
+    private int normalizeBatchStartLimit(int requestedLimit) {
+        if (requestedLimit < 1) {
+            return DEFAULT_BATCH_START_LIMIT;
+        }
+        return Math.min(requestedLimit, MAX_BATCH_START_LIMIT);
+    }
+
+    private int countBatchStatus(List<BatchStartWorkflowsResponse.ItemResult> results, String status) {
+        return (int) results.stream()
+                .filter(result -> status.equals(result.status()))
+                .count();
+    }
+
+    private BatchStartWorkflowsResponse.ItemResult batchResult(
+            String workItemId,
+            String code,
+            String status,
+            String reason,
+            StartWorkflowResponse response) {
+        return new BatchStartWorkflowsResponse.ItemResult(workItemId, code, status, reason, response);
     }
 
     public StartWorkflowResponse continueWorkflow(String instanceId) {
@@ -868,17 +966,17 @@ public class WorkflowCommandService {
         List<WorkflowResumeState.WorkflowStep> steps = nodeDefs.stream()
                 .sorted(Comparator.comparingInt(WorkflowNodeDefinitionEntity::getOrderNo))
                 .map(definition -> {
-                    WorkflowNodeInstanceEntity stepNode = nodeByDefinitionId.get(definition.getId());
-                    boolean current = currentNode.getId().equals(stepNode != null ? stepNode.getId() : null);
+                    WorkflowNodeInstanceEntity node = nodeByDefinitionId.get(definition.getId());
+                    boolean current = currentNode.getId().equals(node != null ? node.getId() : null);
                     return new WorkflowResumeState.WorkflowStep(
-                            stepNode != null ? stepNode.getId() : null,
+                            node != null ? node.getId() : null,
                             definition.getId(),
                             definition.getNodeKey(),
                             definition.getName(),
                             definition.getOrderNo(),
                             definition.getSkillName(),
                             definition.getStageKey(),
-                            stepNode != null ? stepNode.getStatus() : WorkflowNodeStatus.PENDING.name(),
+                            node != null ? node.getStatus() : WorkflowNodeStatus.PENDING.name(),
                             current);
                 })
                 .toList();
