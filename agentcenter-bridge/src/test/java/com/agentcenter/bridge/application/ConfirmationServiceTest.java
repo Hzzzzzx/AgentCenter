@@ -1,7 +1,7 @@
 package com.agentcenter.bridge.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
@@ -32,6 +32,7 @@ import com.agentcenter.bridge.application.runtime.translation.QuestionConfirmati
 import com.agentcenter.bridge.domain.confirmation.ConfirmationActionType;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationRequestType;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationStatus;
+import com.agentcenter.bridge.domain.runtime.RuntimeEventType;
 import com.agentcenter.bridge.domain.runtime.RuntimeType;
 import com.agentcenter.bridge.infrastructure.persistence.entity.AgentSessionEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.ConfirmationRequestEntity;
@@ -47,6 +48,7 @@ class ConfirmationServiceTest {
     private WorkflowCommandService workflowCommandService;
     private AgentSessionMapper agentSessionMapper;
     private AgentMessageMapper agentMessageMapper;
+    private RuntimeEventService runtimeEventService;
     private RuntimeGateway runtimeGateway;
     private PermissionConfirmationHandler permissionConfirmationHandler;
     private QuestionConfirmationHandler questionConfirmationHandler;
@@ -60,7 +62,7 @@ class ConfirmationServiceTest {
         WorkflowMapper workflowMapper = mock(WorkflowMapper.class);
         agentSessionMapper = mock(AgentSessionMapper.class);
         agentMessageMapper = mock(AgentMessageMapper.class);
-        RuntimeEventService runtimeEventService = mock(RuntimeEventService.class);
+        runtimeEventService = mock(RuntimeEventService.class);
         runtimeGateway = mock(RuntimeGateway.class);
         permissionConfirmationHandler = mock(PermissionConfirmationHandler.class);
         questionConfirmationHandler = mock(QuestionConfirmationHandler.class);
@@ -86,7 +88,7 @@ class ConfirmationServiceTest {
     }
 
     @Test
-    void resolveQuestionConfirmationRepliesToOpenCodeBeforeMarkingResolved() {
+    void resolveQuestionConfirmationRepliesToOpenCodeAfterMarkingResolved() {
         ConfirmationRequestEntity entity = questionConfirmation();
         when(confirmationMapper.findById(entity.getId())).thenReturn(entity);
         when(agentMessageMapper.findBySessionId(entity.getAgentSessionId())).thenReturn(List.of());
@@ -98,13 +100,16 @@ class ConfirmationServiceTest {
 
         var result = service.resolve(entity.getId(), request);
 
-        var inOrder = inOrder(questionConfirmationHandler, confirmationMapper);
-        inOrder.verify(questionConfirmationHandler)
-                .respondQuestion(eq(entity), eq(request), eq(ConfirmationActionType.CHOOSE));
-        inOrder.verify(confirmationMapper).update(entity);
+        verify(confirmationMapper).update(entity);
+        verify(questionConfirmationHandler, never()).respondQuestion(any(), any(), any());
 
         TransactionSynchronizationManager.getSynchronizations()
                 .forEach(TransactionSynchronization::afterCommit);
+
+        var inOrder = inOrder(confirmationMapper, questionConfirmationHandler);
+        inOrder.verify(confirmationMapper).update(entity);
+        inOrder.verify(questionConfirmationHandler)
+                .respondQuestion(eq(entity), eq(request), eq(ConfirmationActionType.CHOOSE));
 
         assertThat(result.status()).isEqualTo(ConfirmationStatus.RESOLVED);
         verify(permissionConfirmationHandler, never()).respondPermission(any(), any(), eq(true));
@@ -112,9 +117,10 @@ class ConfirmationServiceTest {
     }
 
     @Test
-    void resolveQuestionRuntimeFailureKeepsConfirmationPending() {
+    void resolveQuestionRuntimeFailureAfterCommitKeepsResolvedAndPublishesFailure() {
         ConfirmationRequestEntity entity = questionConfirmation();
         when(confirmationMapper.findById(entity.getId())).thenReturn(entity);
+        when(agentMessageMapper.findBySessionId(entity.getAgentSessionId())).thenReturn(List.of());
         ResolveConfirmationRequest request = new ResolveConfirmationRequest(
                 ConfirmationActionType.CHOOSE,
                 "快速验证",
@@ -123,11 +129,20 @@ class ConfirmationServiceTest {
                 .when(questionConfirmationHandler)
                 .respondQuestion(eq(entity), eq(request), eq(ConfirmationActionType.CHOOSE));
 
-        assertThatThrownBy(() -> service.resolve(entity.getId(), request))
-                .hasMessageContaining("Failed to respond to OpenCode question");
+        var result = service.resolve(entity.getId(), request);
 
-        assertThat(entity.getStatus()).isEqualTo(ConfirmationStatus.PENDING.name());
-        verify(confirmationMapper, never()).update(entity);
+        assertThat(result.status()).isEqualTo(ConfirmationStatus.RESOLVED);
+        assertThat(entity.getStatus()).isEqualTo(ConfirmationStatus.RESOLVED.name());
+        verify(confirmationMapper).update(entity);
+
+        TransactionSynchronizationManager.getSynchronizations()
+                .forEach(TransactionSynchronization::afterCommit);
+
+        verify(runtimeEventService).publishCommittedEvent(argThat(event ->
+                RuntimeEventType.ERROR.equals(event.eventType())
+                        && event.payloadJson().contains("question.reply.failed")));
+        verify(runtimeEventService).publishCommittedEvent(argThat(event ->
+                RuntimeEventType.CONFIRMATION_RESOLVED.equals(event.eventType())));
     }
 
     @Test

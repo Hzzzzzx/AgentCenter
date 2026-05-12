@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { useConfirmationStore } from '../../stores/confirmations'
 import { useNotificationStore } from '../../stores/notifications'
+import { parseInteractionSchema, type InteractionField } from '../conversation/interactions/interactionSchema'
 import type {
   ConfirmationActionType,
   ConfirmationRequestDto,
@@ -26,6 +27,7 @@ const busyAction = ref<'approve' | 'reject' | 'submit' | 'retry' | 'skip' | null
 const modalOpen = ref(false)
 const selectedOption = ref<{id: string, label: string} | null>(null)
 const supplementText = ref('')
+const fieldValues = ref<Record<string, string>>({})
 
 const typeLabels: Record<ConfirmationRequestType, string> = {
   CONFIRM: '确认',
@@ -62,10 +64,19 @@ const parsedOptions = computed(() => parseOptions(props.confirmation.optionsJson
 const isDecision = computed(() => props.confirmation.requestType === 'DECISION')
 const isInputRequired = computed(() => props.confirmation.requestType === 'INPUT_REQUIRED')
 const isException = computed(() => props.confirmation.requestType === 'EXCEPTION')
+const interactionSchema = computed(() => parseInteractionSchema(props.confirmation))
+const inputFields = computed<InteractionField[]>(() => interactionSchema.value?.fields ?? [])
+const interactionQuestion = computed(() => interactionSchema.value?.question?.trim() ?? '')
+const interactionTitle = computed(() => interactionSchema.value?.title?.trim() || '补充信息')
 const canSubmitDecision = computed(() => {
   return parsedOptions.value.length > 0 ? !!selectedOption.value : !!supplementText.value.trim()
 })
-const canSubmitInput = computed(() => !!supplementText.value.trim())
+const canSubmitInput = computed(() => {
+  if (inputFields.value.length > 0) {
+    return inputFields.value.every(field => !field.required || (fieldValues.value[field.id]?.trim().length ?? 0) > 0)
+  }
+  return !!supplementText.value.trim()
+})
 const rejectLabel = computed(() => {
   if (props.confirmation.requestType === 'PERMISSION') return '拒绝授权'
   if (props.confirmation.requestType === 'APPROVAL') return '退回'
@@ -125,11 +136,30 @@ function parseOptions(raw: string | null): {id: string, label: string}[] {
 function openDialog() {
   selectedOption.value = parsedOptions.value[0] ?? null
   supplementText.value = ''
+  fieldValues.value = {}
   modalOpen.value = true
 }
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : '操作失败，请稍后重试'
+}
+
+function setFieldValue(fieldId: string, value: string) {
+  fieldValues.value = { ...fieldValues.value, [fieldId]: value }
+}
+
+function fieldInputId(field: InteractionField): string {
+  return `confirmation-field-${field.id}`
+}
+
+function fieldQuestion(field: InteractionField): string | null {
+  const placeholder = field.placeholder?.trim()
+  if (!placeholder || placeholder === field.label.trim()) return null
+  return placeholder
+}
+
+function fieldPlaceholder(field: InteractionField): string {
+  return field.type === 'textarea' ? '输入你的回答...' : '输入答案...'
 }
 
 async function handleApprove() {
@@ -197,6 +227,18 @@ async function handleSupplement() {
   if (busyAction.value || !canSubmitInput.value) return
   busyAction.value = 'submit'
   try {
+    if (inputFields.value.length > 0) {
+      const fields = inputFields.value.reduce<Record<string, string>>((acc, field) => {
+        acc[field.id] = fieldValues.value[field.id]?.trim() ?? ''
+        return acc
+      }, {})
+      const input = inputFields.value
+        .map(field => fields[field.id])
+        .filter(Boolean)
+        .join('\n')
+      await resolveWith('SUPPLEMENT', { input, fields }, input)
+      return
+    }
     const input = supplementText.value.trim()
     await resolveWith('SUPPLEMENT', { input }, input)
   } catch (error) {
@@ -386,8 +428,41 @@ function enterSession() {
         </section>
 
         <section v-else-if="isInputRequired" class="confirmation-dialog__interaction">
-          <div class="confirmation-dialog__interaction-title">补充信息</div>
+          <div class="confirmation-dialog__interaction-title">{{ inputFields.length ? interactionTitle : '补充信息' }}</div>
+          <p v-if="inputFields.length && interactionQuestion" class="confirmation-dialog__question">
+            {{ interactionQuestion }}
+          </p>
+          <div v-if="inputFields.length" class="confirmation-dialog__fields">
+            <div v-for="field in inputFields" :key="field.id" class="confirmation-dialog__field">
+              <label :for="fieldInputId(field)" class="confirmation-dialog__field-label">
+                {{ field.label }}
+                <span v-if="field.required" class="confirmation-dialog__field-required">*</span>
+              </label>
+              <p v-if="fieldQuestion(field)" class="confirmation-dialog__field-question">
+                {{ fieldQuestion(field) }}
+              </p>
+              <textarea
+                v-if="field.type === 'textarea'"
+                :id="fieldInputId(field)"
+                :value="fieldValues[field.id] ?? ''"
+                class="confirmation-dialog__textarea confirmation-dialog__field-input"
+                rows="3"
+                :placeholder="fieldPlaceholder(field)"
+                @input="(event: Event) => setFieldValue(field.id, (event.target as HTMLTextAreaElement).value)"
+              />
+              <input
+                v-else
+                :id="fieldInputId(field)"
+                :value="fieldValues[field.id] ?? ''"
+                class="confirmation-dialog__input confirmation-dialog__field-input"
+                :type="field.type === 'number' ? 'number' : 'text'"
+                :placeholder="fieldPlaceholder(field)"
+                @input="(event: Event) => setFieldValue(field.id, (event.target as HTMLInputElement).value)"
+              >
+            </div>
+          </div>
           <textarea
+            v-else
             v-model="supplementText"
             class="confirmation-dialog__textarea"
             rows="5"
@@ -750,6 +825,14 @@ function enterSession() {
   font-weight: 850;
 }
 
+.confirmation-dialog__question {
+  margin: -2px 0 2px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
 .confirmation-dialog__options {
   display: grid;
   gap: 8px;
@@ -780,6 +863,34 @@ function enterSession() {
   flex: 0 0 auto;
 }
 
+.confirmation-dialog__fields {
+  display: grid;
+  gap: 12px;
+}
+
+.confirmation-dialog__field {
+  display: grid;
+  gap: 6px;
+}
+
+.confirmation-dialog__field-label {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.confirmation-dialog__field-required {
+  color: var(--error);
+  margin-left: 2px;
+}
+
+.confirmation-dialog__field-question {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .confirmation-dialog__textarea {
   width: 100%;
   min-height: 112px;
@@ -794,7 +905,24 @@ function enterSession() {
   line-height: 1.6;
 }
 
-.confirmation-dialog__textarea:focus {
+.confirmation-dialog__input {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  outline: none;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.confirmation-dialog__field-input {
+  min-height: auto;
+}
+
+.confirmation-dialog__textarea:focus,
+.confirmation-dialog__input:focus {
   border-color: var(--brand-primary);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-primary) 16%, transparent);
 }

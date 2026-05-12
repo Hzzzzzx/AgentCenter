@@ -186,16 +186,16 @@ public class ConfirmationService {
         }
 
         boolean isQuestionConfirmation = QuestionConfirmationHandler.isQuestionConfirmation(entity);
-        if (isQuestionConfirmation) {
-            respondQuestionBeforeResolving(entity, request, actionType);
-        }
+        Runnable questionResponseAfterCommit = isQuestionConfirmation
+                ? () -> respondQuestionAfterCommit(entity, request, actionType)
+                : null;
 
         if (ConfirmationRequestType.PERMISSION.equals(requestType)) {
             respondPermissionBeforeResolving(entity, request, actionType);
         }
 
         if (ConfirmationActionType.REJECT.equals(actionType)) {
-            return handleReject(entity, request, null);
+            return handleReject(entity, request, questionResponseAfterCommit);
         }
 
         String now = LocalDateTime.now().format(SQLITE_DATETIME);
@@ -269,7 +269,7 @@ public class ConfirmationService {
                         isException,
                         isSkip));
         publishResolutionEventAfterCommit(entity, actionType, actionDescription,
-                workflowDispatchAfterCommit);
+                combineAfterCommitActions(questionResponseAfterCommit, workflowDispatchAfterCommit));
 
         return toDto(entity);
     }
@@ -301,15 +301,15 @@ public class ConfirmationService {
         return "once";
     }
 
-    private void respondQuestionBeforeResolving(ConfirmationRequestEntity entity,
-                                                ResolveConfirmationRequest request,
-                                                ConfirmationActionType actionType) {
+    private void respondQuestionAfterCommit(ConfirmationRequestEntity entity,
+                                            ResolveConfirmationRequest request,
+                                            ConfirmationActionType actionType) {
         try {
             questionConfirmationHandler.respondQuestion(entity, request, actionType);
         } catch (Exception e) {
-            publishConfirmationResponseFailure(entity, actionType, "question.reply.failed", e);
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-                    "Failed to respond to OpenCode question: " + e.getMessage(), e);
+            publishCommittedConfirmationResponseFailure(entity, actionType, "question.reply.failed", e);
+            log.warn("conversation.question_reply_after_commit status=failed confirmation={} requestId={} error={}",
+                    entity.getId(), entity.getInteractionId(), errorMessage(e));
         }
     }
 
@@ -519,6 +519,21 @@ public class ConfirmationService {
                                                     ConfirmationActionType actionType,
                                                     String rawEventType,
                                                     Exception error) {
+        publishConfirmationResponseFailure(confirmation, actionType, rawEventType, error, false);
+    }
+
+    private void publishCommittedConfirmationResponseFailure(ConfirmationRequestEntity confirmation,
+                                                             ConfirmationActionType actionType,
+                                                             String rawEventType,
+                                                             Exception error) {
+        publishConfirmationResponseFailure(confirmation, actionType, rawEventType, error, true);
+    }
+
+    private void publishConfirmationResponseFailure(ConfirmationRequestEntity confirmation,
+                                                    ConfirmationActionType actionType,
+                                                    String rawEventType,
+                                                    Exception error,
+                                                    boolean committed) {
         if (confirmation.getAgentSessionId() == null || confirmation.getAgentSessionId().isBlank()) {
             return;
         }
@@ -541,7 +556,7 @@ public class ConfirmationService {
                     + confirmation.getId() + "\"}";
         }
 
-        runtimeEventService.publishEvent(new RuntimeEventDto(
+        RuntimeEventDto event = new RuntimeEventDto(
                 null,
                 confirmation.getAgentSessionId(),
                 confirmation.getWorkItemId(),
@@ -551,7 +566,12 @@ public class ConfirmationService {
                 RuntimeEventSource.BRIDGE,
                 payloadJson,
                 null
-        ));
+        );
+        if (committed) {
+            runtimeEventService.publishCommittedEvent(event);
+        } else {
+            runtimeEventService.publishEvent(event);
+        }
     }
 
     @SuppressWarnings("unchecked")

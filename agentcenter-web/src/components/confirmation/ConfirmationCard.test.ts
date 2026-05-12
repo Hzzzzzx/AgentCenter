@@ -176,6 +176,64 @@ describe('ConfirmationCard.vue', () => {
     expect(wrapper.emitted('resolved')![0]).toEqual(['conf-1'])
   })
 
+  it('renders and submits INPUT_REQUIRED confirmation with structured fields', async () => {
+    const { confirmationApi } = await import('../../api/confirmations')
+    const wrapper = mountCard({
+      ...pendingConfirmation,
+      requestType: 'INPUT_REQUIRED',
+      title: '补充 PRD 关键问题',
+      content: '请一次性补充目标用户、范围边界和验收标准。',
+      interactionSchemaJson: JSON.stringify({
+        id: 'PRD-MULTI-QUESTION',
+        type: 'INPUT',
+        title: '补充 PRD 关键问题',
+        question: '请一次性补充目标用户、范围边界和验收标准。',
+        fields: [
+          { id: 'PRD-AUDIENCE', label: '目标用户', type: 'textarea', required: true },
+          { id: 'PRD-SCOPE', label: '范围边界', type: 'textarea', required: true },
+          { id: 'PRD-ACCEPTANCE', label: '验收标准', type: 'textarea', required: true },
+        ],
+      }),
+    })
+
+    await openDialog(wrapper)
+    expect(document.body.textContent).toContain('目标用户')
+    expect(document.body.textContent).toContain('范围边界')
+    expect(document.body.textContent).toContain('验收标准')
+
+    const submitButton = document.body.querySelector<HTMLButtonElement>('.confirmation-card__action--approve')!
+    expect(submitButton.disabled).toBe(true)
+
+    const audience = document.body.querySelector<HTMLTextAreaElement>('#confirmation-field-PRD-AUDIENCE')!
+    const scope = document.body.querySelector<HTMLTextAreaElement>('#confirmation-field-PRD-SCOPE')!
+    const acceptance = document.body.querySelector<HTMLTextAreaElement>('#confirmation-field-PRD-ACCEPTANCE')!
+    audience.value = '企业管理员'
+    audience.dispatchEvent(new Event('input'))
+    scope.value = '只覆盖 PRD 阶段，不做 HLD'
+    scope.dispatchEvent(new Event('input'))
+    acceptance.value = '页面出现三个必填输入框'
+    acceptance.dispatchEvent(new Event('input'))
+    await wrapper.vm.$nextTick()
+
+    expect(submitButton.disabled).toBe(false)
+    await submitButton.click()
+    await vi.dynamicImportSettled()
+
+    expect(confirmationApi.resolve).toHaveBeenCalledWith('conf-1', {
+      actionType: 'SUPPLEMENT',
+      payload: {
+        input: '企业管理员\n只覆盖 PRD 阶段，不做 HLD\n页面出现三个必填输入框',
+        fields: {
+          'PRD-AUDIENCE': '企业管理员',
+          'PRD-SCOPE': '只覆盖 PRD 阶段，不做 HLD',
+          'PRD-ACCEPTANCE': '页面出现三个必填输入框',
+        },
+      },
+      comment: '企业管理员\n只覆盖 PRD 阶段，不做 HLD\n页面出现三个必填输入框',
+    })
+    expect(wrapper.emitted('resolved')![0]).toEqual(['conf-1'])
+  })
+
   it('clicking 拒绝 calls rejectConfirmation and emits rejected', async () => {
     const { confirmationApi } = await import('../../api/confirmations')
     const wrapper = mountCard(pendingConfirmation)
