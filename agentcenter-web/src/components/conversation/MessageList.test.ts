@@ -289,6 +289,28 @@ describe('MessageList.vue', () => {
     expect(wrapper.emitted('open-artifact')?.[0]).toEqual([{ title: 'FE2001 详细设计 (LLD).md' }])
   })
 
+  it('opens system-line artifact links by hidden artifactId when available', async () => {
+    const wrapper = mount(MessageList, {
+      props: {
+        messages: [
+          makeMessage({
+            role: 'SYSTEM',
+            content: '已完成 详细设计 (LLD)（Skill：lld-design），产物：FE2001 详细设计 (LLD).md\n<!-- AGENTCENTER_ARTIFACT artifactId: art-123 -->',
+          }),
+        ],
+      },
+    })
+
+    expect(wrapper.text()).not.toContain('AGENTCENTER_ARTIFACT')
+    const artifact = wrapper.find('.system-line__artifact')
+    expect(artifact.exists()).toBe(true)
+    expect(artifact.text()).toBe('FE2001 详细设计 (LLD).md')
+    await artifact.trigger('click')
+    expect(wrapper.emitted('open-artifact')?.[0]).toEqual([
+      { artifactId: 'art-123', title: 'FE2001 详细设计 (LLD).md' },
+    ])
+  })
+
   it('keeps numeric prefixes when linking generated artifact names in system messages', async () => {
     const artifactTitle = '01WORKITEM0000000000000FE2002 详细设计 (LLD).md'
     const wrapper = mount(MessageList, {

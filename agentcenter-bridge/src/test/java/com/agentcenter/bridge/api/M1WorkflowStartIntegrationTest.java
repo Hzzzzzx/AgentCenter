@@ -151,6 +151,53 @@ class M1WorkflowStartIntegrationTest {
     }
 
     @Test
+    void startWorkflow_normalizesArtifactDisplayReferencesAndKeepsSystemLinkById() throws Exception {
+        String fe1234Id = findWorkItemIdByCode("FE1234");
+        assertThat(fe1234Id).isNotEqualTo("FE1234");
+        TestWorkflowExecutorConfig.setNextSkillOutput("""
+                # PRD: %s 用户登录优化
+
+                这是带内部工作项 ID 的产物内容。
+
+                <!-- AGENTCENTER_NODE_STATE
+                status: READY_TO_ADVANCE
+                reason: PRD complete
+                artifact_title: %s 需求整理 (PRD).md
+                -->
+                """.formatted(fe1234Id, fe1234Id).trim());
+
+        MvcResult result = mockMvc.perform(
+                        post("/api/work-items/" + fe1234Id + "/start-workflow")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"mode\":\"START_OR_CONTINUE\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        var json = objectMapper.readTree(result.getResponse().getContentAsString());
+        String instanceId = json.at("/workflowInstance/id").asText();
+        String sessionId = json.at("/workflowInstance/nodes/0/agentSessionId").asText();
+
+        var artifacts = jdbcTemplate.queryForList(
+                "SELECT id, title, content FROM artifact WHERE workflow_instance_id = ?",
+                instanceId);
+        assertThat(artifacts).hasSize(1);
+        var artifact = artifacts.get(0);
+        String artifactId = artifact.get("id").toString();
+        assertThat(artifact.get("title").toString()).isEqualTo("FE1234 需求整理 (PRD).md");
+        assertThat(artifact.get("content").toString())
+                .contains("# PRD: FE1234 用户登录优化")
+                .doesNotContain(fe1234Id)
+                .doesNotContain("AGENTCENTER_NODE_STATE");
+
+        var systemMessages = jdbcTemplate.queryForList(
+                "SELECT content FROM agent_message WHERE session_id = ? AND role = 'SYSTEM' ORDER BY seq_no",
+                sessionId);
+        assertThat(systemMessages).anySatisfy(message -> assertThat(message.get("content").toString())
+                .contains("产物：FE1234 需求整理 (PRD).md")
+                .contains("AGENTCENTER_ARTIFACT artifactId: " + artifactId));
+    }
+
+    @Test
     void startWorkflow_autoMode_advancesAfterReadyNodeUntilUserInput() throws Exception {
         String fe1234Id = findWorkItemIdByCode("FE1234");
 

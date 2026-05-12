@@ -519,9 +519,8 @@ public class WorkflowCommandService {
 
         ArtifactEntity artifact = null;
         if (shouldPersistFinalArtifact) {
-            String artifactTitle = nodeState.getArtifactTitle() != null && !nodeState.getArtifactTitle().isBlank()
-                    ? nodeState.getArtifactTitle()
-                    : "%s-%s.md".formatted(workItem.getCode(), nodeDef.getName());
+            String artifactTitle = resolveArtifactTitle(nodeState, workItem, nodeDef);
+            String artifactContent = normalizeGeneratedArtifactContent(result.outputContent(), workItem);
 
             artifact = new ArtifactEntity();
             artifact.setId(idGenerator.nextId());
@@ -531,7 +530,7 @@ public class WorkflowCommandService {
             artifact.setSessionId(node.getAgentSessionId());
             artifact.setArtifactType(ArtifactType.MARKDOWN.name());
             artifact.setTitle(artifactTitle);
-            artifact.setContent(WorkflowNodeStateParser.stripStateBlock(result.outputContent()));
+            artifact.setContent(artifactContent);
             artifact.setVersionNo(1);
             artifact.setCreatedBy(workflowRuntimeType.name());
             artifact.setCreatedAt(LocalDateTime.now().format(SQLITE_DATETIME));
@@ -541,7 +540,7 @@ public class WorkflowCommandService {
 
             insertNodeOutputMessageIfAbsent(
                     node.getAgentSessionId(), nodeDef.getName(), skillName,
-                    WorkflowNodeStateParser.stripStateBlock(result.outputContent()), artifact.getTitle(), node.getId());
+                    artifactContent, artifact.getTitle(), node.getId());
         }
 
         String sessionId = node.getAgentSessionId();
@@ -575,8 +574,10 @@ public class WorkflowCommandService {
                     node.setAgentState(nodeState.getStatus().name());
                     node.setAgentStateReason(nodeState.getReason());
                     node.setAgentStateUpdatedAt(now);
-                    if (nodeState.getArtifactTitle() != null) {
-                        node.setAgentStateArtifactTitle(nodeState.getArtifactTitle());
+                    if (artifact != null) {
+                        node.setAgentStateArtifactTitle(artifact.getTitle());
+                    } else if (nodeState.getArtifactTitle() != null) {
+                        node.setAgentStateArtifactTitle(normalizeWorkItemReference(nodeState.getArtifactTitle(), workItem));
                     }
 
                     if (isAutoRun(instance)) {
@@ -1408,7 +1409,9 @@ public class WorkflowCommandService {
                                           ArtifactEntity artifact,
                                           WorkflowNodeState nodeState) {
         if (result.success()) {
-            String artifactText = artifact != null ? "，产物：" + artifact.getTitle() : "";
+            String artifactText = artifact != null
+                    ? "，产物：" + artifact.getTitle() + artifactReferenceMarker(artifact)
+                    : "";
             return switch (nodeState.getStatus()) {
                 case READY_TO_ADVANCE -> "已完成 %s（Skill：%s）%s".formatted(nodeDef.getName(), skillName, artifactText);
                 case NEEDS_USER_INPUT -> "%s（Skill：%s）需要用户补充/确认；处理后会回到当前 Skill 继续执行。"
@@ -1422,6 +1425,39 @@ public class WorkflowCommandService {
                 ? "：" + result.errorMessage()
                 : "";
         return "执行失败 %s（Skill：%s）%s".formatted(nodeDef.getName(), skillName, reason);
+    }
+
+    private String resolveArtifactTitle(WorkflowNodeState nodeState,
+                                        WorkItemEntity workItem,
+                                        WorkflowNodeDefinitionEntity nodeDef) {
+        String fallbackCode = workItem != null ? nonBlank(workItem.getCode(), workItem.getId()) : "artifact";
+        String title = nonBlank(nodeState.getArtifactTitle(), "%s-%s.md".formatted(fallbackCode, nodeDef.getName()));
+        return normalizeWorkItemReference(title.trim(), workItem);
+    }
+
+    private String normalizeGeneratedArtifactContent(String outputContent, WorkItemEntity workItem) {
+        return normalizeWorkItemReference(WorkflowNodeStateParser.stripStateBlock(outputContent), workItem);
+    }
+
+    private String normalizeWorkItemReference(String value, WorkItemEntity workItem) {
+        if (value == null || value.isBlank() || workItem == null) {
+            return value;
+        }
+        String workItemId = workItem.getId();
+        String workItemCode = workItem.getCode();
+        if (workItemId == null || workItemId.isBlank()
+                || workItemCode == null || workItemCode.isBlank()
+                || workItemId.equals(workItemCode)) {
+            return value;
+        }
+        return value.replace(workItemId, workItemCode);
+    }
+
+    private String artifactReferenceMarker(ArtifactEntity artifact) {
+        if (artifact == null || artifact.getId() == null || artifact.getId().isBlank()) {
+            return "";
+        }
+        return "\n<!-- AGENTCENTER_ARTIFACT artifactId: " + artifact.getId().trim() + " -->";
     }
 
     private String buildInputContext(WorkItemEntity workItem,

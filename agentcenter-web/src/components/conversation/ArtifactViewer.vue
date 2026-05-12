@@ -25,6 +25,24 @@ const isJson = computed(() => props.artifact?.artifactType === 'JSON')
 const isMarkdownLike = computed(() =>
   props.artifact?.artifactType === 'MARKDOWN' || props.artifact?.artifactType === 'REPORT'
 )
+
+const documentTitle = computed(() => {
+  const content = props.artifact?.content ?? ''
+  return content.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? ''
+})
+
+const shortArtifactId = computed(() => {
+  const id = props.artifact?.id ?? ''
+  return id.length > 18 ? `${id.slice(0, 8)}...${id.slice(-6)}` : id
+})
+
+const createdAtText = computed(() => {
+  const value = props.artifact?.createdAt
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+})
 </script>
 
 <template>
@@ -34,17 +52,37 @@ const isMarkdownLike = computed(() =>
     </div>
     <template v-else>
       <div class="artifact-viewer__header">
-        <span class="artifact-viewer__title">{{ artifact.title }}</span>
-        <span class="artifact-viewer__type">{{ artifact.artifactType }}</span>
+        <div class="artifact-viewer__header-main">
+          <span class="artifact-viewer__title">{{ artifact.title }}</span>
+          <span class="artifact-viewer__type">{{ artifact.artifactType }}</span>
+        </div>
+        <dl class="artifact-viewer__meta">
+          <div v-if="documentTitle && documentTitle !== artifact.title">
+            <dt>文档标题</dt>
+            <dd>{{ documentTitle }}</dd>
+          </div>
+          <div v-if="artifact.workflowNodeInstanceId">
+            <dt>来源节点</dt>
+            <dd :title="artifact.workflowNodeInstanceId">{{ artifact.workflowNodeInstanceId }}</dd>
+          </div>
+          <div v-if="shortArtifactId">
+            <dt>产物 ID</dt>
+            <dd :title="artifact.id">{{ shortArtifactId }}</dd>
+          </div>
+          <div v-if="createdAtText">
+            <dt>创建时间</dt>
+            <dd>{{ createdAtText }}</dd>
+          </div>
+        </dl>
       </div>
       <div class="artifact-viewer__body">
         <pre v-if="isJson" class="artifact-viewer__json">{{ renderedJson }}</pre>
         <MarkdownContent
           v-else-if="isMarkdownLike"
           class="artifact-viewer__markdown"
-          :content="artifact.content"
+          :content="artifact.content ?? ''"
         />
-        <pre v-else class="artifact-viewer__plain">{{ artifact.content }}</pre>
+        <pre v-else class="artifact-viewer__plain">{{ artifact.content ?? '' }}</pre>
       </div>
     </template>
   </div>
@@ -68,26 +106,66 @@ const isMarkdownLike = computed(() =>
 
 .artifact-viewer__header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 0;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0 10px;
   border-bottom: 1px solid var(--border-color);
   margin-bottom: 8px;
+}
+
+.artifact-viewer__header-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .artifact-viewer__title {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .artifact-viewer__type {
+  flex-shrink: 0;
   font-size: 10px;
   padding: 2px 6px;
   border-radius: 3px;
   background-color: rgba(139, 92, 246, 0.1);
   color: #8b5cf6;
   font-weight: 600;
+}
+
+.artifact-viewer__meta {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.artifact-viewer__meta div {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+}
+
+.artifact-viewer__meta dt,
+.artifact-viewer__meta dd {
+  margin: 0;
+}
+
+.artifact-viewer__meta dt {
+  color: var(--text-secondary);
+}
+
+.artifact-viewer__meta dd {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .artifact-viewer__body {

@@ -7,6 +7,7 @@ import MarkdownContent from './MarkdownContent.vue'
 import AssistantTurn from './AssistantTurn.vue'
 
 const PROJECTOR_RUNTIME_EVENT_LIMIT = 300
+const ARTIFACT_REFERENCE_PATTERN = /<!--\s*AGENTCENTER_ARTIFACT\s+artifactId:\s*([A-Za-z0-9_-]+)\s*-->/g
 
 const props = withDefaults(defineProps<{
   messages: AgentMessageDto[]
@@ -42,6 +43,7 @@ const emit = defineEmits<{
 type SystemLinePart = {
   kind: 'text' | 'artifact'
   text: string
+  artifactId?: string
 }
 
 type WorkflowInputSummary = {
@@ -286,7 +288,7 @@ function dedupeSystemMessages(messages: AgentMessageDto[]): AgentMessageDto[] {
 }
 
 function systemContentDedupeKey(content: string): string {
-  return content.replace(/\s+/g, ' ').trim()
+  return stripArtifactReferenceMarkers(content).replace(/\s+/g, ' ').trim()
 }
 
 function assistantContentDedupeKey(content: string): string {
@@ -354,20 +356,35 @@ function findWorkflowTaskInfo(content: string): string {
 
 function systemLineParts(content: string): SystemLinePart[] {
   const artifactPattern = /((?:[0-9]+)?[A-Z][A-Z0-9]*(?:[ -][\w\u4e00-\u9fff（）()·-]+)*\.md)/g
+  const artifactIds = Array.from(content.matchAll(ARTIFACT_REFERENCE_PATTERN), match => match[1])
+  const visibleContent = stripArtifactReferenceMarkers(content)
   const parts: SystemLinePart[] = []
   let lastIndex = 0
   let match: RegExpExecArray | null
-  while ((match = artifactPattern.exec(content)) !== null) {
+  while ((match = artifactPattern.exec(visibleContent)) !== null) {
     if (match.index > lastIndex) {
-      parts.push({ kind: 'text', text: content.slice(lastIndex, match.index) })
+      parts.push({ kind: 'text', text: visibleContent.slice(lastIndex, match.index) })
     }
-    parts.push({ kind: 'artifact', text: match[1] })
+    const artifactId = artifactIds.shift()
+    parts.push(artifactId
+      ? { kind: 'artifact', text: match[1], artifactId }
+      : { kind: 'artifact', text: match[1] })
     lastIndex = match.index + match[1].length
   }
-  if (lastIndex < content.length) {
-    parts.push({ kind: 'text', text: content.slice(lastIndex) })
+  if (lastIndex < visibleContent.length) {
+    parts.push({ kind: 'text', text: visibleContent.slice(lastIndex) })
   }
-  return parts.length > 0 ? parts : [{ kind: 'text', text: content }]
+  return parts.length > 0 ? parts : [{ kind: 'text', text: visibleContent }]
+}
+
+function stripArtifactReferenceMarkers(content: string): string {
+  return content.replace(ARTIFACT_REFERENCE_PATTERN, '').trim()
+}
+
+function artifactOpenRef(part: SystemLinePart): ArtifactOpenRef {
+  return part.artifactId
+    ? { artifactId: part.artifactId, title: part.text }
+    : { title: part.text }
 }
 </script>
 
@@ -489,7 +506,7 @@ function systemLineParts(content: string): SystemLinePart[] {
                 v-if="part.kind === 'artifact'"
                 type="button"
                 class="system-line__artifact"
-                @click="emit('open-artifact', { title: part.text })"
+                @click="emit('open-artifact', artifactOpenRef(part))"
               >
                 {{ part.text }}
               </button>
