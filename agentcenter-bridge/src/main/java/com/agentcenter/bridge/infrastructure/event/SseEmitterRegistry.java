@@ -9,10 +9,12 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import com.agentcenter.bridge.api.dto.RuntimeEventDto;
+
 @Component
 public class SseEmitterRegistry {
 
-    private static final long SSE_TIMEOUT_MS = 300_000L; // 5 minutes
+    private static final long SSE_TIMEOUT_MS = 1_800_000L; // 30 minutes
 
     private final Map<String, List<SseEmitter>> sessionEmitters = new ConcurrentHashMap<>();
 
@@ -29,11 +31,20 @@ public class SseEmitterRegistry {
         var emitters = sessionEmitters.getOrDefault(sessionId, List.of());
         for (var emitter : emitters) {
             try {
-                emitter.send(SseEmitter.event().data(data, MediaType.APPLICATION_JSON));
+                emitter.send(sseEvent(data));
             } catch (Exception e) {
                 removeEmitter(sessionId, emitter);
             }
         }
+    }
+
+    private SseEmitter.SseEventBuilder sseEvent(Object data) {
+        SseEmitter.SseEventBuilder builder = SseEmitter.event()
+                .data(data, MediaType.APPLICATION_JSON);
+        if (data instanceof RuntimeEventDto event && event.seqNo() != null) {
+            builder.id(String.valueOf(event.seqNo()));
+        }
+        return builder;
     }
 
     private void removeEmitter(String sessionId, SseEmitter emitter) {

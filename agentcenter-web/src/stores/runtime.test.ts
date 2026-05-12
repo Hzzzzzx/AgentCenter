@@ -328,7 +328,7 @@ describe('useRuntimeStore — SSE event handlers', () => {
       payloadJson: JSON.stringify({ label: '你好，AgentCenter' }),
     }))
 
-    vi.advanceTimersByTime(20)
+    vi.advanceTimersByTime(40)
     expect(runtimeStore.streamingText).toBe('你好，AgentCenter')
 
     capturedOnEvent!(makeEvent({
@@ -501,7 +501,42 @@ describe('useRuntimeStore — SSE event handlers', () => {
     expect(runtimeStore.streamingText).toBe('')
   })
 
-  it('PROCESS_TRACE with workflowInstanceId refreshes workflow store', async () => {
+  it('keeps ASSISTANT_DELTA out of the retained runtime event timeline', () => {
+    vi.useFakeTimers()
+    const runtimeStore = useRuntimeStore()
+
+    runtimeStore.connectSSE('sess-1')
+    capturedOnEvent!(makeEvent({
+      eventType: 'ASSISTANT_DELTA',
+      id: 'evt-delta-timeline',
+      payloadJson: JSON.stringify({ delta: '轻量流式文本' }),
+    }))
+
+    vi.advanceTimersByTime(40)
+
+    expect(runtimeStore.events).toHaveLength(0)
+    expect(runtimeStore.streamingText).toBe('轻量流式文本')
+  })
+
+  it('caps retained runtime events to a bounded recent window', () => {
+    const runtimeStore = useRuntimeStore()
+
+    runtimeStore.connectSSE('sess-1')
+    for (let i = 0; i < 305; i += 1) {
+      capturedOnEvent!(makeEvent({
+        id: `evt-status-${i}`,
+        eventType: 'STATUS',
+        payloadJson: JSON.stringify({ status: 'running', label: `事件 ${i}` }),
+        createdAt: `2026-01-01T00:00:${String(i % 60).padStart(2, '0')}Z`,
+      }))
+    }
+
+    expect(runtimeStore.events).toHaveLength(300)
+    expect(runtimeStore.events[0].id).toBe('evt-status-5')
+    expect(runtimeStore.events.at(-1)?.id).toBe('evt-status-304')
+  })
+
+  it('PROCESS_TRACE with workflowInstanceId does not refresh workflow store for every trace event', async () => {
     const { workflowApi } = await import('../api/workflows')
     const { workItemApi } = await import('../api/workItems')
     const runtimeStore = useRuntimeStore()
@@ -517,8 +552,8 @@ describe('useRuntimeStore — SSE event handlers', () => {
 
     await vi.dynamicImportSettled()
 
-    expect(workflowApi.getInstance).toHaveBeenCalledWith('inst-42')
-    expect(workItemApi.getById).toHaveBeenCalledWith('work-1')
+    expect(workflowApi.getInstance).not.toHaveBeenCalled()
+    expect(workItemApi.getById).not.toHaveBeenCalled()
   })
 
   it('PROCESS_TRACE without workflowInstanceId does not call refreshInstance', async () => {

@@ -11,8 +11,12 @@ const props = withDefaults(defineProps<{
 
 <template>
   <section class="assistant-answer">
+    <pre
+      v-if="text && streaming"
+      class="assistant-answer__streaming-text"
+    >{{ text }}</pre>
     <MarkdownContent
-      v-if="text"
+      v-else-if="text"
       :content="text"
     />
     <span v-if="streaming" class="stream-cursor">▍</span>
@@ -30,6 +34,15 @@ const props = withDefaults(defineProps<{
 .assistant-answer :deep(.markdown-content) {
   font-size: 15px;
   line-height: 1.75;
+}
+
+.assistant-answer__streaming-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  font: inherit;
+  color: inherit;
 }
 
 .stream-cursor {

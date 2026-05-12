@@ -6,6 +6,8 @@ import { projectConversationTurns } from './projection/conversationTurnProjector
 import MarkdownContent from './MarkdownContent.vue'
 import AssistantTurn from './AssistantTurn.vue'
 
+const PROJECTOR_RUNTIME_EVENT_LIMIT = 300
+
 const props = withDefaults(defineProps<{
   messages: AgentMessageDto[]
   streamingText?: string
@@ -92,6 +94,13 @@ const resolvedSessionId = computed(() =>
   ?? ''
 )
 
+const projectableRuntimeEvents = computed(() =>
+  (props.runtimeEvents ?? [])
+    .filter(e => !props.activeSessionId || e.sessionId === props.activeSessionId)
+    .filter(e => e.eventType !== 'ASSISTANT_DELTA')
+    .slice(-PROJECTOR_RUNTIME_EVENT_LIMIT)
+)
+
 const projectorInput = computed<ProjectorInput>(() => ({
   messages: normalizedMessages.value
     .filter(m => m.role !== 'SYSTEM')
@@ -107,8 +116,7 @@ const projectorInput = computed<ProjectorInput>(() => ({
       createdAt: m.createdAt,
       workflowNodeInstanceId: m.workflowNodeInstanceId,
     })),
-  runtimeEvents: (props.runtimeEvents ?? [])
-    .filter(e => !props.activeSessionId || e.sessionId === props.activeSessionId)
+  runtimeEvents: projectableRuntimeEvents.value
     .map(e => ({
       id: e.id,
       sessionId: e.sessionId,

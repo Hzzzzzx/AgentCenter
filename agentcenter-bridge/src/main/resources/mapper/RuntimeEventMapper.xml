@@ -11,6 +11,35 @@
         ORDER BY COALESCE(seq_no, 0) ASC, created_at ASC, id ASC
     </select>
 
+    <select id="findRecentBySessionId" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.RuntimeEventEntity">
+        SELECT id, session_id, work_item_id, workflow_instance_id, workflow_node_instance_id,
+               event_type, event_source, payload_json, seq_no, created_at
+        FROM (
+            SELECT id, session_id, work_item_id, workflow_instance_id, workflow_node_instance_id,
+                   event_type, event_source, payload_json, seq_no, created_at
+            FROM runtime_event
+            WHERE session_id = #{sessionId}
+            ORDER BY COALESCE(seq_no, 0) DESC, created_at DESC, id DESC
+            LIMIT #{limit}
+        )
+        ORDER BY COALESCE(seq_no, 0) ASC, created_at ASC, id ASC
+    </select>
+
+    <select id="findBySessionIdAfterSeq" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.RuntimeEventEntity">
+        SELECT id, session_id, work_item_id, workflow_instance_id, workflow_node_instance_id,
+               event_type, event_source, payload_json, seq_no, created_at
+        FROM (
+            SELECT id, session_id, work_item_id, workflow_instance_id, workflow_node_instance_id,
+                   event_type, event_source, payload_json, seq_no, created_at
+            FROM runtime_event
+            WHERE session_id = #{sessionId}
+              AND COALESCE(seq_no, 0) > #{afterSeq}
+            ORDER BY COALESCE(seq_no, 0) DESC, created_at DESC, id DESC
+            LIMIT #{limit}
+        )
+        ORDER BY COALESCE(seq_no, 0) ASC, created_at ASC, id ASC
+    </select>
+
     <select id="nextSeqNo" resultType="int">
         SELECT COALESCE(MAX(seq_no), 0) + 1
         FROM runtime_event

@@ -117,6 +117,8 @@ const promptDebugDragOffset = ref({ x: 0, y: 0 })
 const promptDebugSize = ref({ width: 0, height: 0 })
 const promptDebugCopiedId = ref<string | null>(null)
 let ensureActiveSessionSeq = 0
+let pendingScrollFrame: number | null = null
+let pendingScrollBehavior: ScrollBehavior = 'smooth'
 
 const currentWorkflowNodeInstanceId = computed(() => {
   return nodeStateInfo.value.nodeId ?? null
@@ -650,6 +652,7 @@ async function ensureActiveSession(): Promise<AgentSessionDto | null> {
 
 onUnmounted(() => {
   stopPromptDebugDrag()
+  cancelPendingScroll()
   runtimeStore.disconnectSSE()
 })
 
@@ -660,23 +663,53 @@ function isNearMessagesBottom(el: HTMLElement): boolean {
 function scrollToBottom(behavior: ScrollBehavior = 'smooth') {
   const currentEl = messagesRef.value
   const shouldFollowBottom = !currentEl || isNearMessagesBottom(currentEl)
+  if (!shouldFollowBottom) return
 
   nextTick(() => {
-    const el = messagesRef.value
-    if (!el || !shouldFollowBottom) return
+    pendingScrollBehavior = mergeScrollBehavior(pendingScrollBehavior, behavior)
+    if (pendingScrollFrame !== null) return
 
-    const targetTop = el.scrollHeight
-    if (typeof el.scrollTo === 'function') {
-      el.scrollTo({ top: targetTop, behavior })
-      return
-    }
-    el.scrollTop = targetTop
+    pendingScrollFrame = requestScrollFrame(() => {
+      pendingScrollFrame = null
+      const el = messagesRef.value
+      if (!el) return
+
+      const targetTop = el.scrollHeight
+      const nextBehavior = pendingScrollBehavior
+      pendingScrollBehavior = 'smooth'
+      if (typeof el.scrollTo === 'function') {
+        el.scrollTo({ top: targetTop, behavior: nextBehavior })
+        return
+      }
+      el.scrollTop = targetTop
+    })
   })
 }
 
+function mergeScrollBehavior(current: ScrollBehavior, next: ScrollBehavior): ScrollBehavior {
+  return current === 'auto' || next === 'auto' ? 'auto' : next
+}
+
+function requestScrollFrame(callback: FrameRequestCallback): number {
+  if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+    return window.requestAnimationFrame(callback)
+  }
+  return window.setTimeout(() => callback(performance.now()), 16)
+}
+
+function cancelPendingScroll() {
+  if (pendingScrollFrame === null) return
+  if (typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
+    window.cancelAnimationFrame(pendingScrollFrame)
+  } else {
+    clearTimeout(pendingScrollFrame)
+  }
+  pendingScrollFrame = null
+}
+
 watch(() => sessionStore.messages.length, () => scrollToBottom())
-watch(() => currentStreamingText.value, () => scrollToBottom())
-watch(() => currentRuntimeEvents.value.length, () => scrollToBottom())
+watch(() => currentStreamingText.value, () => scrollToBottom('auto'))
+watch(() => currentRuntimeEvents.value.length, () => scrollToBottom('auto'))
 watch(
   () => runtimeSettingsStore.promptDebugPanelEnabled,
   (enabled) => {

@@ -236,6 +236,32 @@ describe('MessageList.vue', () => {
     expect(wrapper.text()).not.toContain('旧会话 Skill')
   })
 
+  it('does not send historical assistant delta events into turn projection', () => {
+    const wrapper = mount(MessageList, {
+      props: {
+        activeSessionId: 'session-current',
+        messages: [makeMessage({ id: 'msg-current', sessionId: 'session-current', content: '当前会话' })],
+        runtimeEvents: [
+          makeRuntimeEvent({
+            id: 'evt-delta-history',
+            sessionId: 'session-current',
+            eventType: 'ASSISTANT_DELTA',
+            payloadJson: '{"delta":"不应作为历史步骤显示"}',
+          }),
+          makeRuntimeEvent({
+            id: 'evt-current',
+            sessionId: 'session-current',
+            eventType: 'SKILL_STARTED',
+            payloadJson: '{"label":"当前会话 Skill"}',
+          }),
+        ],
+      },
+    })
+
+    expect(wrapper.text()).toContain('当前会话 Skill')
+    expect(wrapper.text()).not.toContain('不应作为历史步骤显示')
+  })
+
   it('renders system messages correctly', () => {
     const wrapper = mount(MessageList, {
       props: { messages: [makeMessage({ role: 'SYSTEM', content: '节点已完成' })] },

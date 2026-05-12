@@ -30,6 +30,8 @@ public class RuntimeEventService {
     private static final Logger log = LoggerFactory.getLogger(RuntimeEventService.class);
     private static final int SQLITE_BUSY_MAX_RETRIES = 5;
     private static final long SQLITE_BUSY_RETRY_SLEEP_MS = 80L;
+    private static final int DEFAULT_EVENT_REPLAY_LIMIT = 300;
+    private static final int MAX_EVENT_REPLAY_LIMIT = 1000;
     private static final int LOG_FIELD_LIMIT = 180;
     private static final ObjectMapper TRACE_OBJECT_MAPPER = new ObjectMapper();
 
@@ -53,9 +55,24 @@ public class RuntimeEventService {
     }
 
     public List<RuntimeEventDto> getEventsBySession(String sessionId) {
-        return eventMapper.findBySessionId(sessionId).stream()
+        return getEventsBySession(sessionId, null, DEFAULT_EVENT_REPLAY_LIMIT);
+    }
+
+    public List<RuntimeEventDto> getEventsBySession(String sessionId, Long afterSeq, Integer limit) {
+        int effectiveLimit = normalizeReplayLimit(limit);
+        List<RuntimeEventEntity> events = afterSeq != null && afterSeq >= 0
+                ? eventMapper.findBySessionIdAfterSeq(sessionId, afterSeq, effectiveLimit)
+                : eventMapper.findRecentBySessionId(sessionId, effectiveLimit);
+        return events.stream()
                 .map(this::toDto)
                 .toList();
+    }
+
+    private int normalizeReplayLimit(Integer limit) {
+        if (limit == null || limit <= 0) {
+            return DEFAULT_EVENT_REPLAY_LIMIT;
+        }
+        return Math.min(limit, MAX_EVENT_REPLAY_LIMIT);
     }
 
     public void publishEvent(RuntimeEventDto event) {
@@ -87,7 +104,35 @@ public class RuntimeEventService {
     }
 
     private void publishImmediately(RuntimeEventDto event) {
+        if (RuntimeEventType.ASSISTANT_DELTA.equals(event.eventType())) {
+            broadcastTransientEvent(event);
+            return;
+        }
         persistAndBroadcast(event);
+    }
+
+    private void broadcastTransientEvent(RuntimeEventDto event) {
+        if (event.sessionId() == null) {
+            return;
+        }
+        RuntimeEventDto withId = new RuntimeEventDto(
+                event.id() != null ? event.id() : idGenerator.nextId(),
+                event.sessionId(),
+                event.workItemId(),
+                event.workflowInstanceId(),
+                event.workflowNodeInstanceId(),
+                event.eventType(),
+                event.eventSource(),
+                event.payloadJson(),
+                event.seqNo(),
+                event.createdAt() != null ? event.createdAt() : OffsetDateTime.now()
+        );
+        logConversationEvent(withId);
+        emitterRegistry.sendToSession(event.sessionId(), withId);
+        webSocketSessionRegistry.sendToSession(event.sessionId(), Map.of(
+                "type", "runtime.event",
+                "payload", withId
+        ));
     }
 
     private void persistAndBroadcast(RuntimeEventDto event) {

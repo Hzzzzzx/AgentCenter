@@ -156,6 +156,52 @@ class RuntimeEventServiceTest {
         verify(emitterRegistry).sendToSession(eq("ses-1"), any(RuntimeEventDto.class));
     }
 
+    @Test
+    void assistantDeltaIsBroadcastWithoutPersistence() {
+        RuntimeEventDto delta = new RuntimeEventDto(
+                null,
+                "ses-1",
+                "work-1",
+                "workflow-1",
+                "node-1",
+                RuntimeEventType.ASSISTANT_DELTA,
+                RuntimeEventSource.OPENCODE,
+                "{\"delta\":\"hi\"}",
+                null
+        );
+
+        service.publishEvent(delta);
+
+        verify(eventMapper, never()).insert(any(RuntimeEventEntity.class));
+        verify(eventMapper, never()).nextSeqNo("ses-1");
+        verify(emitterRegistry).sendToSession(eq("ses-1"), any(RuntimeEventDto.class));
+        verify(webSocketSessionRegistry).sendToSession(eq("ses-1"), any());
+    }
+
+    @Test
+    void getEventsBySessionUsesBoundedRecentReplayByDefault() {
+        when(eventMapper.findRecentBySessionId("ses-1", 300))
+                .thenReturn(List.of(runtimeEventEntity(42)));
+
+        List<RuntimeEventDto> events = service.getEventsBySession("ses-1");
+
+        assertThat(events).hasSize(1);
+        assertThat(events.get(0).seqNo()).isEqualTo(42);
+        verify(eventMapper).findRecentBySessionId("ses-1", 300);
+    }
+
+    @Test
+    void getEventsBySessionUsesCursorAndClampsReplayLimit() {
+        when(eventMapper.findBySessionIdAfterSeq("ses-1", 42L, 1000))
+                .thenReturn(List.of(runtimeEventEntity(43)));
+
+        List<RuntimeEventDto> events = service.getEventsBySession("ses-1", 42L, 5000);
+
+        assertThat(events).hasSize(1);
+        assertThat(events.get(0).seqNo()).isEqualTo(43);
+        verify(eventMapper).findBySessionIdAfterSeq("ses-1", 42L, 1000);
+    }
+
     private RuntimeEventDto runtimeEvent() {
         return new RuntimeEventDto(
                 null,
@@ -168,5 +214,20 @@ class RuntimeEventServiceTest {
                 "{\"status\":\"running\"}",
                 null
         );
+    }
+
+    private RuntimeEventEntity runtimeEventEntity(int seqNo) {
+        RuntimeEventEntity entity = new RuntimeEventEntity();
+        entity.setId("evt-" + seqNo);
+        entity.setSessionId("ses-1");
+        entity.setWorkItemId("work-1");
+        entity.setWorkflowInstanceId("workflow-1");
+        entity.setWorkflowNodeInstanceId("node-1");
+        entity.setEventType(RuntimeEventType.STATUS.name());
+        entity.setEventSource(RuntimeEventSource.BRIDGE.name());
+        entity.setPayloadJson("{\"status\":\"running\"}");
+        entity.setSeqNo(seqNo);
+        entity.setCreatedAt("2026-01-01T00:00:00Z");
+        return entity;
     }
 }

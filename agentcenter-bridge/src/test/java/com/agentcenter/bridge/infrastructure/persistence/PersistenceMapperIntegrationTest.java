@@ -229,6 +229,30 @@ class PersistenceMapperIntegrationTest {
     }
 
     @Test
+    void canReadRecentAndCursorRuntimeEvents() {
+        String sessionId = idGenerator.nextId();
+        for (int i = 1; i <= 4; i++) {
+            RuntimeEventEntity evt = new RuntimeEventEntity();
+            evt.setId(idGenerator.nextId());
+            evt.setSessionId(sessionId);
+            evt.setEventType("STATUS");
+            evt.setEventSource("BRIDGE");
+            evt.setPayloadJson("{\"status\":\"event-" + i + "\"}");
+            evt.setSeqNo(i);
+            eventMapper.insert(evt);
+        }
+
+        List<RuntimeEventEntity> recent = eventMapper.findRecentBySessionId(sessionId, 2);
+        assertThat(recent).extracting(RuntimeEventEntity::getSeqNo).containsExactly(3, 4);
+
+        List<RuntimeEventEntity> afterCursor = eventMapper.findBySessionIdAfterSeq(sessionId, 2, 10);
+        assertThat(afterCursor).extracting(RuntimeEventEntity::getSeqNo).containsExactly(3, 4);
+
+        List<RuntimeEventEntity> cappedAfterCursor = eventMapper.findBySessionIdAfterSeq(sessionId, 1, 2);
+        assertThat(cappedAfterCursor).extracting(RuntimeEventEntity::getSeqNo).containsExactly(3, 4);
+    }
+
+    @Test
     void canInsertAndReadMessage() {
         AgentSessionEntity session = new AgentSessionEntity();
         session.setId(idGenerator.nextId());

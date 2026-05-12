@@ -7,8 +7,10 @@ import { useWorkflowStore } from './workflows'
 import { useConfirmationStore } from './confirmations'
 import { useWorkItemWorkflowProjectionStore } from './workItemWorkflowProjection'
 
-const STREAM_FRAME_DELAY_MS = 16
-const STREAM_FRAME_BATCH_SIZE = 8
+const STREAM_FRAME_DELAY_MS = 32
+const STREAM_FRAME_BATCH_SIZE = 24
+const EVENT_BUFFER_LIMIT = 300
+const SEEN_EVENT_ID_LIMIT = 2000
 
 type RuntimePayload = Record<string, unknown>
 
@@ -22,6 +24,7 @@ export const useRuntimeStore = defineStore('runtime', () => {
   const lastNodeState = ref<string | null>(null)
   const lastNodeStateReason = ref<string | null>(null)
   const seenEventIds = new Set<string>()
+  const seenEventIdOrder: string[] = []
   const streamQueue: string[] = []
   let finalSyncTimer: ReturnType<typeof setTimeout> | null = null
   let streamFlushTimer: ReturnType<typeof setTimeout> | null = null
@@ -41,6 +44,7 @@ export const useRuntimeStore = defineStore('runtime', () => {
     connectedAtMs = Date.now()
     events.value = []
     seenEventIds.clear()
+    seenEventIdOrder.length = 0
     resetStreamingOutput()
     markIdle()
     lastNodeState.value = null
@@ -55,10 +59,13 @@ export const useRuntimeStore = defineStore('runtime', () => {
         if (activeSessionId.value !== subscribedSessionId) return
         if (event.sessionId !== subscribedSessionId) return
         if (hasSeenEvent(event)) return
-        events.value.push(event)
+        if (shouldKeepTimelineEvent(event)) {
+          pushTimelineEvent(event)
+        }
         applyRuntimeEvent(event)
       },
       () => handleSseError(subscribedSessionId),
+      { limit: EVENT_BUFFER_LIMIT },
     )
   }
 
@@ -75,6 +82,7 @@ export const useRuntimeStore = defineStore('runtime', () => {
   function clearEvents() {
     events.value = []
     seenEventIds.clear()
+    seenEventIdOrder.length = 0
   }
 
   function applyRuntimeEvent(event: RuntimeEventDto) {
@@ -164,9 +172,7 @@ export const useRuntimeStore = defineStore('runtime', () => {
     }
 
     if (event.eventType === 'PROCESS_TRACE') {
-      if (event.workflowInstanceId) {
-        void syncWorkflowAndWorkItem(event)
-      }
+      return
     }
   }
 
@@ -252,7 +258,22 @@ export const useRuntimeStore = defineStore('runtime', () => {
     if (!event.id) return false
     if (seenEventIds.has(event.id)) return true
     seenEventIds.add(event.id)
+    seenEventIdOrder.push(event.id)
+    while (seenEventIdOrder.length > SEEN_EVENT_ID_LIMIT) {
+      const evicted = seenEventIdOrder.shift()
+      if (evicted) {
+        seenEventIds.delete(evicted)
+      }
+    }
     return false
+  }
+
+  function shouldKeepTimelineEvent(event: RuntimeEventDto): boolean {
+    return event.eventType !== 'ASSISTANT_DELTA'
+  }
+
+  function pushTimelineEvent(event: RuntimeEventDto) {
+    events.value = [...events.value, event].slice(-EVENT_BUFFER_LIMIT)
   }
 
   function shouldApplyAssistantDelta(event: RuntimeEventDto): boolean {
@@ -338,7 +359,7 @@ export const useRuntimeStore = defineStore('runtime', () => {
       seqNo: null,
       createdAt: new Date(now).toISOString(),
     }
-    events.value.push(event)
+    pushTimelineEvent(event)
     applyRuntimeEvent(event)
   }
 

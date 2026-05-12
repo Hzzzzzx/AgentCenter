@@ -390,6 +390,7 @@ describe('ConversationWorkbench.vue', () => {
     sessionStore.messages.push(makeAssistantMessage('msg-smooth-follow', 3))
     await nextTick()
     await nextTick()
+    await new Promise(resolve => requestAnimationFrame(() => resolve(undefined)))
 
     expect(scrollTo).toHaveBeenCalledWith({ top: 1000, behavior: 'smooth' })
   })
@@ -421,6 +422,7 @@ describe('ConversationWorkbench.vue', () => {
     sessionStore.messages.push(makeAssistantMessage('msg-no-scroll-steal', 4))
     await nextTick()
     await nextTick()
+    await new Promise(resolve => requestAnimationFrame(() => resolve(undefined)))
 
     expect(scrollTo).not.toHaveBeenCalled()
   })
