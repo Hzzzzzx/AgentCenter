@@ -113,9 +113,11 @@ public class WorkflowPromptComposer {
             return;
         }
 
-        sb.append("## 补充用户输入\n\n");
+        sb.append("## 用户本轮输入（优先执行）\n\n");
+        sb.append("以下内容来自用户在页面中的主动介入。它是当前节点的直接指令；请优先按它继续、修正或扩展当前输出，不要只回复等待平台推进。\n\n");
+        sb.append("```text\n");
         sb.append(context.getSupplementalInput());
-        sb.append("\n\n");
+        sb.append("\n```\n\n");
     }
 
     private void appendField(StringBuilder sb, String label, String value) {

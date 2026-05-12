@@ -11,6 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -87,6 +88,10 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
     private final ProjectRuntimeWorkspaceResolver workspaceResolver;
     private final String agent;
     private final int responseTimeoutSeconds;
+    private final int waitInterruptedRetryLimit;
+    private final long waitInterruptedRetryBackoffMs;
+    private final int pollErrorRetryLimit;
+    private final long pollErrorRetryBackoffMs;
 
     @Value("${agentcenter.trace.conversation-log-enabled:false}")
     private boolean conversationLogEnabled;
@@ -95,6 +100,7 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
     private final Map<String, String> sessionWorkingDirectories = new ConcurrentHashMap<>();
     private final Map<String, Long> cancelGenerations = new ConcurrentHashMap<>();
 
+    @Autowired
     public OpenCodeRuntimeAdapter(
             OpenCodeProcessManager processManager,
             OpenCodeEventSubscriber eventSubscriber,
@@ -106,7 +112,11 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
             WorkItemMapper workItemMapper,
             ProjectRuntimeWorkspaceResolver workspaceResolver,
             @Value("${agentcenter.runtime.opencode.serve.agent:build}") String agent,
-            @Value("${agentcenter.runtime.opencode.timeout-seconds:180}") int responseTimeoutSeconds) {
+            @Value("${agentcenter.runtime.opencode.timeout-seconds:180}") int responseTimeoutSeconds,
+            @Value("${agentcenter.runtime.opencode.wait-interrupted-retry-limit:1}") int waitInterruptedRetryLimit,
+            @Value("${agentcenter.runtime.opencode.wait-interrupted-retry-backoff-ms:700}") long waitInterruptedRetryBackoffMs,
+            @Value("${agentcenter.runtime.opencode.poll-error-retry-limit:3}") int pollErrorRetryLimit,
+            @Value("${agentcenter.runtime.opencode.poll-error-retry-backoff-ms:1000}") long pollErrorRetryBackoffMs) {
         this.processManager = processManager;
         this.eventSubscriber = eventSubscriber;
         this.objectMapper = objectMapper;
@@ -118,6 +128,47 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         this.workspaceResolver = workspaceResolver;
         this.agent = agent;
         this.responseTimeoutSeconds = responseTimeoutSeconds;
+        this.waitInterruptedRetryLimit = Math.max(0, waitInterruptedRetryLimit);
+        this.waitInterruptedRetryBackoffMs = Math.max(0L, waitInterruptedRetryBackoffMs);
+        this.pollErrorRetryLimit = Math.max(0, pollErrorRetryLimit);
+        this.pollErrorRetryBackoffMs = Math.max(0L, pollErrorRetryBackoffMs);
+    }
+
+    public OpenCodeRuntimeAdapter(
+            OpenCodeProcessManager processManager,
+            OpenCodeEventSubscriber eventSubscriber,
+            ObjectMapper objectMapper,
+            OpenCodeSkillFileService skillFileService,
+            OpenCodeMcpFileService mcpFileService,
+            OpenCodeHttpCommandTransport commandTransport,
+            RuntimeEventService runtimeEventService,
+            WorkItemMapper workItemMapper,
+            ProjectRuntimeWorkspaceResolver workspaceResolver,
+            String agent,
+            int responseTimeoutSeconds,
+            int waitInterruptedRetryLimit,
+            long waitInterruptedRetryBackoffMs) {
+        this(processManager, eventSubscriber, objectMapper,
+                skillFileService, mcpFileService, commandTransport, runtimeEventService,
+                workItemMapper, workspaceResolver, agent, responseTimeoutSeconds,
+                waitInterruptedRetryLimit, waitInterruptedRetryBackoffMs, 3, 1000);
+    }
+
+    public OpenCodeRuntimeAdapter(
+            OpenCodeProcessManager processManager,
+            OpenCodeEventSubscriber eventSubscriber,
+            ObjectMapper objectMapper,
+            OpenCodeSkillFileService skillFileService,
+            OpenCodeMcpFileService mcpFileService,
+            OpenCodeHttpCommandTransport commandTransport,
+            RuntimeEventService runtimeEventService,
+            WorkItemMapper workItemMapper,
+            ProjectRuntimeWorkspaceResolver workspaceResolver,
+            String agent,
+            int responseTimeoutSeconds) {
+        this(processManager, eventSubscriber, objectMapper,
+                skillFileService, mcpFileService, commandTransport, runtimeEventService,
+                workItemMapper, workspaceResolver, agent, responseTimeoutSeconds, 1, 700, 3, 1000);
     }
 
     @Override
@@ -237,19 +288,13 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
     @Override
     public SkillRunResult runSkill(String sessionId, String skillName, String inputContext) {
-        String output = dispatchPromptAndWait(
+        WaitResult waitResult = dispatchPromptAndWait(
                 sessionId,
                 buildSkillPrompt(skillName, inputContext),
                 false);
+        String output = waitResult.output();
         if (output == null || output.isBlank()) {
-            return new SkillRunResult(
-                    false,
-                    null,
-                    "MARKDOWN",
-                    "Agent Runtime 已接收 Skill `" + skillName + "`，但在 "
-                            + responseTimeoutSeconds + " 秒内没有返回可用输出。",
-                    false
-            );
+            return failedSkillResult(skillName, waitResult);
         }
         return new SkillRunResult(true, output, "MARKDOWN", null, false);
     }
@@ -260,16 +305,10 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
      */
     public SkillRunResult runSkill(String sessionId, SkillInvocationRequest request) {
         ArrayNode parts = buildSkillParts(request);
-        String output = dispatchMultiPartPromptAndWait(sessionId, parts, request.skillName());
+        WaitResult waitResult = dispatchMultiPartPromptAndWait(sessionId, parts, request.skillName());
+        String output = waitResult.output();
         if (output == null || output.isBlank()) {
-            return new SkillRunResult(
-                    false,
-                    null,
-                    "MARKDOWN",
-                    "Agent Runtime 已接收 Skill `" + request.skillName() + "`，但在 "
-                            + responseTimeoutSeconds + " 秒内没有返回可用输出。",
-                    false
-            );
+            return failedSkillResult(request.skillName(), waitResult);
         }
         return new SkillRunResult(true, output, "MARKDOWN", null, false);
     }
@@ -285,9 +324,10 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
                 工作方式：
                 - 优先遵循 Skill 自身说明和当前会话上下文。
-                - AgentCenter 工作流只提供调用顺序、工作项信息、上游产物和用户交互回答，不替代 Skill 的判断。
+                - AgentCenter 页面是用户可介入的协作界面；用户可能随时输入补充、调整、继续或接管指令。
+                - AgentCenter 工作流只提供调用顺序、工作项信息、上游产物和用户交互回答，不替代 Skill 的判断，也不替代用户本轮输入。
                 - 用户说“继续”、补充、调整或追问时，把它当作当前 Skill 的自然多轮输入，直接继续产出、修正或提问。
-                - 不要用“可在适当时机推进”这类流程占位话术替代对用户本轮输入的实际响应。
+                - 不要用“等待系统推进”“可在适当时机推进”这类流程占位话术替代对用户本轮输入的实际响应；能继续就直接继续。
                 - 如果需要用户继续澄清、选择、确认或授权，优先使用 OpenCode 原生 Question 交互；AgentCenter Bridge 会将 Question 翻译为平台待确认。
                 - 有限方案选择必须给出 2-3 个选项；只有开放式补充信息才让用户自由输入。
                 - 如果当前 Runtime 不能使用 Question，再在输出末尾按 AgentCenter 节点状态协议声明 NEEDS_USER_INPUT。
@@ -321,9 +361,10 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
                 工作方式：
                 - 优先遵循 Skill 自身说明和当前会话上下文。
-                - AgentCenter 工作流只提供调用顺序、工作项信息、上游产物和用户交互回答，不替代 Skill 的判断。
+                - AgentCenter 页面是用户可介入的协作界面；用户可能随时输入补充、调整、继续或接管指令。
+                - AgentCenter 工作流只提供调用顺序、工作项信息、上游产物和用户交互回答，不替代 Skill 的判断，也不替代用户本轮输入。
                 - 用户说“继续”、补充、调整或追问时，把它当作当前 Skill 的自然多轮输入，直接继续产出、修正或提问。
-                - 不要用“可在适当时机推进”这类流程占位话术替代对用户本轮输入的实际响应。
+                - 不要用“等待系统推进”“可在适当时机推进”这类流程占位话术替代对用户本轮输入的实际响应；能继续就直接继续。
                 - 如果需要用户继续澄清、选择、确认或授权，优先使用 OpenCode 原生 Question 交互；AgentCenter Bridge 会将 Question 翻译为平台待确认。
                 - 有限方案选择必须给出 2-3 个选项；只有开放式补充信息才让用户自由输入。
                 - 如果当前 Runtime 不能使用 Question，再在输出末尾按 AgentCenter 节点状态协议声明 NEEDS_USER_INPUT。
@@ -351,9 +392,41 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         return parts;
     }
 
-    private String dispatchPromptAndWait(String sessionId, String userMessage, boolean allowToolOutputFallback) {
-        DispatchContext context = dispatchPrompt(sessionId, userMessage, false);
-        return waitForAssistantText(
+    private SkillRunResult failedSkillResult(String skillName, WaitResult waitResult) {
+        return new SkillRunResult(
+                false,
+                null,
+                "MARKDOWN",
+                failedSkillMessage(skillName, waitResult),
+                false
+        );
+    }
+
+    private String failedSkillMessage(String skillName, WaitResult waitResult) {
+        if (waitResult.status() == WaitStatus.INTERRUPTED) {
+            return "Agent Runtime 等待 Skill `" + skillName + "` 输出时被中断，已自动重试 "
+                    + waitResult.retryCount() + " 次仍未恢复。"
+                    + " 这通常意味着 Bridge 服务重启、工作流线程池关闭，或企业运行环境回收了长时间等待的任务。"
+                    + " 请检查服务生命周期后重试该节点。";
+        }
+        if (waitResult.status() == WaitStatus.TRANSPORT_ERROR) {
+            return "Agent Runtime 已接收 Skill `" + skillName + "`，但读取 Runtime 输出时连续失败，已自动重试 "
+                    + waitResult.retryCount() + " 次仍未恢复。"
+                    + " 最后错误：" + nonBlank(waitResult.failureDetail(), "未知错误")
+                    + "。请检查 opencode serve 进程、企业代理/网关或网络连接后重试该节点。";
+        }
+        return "Agent Runtime 已接收 Skill `" + skillName + "`，但在 "
+                + responseTimeoutSeconds + " 秒内没有返回可用输出。";
+    }
+
+    private WaitResult dispatchPromptAndWait(String sessionId, String userMessage, boolean allowToolOutputFallback) {
+        DispatchContext context;
+        try {
+            context = dispatchPrompt(sessionId, userMessage, false);
+        } catch (RuntimePollingException e) {
+            return WaitResult.transportError(e.retryCount(), e.getMessage());
+        }
+        return waitForAssistantTextWithRetry(
                 context.baseUrl(),
                 context.cwd(),
                 context.opencodeSessionId(),
@@ -362,9 +435,14 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
                 context.cancelGeneration());
     }
 
-    private String dispatchMultiPartPromptAndWait(String sessionId, ArrayNode parts, String skillName) {
-        DispatchContext context = dispatchMultiPartPrompt(sessionId, parts, skillName);
-        return waitForAssistantText(
+    private WaitResult dispatchMultiPartPromptAndWait(String sessionId, ArrayNode parts, String skillName) {
+        DispatchContext context;
+        try {
+            context = dispatchMultiPartPrompt(sessionId, parts, skillName);
+        } catch (RuntimePollingException e) {
+            return WaitResult.transportError(e.retryCount(), e.getMessage());
+        }
+        return waitForAssistantTextWithRetry(
                 context.baseUrl(),
                 context.cwd(),
                 context.opencodeSessionId(),
@@ -669,7 +747,24 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
     private Set<String> fetchMessageIds(String baseUrl, String cwd, String opencodeSessionId) {
         Set<String> ids = new HashSet<>();
-        JsonNode messages = commandTransport.fetchMessages(baseUrl, cwd, opencodeSessionId);
+        JsonNode messages;
+        int retryCount = 0;
+        while (true) {
+            try {
+                messages = commandTransport.fetchMessages(baseUrl, cwd, opencodeSessionId);
+                break;
+            } catch (RuntimeException e) {
+                if (retryCount >= pollErrorRetryLimit) {
+                    publishAssistantPollFailed(opencodeSessionId, retryCount, e);
+                    throw new RuntimePollingException(errorMessage(e), e, retryCount);
+                }
+                retryCount += 1;
+                publishAssistantPollRetry(opencodeSessionId, retryCount, e);
+                if (!sleepBeforePollErrorRetry()) {
+                    throw new RuntimePollingException("Interrupted while retrying Runtime message polling", e, retryCount);
+                }
+            }
+        }
         if (messages != null && messages.isArray()) {
             for (JsonNode message : messages) {
                 String id = message.path("info").path("id").asText("");
@@ -743,39 +838,111 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         }
     }
 
-    private String waitForAssistantText(String baseUrl, String cwd,
-                                        String opencodeSessionId,
-                                        Set<String> knownMessageIds,
-                                        boolean allowToolOutputFallback,
-                                        long cancelGeneration) {
+    private WaitResult waitForAssistantTextWithRetry(String baseUrl, String cwd,
+                                                     String opencodeSessionId,
+                                                     Set<String> knownMessageIds,
+                                                     boolean allowToolOutputFallback,
+                                                     long cancelGeneration) {
         long deadline = System.nanoTime() + Duration.ofSeconds(responseTimeoutSeconds).toNanos();
+        int retryCount = 0;
+        while (true) {
+            WaitResult result = waitForAssistantText(
+                    baseUrl, cwd, opencodeSessionId, knownMessageIds,
+                    allowToolOutputFallback, cancelGeneration, deadline, retryCount);
+            if (result.status() != WaitStatus.INTERRUPTED) {
+                return result;
+            }
+            if (retryCount >= waitInterruptedRetryLimit || System.nanoTime() >= deadline) {
+                publishAssistantInterrupted(opencodeSessionId, retryCount);
+                return result;
+            }
+
+            retryCount += 1;
+            Thread.interrupted(); // clear the interrupted flag before the retry wait.
+            publishAssistantWaitRetry(opencodeSessionId, retryCount);
+            if (!sleepBeforeInterruptedRetry()) {
+                publishAssistantInterrupted(opencodeSessionId, retryCount);
+                return WaitResult.interrupted(retryCount);
+            }
+        }
+    }
+
+    private WaitResult waitForAssistantText(String baseUrl, String cwd,
+                                            String opencodeSessionId,
+                                            Set<String> knownMessageIds,
+                                            boolean allowToolOutputFallback,
+                                            long cancelGeneration,
+                                            long deadline,
+                                            int retryCount) {
         Map<String, Integer> streamedTextLengths = new HashMap<>();
+        int pollErrorRetryCount = 0;
         while (System.nanoTime() < deadline) {
             if (wasCancelled(opencodeSessionId, cancelGeneration)) {
-                return USER_CANCELLED_NODE_STATE;
+                return WaitResult.output(USER_CANCELLED_NODE_STATE, retryCount);
             }
-            JsonNode messages = commandTransport.fetchMessages(baseUrl, cwd, opencodeSessionId);
+            JsonNode messages;
+            try {
+                messages = commandTransport.fetchMessages(baseUrl, cwd, opencodeSessionId);
+                pollErrorRetryCount = 0;
+            } catch (RuntimeException e) {
+                if (pollErrorRetryCount >= pollErrorRetryLimit || System.nanoTime() >= deadline) {
+                    publishAssistantPollFailed(opencodeSessionId, pollErrorRetryCount, e);
+                    return WaitResult.transportError(pollErrorRetryCount, errorMessage(e));
+                }
+                pollErrorRetryCount += 1;
+                publishAssistantPollRetry(opencodeSessionId, pollErrorRetryCount, e);
+                if (!sleepBeforePollErrorRetry()) {
+                    return WaitResult.interrupted(retryCount);
+                }
+                continue;
+            }
             publishAssistantTextSnapshotDeltas(opencodeSessionId, messages, knownMessageIds, streamedTextLengths);
             String text = extractNewAssistantText(messages, knownMessageIds);
             if (text != null && !text.isBlank()) {
                 publishAssistantCompleted(opencodeSessionId);
-                return text;
+                return WaitResult.output(text, retryCount);
             }
             if (allowToolOutputFallback) {
                 String toolOutput = extractNewCompletedToolOutput(messages, knownMessageIds);
                 if (toolOutput != null && !toolOutput.isBlank()) {
-                    return toolOutput;
+                    return WaitResult.output(toolOutput, retryCount);
                 }
             }
             try {
                 Thread.sleep(500);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                return null;
+                return WaitResult.interrupted(retryCount);
             }
         }
         publishAssistantTimeout(opencodeSessionId);
-        return null;
+        return WaitResult.timeout(retryCount);
+    }
+
+    private boolean sleepBeforeInterruptedRetry() {
+        if (waitInterruptedRetryBackoffMs == 0L) {
+            return true;
+        }
+        try {
+            Thread.sleep(waitInterruptedRetryBackoffMs);
+            return true;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
+    private boolean sleepBeforePollErrorRetry() {
+        if (pollErrorRetryBackoffMs == 0L) {
+            return true;
+        }
+        try {
+            Thread.sleep(pollErrorRetryBackoffMs);
+            return true;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
     }
 
     private void publishAssistantTimeout(String opencodeSessionId) {
@@ -831,6 +998,164 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
                     responseTimeoutSeconds);
         } catch (Exception e) {
             log.warn("conversation.timeout status=publish_failed runtimeSession={} error={}",
+                    opencodeSessionId, errorMessage(e), e);
+        }
+    }
+
+    private void publishAssistantPollRetry(String opencodeSessionId, int retryCount, Exception error) {
+        publishAssistantPollFailureEvent(
+                opencodeSessionId,
+                RuntimeEventType.PROCESS_TRACE,
+                "retrying",
+                "读取 Runtime 输出失败，正在自动重试",
+                retryCount,
+                true,
+                error);
+    }
+
+    private void publishAssistantPollFailed(String opencodeSessionId, int retryCount, Exception error) {
+        publishAssistantPollFailureEvent(
+                opencodeSessionId,
+                RuntimeEventType.ERROR,
+                "failed",
+                "读取 Runtime 输出失败",
+                retryCount,
+                false,
+                error);
+        publishAssistantPollFailureEvent(
+                opencodeSessionId,
+                RuntimeEventType.PROCESS_TRACE,
+                "failed",
+                "读取 Runtime 输出失败",
+                retryCount,
+                false,
+                error);
+    }
+
+    private void publishAssistantPollFailureEvent(String opencodeSessionId,
+                                                  RuntimeEventType eventType,
+                                                  String status,
+                                                  String title,
+                                                  int retryCount,
+                                                  boolean retrying,
+                                                  Exception error) {
+        String agentSessionId = eventSubscriber.getAgentSessionId(opencodeSessionId);
+        if (agentSessionId == null || agentSessionId.isBlank()) {
+            log.warn("conversation.poll_failed status=missing_agent_mapping runtimeSession={} retryCount={} retryLimit={} error={}",
+                    opencodeSessionId, retryCount, pollErrorRetryLimit, errorMessage(error));
+            return;
+        }
+        String summary = retrying
+                ? "读取 Agent Runtime 输出时失败，正在第 " + retryCount + " 次自动重试。"
+                : "读取 Agent Runtime 输出时失败，已自动重试 " + retryCount + " 次仍未恢复。";
+        try {
+            ObjectNode payload = objectMapper.createObjectNode();
+            payload.put("kind", retrying ? "retry" : "error");
+            payload.put("status", status);
+            payload.put("title", title);
+            payload.put("summary", summary);
+            payload.put("reason", "RUNTIME_POLL_FAILED");
+            payload.put("errorCode", "RUNTIME_POLL_FAILED");
+            payload.put("errorMessage", errorMessage(error));
+            payload.put("recoverable", true);
+            payload.put("retryAttempt", retryCount);
+            payload.put("retryLimit", pollErrorRetryLimit);
+            payload.put("rawEventType", "session.messages.poll_failed");
+            if (eventType == RuntimeEventType.PROCESS_TRACE && !retrying) {
+                payload.put("visibility", "public_summary");
+            }
+            runtimeEventService.publishEvent(new RuntimeEventDto(
+                    null,
+                    agentSessionId,
+                    eventSubscriber.getWorkItemId(agentSessionId),
+                    eventSubscriber.getWorkflowInstanceId(agentSessionId),
+                    eventSubscriber.getWorkflowNodeInstanceId(agentSessionId),
+                    eventType,
+                    RuntimeEventSource.OPENCODE,
+                    payload.toString(),
+                    null
+            ));
+            log.warn("conversation.poll_failed status={} session={} runtimeSession={} retryCount={} retryLimit={} errorCode=RUNTIME_POLL_FAILED recoverable=true error={}",
+                    status, agentSessionId, opencodeSessionId, retryCount, pollErrorRetryLimit, errorMessage(error));
+        } catch (Exception e) {
+            log.warn("conversation.poll_failed status=publish_failed runtimeSession={} error={}",
+                    opencodeSessionId, errorMessage(e), e);
+        }
+    }
+
+    private void publishAssistantWaitRetry(String opencodeSessionId, int retryCount) {
+        publishAssistantWaitInterruptionEvent(
+                opencodeSessionId,
+                RuntimeEventType.PROCESS_TRACE,
+                "retrying",
+                "Runtime 等待被中断，正在自动重试",
+                retryCount,
+                true);
+    }
+
+    private void publishAssistantInterrupted(String opencodeSessionId, int retryCount) {
+        publishAssistantWaitInterruptionEvent(
+                opencodeSessionId,
+                RuntimeEventType.ERROR,
+                "failed",
+                "Runtime 等待被中断",
+                retryCount,
+                false);
+        publishAssistantWaitInterruptionEvent(
+                opencodeSessionId,
+                RuntimeEventType.PROCESS_TRACE,
+                "failed",
+                "Runtime 等待被中断",
+                retryCount,
+                false);
+    }
+
+    private void publishAssistantWaitInterruptionEvent(String opencodeSessionId,
+                                                       RuntimeEventType eventType,
+                                                       String status,
+                                                       String title,
+                                                       int retryCount,
+                                                       boolean retrying) {
+        String agentSessionId = eventSubscriber.getAgentSessionId(opencodeSessionId);
+        if (agentSessionId == null || agentSessionId.isBlank()) {
+            log.warn("conversation.wait_interrupted status=missing_agent_mapping runtimeSession={} retryCount={} retryLimit={}",
+                    opencodeSessionId, retryCount, waitInterruptedRetryLimit);
+            return;
+        }
+        String summary = retrying
+                ? "Agent Runtime 等待输出时被中断，正在第 " + retryCount + " 次自动重试。"
+                : "Agent Runtime 等待输出时被中断，已自动重试 " + retryCount + " 次仍未恢复。";
+        try {
+            ObjectNode payload = objectMapper.createObjectNode();
+            payload.put("kind", retrying ? "retry" : "error");
+            payload.put("status", status);
+            payload.put("title", title);
+            payload.put("summary", summary);
+            payload.put("reason", "RUNTIME_WAIT_INTERRUPTED");
+            payload.put("errorCode", "RUNTIME_WAIT_INTERRUPTED");
+            payload.put("errorMessage", summary);
+            payload.put("recoverable", true);
+            payload.put("retryAttempt", retryCount);
+            payload.put("retryLimit", waitInterruptedRetryLimit);
+            payload.put("rawEventType", "session.messages.wait_interrupted");
+            if (eventType == RuntimeEventType.PROCESS_TRACE && !retrying) {
+                payload.put("visibility", "public_summary");
+            }
+            runtimeEventService.publishEvent(new RuntimeEventDto(
+                    null,
+                    agentSessionId,
+                    eventSubscriber.getWorkItemId(agentSessionId),
+                    eventSubscriber.getWorkflowInstanceId(agentSessionId),
+                    eventSubscriber.getWorkflowNodeInstanceId(agentSessionId),
+                    eventType,
+                    RuntimeEventSource.OPENCODE,
+                    payload.toString(),
+                    null
+            ));
+            log.warn("conversation.wait_interrupted status={} session={} runtimeSession={} retryCount={} retryLimit={} recoverable=true",
+                    status, agentSessionId, opencodeSessionId, retryCount, waitInterruptedRetryLimit);
+        } catch (Exception e) {
+            log.warn("conversation.wait_interrupted status=publish_failed runtimeSession={} error={}",
                     opencodeSessionId, errorMessage(e), e);
         }
     }
@@ -1064,8 +1389,50 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         }
     }
 
+    private static String nonBlank(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
+    }
+
     private record DispatchContext(String baseUrl, String cwd,
                                    String opencodeSessionId,
                                    Set<String> knownMessageIds,
                                    long cancelGeneration) {}
+
+    private enum WaitStatus {
+        OUTPUT,
+        TIMEOUT,
+        INTERRUPTED,
+        TRANSPORT_ERROR
+    }
+
+    private record WaitResult(WaitStatus status, String output, int retryCount, String failureDetail) {
+        static WaitResult output(String output, int retryCount) {
+            return new WaitResult(WaitStatus.OUTPUT, output, retryCount, null);
+        }
+
+        static WaitResult timeout(int retryCount) {
+            return new WaitResult(WaitStatus.TIMEOUT, null, retryCount, null);
+        }
+
+        static WaitResult interrupted(int retryCount) {
+            return new WaitResult(WaitStatus.INTERRUPTED, null, retryCount, null);
+        }
+
+        static WaitResult transportError(int retryCount, String failureDetail) {
+            return new WaitResult(WaitStatus.TRANSPORT_ERROR, null, retryCount, failureDetail);
+        }
+    }
+
+    private static final class RuntimePollingException extends RuntimeException {
+        private final int retryCount;
+
+        private RuntimePollingException(String message, Throwable cause, int retryCount) {
+            super(message, cause);
+            this.retryCount = retryCount;
+        }
+
+        private int retryCount() {
+            return retryCount;
+        }
+    }
 }

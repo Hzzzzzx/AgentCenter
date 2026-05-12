@@ -100,9 +100,11 @@ class OpenCodeRuntimeAdapterBuildPartsTest {
         String part1 = parts.get(0).get("text").asText();
         assertTrue(part1.contains("请使用当前 Agent Runtime 中的 Skill `code-review` 处理下面的用户输入。"));
         assertTrue(part1.contains("优先遵循 Skill 自身说明和当前会话上下文"));
+        assertTrue(part1.contains("AgentCenter 页面是用户可介入的协作界面"));
         assertTrue(part1.contains("AgentCenter 工作流只提供调用顺序"));
+        assertTrue(part1.contains("不替代用户本轮输入"));
         assertTrue(part1.contains("自然多轮输入"));
-        assertTrue(part1.contains("可在适当时机推进"));
+        assertTrue(part1.contains("不要用“等待系统推进”"));
         assertTrue(part1.contains("优先使用 OpenCode 原生 Question 交互"));
         assertTrue(part1.contains("有限方案选择必须给出 2-3 个选项"));
         assertTrue(part1.contains("AgentCenter Bridge 会将 Question 翻译为平台待确认"));

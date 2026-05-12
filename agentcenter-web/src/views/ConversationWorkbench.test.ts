@@ -691,7 +691,7 @@ describe('ConversationWorkbench.vue', () => {
     )
   })
 
-  it('uses the composer slot for current interactions instead of the text input', async () => {
+  it('allows typed composer input to supplement the current interaction', async () => {
     const pinia = createPinia()
     setActivePinia(pinia)
     const wrapper = mount(ConversationWorkbench, {
@@ -713,7 +713,22 @@ describe('ConversationWorkbench.vue', () => {
 
     const composer = wrapper.find('.conversation-workbench__composer')
     expect(composer.find('.interaction-bar').exists()).toBe(true)
-    expect(composer.find('.conversation-workbench__input-area').exists()).toBe(false)
+    expect(composer.find('.conversation-workbench__input-area').exists()).toBe(true)
+
+    const input = wrapper.find<HTMLInputElement>('.conversation-workbench__input')
+    await input.setValue('我先补一版调整意见，不要直接进下一步')
+    await wrapper.find('form.conversation-workbench__input-area').trigger('submit')
+    await flushPromises()
+
+    expect(confirmationApi.resolve).toHaveBeenCalledWith(
+      mocks.pendingConfirmation.id,
+      expect.objectContaining({
+        actionType: 'SUPPLEMENT',
+        comment: '我先补一版调整意见，不要直接进下一步',
+        payload: { input: '我先补一版调整意见，不要直接进下一步' },
+      }),
+    )
+    expect(sessionApi.sendMessage).not.toHaveBeenCalled()
   })
 
   it('does not show interactions that belong to another session on the same work item', async () => {
@@ -833,7 +848,7 @@ describe('ConversationWorkbench.vue', () => {
 
     await flushPromises()
 
-    expect(wrapper.find('.conversation-workbench__input-area').exists()).toBe(false)
+    expect(wrapper.find('.conversation-workbench__input-area').exists()).toBe(true)
     expect(wrapper.find('.interaction-bar').exists()).toBe(true)
 
     const textarea = wrapper.find<HTMLTextAreaElement>('.interaction-bar__textarea')

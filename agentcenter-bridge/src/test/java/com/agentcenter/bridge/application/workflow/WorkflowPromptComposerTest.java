@@ -146,7 +146,8 @@ class WorkflowPromptComposerTest {
 
             String prompt = composer.composeNodePrompt(context);
 
-            assertTrue(prompt.contains("## 补充用户输入"), "should have supplemental section");
+            assertTrue(prompt.contains("## 用户本轮输入（优先执行）"), "should have supplemental section");
+            assertTrue(prompt.contains("当前节点的直接指令"), "should mark user input as direct instruction");
             assertTrue(prompt.contains("用户要求使用JWT认证"), "should have input content");
         }
 
@@ -155,7 +156,7 @@ class WorkflowPromptComposerTest {
         void composeNodePrompt_withoutSupplementalInput() {
             String prompt = composer.composeNodePrompt(basicContext());
 
-            assertFalse(prompt.contains("## 补充用户输入"), "should not have supplemental section when null");
+            assertFalse(prompt.contains("## 用户本轮输入（优先执行）"), "should not have supplemental section when null");
         }
 
         @Test
@@ -168,7 +169,7 @@ class WorkflowPromptComposerTest {
 
             String prompt = composer.composeNodePrompt(context);
 
-            assertFalse(prompt.contains("## 补充用户输入"), "should not have supplemental section when blank");
+            assertFalse(prompt.contains("## 用户本轮输入（优先执行）"), "should not have supplemental section when blank");
         }
 
         @Test
@@ -281,13 +282,15 @@ class WorkflowPromptComposerTest {
         void instructionComposer_containsImportantRules() {
             String instruction = instructionComposer.composeProtocolInstruction();
 
-            assertTrue(instruction.contains("如果你不输出状态块，系统默认视为 IN_PROGRESS"), "should explain default");
+            assertTrue(instruction.contains("如果你不输出状态块，平台默认视为 IN_PROGRESS"), "should explain default");
             assertTrue(instruction.contains("优先使用 OpenCode 原生 Question 交互"), "should prefer OpenCode question");
             assertTrue(instruction.contains("AgentCenter Bridge 会将 Question 翻译为平台待确认"), "should explain question bridge");
             assertTrue(instruction.contains("只有 READY_TO_ADVANCE 才会保存"), "should explain advance rule");
             assertTrue(instruction.contains("NEEDS_USER_INPUT 下用户回答后"), "should explain feedback loop");
             assertTrue(instruction.contains("自然多轮输入"), "should preserve flexible user interaction");
-            assertTrue(instruction.contains("可在适当时机推进"), "should warn against placeholder advance wording");
+            assertTrue(instruction.contains("用户可以随时在页面输入补充、调整、继续或接管指令"), "should mention page-side intervention");
+            assertTrue(instruction.contains("不要把可执行的用户输入回复成“等待系统推进”"), "should avoid rigid system-progress wording");
+            assertTrue(instruction.contains("由系统继续推进"), "should warn against placeholder advance wording");
             assertTrue(instruction.contains("type: DECISION"), "should require structured decision choices");
             assertTrue(instruction.contains("2-3 个互斥选择"), "should prefer options for finite choices");
         }

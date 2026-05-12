@@ -45,3 +45,7 @@ agentcenter:
       command: opencode
       model: ""
       timeout-seconds: 86400
+      wait-interrupted-retry-limit: 1
+      wait-interrupted-retry-backoff-ms: 700
+      poll-error-retry-limit: 3
+      poll-error-retry-backoff-ms: 1000

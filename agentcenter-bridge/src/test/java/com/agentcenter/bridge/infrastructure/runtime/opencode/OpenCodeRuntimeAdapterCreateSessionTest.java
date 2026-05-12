@@ -282,6 +282,213 @@ class OpenCodeRuntimeAdapterCreateSessionTest {
     }
 
     @Test
+    void runSkillRetriesInterruptedWaitWithoutResendingPrompt() throws Exception {
+        adapter = new OpenCodeRuntimeAdapter(
+                processManager, eventSubscriber, objectMapper,
+                skillFileService, mcpFileService, commandTransport, runtimeEventService,
+                workItemMapper, workspaceResolver,
+                "build", 30, 1, 0);
+
+        RuntimeAckEnvelope ack = new RuntimeAckEnvelope(
+                null, "agentcenter.runtime.v1", null,
+                "ack-msg-id", "corr-id", null,
+                RuntimeType.OPENCODE, null, "ses_retry_wait",
+                true, null, objectMapper.createObjectNode(), null);
+
+        when(commandTransport.send(any())).thenReturn(ack);
+        when(eventSubscriber.getAgentSessionId("ses_retry_wait")).thenReturn("agent-retry");
+        when(eventSubscriber.getWorkItemId("agent-retry")).thenReturn("work-retry");
+        when(eventSubscriber.getWorkflowInstanceId("agent-retry")).thenReturn("workflow-retry");
+        when(eventSubscriber.getWorkflowNodeInstanceId("agent-retry")).thenReturn("node-retry");
+
+        AtomicInteger fetchCount = new AtomicInteger();
+        when(commandTransport.fetchMessages(anyString(), anyString(), eq("ses_retry_wait")))
+                .thenAnswer(invocation -> {
+                    int count = fetchCount.incrementAndGet();
+                    if (count == 2) {
+                        Thread.currentThread().interrupt();
+                        return objectMapper.createArrayNode();
+                    }
+                    if (count >= 3) {
+                        return objectMapper.readTree("""
+                                [
+                                  {
+                                    "info": {"id": "msg-retry", "role": "assistant", "finish": "stop"},
+                                    "parts": [{"type": "text", "text": "重试后拿到输出"}]
+                                  }
+                                ]
+                                """);
+                    }
+                    return objectMapper.createArrayNode();
+                });
+
+        SkillRunResult result = adapter.runSkill("ses_retry_wait", "prd-design", "ctx");
+
+        assertTrue(result.success());
+        assertEquals("重试后拿到输出", result.outputContent());
+        assertFalse(Thread.currentThread().isInterrupted());
+        verify(commandTransport, times(1)).send(any());
+
+        ArgumentCaptor<RuntimeEventDto> eventCaptor = ArgumentCaptor.forClass(RuntimeEventDto.class);
+        verify(runtimeEventService, atLeastOnce()).publishEvent(eventCaptor.capture());
+        assertTrue(eventCaptor.getAllValues().stream()
+                .anyMatch(event -> event.eventType() == RuntimeEventType.PROCESS_TRACE
+                        && event.payloadJson() != null
+                        && event.payloadJson().contains("\"errorCode\":\"RUNTIME_WAIT_INTERRUPTED\"")
+                        && event.payloadJson().contains("\"retryAttempt\":1")));
+    }
+
+    @Test
+    void runSkillRetriesTransientPollFailureBeforeReturningOutput() throws Exception {
+        adapter = new OpenCodeRuntimeAdapter(
+                processManager, eventSubscriber, objectMapper,
+                skillFileService, mcpFileService, commandTransport, runtimeEventService,
+                workItemMapper, workspaceResolver,
+                "build", 86400, 1, 0, 2, 0);
+
+        RuntimeAckEnvelope ack = new RuntimeAckEnvelope(
+                null, "agentcenter.runtime.v1", null,
+                "ack-msg-id", "corr-id", null,
+                RuntimeType.OPENCODE, null, "ses_poll_retry",
+                true, null, objectMapper.createObjectNode(), null);
+
+        when(commandTransport.send(any())).thenReturn(ack);
+        when(eventSubscriber.getAgentSessionId("ses_poll_retry")).thenReturn("agent-poll-retry");
+        when(eventSubscriber.getWorkItemId("agent-poll-retry")).thenReturn("work-poll-retry");
+        when(eventSubscriber.getWorkflowInstanceId("agent-poll-retry")).thenReturn("workflow-poll-retry");
+        when(eventSubscriber.getWorkflowNodeInstanceId("agent-poll-retry")).thenReturn("node-poll-retry");
+
+        AtomicInteger fetchCount = new AtomicInteger();
+        when(commandTransport.fetchMessages(anyString(), anyString(), eq("ses_poll_retry")))
+                .thenAnswer(invocation -> {
+                    int count = fetchCount.incrementAndGet();
+                    if (count == 1) {
+                        throw new RuntimeException("temporary 502");
+                    }
+                    if (count == 2) {
+                        return objectMapper.createArrayNode();
+                    }
+                    return objectMapper.readTree("""
+                            [
+                              {
+                                "info": {"id": "msg-poll-retry", "role": "assistant", "finish": "stop"},
+                                "parts": [{"type": "text", "text": "轮询重试后拿到输出"}]
+                              }
+                            ]
+                            """);
+                });
+
+        SkillRunResult result = adapter.runSkill("ses_poll_retry", "prd-design", "ctx");
+
+        assertTrue(result.success());
+        assertEquals("轮询重试后拿到输出", result.outputContent());
+
+        ArgumentCaptor<RuntimeEventDto> eventCaptor = ArgumentCaptor.forClass(RuntimeEventDto.class);
+        verify(runtimeEventService, atLeastOnce()).publishEvent(eventCaptor.capture());
+        assertTrue(eventCaptor.getAllValues().stream()
+                .anyMatch(event -> event.eventType() == RuntimeEventType.PROCESS_TRACE
+                        && event.payloadJson() != null
+                        && event.payloadJson().contains("\"errorCode\":\"RUNTIME_POLL_FAILED\"")
+                        && event.payloadJson().contains("\"retryAttempt\":1")));
+    }
+
+    @Test
+    void runSkillReportsInterruptedWaitSeparatelyAfterRetryExhausted() throws Exception {
+        adapter = new OpenCodeRuntimeAdapter(
+                processManager, eventSubscriber, objectMapper,
+                skillFileService, mcpFileService, commandTransport, runtimeEventService,
+                workItemMapper, workspaceResolver,
+                "build", 86400, 1, 0);
+
+        RuntimeAckEnvelope ack = new RuntimeAckEnvelope(
+                null, "agentcenter.runtime.v1", null,
+                "ack-msg-id", "corr-id", null,
+                RuntimeType.OPENCODE, null, "ses_retry_exhausted",
+                true, null, objectMapper.createObjectNode(), null);
+
+        when(commandTransport.send(any())).thenReturn(ack);
+        when(eventSubscriber.getAgentSessionId("ses_retry_exhausted")).thenReturn("agent-retry-exhausted");
+        when(eventSubscriber.getWorkItemId("agent-retry-exhausted")).thenReturn("work-retry-exhausted");
+        when(eventSubscriber.getWorkflowInstanceId("agent-retry-exhausted")).thenReturn("workflow-retry-exhausted");
+        when(eventSubscriber.getWorkflowNodeInstanceId("agent-retry-exhausted")).thenReturn("node-retry-exhausted");
+
+        AtomicInteger fetchCount = new AtomicInteger();
+        when(commandTransport.fetchMessages(anyString(), anyString(), eq("ses_retry_exhausted")))
+                .thenAnswer(invocation -> {
+                    int count = fetchCount.incrementAndGet();
+                    if (count >= 2) {
+                        Thread.currentThread().interrupt();
+                    }
+                    return objectMapper.createArrayNode();
+                });
+
+        SkillRunResult result;
+        try {
+            result = adapter.runSkill("ses_retry_exhausted", "prd-design", "ctx");
+        } finally {
+            Thread.interrupted();
+        }
+
+        assertFalse(result.success());
+        assertTrue(result.errorMessage().contains("等待 Skill `prd-design` 输出时被中断"));
+        assertTrue(result.errorMessage().contains("已自动重试 1 次仍未恢复"));
+        assertFalse(result.errorMessage().contains("86400 秒内没有返回可用输出"));
+
+        ArgumentCaptor<RuntimeEventDto> eventCaptor = ArgumentCaptor.forClass(RuntimeEventDto.class);
+        verify(runtimeEventService, atLeastOnce()).publishEvent(eventCaptor.capture());
+        var waitInterruptedEvents = eventCaptor.getAllValues().stream()
+                .filter(event -> event.payloadJson() != null
+                        && event.payloadJson().contains("\"errorCode\":\"RUNTIME_WAIT_INTERRUPTED\""))
+                .toList();
+        assertEquals(3, waitInterruptedEvents.size());
+        assertTrue(waitInterruptedEvents.stream().anyMatch(event -> event.eventType() == RuntimeEventType.ERROR));
+        assertTrue(waitInterruptedEvents.stream().noneMatch(event ->
+                event.payloadJson() != null && event.payloadJson().contains("\"errorCode\":\"RUNTIME_TIMEOUT\"")));
+    }
+
+    @Test
+    void runSkillReportsPollFailureSeparatelyAfterRetryExhausted() throws Exception {
+        adapter = new OpenCodeRuntimeAdapter(
+                processManager, eventSubscriber, objectMapper,
+                skillFileService, mcpFileService, commandTransport, runtimeEventService,
+                workItemMapper, workspaceResolver,
+                "build", 86400, 1, 0, 2, 0);
+
+        RuntimeAckEnvelope ack = new RuntimeAckEnvelope(
+                null, "agentcenter.runtime.v1", null,
+                "ack-msg-id", "corr-id", null,
+                RuntimeType.OPENCODE, null, "ses_poll_exhausted",
+                true, null, objectMapper.createObjectNode(), null);
+
+        when(commandTransport.send(any())).thenReturn(ack);
+        when(eventSubscriber.getAgentSessionId("ses_poll_exhausted")).thenReturn("agent-poll-exhausted");
+        when(eventSubscriber.getWorkItemId("agent-poll-exhausted")).thenReturn("work-poll-exhausted");
+        when(eventSubscriber.getWorkflowInstanceId("agent-poll-exhausted")).thenReturn("workflow-poll-exhausted");
+        when(eventSubscriber.getWorkflowNodeInstanceId("agent-poll-exhausted")).thenReturn("node-poll-exhausted");
+        when(commandTransport.fetchMessages(anyString(), anyString(), eq("ses_poll_exhausted")))
+                .thenThrow(new RuntimeException("gateway reset"));
+
+        SkillRunResult result = adapter.runSkill("ses_poll_exhausted", "prd-design", "ctx");
+
+        assertFalse(result.success());
+        assertTrue(result.errorMessage().contains("读取 Runtime 输出时连续失败"));
+        assertTrue(result.errorMessage().contains("已自动重试 2 次仍未恢复"));
+        assertTrue(result.errorMessage().contains("gateway reset"));
+        assertFalse(result.errorMessage().contains("86400 秒内没有返回可用输出"));
+
+        ArgumentCaptor<RuntimeEventDto> eventCaptor = ArgumentCaptor.forClass(RuntimeEventDto.class);
+        verify(runtimeEventService, atLeastOnce()).publishEvent(eventCaptor.capture());
+        var pollFailureEvents = eventCaptor.getAllValues().stream()
+                .filter(event -> event.payloadJson() != null
+                        && event.payloadJson().contains("\"errorCode\":\"RUNTIME_POLL_FAILED\""))
+                .toList();
+        assertEquals(4, pollFailureEvents.size());
+        assertTrue(pollFailureEvents.stream().anyMatch(event -> event.eventType() == RuntimeEventType.ERROR));
+        assertTrue(pollFailureEvents.stream().noneMatch(event ->
+                event.payloadJson() != null && event.payloadJson().contains("\"errorCode\":\"RUNTIME_TIMEOUT\"")));
+    }
+
+    @Test
     void sendMessagePublishesPromptDebugEvent() {
         ObjectNode createAckPayload = objectMapper.createObjectNode();
         createAckPayload.put("sessionId", "ses_debug");

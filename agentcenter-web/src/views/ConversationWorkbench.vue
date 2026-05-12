@@ -166,8 +166,8 @@ const workflowNodeStateReason = computed<string | null>(() => {
 
 const inputPlaceholder = computed(() => {
   if (isConversationRunning.value) return '对话运行中，可点击右侧按钮暂停...'
-  if (composerRecoveryInteraction.value?.requestType === 'EXCEPTION') return '补充异常处理信息后继续当前节点...'
-  if (composerRecoveryInteraction.value?.requestType === 'INPUT_REQUIRED') return '补充输入后返回给 Agent...'
+  if (composerRecoveryInteraction.value?.requestType === 'EXCEPTION') return '输入你的恢复指令，Agent 会按这句话继续当前节点...'
+  if (composerRecoveryInteraction.value) return '输入你的补充、调整或继续指令，介入当前节点...'
   if (isWorkflowCompleted.value) return '流程已完成，可查看产物或输入新的补充指令...'
   const state = workflowNodeState.value
   if (state === 'NEEDS_USER_INPUT') return '补充输入后返回给 Agent...'
@@ -392,11 +392,15 @@ const currentInteractions = computed(() => {
 })
 
 function canSubmitInteractionFromComposer(item: { requestType: ConfirmationRequestType }): boolean {
-  return item.requestType === 'EXCEPTION' || item.requestType === 'INPUT_REQUIRED'
+  return item.requestType !== 'PERMISSION'
 }
 
 const composerRecoveryInteraction = computed(() =>
   currentInteractions.value.find(canSubmitInteractionFromComposer) ?? null
+)
+
+const shouldShowInputArea = computed(() =>
+  currentInteractions.value.length === 0 || Boolean(composerRecoveryInteraction.value)
 )
 
 const shouldShowWorkflowNodeControl = computed(() =>
@@ -1606,15 +1610,14 @@ function timestamp(value: string | null | undefined): number {
           @rejected="handleInteractionChanged"
           @open="emit('show-confirmation', $event)"
         />
-        <template v-else>
-          <WorkflowNodeControlBar
-            v-if="shouldShowWorkflowNodeControl"
-            :node-state="workflowNodeState"
-            :node-instance-id="currentWorkflowNodeInstanceId"
-            @action="handleWorkflowAction"
-          />
+        <WorkflowNodeControlBar
+          v-if="shouldShowWorkflowNodeControl"
+          :node-state="workflowNodeState"
+          :node-instance-id="currentWorkflowNodeInstanceId"
+          @action="handleWorkflowAction"
+        />
 
-          <form class="conversation-workbench__input-area" @submit.prevent="handleSend">
+        <form v-if="shouldShowInputArea" class="conversation-workbench__input-area" @submit.prevent="handleSend">
           <input
             ref="inputRef"
             v-model="inputText"
@@ -1641,8 +1644,7 @@ function timestamp(value: string | null | undefined): number {
               <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </button>
-          </form>
-        </template>
+        </form>
       </div>
     </section>
   </div>

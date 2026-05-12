@@ -1513,10 +1513,11 @@ public class WorkflowCommandService {
 
         sb.append("## 执行方式\n");
         sb.append("- 请按 Skill 自身说明处理上述输入。\n");
-        sb.append("- 工作流只提供调用顺序、当前输入和上游输出，不替代 Skill 的判断。\n");
+        sb.append("- AgentCenter 页面是用户可介入的协作界面；用户可以随时输入补充、调整、继续或接管指令。\n");
+        sb.append("- 工作流只提供调用顺序、当前输入和上游输出，不替代 Skill 的判断，也不替代用户本轮输入。\n");
         sb.append("- 如果存在“用户本轮输入”，它是当前节点的自然多轮指令；优先围绕这句话继续、修正或扩展当前输出。\n");
         sb.append("- 用户说“继续”通常表示继续当前 Skill 的未完成内容；除非用户明确要求进入下一节点，不要把它解读为推进确认。\n");
-        sb.append("- 不要用“可在适当时机推进”这类流程占位话术替代对用户本轮输入的实际响应。\n");
+        sb.append("- 不要用“等待系统推进”“可在适当时机推进”这类流程占位话术替代对用户本轮输入的实际响应；能继续就直接继续。\n");
         sb.append("- 如果还需要用户澄清、选择、确认或授权，优先使用 OpenCode 原生 Question 交互；AgentCenter Bridge 会将 Question 翻译为平台待确认。\n");
         sb.append("- 如果当前 Runtime 不能使用 Question，再在输出末尾按 AgentCenter 节点状态协议声明 NEEDS_USER_INPUT。\n");
         sb.append("- 如果信息已经足够，请输出当前 Skill 的最终 Markdown 结果。\n");
@@ -1547,7 +1548,8 @@ public class WorkflowCommandService {
         if (supplementalInput == null || supplementalInput.isBlank()) {
             return;
         }
-        sb.append("## 用户本轮输入\n\n");
+        sb.append("## 用户本轮输入（优先执行）\n\n");
+        sb.append("以下内容来自用户在页面中的主动介入。它是当前节点的直接指令；请优先按它继续、修正或扩展当前输出，不要只回复等待平台推进。\n\n");
         sb.append("```text\n");
         sb.append(supplementalInput.trim());
         sb.append("\n```\n\n");
