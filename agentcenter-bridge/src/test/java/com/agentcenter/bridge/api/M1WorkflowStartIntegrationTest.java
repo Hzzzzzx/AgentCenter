@@ -155,6 +155,8 @@ class M1WorkflowStartIntegrationTest {
         String fe1234Id = findWorkItemIdByCode("FE1234");
         assertThat(fe1234Id).isNotEqualTo("FE1234");
         TestWorkflowExecutorConfig.setNextSkillOutput("""
+                下面是本轮根据工作项生成的 PRD 摘要。
+
                 # PRD: %s 用户登录优化
 
                 这是带内部工作项 ID 的产物内容。
@@ -186,6 +188,7 @@ class M1WorkflowStartIntegrationTest {
         assertThat(artifact.get("title").toString()).isEqualTo("FE1234 需求整理 (PRD).md");
         assertThat(artifact.get("content").toString())
                 .contains("# PRD: FE1234 用户登录优化")
+                .doesNotContain("下面是本轮根据工作项生成的 PRD 摘要")
                 .doesNotContain(fe1234Id)
                 .doesNotContain("AGENTCENTER_NODE_STATE");
 

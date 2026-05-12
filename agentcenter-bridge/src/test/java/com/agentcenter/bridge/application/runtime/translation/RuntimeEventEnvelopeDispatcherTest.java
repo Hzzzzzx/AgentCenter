@@ -182,6 +182,32 @@ class RuntimeEventEnvelopeDispatcherTest {
     }
 
     @Test
+    void permissionRepliedTraceSynchronizesConfirmation() {
+        RuntimeEventEnvelope env = envelope(RuntimeEventTypes.PROCESS_TRACE, """
+            {
+              "kind": "confirmation",
+              "status": "completed",
+              "rawEventType": "permission.replied",
+              "toolCallId": "per_1",
+              "reply": "always",
+              "rawProperties": {
+                "sessionID": "opencode_ses_1",
+                "requestID": "per_1",
+                "reply": "always"
+              }
+            }
+            """);
+
+        dispatcher.dispatch(List.of(env));
+
+        verify(permissionHandler).handlePermissionReplied(
+                "agent_ses_1",
+                "opencode_ses_1",
+                "per_1",
+                "always");
+    }
+
+    @Test
     void emptyEnvelopeListDoesNothing() {
         dispatcher.dispatch(List.of());
         verifyNoInteractions(projector, legacyBridge, eventService);

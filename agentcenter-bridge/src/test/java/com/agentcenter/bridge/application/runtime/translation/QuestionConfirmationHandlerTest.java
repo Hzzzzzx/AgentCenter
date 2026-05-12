@@ -95,6 +95,36 @@ class QuestionConfirmationHandlerTest {
     }
 
     @Test
+    void createQuestionConfirmationTreatsStringOptionsAsDecision() throws Exception {
+        ObjectNode payload = (ObjectNode) objectMapper.readTree("""
+                {
+                  "requestId": "q_string_options",
+                  "questions": [
+                    {
+                      "header": "方案",
+                      "question": "请选择推进方案",
+                      "options": ["快速验证", "严格校验"]
+                    }
+                  ]
+                }
+                """);
+        RuntimeEventEnvelope envelope = new RuntimeEventEnvelope(
+                "runtime-event", "question.requested", null, null, null,
+                RuntimeType.OPENCODE, "agent-1", "ses_1", "work-1", "wf-1", "node-1",
+                payload, OffsetDateTime.now());
+
+        handler.createQuestionConfirmation(envelope);
+
+        ArgumentCaptor<ConfirmationRequestEntity> entityCaptor =
+                ArgumentCaptor.forClass(ConfirmationRequestEntity.class);
+        verify(confirmationMapper).insert(entityCaptor.capture());
+        ConfirmationRequestEntity entity = entityCaptor.getValue();
+        assertEquals(ConfirmationRequestType.DECISION.name(), entity.getRequestType());
+        assertTrue(entity.getOptionsJson().contains("快速验证"));
+        assertTrue(entity.getInteractionSchemaJson().contains("\"options\""));
+    }
+
+    @Test
     void respondQuestionSendsChoiceLabelToOpenCode() {
         ConfirmationRequestEntity entity = questionEntity(ConfirmationRequestType.DECISION.name());
         ResolveConfirmationRequest request = new ResolveConfirmationRequest(

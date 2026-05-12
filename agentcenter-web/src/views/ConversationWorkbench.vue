@@ -75,6 +75,8 @@ interface ArtifactOpenRef {
   title?: string
 }
 
+type ArtifactIdSource = 'message' | 'runtime-event' | 'workflow-node'
+
 const PROMPT_DEBUG_ENABLED = true
 const PROMPT_DEBUG_EDGE_GAP = 16
 const PROMPT_DEBUG_RUNTIME_EVENT_LIMIT = 24
@@ -82,11 +84,13 @@ const CONTINUE_CURRENT_MESSAGE = '请继续当前节点未完成的回答，不�
 const AUTO_SCROLL_BOTTOM_THRESHOLD = 180
 const INTERACTION_FALLBACK_ATTEMPTS = 5
 const INTERACTION_FALLBACK_INTERVAL_MS = 900
+const ARTIFACT_REFERENCE_PATTERN = /<!--\s*AGENTCENTER_ARTIFACT\s+artifactId:\s*([A-Za-z0-9_-]+)\s*-->/g
 
 const props = defineProps<{
   workItemId?: string
   targetSessionId?: string | null
   projectId?: string
+  selectedArtifactId?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -121,6 +125,11 @@ const promptDebugDragOffset = ref({ x: 0, y: 0 })
 const promptDebugSize = ref({ width: 0, height: 0 })
 const promptDebugCopiedId = ref<string | null>(null)
 const interactionFallbackTimers = new Set<number>()
+const artifactAutoPreviewArmed = ref(false)
+const artifactAutoPreviewBaselineId = ref<string | null>(null)
+const lastAutoOpenedArtifactId = ref<string | null>(null)
+const dismissedAutoArtifactId = ref<string | null>(null)
+const autoOpeningArtifactId = ref<string | null>(null)
 let ensureActiveSessionSeq = 0
 let pendingScrollFrame: number | null = null
 let pendingScrollBehavior: ScrollBehavior = 'smooth'
@@ -304,6 +313,12 @@ const currentRuntimeEvents = computed(() => {
   const sessionId = sessionStore.activeSession?.id
   if (!sessionId) return []
   return runtimeStore.events.filter((event) => event.sessionId === sessionId)
+})
+
+const latestArtifactCandidate = computed(() => {
+  return latestArtifactFromMessages()
+    ?? latestArtifactFromRuntimeEvents()
+    ?? latestArtifactFromWorkflow()
 })
 
 const currentStreamingText = computed(() =>
@@ -550,6 +565,30 @@ watch(
   }
 )
 
+watch(
+  () => [props.workItemId ?? null, props.targetSessionId ?? null, sessionStore.activeSession?.id ?? null] as const,
+  () => resetArtifactAutoPreviewState()
+)
+
+watch(
+  () => props.selectedArtifactId ?? null,
+  (nextArtifactId, previousArtifactId) => {
+    if (!nextArtifactId && previousArtifactId && previousArtifactId === lastAutoOpenedArtifactId.value) {
+      dismissedAutoArtifactId.value = previousArtifactId
+    }
+  }
+)
+
+watch(
+  () => latestArtifactCandidate.value?.id ?? null,
+  (artifactId) => {
+    if (!artifactAutoPreviewArmed.value) {
+      artifactAutoPreviewBaselineId.value = artifactId
+    }
+    void maybeAutoOpenLatestArtifact()
+  }
+)
+
 async function ensureActiveSession(): Promise<AgentSessionDto | null> {
   const seq = ++ensureActiveSessionSeq
   const requestedWorkItemId = props.workItemId
@@ -766,6 +805,7 @@ async function resolveComposerRecoveryInteraction(confirmationId: string, text: 
   runtimeStore.markBusy()
   try {
     notifyInteractionSubmitted()
+    armArtifactAutoPreview()
     await confirmationStore.resolveConfirmation(confirmationId, {
       actionType: 'SUPPLEMENT',
       comment: text,
@@ -812,6 +852,7 @@ async function handleCancelReply() {
 
 async function handleWorkflowAction(action: string, nodeInstanceId: string) {
   if (!sessionStore.activeSession) return
+  armArtifactAutoPreview()
   if (action === 'CONTINUE_CURRENT') {
     await sendContinueCurrentMessage(nodeInstanceId, CONTINUE_CURRENT_MESSAGE)
     return
@@ -826,6 +867,7 @@ async function handleWorkflowAction(action: string, nodeInstanceId: string) {
 
 async function sendContinueCurrentMessage(nodeInstanceId: string, content: string) {
   runtimeStore.markBusy()
+  armArtifactAutoPreview()
   await sessionStore.sendMessage({
     content,
     workflowUserAction: 'CONTINUE_CURRENT',
@@ -835,15 +877,103 @@ async function sendContinueCurrentMessage(nodeInstanceId: string, content: strin
   pausedRunningNodeId.value = null
 }
 
+function armArtifactAutoPreview() {
+  artifactAutoPreviewArmed.value = true
+}
+
+function resetArtifactAutoPreviewState() {
+  artifactAutoPreviewArmed.value = false
+  artifactAutoPreviewBaselineId.value = latestArtifactCandidate.value?.id ?? null
+  lastAutoOpenedArtifactId.value = null
+  dismissedAutoArtifactId.value = null
+  autoOpeningArtifactId.value = null
+}
+
+async function maybeAutoOpenLatestArtifact() {
+  const candidate = latestArtifactCandidate.value
+  if (!candidate || !artifactAutoPreviewArmed.value) return
+  if (candidate.id === artifactAutoPreviewBaselineId.value) return
+  if (candidate.id === lastAutoOpenedArtifactId.value) return
+  if (candidate.id === dismissedAutoArtifactId.value) return
+  if (autoOpeningArtifactId.value === candidate.id) return
+
+  autoOpeningArtifactId.value = candidate.id
+  try {
+    const artifact = await artifactApi.get(candidate.id)
+    if (latestArtifactCandidate.value?.id !== candidate.id) return
+    if (candidate.id === dismissedAutoArtifactId.value) return
+    lastAutoOpenedArtifactId.value = candidate.id
+    artifactAutoPreviewBaselineId.value = candidate.id
+    artifactAutoPreviewArmed.value = false
+    emit('open-artifact', artifact)
+  } catch (error) {
+    console.debug('Failed to auto-open generated artifact', {
+      artifactId: candidate.id,
+      source: candidate.source,
+      error,
+    })
+  } finally {
+    if (autoOpeningArtifactId.value === candidate.id) {
+      autoOpeningArtifactId.value = null
+    }
+  }
+}
+
+function latestArtifactFromMessages(): { id: string; source: ArtifactIdSource } | null {
+  for (let index = sessionStore.messages.length - 1; index >= 0; index -= 1) {
+    const content = sessionStore.messages[index].content ?? ''
+    const ids = artifactIdsFromText(content)
+    const artifactId = ids.at(-1)
+    if (artifactId) {
+      return { id: artifactId, source: 'message' }
+    }
+  }
+  return null
+}
+
+function latestArtifactFromRuntimeEvents(): { id: string; source: ArtifactIdSource } | null {
+  for (let index = currentRuntimeEvents.value.length - 1; index >= 0; index -= 1) {
+    const event = currentRuntimeEvents.value[index]
+    const payload = parseRuntimePayload(event.payloadJson)
+    if (payload && typeof payload.artifactId === 'string' && payload.artifactId.trim()) {
+      return { id: payload.artifactId.trim(), source: 'runtime-event' }
+    }
+  }
+  return null
+}
+
+function latestArtifactFromWorkflow(): { id: string; source: ArtifactIdSource } | null {
+  const nodes = currentWorkflowInstance.value?.nodes ?? []
+  const node = [...nodes]
+    .filter((item) => Boolean(item.outputArtifactId))
+    .sort((a, b) => (b.sequenceNo ?? 0) - (a.sequenceNo ?? 0))[0]
+  return node?.outputArtifactId
+    ? { id: node.outputArtifactId, source: 'workflow-node' }
+    : null
+}
+
+function artifactIdsFromText(content: string): string[] {
+  return Array.from(content.matchAll(ARTIFACT_REFERENCE_PATTERN), match => match[1].trim())
+    .filter(Boolean)
+}
+
 async function handleInteractionChanged(_confirmationId?: string) {
+  if (_confirmationId) {
+    armArtifactAutoPreview()
+  }
+  const activeSessionId = sessionStore.activeSession?.id ?? null
   await confirmationStore.loadPending()
   if (sessionStore.activeSession?.workflowInstanceId) {
     await workflowStore.refreshInstance(sessionStore.activeSession.workflowInstanceId)
+  }
+  if (activeSessionId) {
+    await sessionStore.selectSession(activeSessionId)
   }
   const workItemId = props.workItemId ?? sessionStore.activeSession?.workItemId
   if (workItemId) {
     await workflowProjectionStore.syncWorkItem(workItemId)
   }
+  await maybeAutoOpenLatestArtifact()
 }
 
 async function handleResolveConfirmation(confirmationId: string, value: string, meta?: { requestType?: string; interactionType?: string }) {
@@ -851,12 +981,13 @@ async function handleResolveConfirmation(confirmationId: string, value: string, 
   runtimeStore.markBusy()
   try {
     notifyInteractionSubmitted()
+    armArtifactAutoPreview()
     await confirmationStore.resolveConfirmation(confirmationId, {
       actionType,
       payload: { choice: value },
       comment: value,
     })
-    await handleInteractionChanged()
+    await handleInteractionChanged(confirmationId)
     scheduleInteractionFallbackSync(confirmationId)
   } catch (error) {
     runtimeStore.markIdle()
@@ -1470,6 +1601,7 @@ function timestamp(value: string | null | undefined): number {
           v-if="currentInteractions.length"
           class="conversation-workbench__interaction-composer"
           :interactions="currentInteractions"
+          @submitting="armArtifactAutoPreview"
           @resolved="handleInteractionChanged"
           @rejected="handleInteractionChanged"
           @open="emit('show-confirmation', $event)"

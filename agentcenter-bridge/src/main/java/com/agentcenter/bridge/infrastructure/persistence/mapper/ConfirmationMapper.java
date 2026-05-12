@@ -11,6 +11,7 @@ public interface ConfirmationMapper {
     List<ConfirmationRequestEntity> findByStatus(@Param("status") String status);
     ConfirmationRequestEntity findById(@Param("id") String id);
     List<ConfirmationRequestEntity> findByWorkItemId(@Param("workItemId") String workItemId);
+    List<ConfirmationRequestEntity> findPermissionHistoryByAgentSessionId(@Param("agentSessionId") String agentSessionId);
     ConfirmationRequestEntity findPendingRuntimeExceptionBySessionId(@Param("agentSessionId") String agentSessionId);
     void insert(ConfirmationRequestEntity entity);
     void update(ConfirmationRequestEntity entity);

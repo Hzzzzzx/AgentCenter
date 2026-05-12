@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { nextTick } from 'vue'
 import ConversationWorkbench from './ConversationWorkbench.vue'
+import ConversationInteractionBar from '../components/conversation/ConversationInteractionBar.vue'
 import MessageList from '../components/conversation/MessageList.vue'
 import { sessionApi } from '../api/sessions'
 import { workflowApi } from '../api/workflows'
@@ -13,7 +14,7 @@ import { useRuntimeStore } from '../stores/runtime'
 import { useRuntimeSettingsStore } from '../stores/runtimeSettings'
 import { useSessionStore } from '../stores/sessions'
 import { useWorkflowStore } from '../stores/workflows'
-import type { AgentMessageDto, AgentSessionDto, ArtifactDto, ConfirmationRequestDto, WorkflowInstanceDto } from '../api/types'
+import type { AgentMessageDto, AgentSessionDto, ArtifactDto, ConfirmationRequestDto, RuntimeEventDto, WorkflowInstanceDto } from '../api/types'
 
 const mocks = vi.hoisted(() => {
   const runningWorkItem = {
@@ -368,6 +369,146 @@ describe('ConversationWorkbench.vue', () => {
 
     expect(artifactApi.get).toHaveBeenCalledWith('art-1')
     expect(wrapper.emitted('open-artifact')?.[0]).toEqual([mocks.capturedArtifact])
+  })
+
+  it('reloads feedback messages and auto-opens the new artifact after interaction resolves', async () => {
+    const ledgerMessage: AgentMessageDto = {
+      id: 'msg-ledger-1',
+      sessionId: 'session-1',
+      role: 'USER',
+      content: '用户输入：用户确认通过：APPROVE\n确认项：确认继续下一步\n类型：APPROVAL\n节点：node-1',
+      contentFormat: 'TEXT',
+      status: 'COMPLETED',
+      seqNo: 6,
+      createdAt: '2026-05-08T10:06:00Z',
+      workflowNodeInstanceId: 'node-1',
+    }
+    const workflowWithArtifact: WorkflowInstanceDto = {
+      ...mocks.runningWorkflow,
+      status: 'BLOCKED',
+      nodes: [
+        {
+          ...mocks.runningWorkflow.nodes[0],
+          status: 'WAITING_CONFIRMATION',
+          outputArtifactId: 'art-1',
+          sequenceNo: 1,
+        },
+      ],
+    }
+    vi.mocked(workflowApi.getInstance)
+      .mockResolvedValueOnce(mocks.runningWorkflow)
+      .mockResolvedValueOnce(mocks.runningWorkflow)
+      .mockResolvedValue(workflowWithArtifact)
+    vi.mocked(sessionApi.getMessages)
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([ledgerMessage])
+
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(ConversationWorkbench, {
+      props: {
+        workItemId: 'work-1',
+        targetSessionId: 'session-1',
+      },
+      global: {
+        plugins: [pinia],
+      },
+    })
+
+    await flushPromises()
+    wrapper.findComponent(MessageList).vm.$emit('resolve-confirmation', mocks.pendingConfirmation.id, 'APPROVE', {
+      requestType: 'APPROVAL',
+    })
+    await flushPromises()
+
+    expect(sessionApi.getMessages).toHaveBeenCalledWith('session-1')
+    expect(wrapper.text()).toContain('用户确认通过：APPROVE')
+    expect(artifactApi.get).toHaveBeenCalledWith('art-1')
+    expect(wrapper.emitted('open-artifact')?.at(-1)).toEqual([mocks.capturedArtifact])
+  })
+
+  it('does not repeatedly auto-open the same artifact after the user closes it', async () => {
+    const workflowWithArtifact: WorkflowInstanceDto = {
+      ...mocks.runningWorkflow,
+      status: 'BLOCKED',
+      nodes: [
+        {
+          ...mocks.runningWorkflow.nodes[0],
+          status: 'WAITING_CONFIRMATION',
+          outputArtifactId: 'art-1',
+          sequenceNo: 1,
+        },
+      ],
+    }
+    vi.mocked(workflowApi.getInstance)
+      .mockResolvedValueOnce(mocks.runningWorkflow)
+      .mockResolvedValueOnce(mocks.runningWorkflow)
+      .mockResolvedValue(workflowWithArtifact)
+
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(ConversationWorkbench, {
+      props: {
+        workItemId: 'work-1',
+        targetSessionId: 'session-1',
+      },
+      global: {
+        plugins: [pinia],
+      },
+    })
+
+    await flushPromises()
+    wrapper.findComponent(MessageList).vm.$emit('resolve-confirmation', mocks.pendingConfirmation.id, 'APPROVE', {
+      requestType: 'APPROVAL',
+    })
+    await flushPromises()
+
+    expect(artifactApi.get).toHaveBeenCalledWith('art-1')
+    await wrapper.setProps({ selectedArtifactId: 'art-1' })
+    await wrapper.setProps({ selectedArtifactId: null })
+    vi.mocked(artifactApi.get).mockClear()
+
+    wrapper.findComponent(MessageList).vm.$emit('resolve-confirmation', mocks.pendingConfirmation.id, 'APPROVE', {
+      requestType: 'APPROVAL',
+    })
+    await flushPromises()
+
+    expect(artifactApi.get).not.toHaveBeenCalled()
+  })
+
+  it('arms artifact auto-preview before a composer interaction resolve finishes', async () => {
+    const artifactEvent: RuntimeEventDto = {
+      id: 'event-artifact-1',
+      sessionId: 'session-1',
+      workItemId: 'work-1',
+      workflowInstanceId: 'wf-1',
+      workflowNodeInstanceId: 'node-1',
+      eventType: 'SKILL_COMPLETED',
+      eventSource: 'OPENCODE',
+      payloadJson: JSON.stringify({ artifactId: 'art-1' }),
+      seqNo: 7,
+      createdAt: '2026-05-08T10:07:00Z',
+    }
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(ConversationWorkbench, {
+      props: {
+        workItemId: 'work-1',
+        targetSessionId: 'session-1',
+      },
+      global: {
+        plugins: [pinia],
+      },
+    })
+
+    await flushPromises()
+    wrapper.findComponent(ConversationInteractionBar).vm.$emit('submitting', mocks.pendingConfirmation.id)
+    useRuntimeStore().events = [artifactEvent]
+    await nextTick()
+    await flushPromises()
+
+    expect(artifactApi.get).toHaveBeenCalledWith('art-1')
+    expect(wrapper.emitted('open-artifact')?.at(-1)).toEqual([mocks.capturedArtifact])
   })
 
   it('smoothly follows new conversation content when the user is already near the bottom', async () => {

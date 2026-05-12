@@ -232,9 +232,13 @@ public class QuestionConfirmationHandler {
             return result;
         }
         for (JsonNode node : optionsNode) {
-            String label = firstNonBlank(text(node, "label"), text(node, "value"), text(node, "id"));
+            String label = node.isValueNode()
+                    ? node.asText("").trim()
+                    : firstNonBlank(text(node, "label"), text(node, "name"), text(node, "title"),
+                    text(node, "value"), text(node, "id"));
             if (label.isBlank()) continue;
-            result.add(new QuestionOption(label, text(node, "description")));
+            String description = node.isObject() ? text(node, "description") : "";
+            result.add(new QuestionOption(label, description));
         }
         return result;
     }

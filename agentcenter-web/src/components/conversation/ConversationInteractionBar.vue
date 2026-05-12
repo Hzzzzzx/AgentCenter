@@ -14,6 +14,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  submitting: [id: string]
   resolved: [id: string]
   rejected: [id: string]
   open: [id: string]
@@ -403,6 +404,7 @@ async function resolveActive(actionType: ConfirmationActionType, payload?: Recor
   if (!activeInteraction.value || busyAction.value) return
   const interaction = activeInteraction.value
   busyAction.value = `${interaction.id}:${actionType}`
+  emit('submitting', interaction.id)
   try {
     await confirmationStore.resolveConfirmation(interaction.id, { actionType, payload, comment })
     notificationStore.push({
@@ -430,6 +432,7 @@ async function handlePermissionDecision(reply: 'once' | 'always' | 'reject') {
   if (!interaction || busyAction.value) return
   const actionType: ConfirmationActionType = reply === 'reject' ? 'REJECT' : 'APPROVE'
   busyAction.value = `${interaction.id}:PERMISSION:${reply}`
+  emit('submitting', interaction.id)
   try {
     await confirmationStore.resolveConfirmation(interaction.id, {
       actionType,
@@ -548,6 +551,7 @@ function handleSecondary() {
     return
   }
   busyAction.value = `${interaction.id}:REJECT`
+  emit('submitting', interaction.id)
   confirmationStore.resolveConfirmation(interaction.id, { actionType: 'REJECT' })
     .then(() => {
       notificationStore.push({

@@ -163,7 +163,37 @@ describe('ConversationInteractionBar.vue', () => {
       payload: { choice: '跳过', choiceId: '跳过', choiceLabel: '跳过' },
       comment: '跳过',
     })
+    expect(wrapper.emitted('submitting')?.[0]).toEqual(['confirm-2'])
     expect(wrapper.emitted('resolved')?.[0]).toEqual(['confirm-2'])
+  })
+
+  it('announces submission before the resolve request completes', async () => {
+    let resolveRequest!: (value: ConfirmationRequestDto) => void
+    vi.mocked(confirmationApi.resolve).mockReturnValueOnce(new Promise((resolve) => {
+      resolveRequest = resolve
+    }))
+    const wrapper = mount(ConversationInteractionBar, {
+      props: {
+        interactions: [
+          makeInteraction({
+            id: 'confirm-submit',
+            requestType: 'DECISION',
+            title: '选择处理方式',
+            optionsJson: '["重试","跳过"]',
+          }),
+        ],
+      },
+    })
+
+    await wrapper.find('.interaction-bar__primary').trigger('click')
+
+    expect(wrapper.emitted('submitting')?.[0]).toEqual(['confirm-submit'])
+    expect(wrapper.emitted('resolved')).toBeFalsy()
+
+    resolveRequest(makeInteraction({ id: 'confirm-submit' }))
+    await flushPromises()
+
+    expect(wrapper.emitted('resolved')?.[0]).toEqual(['confirm-submit'])
   })
 
   it('submits a selected decision option when legacy options use value and label fields', async () => {

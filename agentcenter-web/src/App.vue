@@ -427,6 +427,7 @@ watch(
         :work-item-id="selectedWorkItemId"
         :target-session-id="targetSessionId"
         :project-id="activeProjectId"
+        :selected-artifact-id="selectedArtifact?.id ?? null"
         @back="handleConversationBack"
         @open-artifact="selectedArtifact = $event"
         @show-confirmation="handleShowConfirmation"

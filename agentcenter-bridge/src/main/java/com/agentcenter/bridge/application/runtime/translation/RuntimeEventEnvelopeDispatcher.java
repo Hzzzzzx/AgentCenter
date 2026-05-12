@@ -67,6 +67,18 @@ public class RuntimeEventEnvelopeDispatcher {
                 }
             }
 
+            if (isPermissionRepliedTrace(envelope)) {
+                try {
+                    permissionHandler.handlePermissionReplied(
+                            envelope.agentSessionId(),
+                            envelope.runtimeSessionId(),
+                            extractPermissionReplyId(envelope),
+                            extractPermissionReply(envelope));
+                } catch (Exception e) {
+                    log.warn("Failed to sync permission reply: {}", e.getMessage());
+                }
+            }
+
             if (RuntimeEventTypes.QUESTION_REQUESTED.equals(envelope.type())) {
                 try {
                     questionHandler.createQuestionConfirmation(envelope);
@@ -108,6 +120,42 @@ public class RuntimeEventEnvelopeDispatcher {
             }
         } catch (Exception ignored) {}
         return envelope.messageId() != null ? envelope.messageId() : UUID.randomUUID().toString();
+    }
+
+    private boolean isPermissionRepliedTrace(RuntimeEventEnvelope envelope) {
+        try {
+            if (!RuntimeEventTypes.PROCESS_TRACE.equals(envelope.type())) return false;
+            JsonNode payload = envelope.payload();
+            return payload != null && "permission.replied".equals(payload.path("rawEventType").asText(""));
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private String extractPermissionReplyId(RuntimeEventEnvelope envelope) {
+        try {
+            JsonNode payload = envelope.payload();
+            if (payload != null) {
+                JsonNode rawProperties = payload.path("rawProperties");
+                if (payload.has("permissionId")) return payload.get("permissionId").asText();
+                if (payload.has("toolCallId")) return payload.get("toolCallId").asText();
+                if (rawProperties.has("requestID")) return rawProperties.get("requestID").asText();
+                if (rawProperties.has("requestId")) return rawProperties.get("requestId").asText();
+            }
+        } catch (Exception ignored) {}
+        return "";
+    }
+
+    private String extractPermissionReply(RuntimeEventEnvelope envelope) {
+        try {
+            JsonNode payload = envelope.payload();
+            if (payload != null) {
+                JsonNode rawProperties = payload.path("rawProperties");
+                if (payload.has("reply")) return payload.get("reply").asText();
+                if (rawProperties.has("reply")) return rawProperties.get("reply").asText();
+            }
+        } catch (Exception ignored) {}
+        return "";
     }
 
     private String extractTitle(RuntimeEventEnvelope envelope) {

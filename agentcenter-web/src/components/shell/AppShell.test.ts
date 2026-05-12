@@ -84,6 +84,18 @@ describe('AppShell.vue', () => {
     return mount(AppShell, {
       props: {
         activeView: 'home',
+        projectContext: {
+          id: 'ctx-agentcenter',
+          project: 'AgentCenter',
+          cloudeReqProject: 'AgentCenter',
+          space: 'AI DevOps',
+          iteration: 'Sprint 14',
+        },
+        projectContextOptions: {
+          cloudeReqProjects: ['AgentCenter'],
+          spaces: ['AI DevOps'],
+          iterations: ['Sprint 14'],
+        },
         ...props,
       },
       slots: {
