@@ -15,12 +15,15 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import com.agentcenter.bridge.api.dto.RuntimeEventDto;
+import com.agentcenter.bridge.application.ProjectRuntimeWorkspaceResolver;
 import com.agentcenter.bridge.application.RuntimeEventService;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeAckEnvelope;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeCommandEnvelope;
 import com.agentcenter.bridge.application.runtime.SkillRunResult;
 import com.agentcenter.bridge.domain.runtime.RuntimeEventType;
 import com.agentcenter.bridge.domain.runtime.RuntimeType;
+import com.agentcenter.bridge.infrastructure.persistence.entity.WorkItemEntity;
+import com.agentcenter.bridge.infrastructure.persistence.mapper.WorkItemMapper;
 import com.agentcenter.bridge.infrastructure.runtime.opencode.transport.OpenCodeHttpCommandTransport;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -35,6 +38,8 @@ class OpenCodeRuntimeAdapterCreateSessionTest {
     private OpenCodeMcpFileService mcpFileService;
     private OpenCodeHttpCommandTransport commandTransport;
     private RuntimeEventService runtimeEventService;
+    private WorkItemMapper workItemMapper;
+    private ProjectRuntimeWorkspaceResolver workspaceResolver;
     private OpenCodeRuntimeAdapter adapter;
 
     @BeforeEach
@@ -46,14 +51,18 @@ class OpenCodeRuntimeAdapterCreateSessionTest {
         mcpFileService = mock(OpenCodeMcpFileService.class);
         commandTransport = mock(OpenCodeHttpCommandTransport.class);
         runtimeEventService = mock(RuntimeEventService.class);
+        workItemMapper = mock(WorkItemMapper.class);
+        workspaceResolver = mock(ProjectRuntimeWorkspaceResolver.class);
 
         when(processManager.isEnabled()).thenReturn(true);
         when(processManager.ensureRunning()).thenReturn("http://127.0.0.1:4097");
+        when(processManager.ensureRunning(any(Path.class))).thenReturn("http://127.0.0.1:4097");
         when(processManager.resolveWorkingDirectory()).thenReturn(Path.of("/tmp/project"));
 
         adapter = new OpenCodeRuntimeAdapter(
                 processManager, eventSubscriber, objectMapper,
                 skillFileService, mcpFileService, commandTransport, runtimeEventService,
+                workItemMapper, workspaceResolver,
                 "build", 180);
     }
 
@@ -84,6 +93,34 @@ class OpenCodeRuntimeAdapterCreateSessionTest {
         assertFalse(workingDirectory.isEmpty(), "workingDirectory must not be empty in createSession payload");
         assertEquals("http://127.0.0.1:4097", baseUrl);
         assertEquals("/tmp/project", workingDirectory);
+    }
+
+    @Test
+    void createSessionUsesProjectWorkspaceResolvedFromWorkItem() {
+        WorkItemEntity workItem = new WorkItemEntity();
+        workItem.setId("work-project-a");
+        workItem.setProjectId("Project-A");
+        when(workItemMapper.findById("work-project-a")).thenReturn(workItem);
+        when(workspaceResolver.resolve("Project-A")).thenReturn(Path.of("/tmp/project-a"));
+
+        ObjectNode ackPayload = objectMapper.createObjectNode();
+        ackPayload.put("sessionId", "ses_project_a");
+        RuntimeAckEnvelope ack = new RuntimeAckEnvelope(
+                null, "agentcenter.runtime.v1", null,
+                "ack-msg-id", "corr-id", null,
+                RuntimeType.OPENCODE, null, "ses_project_a",
+                true, null, ackPayload, null);
+
+        ArgumentCaptor<RuntimeCommandEnvelope> envelopeCaptor =
+                ArgumentCaptor.forClass(RuntimeCommandEnvelope.class);
+        when(commandTransport.send(envelopeCaptor.capture())).thenReturn(ack);
+
+        adapter.createSession("work-project-a", "agent-project-a");
+
+        assertEquals("/tmp/project-a", envelopeCaptor.getValue().payload().path("workingDirectory").asText());
+        verify(processManager).ensureRunning(Path.of("/tmp/project-a"));
+        verify(eventSubscriber).registerSession(
+                eq("ses_project_a"), eq("agent-project-a"), eq("http://127.0.0.1:4097"), eq("/tmp/project-a"));
     }
 
     @Test
@@ -137,6 +174,7 @@ class OpenCodeRuntimeAdapterCreateSessionTest {
         adapter = new OpenCodeRuntimeAdapter(
                 processManager, eventSubscriber, objectMapper,
                 skillFileService, mcpFileService, commandTransport, runtimeEventService,
+                workItemMapper, workspaceResolver,
                 "build", 1);
 
         ObjectNode ackPayload = objectMapper.createObjectNode();
@@ -315,6 +353,7 @@ class OpenCodeRuntimeAdapterCreateSessionTest {
         adapter = new OpenCodeRuntimeAdapter(
                 processManager, eventSubscriber, objectMapper,
                 skillFileService, mcpFileService, commandTransport, runtimeEventService,
+                workItemMapper, workspaceResolver,
                 "build", 30);
 
         RuntimeAckEnvelope ack = new RuntimeAckEnvelope(

@@ -5,8 +5,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -19,6 +22,9 @@ class ProjectDataProviderControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @Test
     void switchesProviderAndSyncsScopedFixtureWorkItems() throws Exception {
@@ -39,6 +45,13 @@ class ProjectDataProviderControllerTest {
                     .andExpect(jsonPath("$.providerId").value("fixture-beta"))
                     .andExpect(jsonPath("$.contexts[0].project").value("企业中台"));
 
+            mockMvc.perform(get("/api/project-data-providers"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.activeProviderId").value("fixture-beta"))
+                    .andExpect(jsonPath("$.activeProjectContextId").isNotEmpty())
+                    .andExpect(jsonPath("$.activeProjectSpaceId").isNotEmpty())
+                    .andExpect(jsonPath("$.activeProjectIterationId").isNotEmpty());
+
             mockMvc.perform(get("/api/work-items")
                             .param("projectId", "企业中台")
                             .param("spaceId", "企业中台")
@@ -55,6 +68,22 @@ class ProjectDataProviderControllerTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.stats[?(@.type == 'FE' && @.total == 1)]").exists())
                     .andExpect(jsonPath("$.stats[?(@.type == 'WORK' && @.total == 0)]").exists());
+
+            Integer contextCount = jdbcTemplate.queryForObject("""
+                    SELECT COUNT(*) FROM project_context
+                    WHERE provider_id = 'fixture-beta'
+                    """, Integer.class);
+            assertTrue(contextCount != null && contextCount >= 2);
+
+            String sprint22IterationId = jdbcTemplate.queryForObject("""
+                    SELECT id FROM project_iteration
+                    WHERE provider_id = 'fixture-beta' AND iteration_name = 'Sprint 22'
+                    """, String.class);
+            String workItemIterationId = jdbcTemplate.queryForObject("""
+                    SELECT project_iteration_id FROM work_item
+                    WHERE code = 'B-WORK201'
+                    """, String.class);
+            assertEquals(sprint22IterationId, workItemIterationId);
         } finally {
             mockMvc.perform(put("/api/project-data-providers/active")
                     .contentType(MediaType.APPLICATION_JSON)

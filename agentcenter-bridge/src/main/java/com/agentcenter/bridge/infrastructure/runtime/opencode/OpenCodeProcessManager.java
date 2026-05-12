@@ -70,9 +70,14 @@ public class OpenCodeProcessManager {
      * @throws IllegalStateException if opencode serve cannot be started or is not enabled
      */
     public String ensureRunning() {
+        return ensureRunning(resolveWorkingDirectory());
+    }
+
+    public String ensureRunning(Path requiredWorkingDirectory) {
         if (!enabled) {
             throw new IllegalStateException("OpenCode serve adapter is disabled in configuration");
         }
+        Path cwd = normalizeWorkingDirectory(requiredWorkingDirectory);
         if (started && isAlive()) {
             return baseUrl;
         }
@@ -81,7 +86,7 @@ public class OpenCodeProcessManager {
             if (started && isAlive()) {
                 return baseUrl;
             }
-            startProcess();
+            startProcess(cwd);
             return baseUrl;
         } finally {
             startLock.unlock();
@@ -92,13 +97,18 @@ public class OpenCodeProcessManager {
      * Checks if the opencode serve process is alive and healthy.
      */
     public boolean isHealthy() {
+        return isHealthy(resolveWorkingDirectory());
+    }
+
+    public boolean isHealthy(Path requiredWorkingDirectory) {
         if (!started || !isAlive()) {
             return false;
         }
+        Path cwd = normalizeWorkingDirectory(requiredWorkingDirectory);
         try {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(baseUrl + "/path"))
-                    .header("x-opencode-directory", resolveWorkingDirectory().toString())
+                    .header("x-opencode-directory", cwd.toString())
                     .timeout(Duration.ofSeconds(3))
                     .GET()
                     .build();
@@ -152,28 +162,33 @@ public class OpenCodeProcessManager {
     }
 
     public void restartIfRunning() {
+        restartIfRunning(resolveWorkingDirectory());
+    }
+
+    public void restartIfRunning(Path requiredWorkingDirectory) {
         if (!enabled) {
             return;
         }
-        if (!started && !probeReady()) {
+        Path cwd = normalizeWorkingDirectory(requiredWorkingDirectory);
+        if (!started && !probeReady(cwd)) {
             return;
         }
         startLock.lock();
         try {
             shutdown();
-            startProcess();
+            startProcess(cwd);
         } finally {
             startLock.unlock();
         }
     }
 
-    private void startProcess() {
+    private void startProcess(Path requiredWorkingDirectory) {
         baseUrl = "http://" + hostname + ":" + port;
-        Path cwd = resolveWorkingDirectory();
+        Path cwd = normalizeWorkingDirectory(requiredWorkingDirectory);
 
         // First, check if opencode serve is already running on the target port.
         // This avoids spawning a conflicting process when one is already active.
-        if (probeReady()) {
+        if (probeReady(cwd)) {
             log.info("opencode serve already running at {}, reusing existing instance", baseUrl);
             started = true;
             return;
@@ -236,7 +251,7 @@ public class OpenCodeProcessManager {
             }
         });
 
-        waitForReady();
+        waitForReady(cwd);
         started = true;
         log.info("opencode serve is ready at {}", baseUrl);
     }
@@ -245,10 +260,15 @@ public class OpenCodeProcessManager {
      * Probes whether opencode serve is already reachable at the configured baseUrl.
      */
     private boolean probeReady() {
+        return probeReady(resolveWorkingDirectory());
+    }
+
+    private boolean probeReady(Path requiredWorkingDirectory) {
+        Path cwd = normalizeWorkingDirectory(requiredWorkingDirectory);
         try {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(baseUrl + "/path"))
-                    .header("x-opencode-directory", resolveWorkingDirectory().toString())
+                    .header("x-opencode-directory", cwd.toString())
                     .timeout(Duration.ofSeconds(2))
                     .GET()
                     .build();
@@ -259,14 +279,15 @@ public class OpenCodeProcessManager {
         }
     }
 
-    private void waitForReady() {
+    private void waitForReady(Path requiredWorkingDirectory) {
+        Path cwd = normalizeWorkingDirectory(requiredWorkingDirectory);
         long deadline = System.currentTimeMillis() + READY_TIMEOUT_MS;
         String lastError = "";
         while (System.currentTimeMillis() < deadline) {
             try {
                 HttpRequest request = HttpRequest.newBuilder()
                         .uri(URI.create(baseUrl + "/path"))
-                        .header("x-opencode-directory", resolveWorkingDirectory().toString())
+                        .header("x-opencode-directory", cwd.toString())
                         .timeout(Duration.ofSeconds(2))
                         .GET()
                         .build();
@@ -291,6 +312,12 @@ public class OpenCodeProcessManager {
         }
         shutdown();
         throw new IllegalStateException("opencode serve did not become ready within timeout: " + lastError);
+    }
+
+    private Path normalizeWorkingDirectory(Path requiredWorkingDirectory) {
+        return requiredWorkingDirectory == null
+                ? resolveWorkingDirectory()
+                : requiredWorkingDirectory.toAbsolutePath().normalize();
     }
 
     private String resolveCommand() {

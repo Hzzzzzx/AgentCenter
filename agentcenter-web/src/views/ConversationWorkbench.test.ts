@@ -97,6 +97,7 @@ const mocks = vi.hoisted(() => {
 
   const workflowDefinition = {
     id: 'wf-def-1',
+    projectId: '01DEFAULTPROJECT0000000000001',
     workItemType: 'FE',
     name: 'FE 标准工作流',
     versionNo: 1,
@@ -215,8 +216,14 @@ vi.mock('../api/events', () => ({
 }))
 
 vi.mock('../api/runtimeResources', () => ({
-  runtimeResourceApi: {
-    refreshSkills: vi.fn(),
+  skillApi: {
+    refresh: vi.fn().mockResolvedValue({
+      refreshedAt: '2026-05-12T00:00:00Z',
+      projectRoot: '/tmp/project',
+      skillsPath: '/tmp/project/.opencode/skills',
+      skillCount: 0,
+      skills: [],
+    }),
   },
 }))
 

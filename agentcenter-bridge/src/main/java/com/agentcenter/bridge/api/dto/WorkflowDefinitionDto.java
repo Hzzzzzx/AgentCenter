@@ -7,6 +7,7 @@ import com.agentcenter.bridge.domain.workitem.WorkItemType;
 
 public record WorkflowDefinitionDto(
         String id,
+        String projectId,
         WorkItemType workItemType,
         String name,
         int versionNo,

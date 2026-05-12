@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import com.agentcenter.bridge.api.dto.RuntimeEventDto;
+import com.agentcenter.bridge.application.ProjectRuntimeWorkspaceResolver;
 import com.agentcenter.bridge.application.RuntimeEventService;
 import com.agentcenter.bridge.api.dto.RuntimeSkillDto;
 import com.agentcenter.bridge.application.runtime.AgentRuntimeAdapter;
@@ -27,6 +28,8 @@ import com.agentcenter.bridge.application.runtime.protocol.RuntimeCommandTypes;
 import com.agentcenter.bridge.domain.runtime.RuntimeEventSource;
 import com.agentcenter.bridge.domain.runtime.RuntimeEventType;
 import com.agentcenter.bridge.domain.runtime.RuntimeType;
+import com.agentcenter.bridge.infrastructure.persistence.entity.WorkItemEntity;
+import com.agentcenter.bridge.infrastructure.persistence.mapper.WorkItemMapper;
 import com.agentcenter.bridge.infrastructure.runtime.opencode.transport.OpenCodeHttpCommandTransport;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -80,6 +83,8 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
     private final OpenCodeMcpFileService mcpFileService;
     private final OpenCodeHttpCommandTransport commandTransport;
     private final RuntimeEventService runtimeEventService;
+    private final WorkItemMapper workItemMapper;
+    private final ProjectRuntimeWorkspaceResolver workspaceResolver;
     private final String agent;
     private final int responseTimeoutSeconds;
 
@@ -87,6 +92,7 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
     private boolean conversationLogEnabled;
 
     private final Map<String, String> agentToOpencodeSession = new ConcurrentHashMap<>();
+    private final Map<String, String> sessionWorkingDirectories = new ConcurrentHashMap<>();
     private final Map<String, Long> cancelGenerations = new ConcurrentHashMap<>();
 
     public OpenCodeRuntimeAdapter(
@@ -97,6 +103,8 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
             OpenCodeMcpFileService mcpFileService,
             OpenCodeHttpCommandTransport commandTransport,
             RuntimeEventService runtimeEventService,
+            WorkItemMapper workItemMapper,
+            ProjectRuntimeWorkspaceResolver workspaceResolver,
             @Value("${agentcenter.runtime.opencode.serve.agent:build}") String agent,
             @Value("${agentcenter.runtime.opencode.timeout-seconds:180}") int responseTimeoutSeconds) {
         this.processManager = processManager;
@@ -106,6 +114,8 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         this.mcpFileService = mcpFileService;
         this.commandTransport = commandTransport;
         this.runtimeEventService = runtimeEventService;
+        this.workItemMapper = workItemMapper;
+        this.workspaceResolver = workspaceResolver;
         this.agent = agent;
         this.responseTimeoutSeconds = responseTimeoutSeconds;
     }
@@ -152,7 +162,8 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
             throw new IllegalStateException("OpenCode serve adapter is disabled");
         }
 
-        String baseUrl = processManager.ensureRunning();
+        Path cwd = resolveRuntimeWorkdir(workItemId);
+        String baseUrl = processManager.ensureRunning(cwd);
 
         String title = "AgentCenter Session";
         if (workItemId != null && !workItemId.isBlank()) {
@@ -161,7 +172,7 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
         ObjectNode sessionPayload = objectMapper.createObjectNode();
         sessionPayload.put("baseUrl", baseUrl);
-        sessionPayload.put("workingDirectory", processManager.resolveWorkingDirectory().toString());
+        sessionPayload.put("workingDirectory", cwd.toString());
         sessionPayload.put("title", title);
         ArrayNode permissions = sessionPayload.putArray("permission");
         addPermissionRule(permissions, "edit", "*", "ask");
@@ -185,9 +196,9 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
                 : (workItemId != null ? "acs_" + workItemId : "acs_" + System.currentTimeMillis());
         agentToOpencodeSession.put(agentSid, opencodeSessionId);
         agentToOpencodeSession.put(opencodeSessionId, opencodeSessionId);
+        rememberSessionWorkingDirectory(agentSid, opencodeSessionId, cwd);
 
-        String cwd = processManager.resolveWorkingDirectory().toString();
-        eventSubscriber.registerSession(opencodeSessionId, agentSid, baseUrl, cwd);
+        eventSubscriber.registerSession(opencodeSessionId, agentSid, baseUrl, cwd.toString());
 
         log.info("Created opencode session {} → agent session {}", opencodeSessionId, agentSid);
         return opencodeSessionId;
@@ -206,17 +217,21 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
             return createSession(workItemId, agentSessionId);
         }
 
-        String baseUrl = processManager.ensureRunning();
-        String cwd = processManager.resolveWorkingDirectory().toString();
-        if (commandTransport.fetchMessages(baseUrl, cwd, runtimeSessionId) == null) {
+        Path cwd = resolveRuntimeWorkdir(workItemId);
+        String baseUrl = processManager.ensureRunning(cwd);
+        if (commandTransport.fetchMessages(baseUrl, cwd.toString(), runtimeSessionId) == null) {
             log.info("Persisted opencode session {} is not available; creating a replacement for agent session {}",
                     runtimeSessionId, agentSessionId);
             return createSession(workItemId, agentSessionId);
         }
 
-        agentToOpencodeSession.put(agentSessionId, runtimeSessionId);
+        String agentSid = (agentSessionId != null && !agentSessionId.isBlank())
+                ? agentSessionId
+                : runtimeSessionId;
+        agentToOpencodeSession.put(agentSid, runtimeSessionId);
         agentToOpencodeSession.put(runtimeSessionId, runtimeSessionId);
-        eventSubscriber.registerSession(runtimeSessionId, agentSessionId, baseUrl, cwd);
+        rememberSessionWorkingDirectory(agentSid, runtimeSessionId, cwd);
+        eventSubscriber.registerSession(runtimeSessionId, agentSid, baseUrl, cwd.toString());
         return runtimeSessionId;
     }
 
@@ -362,8 +377,8 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         }
         long cancelGeneration = cancelGeneration(opencodeSessionId);
 
-        String baseUrl = processManager.ensureRunning();
-        Path cwd = processManager.resolveWorkingDirectory();
+        Path cwd = resolveSessionWorkingDirectory(sessionId, opencodeSessionId);
+        String baseUrl = processManager.ensureRunning(cwd);
         Set<String> knownMessageIds = fetchMessageIds(baseUrl, cwd.toString(), opencodeSessionId);
 
         ObjectNode sendPayload = objectMapper.createObjectNode();
@@ -407,8 +422,8 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         }
         long cancelGeneration = cancelGeneration(opencodeSessionId);
 
-        String baseUrl = processManager.ensureRunning();
-        Path cwd = processManager.resolveWorkingDirectory();
+        Path cwd = resolveSessionWorkingDirectory(sessionId, opencodeSessionId);
+        String baseUrl = processManager.ensureRunning(cwd);
         Set<String> knownMessageIds = fetchMessageIds(baseUrl, cwd.toString(), opencodeSessionId);
 
         ObjectNode sendPayload = objectMapper.createObjectNode();
@@ -441,8 +456,8 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
             return;
         }
 
-        String baseUrl = processManager.ensureRunning();
-        Path cwd = processManager.resolveWorkingDirectory();
+        Path cwd = resolveSessionWorkingDirectory(sessionId, opencodeSessionId);
+        String baseUrl = processManager.ensureRunning(cwd);
         ObjectNode payload = objectMapper.createObjectNode();
         payload.put("baseUrl", baseUrl);
         payload.put("workingDirectory", cwd.toString());
@@ -463,6 +478,7 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
     @Override
     public void refreshMcps() {
         agentToOpencodeSession.clear();
+        sessionWorkingDirectories.clear();
         cancelGenerations.clear();
         processManager.restartIfRunning();
     }
@@ -470,12 +486,20 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
     @Override
     public void refreshSkills(RuntimeSkillSnapshot snapshot) {
         agentToOpencodeSession.clear();
+        sessionWorkingDirectories.clear();
         cancelGenerations.clear();
-        processManager.restartIfRunning();
+        if (snapshot != null && snapshot.projectRoot() != null && !snapshot.projectRoot().isBlank()) {
+            processManager.restartIfRunning(Path.of(snapshot.projectRoot()));
+        } else {
+            processManager.restartIfRunning();
+        }
     }
 
     public void refreshMcps(Path projectWorkdir) {
-        refreshMcps();
+        agentToOpencodeSession.clear();
+        sessionWorkingDirectories.clear();
+        cancelGenerations.clear();
+        processManager.restartIfRunning(projectWorkdir);
     }
 
     @Override
@@ -521,6 +545,45 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         return opencodeSessionId;
     }
 
+    private Path resolveRuntimeWorkdir(String workItemId) {
+        if (workItemId != null && !workItemId.isBlank()) {
+            try {
+                WorkItemEntity workItem = workItemMapper.findById(workItemId);
+                if (workItem != null) {
+                    return workspaceResolver.resolve(workItem.getProjectId());
+                }
+            } catch (Exception e) {
+                log.warn("Failed to resolve runtime workspace for work item {}, falling back to default: {}",
+                        workItemId, e.getMessage());
+            }
+        }
+        return processManager.resolveWorkingDirectory();
+    }
+
+    private void rememberSessionWorkingDirectory(String agentSessionId, String opencodeSessionId, Path cwd) {
+        if (cwd == null) {
+            return;
+        }
+        String value = cwd.toAbsolutePath().normalize().toString();
+        if (agentSessionId != null && !agentSessionId.isBlank()) {
+            sessionWorkingDirectories.put(agentSessionId, value);
+        }
+        if (opencodeSessionId != null && !opencodeSessionId.isBlank()) {
+            sessionWorkingDirectories.put(opencodeSessionId, value);
+        }
+    }
+
+    private Path resolveSessionWorkingDirectory(String dispatchSessionId, String opencodeSessionId) {
+        String mapped = dispatchSessionId == null ? null : sessionWorkingDirectories.get(dispatchSessionId);
+        if ((mapped == null || mapped.isBlank()) && opencodeSessionId != null) {
+            mapped = sessionWorkingDirectories.get(opencodeSessionId);
+        }
+        if (mapped != null && !mapped.isBlank()) {
+            return Path.of(mapped).toAbsolutePath().normalize();
+        }
+        return processManager.resolveWorkingDirectory();
+    }
+
     private long cancelGeneration(String opencodeSessionId) {
         return cancelGenerations.getOrDefault(opencodeSessionId, 0L);
     }
@@ -538,8 +601,8 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
     }
 
     public void respondPermission(String opencodeSessionId, String permissionId, String reply) {
-        String baseUrl = processManager.ensureRunning();
-        Path cwd = processManager.resolveWorkingDirectory();
+        Path cwd = resolveSessionWorkingDirectory(opencodeSessionId, opencodeSessionId);
+        String baseUrl = processManager.ensureRunning(cwd);
 
         ObjectNode payload = objectMapper.createObjectNode();
         payload.put("baseUrl", baseUrl);
@@ -560,8 +623,8 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
     }
 
     public void replyQuestion(String opencodeSessionId, String requestId, List<List<String>> answers) {
-        String baseUrl = processManager.ensureRunning();
-        Path cwd = processManager.resolveWorkingDirectory();
+        Path cwd = resolveSessionWorkingDirectory(opencodeSessionId, opencodeSessionId);
+        String baseUrl = processManager.ensureRunning(cwd);
 
         ObjectNode payload = objectMapper.createObjectNode();
         payload.put("baseUrl", baseUrl);
@@ -583,8 +646,8 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
     }
 
     public void rejectQuestion(String opencodeSessionId, String requestId) {
-        String baseUrl = processManager.ensureRunning();
-        Path cwd = processManager.resolveWorkingDirectory();
+        Path cwd = resolveSessionWorkingDirectory(opencodeSessionId, opencodeSessionId);
+        String baseUrl = processManager.ensureRunning(cwd);
 
         ObjectNode payload = objectMapper.createObjectNode();
         payload.put("baseUrl", baseUrl);

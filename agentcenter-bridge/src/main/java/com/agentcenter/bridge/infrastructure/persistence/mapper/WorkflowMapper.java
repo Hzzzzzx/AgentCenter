@@ -13,13 +13,19 @@ import java.util.List;
 public interface WorkflowMapper {
     // Definitions
     List<WorkflowDefinitionEntity> findAllDefinitions();
+    List<WorkflowDefinitionEntity> findDefinitionsByProjectId(@Param("projectId") String projectId);
     WorkflowDefinitionEntity findDefinitionById(@Param("id") String id);
     List<WorkflowDefinitionEntity> findDefinitionsByWorkItemType(@Param("workItemType") String type);
+    List<WorkflowDefinitionEntity> findDefinitionsByProjectIdAndWorkItemType(@Param("projectId") String projectId,
+                                                                              @Param("workItemType") String type);
     WorkflowDefinitionEntity findDefaultEnabledDefinition();
+    WorkflowDefinitionEntity findDefaultEnabledDefinitionByProjectId(@Param("projectId") String projectId);
     List<WorkflowNodeDefinitionEntity> findNodeDefinitionsByWorkflowDefinitionId(@Param("workflowDefinitionId") String id);
     void insertDefinition(WorkflowDefinitionEntity entity);
     void updateDefinition(WorkflowDefinitionEntity entity);
     void clearDefaultDefinitionsByWorkItemType(@Param("workItemType") String workItemType);
+    void clearDefaultDefinitionsByProjectIdAndWorkItemType(@Param("projectId") String projectId,
+                                                           @Param("workItemType") String workItemType);
     void insertNodeDefinition(WorkflowNodeDefinitionEntity entity);
 
     // Instances
@@ -32,6 +38,14 @@ public interface WorkflowMapper {
     WorkflowNodeInstanceEntity findNodeInstanceById(@Param("id") String id);
     List<WorkflowInstanceEntity> findInstancesByWorkItemId(@Param("workItemId") String workItemId);
     int countNodeDefinitionsBySkillName(@Param("skillName") String skillName);
+    int countNodeDefinitionsByProjectIdAndSkillName(@Param("projectId") String projectId,
+                                                    @Param("skillName") String skillName);
     int renameSkillReferences(@Param("oldSkillName") String oldSkillName, @Param("newSkillName") String newSkillName);
+    int renameSkillReferencesByProjectId(@Param("projectId") String projectId,
+                                         @Param("oldSkillName") String oldSkillName,
+                                         @Param("newSkillName") String newSkillName);
     int renameNodeInstanceSkillName(@Param("oldSkillName") String oldSkillName, @Param("newSkillName") String newSkillName);
+    int renameNodeInstanceSkillNameByProjectId(@Param("projectId") String projectId,
+                                               @Param("oldSkillName") String oldSkillName,
+                                               @Param("newSkillName") String newSkillName);
 }

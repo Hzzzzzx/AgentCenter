@@ -1295,18 +1295,41 @@ public class WorkflowCommandService {
     }
 
     private WorkflowDefinitionEntity resolveDefinition(WorkItemEntity workItem, StartWorkflowRequest request) {
+        String projectId = ProjectDefaults.resolveProjectId(workItem.getProjectId());
         if (request.workflowDefinitionId() != null) {
             WorkflowDefinitionEntity def = workflowMapper.findDefinitionById(request.workflowDefinitionId());
-            if (def != null && "ENABLED".equals(def.getStatus())) {
+            if (def != null && "ENABLED".equals(def.getStatus())
+                    && definitionAvailableForProject(def, projectId)) {
                 return def;
             }
         }
         List<WorkflowDefinitionEntity> defs =
-                workflowMapper.findDefinitionsByWorkItemType(workItem.getType());
+                workflowMapper.findDefinitionsByProjectIdAndWorkItemType(projectId, workItem.getType());
+        if (defs.isEmpty() && !ProjectDefaults.DEFAULT_PROJECT_ID.equals(projectId)) {
+            defs = workflowMapper.findDefinitionsByProjectIdAndWorkItemType(
+                    ProjectDefaults.DEFAULT_PROJECT_ID, workItem.getType());
+        }
         return defs.stream()
                 .filter(d -> Boolean.TRUE.equals(d.getIsDefault()) && "ENABLED".equals(d.getStatus()))
                 .findFirst()
-                .orElseGet(workflowMapper::findDefaultEnabledDefinition);
+                .orElseGet(() -> {
+                    WorkflowDefinitionEntity projectDefault =
+                            workflowMapper.findDefaultEnabledDefinitionByProjectId(projectId);
+                    if (projectDefault != null) {
+                        return projectDefault;
+                    }
+                    WorkflowDefinitionEntity defaultProjectDefault =
+                            workflowMapper.findDefaultEnabledDefinitionByProjectId(ProjectDefaults.DEFAULT_PROJECT_ID);
+                    return defaultProjectDefault != null
+                            ? defaultProjectDefault
+                            : workflowMapper.findDefaultEnabledDefinition();
+                });
+    }
+
+    private boolean definitionAvailableForProject(WorkflowDefinitionEntity definition, String projectId) {
+        String definitionProjectId = ProjectDefaults.resolveProjectId(definition.getProjectId());
+        return definitionProjectId.equals(projectId)
+                || ProjectDefaults.DEFAULT_PROJECT_ID.equals(definitionProjectId);
     }
 
     private void applyRequestedExecutionMode(WorkflowInstanceEntity instance,

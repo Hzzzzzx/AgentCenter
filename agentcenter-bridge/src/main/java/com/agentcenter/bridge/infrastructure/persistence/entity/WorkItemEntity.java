@@ -8,12 +8,18 @@ public class WorkItemEntity {
     private String description;
     private String status;
     private String priority;
+    private String providerId;
+    private String externalWorkItemId;
     private String projectId;
     private String spaceId;
     private String iterationId;
+    private String projectContextId;
+    private String projectSpaceId;
+    private String projectIterationId;
     private String ownerUserId;
     private String assigneeUserId;
     private String currentWorkflowInstanceId;
+    private String extraJson;
     private Integer version;
     private String createdAt;
     private String updatedAt;
@@ -34,18 +40,30 @@ public class WorkItemEntity {
     public void setStatus(String status) { this.status = status; }
     public String getPriority() { return priority; }
     public void setPriority(String priority) { this.priority = priority; }
+    public String getProviderId() { return providerId; }
+    public void setProviderId(String providerId) { this.providerId = providerId; }
+    public String getExternalWorkItemId() { return externalWorkItemId; }
+    public void setExternalWorkItemId(String externalWorkItemId) { this.externalWorkItemId = externalWorkItemId; }
     public String getProjectId() { return projectId; }
     public void setProjectId(String projectId) { this.projectId = projectId; }
     public String getSpaceId() { return spaceId; }
     public void setSpaceId(String spaceId) { this.spaceId = spaceId; }
     public String getIterationId() { return iterationId; }
     public void setIterationId(String iterationId) { this.iterationId = iterationId; }
+    public String getProjectContextId() { return projectContextId; }
+    public void setProjectContextId(String projectContextId) { this.projectContextId = projectContextId; }
+    public String getProjectSpaceId() { return projectSpaceId; }
+    public void setProjectSpaceId(String projectSpaceId) { this.projectSpaceId = projectSpaceId; }
+    public String getProjectIterationId() { return projectIterationId; }
+    public void setProjectIterationId(String projectIterationId) { this.projectIterationId = projectIterationId; }
     public String getOwnerUserId() { return ownerUserId; }
     public void setOwnerUserId(String ownerUserId) { this.ownerUserId = ownerUserId; }
     public String getAssigneeUserId() { return assigneeUserId; }
     public void setAssigneeUserId(String assigneeUserId) { this.assigneeUserId = assigneeUserId; }
     public String getCurrentWorkflowInstanceId() { return currentWorkflowInstanceId; }
     public void setCurrentWorkflowInstanceId(String currentWorkflowInstanceId) { this.currentWorkflowInstanceId = currentWorkflowInstanceId; }
+    public String getExtraJson() { return extraJson; }
+    public void setExtraJson(String extraJson) { this.extraJson = extraJson; }
     public Integer getVersion() { return version; }
     public void setVersion(Integer version) { this.version = version; }
     public String getCreatedAt() { return createdAt; }

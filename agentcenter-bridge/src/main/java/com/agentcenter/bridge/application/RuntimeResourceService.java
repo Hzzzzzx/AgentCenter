@@ -3,7 +3,8 @@ package com.agentcenter.bridge.application;
 import java.nio.file.Path;
 import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 import org.springframework.stereotype.Service;
 
@@ -18,8 +19,7 @@ public class RuntimeResourceService {
 
     private final RuntimeGateway runtimeGateway;
     private final ProjectRuntimeWorkspaceResolver workspaceResolver;
-    private final AtomicReference<RuntimeSkillSnapshot> skillSnapshot =
-            new AtomicReference<>(new RuntimeSkillSnapshot(null, null, List.of()));
+    private final ConcurrentMap<String, RuntimeSkillSnapshot> skillSnapshots = new ConcurrentHashMap<>();
 
     public RuntimeResourceService(RuntimeGateway runtimeGateway,
                                   ProjectRuntimeWorkspaceResolver workspaceResolver) {
@@ -28,11 +28,17 @@ public class RuntimeResourceService {
     }
 
     public RuntimeSkillRefreshResponse listSkills() {
-        RuntimeSkillSnapshot snapshot = skillSnapshot.get();
-        if (snapshot.refreshedAt() == null) {
-            return refreshSkills();
+        return listSkills(null);
+    }
+
+    public RuntimeSkillRefreshResponse listSkills(String projectId) {
+        String resolvedProjectId = ProjectDefaults.resolveProjectId(projectId);
+        RuntimeSkillSnapshot snapshot = skillSnapshots.get(resolvedProjectId);
+        if (snapshot == null || snapshot.refreshedAt() == null) {
+            return refreshSkills(resolvedProjectId);
         }
-        String projectRootStr = snapshot.projectRoot();
+        Path projectWorkdir = resolveProjectWorkdir(resolvedProjectId);
+        String projectRootStr = snapshot.projectRoot() == null ? projectWorkdir.toString() : snapshot.projectRoot();
         String skillsPath = runtimeGateway.getSkillsRootPath(RuntimeType.OPENCODE, Path.of(projectRootStr));
         return toResponse(snapshot.refreshedAt(), projectRootStr, skillsPath, snapshot.skills());
     }
@@ -42,7 +48,8 @@ public class RuntimeResourceService {
     }
 
     public RuntimeSkillRefreshResponse refreshSkills(String projectId) {
-        Path projectWorkdir = resolveProjectWorkdir(projectId);
+        String resolvedProjectId = ProjectDefaults.resolveProjectId(projectId);
+        Path projectWorkdir = resolveProjectWorkdir(resolvedProjectId);
         List<RuntimeSkillDto> skills = runtimeGateway.scanSkills(RuntimeType.OPENCODE, projectWorkdir);
         OffsetDateTime refreshedAt = OffsetDateTime.now();
         String projectRootStr = projectWorkdir.toString();
@@ -51,14 +58,20 @@ public class RuntimeResourceService {
                 projectRootStr,
                 skills
         );
-        skillSnapshot.set(snapshot);
+        skillSnapshots.put(resolvedProjectId, snapshot);
         runtimeGateway.refreshSkills(RuntimeType.OPENCODE, snapshot);
         String skillsPath = runtimeGateway.getSkillsRootPath(RuntimeType.OPENCODE, projectWorkdir);
         return toResponse(refreshedAt, projectRootStr, skillsPath, skills);
     }
 
     public RuntimeSkillSnapshot currentSkillSnapshot() {
-        return skillSnapshot.get();
+        return currentSkillSnapshot(null);
+    }
+
+    public RuntimeSkillSnapshot currentSkillSnapshot(String projectId) {
+        return skillSnapshots.getOrDefault(
+                ProjectDefaults.resolveProjectId(projectId),
+                new RuntimeSkillSnapshot(null, null, List.of()));
     }
 
     private RuntimeSkillRefreshResponse toResponse(OffsetDateTime refreshedAt,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { skillApi } from '../api/runtimeResources'
 import { useWorkflowStore } from '../stores/workflows'
 import MarkdownContent from '../components/conversation/MarkdownContent.vue'
@@ -32,6 +32,11 @@ type DefinitionDraft = {
 }
 
 const workflowStore = useWorkflowStore()
+const props = withDefaults(defineProps<{
+  projectId?: string
+}>(), {
+  projectId: DEFAULT_PROJECT_ID,
+})
 const skills = ref<RuntimeSkillDetailDto[]>([])
 const skillLoading = ref(false)
 const editingDefinitionId = ref<string | null>(null)
@@ -126,7 +131,13 @@ const agentFlowMermaidMarkdown = computed(() =>
 )
 
 onMounted(() => {
-  workflowStore.loadDefinitions()
+  workflowStore.loadDefinitions(props.projectId)
+  loadSkills()
+})
+
+watch(() => props.projectId, () => {
+  cancelEdit()
+  workflowStore.loadDefinitions(props.projectId)
   loadSkills()
 })
 
@@ -134,7 +145,7 @@ async function loadSkills() {
   skillLoading.value = true
   error.value = null
   try {
-    skills.value = await skillApi.catalog(DEFAULT_PROJECT_ID)
+    skills.value = await skillApi.catalog(props.projectId)
   } catch (loadError) {
     skills.value = []
     error.value = loadError instanceof Error ? loadError.message : '加载项目 Skill 失败'
@@ -428,7 +439,7 @@ async function saveDraft() {
   const request: UpdateWorkflowDefinitionRequest = {
     name: draft.value.name.trim(),
     isDefault: draft.value.isDefault,
-    projectId: DEFAULT_PROJECT_ID,
+    projectId: props.projectId,
     nodes: draft.value.nodes.map((node) => ({
       nodeKey: node.nodeKey.trim() || null,
       name: node.name.trim(),
@@ -450,7 +461,7 @@ async function saveDraft() {
     savedMessage.value = `已保存为 v${updated.versionNo}，后续新工作项将使用这版编排`
     editingDefinitionId.value = null
     draft.value = null
-    await workflowStore.loadDefinitions()
+    await workflowStore.loadDefinitions(props.projectId)
   } catch (saveError) {
     error.value = saveError instanceof Error ? saveError.message : '保存失败'
   } finally {

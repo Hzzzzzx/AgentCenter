@@ -11,7 +11,8 @@ import { useNotificationStore } from '../stores/notifications'
 import MessageList from '../components/conversation/MessageList.vue'
 import WorkflowNodeControlBar from '../components/conversation/WorkflowNodeControlBar.vue'
 import ConversationInteractionBar from '../components/conversation/ConversationInteractionBar.vue'
-import { runtimeResourceApi } from '../api/runtimeResources'
+import { skillApi } from '../api/runtimeResources'
+import { DEFAULT_PROJECT_ID } from '../constants/projects'
 import { artifactApi } from '../api/artifacts'
 import type {
   AgentMessageDto,
@@ -83,6 +84,7 @@ const AUTO_SCROLL_BOTTOM_THRESHOLD = 180
 const props = defineProps<{
   workItemId?: string
   targetSessionId?: string | null
+  projectId?: string
 }>()
 
 const emit = defineEmits<{
@@ -899,7 +901,7 @@ async function refreshSkills() {
   refreshingSkills.value = true
   skillRefreshStatus.value = ''
   try {
-    const result = await runtimeResourceApi.refreshSkills()
+    const result = await skillApi.refresh(props.projectId || DEFAULT_PROJECT_ID)
     skillRefreshStatus.value = `已刷新 ${result.skillCount} 个 Skill`
   } catch (error) {
     skillRefreshStatus.value = error instanceof Error ? error.message : '刷新 Skill 失败'

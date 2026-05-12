@@ -1,6 +1,6 @@
 # Project Context Integration Guide
 
-> Status: frontend context management implemented; home overview stats are database-backed; global project-data provider switching and fixture sync implemented; enterprise provider pending
+> Status: frontend context management implemented; home overview stats are database-backed; global project-data provider switching, fixture sync, and normalized project context persistence implemented; enterprise provider pending
 > Scope: project management page, title bar project context, enterprise data source sync, home overview aggregation
 
 ## Goal
@@ -14,7 +14,7 @@ Project Context is the workspace-level scope used by AgentCenter to decide which
 - A `Sync Data` button that refreshes work items, confirmations, and the home overview from Bridge APIs.
 - Home overview top metrics loaded from the database-backed `/api/work-items/overview` API.
 
-The current implementation adds a Bridge-side project-data provider registry with fixture providers. The next implementation step is to replace fixture providers with an enterprise provider implementation while keeping the Web and Bridge API contracts stable.
+The current implementation adds a Bridge-side project-data provider registry with fixture providers and persists provider snapshots into normalized project context tables. The next implementation step is to add an enterprise provider implementation while keeping the Web and Bridge API contracts stable.
 
 ## Current Frontend Shape
 
@@ -140,20 +140,39 @@ Suggested response shape:
 
 ## Persistence Model
 
-Minimum table/entity fields:
+Implemented normalized project context tables:
 
-| Field | Notes |
-|-------|-------|
-| `id` | Stable context id. |
-| `user_id` or `workspace_id` | Decide whether context is user-scoped, workspace-scoped, or both. |
-| `project` | Custom display name shown in the title bar. |
-| `external_system` | Example: `CLOUDEREQ`. |
-| `external_project_id` | Stable CloudeReq project id. Do not persist display name only. |
-| `external_project_name` | Cached display name. |
-| `space_id` / `space_name` | Enterprise space mapping. |
-| `iteration_id` / `iteration_name` | Enterprise iteration mapping. |
-| `active` | One active context per scope. Enforce uniqueness. |
-| `created_at` / `updated_at` | Audit fields. |
+| Table | Purpose | Key fields |
+|-------|---------|------------|
+| `project_context` | Provider-scoped project mapping. | `provider_id`, `external_project_id`, `project_name`, `external_cloude_req_project_id`, `cloude_req_project_name`, `active`, `extra_json` |
+| `project_space` | Provider-scoped project space mapping. | `provider_id`, `project_context_id`, `external_space_id`, `space_name`, `extra_json` |
+| `project_iteration` | Provider-scoped iteration mapping under a space. | `provider_id`, `project_context_id`, `project_space_id`, `external_iteration_id`, `iteration_name`, `status`, `start_at`, `end_at`, `extra_json` |
+| `project_provider_setting` | Current global runtime selection. | `active_provider_id`, `active_project_context_id`, `active_project_space_id`, `active_project_iteration_id` |
+
+`work_item` keeps its existing display-scope fields for API compatibility:
+
+| Field | Current role |
+|-------|--------------|
+| `project_id` | Display project name used by current scoped queries. |
+| `space_id` | Display space name used by current scoped queries. |
+| `iteration_id` | Display iteration name used by current scoped queries. |
+
+`work_item` also stores stable provider mapping fields:
+
+| Field | Current role |
+|-------|--------------|
+| `provider_id` | Owning project data provider, for example `fixture-alpha` or `enterprise-cloudereq`. |
+| `external_work_item_id` | Stable enterprise work item id. Use the external primary key, not the display code, when available. |
+| `project_context_id` | Internal FK-like reference to `project_context.id`. |
+| `project_space_id` | Internal FK-like reference to `project_space.id`. |
+| `project_iteration_id` | Internal FK-like reference to `project_iteration.id`. |
+| `extra_json` | Provider-specific metadata that should be preserved but is not queried frequently. |
+
+Extension rule:
+
+- Stable identifiers and high-frequency filters should become first-class columns.
+- Display-only or provider-specific fields should go into `extra_json`.
+- Complex repeated structures should become dedicated tables only after a concrete access pattern exists.
 
 ## Sync Rules
 
@@ -182,6 +201,15 @@ Home top-card aggregation rules:
 - `blockedCount` counts failed stages or blocked/failed workflow instances.
 - `nodeDistribution` groups work items by current waiting/running/failed/next node, not by frontend mock labels.
 
+Implemented provider sync rules:
+
+1. Read the active provider snapshot through `ProjectDataProvider.snapshot()`.
+2. Upsert project, space, and iteration rows from both `contexts` and `workItems`.
+3. Upsert work items by `(provider_id, external_work_item_id)` when available, with a legacy fallback to `code` for existing local rows.
+4. Preserve workflow/runtime state by updating only work item business fields and provider mapping fields.
+5. Store active provider/project/space/iteration in `project_provider_setting`.
+6. Keep current UI filtering compatible through `project_id`, `space_id`, and `iteration_id` display fields.
+
 ## Provider Registry
 
 Bridge owns a stable provider contract:
@@ -205,6 +233,8 @@ Implemented fixture providers:
 | `fixture-beta` | Local test source for 企业中台 / 安全治理 with Sprint 21, Sprint 22, and 长期治理 data. |
 
 Enterprise rollout should add a new provider bean, for example `enterprise-cloudereq`, and switch `agentcenter.project-context.provider` or the runtime settings dropdown to that provider id. Web code and project-management UI should not change.
+
+For implementation details, field mapping, and validation rules, see [ENTERPRISE-PROJECT-DATA-PROVIDER-GUIDE.md](./ENTERPRISE-PROJECT-DATA-PROVIDER-GUIDE.md).
 
 Current global setting scope:
 
@@ -256,8 +286,8 @@ Then wire:
 
 ## Current Known Gaps
 
-- No Bridge API or database persistence yet for project context configurations.
 - No enterprise auth/permission check for CloudeReq sync yet.
 - No stale mapping warning UI yet.
 - No optimistic/error state in the current placeholder implementation.
-- Home overview aggregation is currently unscoped; add project/space/iteration filters with the project context API rollout.
+- Project provider selection is global; user/workspace-level provider selection is deferred.
+- Current scoped work item API still accepts display names. The normalized internal ids are persisted and ready for a later API tightening pass.

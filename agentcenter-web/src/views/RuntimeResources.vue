@@ -1,13 +1,25 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { runtimeResourceApi } from '../api/runtimeResources'
-import type { RuntimeSkillRefreshResponse } from '../api/types'
+import { computed, onMounted, ref, watch } from 'vue'
+import { skillApi } from '../api/runtimeResources'
+import { DEFAULT_PROJECT_ID } from '../constants/projects'
+import type { RuntimeSkillDetailDto, RuntimeSkillDto } from '../api/types'
 
-const snapshot = ref<RuntimeSkillRefreshResponse | null>(null)
+interface Props {
+  projectId?: string
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  projectId: DEFAULT_PROJECT_ID,
+})
+
+const skills = ref<RuntimeSkillDto[]>([])
+const refreshedAt = ref<string>('')
+const skillsPath = ref('.opencode/skills')
 const loading = ref(false)
 const errorMessage = ref('')
 
 const shortChecksum = computed(() => (checksum: string) => checksum.slice(0, 10))
+const skillCount = computed(() => skills.value.length)
 
 onMounted(() => {
   loadSkills()
@@ -17,7 +29,9 @@ async function loadSkills() {
   loading.value = true
   errorMessage.value = ''
   try {
-    snapshot.value = await runtimeResourceApi.listSkills()
+    const catalog = await skillApi.catalog(props.projectId)
+    skills.value = catalog.map(toRuntimeSkill)
+    refreshedAt.value = ''
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '读取 Skill 失败'
   } finally {
@@ -29,7 +43,10 @@ async function refreshSkills() {
   loading.value = true
   errorMessage.value = ''
   try {
-    snapshot.value = await runtimeResourceApi.refreshSkills()
+    const snapshot = await skillApi.refresh(props.projectId)
+    skills.value = snapshot.skills
+    refreshedAt.value = snapshot.refreshedAt
+    skillsPath.value = snapshot.skillsPath
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '刷新 Skill 失败'
   } finally {
@@ -41,6 +58,20 @@ function formatTime(value?: string) {
   if (!value) return '未刷新'
   return new Date(value).toLocaleString()
 }
+
+function toRuntimeSkill(skill: RuntimeSkillDetailDto): RuntimeSkillDto {
+  return {
+    name: skill.name,
+    description: skill.description ?? '',
+    relativePath: skill.relativePath,
+    checksum: skill.checksum ?? '',
+    updatedAt: skill.updatedAt,
+  }
+}
+
+watch(() => props.projectId, () => {
+  loadSkills()
+})
 </script>
 
 <template>
@@ -64,15 +95,15 @@ function formatTime(value?: string) {
     <section class="runtime-resources__summary">
       <div class="runtime-resources__metric">
         <span class="runtime-resources__metric-label">可用 Skill</span>
-        <strong>{{ snapshot?.skillCount ?? 0 }}</strong>
+        <strong>{{ skillCount }}</strong>
       </div>
       <div class="runtime-resources__metric">
         <span class="runtime-resources__metric-label">最近刷新</span>
-        <strong>{{ formatTime(snapshot?.refreshedAt) }}</strong>
+        <strong>{{ formatTime(refreshedAt) }}</strong>
       </div>
       <div class="runtime-resources__path">
         <span>扫描目录</span>
-        <code>{{ snapshot?.skillsPath ?? '.opencode/skills' }}</code>
+        <code>{{ skillsPath }}</code>
       </div>
     </section>
 
@@ -84,13 +115,13 @@ function formatTime(value?: string) {
         <span>OpenCode 项目目录</span>
       </div>
 
-      <div v-if="loading && !snapshot" class="runtime-resources__empty">正在读取...</div>
-      <div v-else-if="!snapshot?.skills.length" class="runtime-resources__empty">
+      <div v-if="loading && skills.length === 0" class="runtime-resources__empty">正在读取...</div>
+      <div v-else-if="skills.length === 0" class="runtime-resources__empty">
         暂未发现 Skill。请在扫描目录下创建子目录，并放入 SKILL.md。
       </div>
       <div v-else class="runtime-resources__list">
         <article
-          v-for="skill in snapshot.skills"
+          v-for="skill in skills"
           :key="skill.name"
           class="runtime-skill"
         >

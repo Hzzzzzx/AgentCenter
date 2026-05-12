@@ -9,6 +9,7 @@ import type { RuntimeSkillDetailDto, WorkflowDefinitionDto } from '../api/types'
 const mocks = vi.hoisted(() => ({
   definition: {
     id: 'wf-fe-v1',
+    projectId: '01DEFAULTPROJECT0000000000001',
     workItemType: 'FE',
     name: 'FE 标准工作流',
     versionNo: 1,

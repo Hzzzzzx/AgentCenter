@@ -19,6 +19,7 @@ import { useWorkflowStore } from './stores/workflows'
 import { useWorkItemStore } from './stores/workItems'
 import { useRuntimeSettingsStore } from './stores/runtimeSettings'
 import { useWorkItemWorkflowProjectionStore } from './stores/workItemWorkflowProjection'
+import { DEFAULT_PROJECT_ID } from './constants/projects'
 import type { AgentSessionDto, ArtifactDto, ProjectDataSnapshotDto, StartWorkflowResponse } from './api/types'
 import type { ProjectContextOptions, ProjectContextSelection } from './types/projectContext'
 
@@ -67,6 +68,7 @@ const projectContext = computed<ProjectContextSelection>({
     activeProjectContextId.value = value.id
   },
 })
+const activeProjectId = computed(() => projectContext.value?.project?.trim() || DEFAULT_PROJECT_ID)
 const sessionStore = useSessionStore()
 const workflowStore = useWorkflowStore()
 const confirmationStore = useConfirmationStore()
@@ -107,7 +109,7 @@ async function refreshOneWorkItemState(workItemId: string) {
 function scopeForProjectContext() {
   const context = projectContext.value
   return {
-    projectId: context?.project ?? null,
+    projectId: activeProjectId.value,
     spaceId: context?.space ?? null,
     iterationId: context?.iteration ?? null,
   }
@@ -275,11 +277,19 @@ function applyProjectDataSnapshot(snapshot: ProjectDataSnapshotDto) {
   if (snapshot.contexts.length === 0) return
   projectContexts.value = snapshot.contexts.map(context => ({
     id: context.id,
+    externalProjectId: context.externalProjectId,
     project: context.project,
+    externalCloudeReqProjectId: context.externalCloudeReqProjectId,
     cloudeReqProject: context.cloudeReqProject,
+    externalSpaceId: context.externalSpaceId,
     space: context.space,
+    externalIterationId: context.externalIterationId,
     iteration: context.iteration,
+    iterationStatus: context.iterationStatus,
+    iterationStartAt: context.iterationStartAt,
+    iterationEndAt: context.iterationEndAt,
     active: context.active,
+    extraJson: context.extraJson,
   }))
   activeProjectContextId.value = snapshot.contexts.find(context => context.active)?.id
     ?? snapshot.contexts[0].id
@@ -373,8 +383,8 @@ watch(
         v-else-if="activeView === 'board'"
         @select-work-item="handleSelectWorkItem"
       />
-      <WorkflowConfig v-else-if="activeView === 'workflow'" />
-      <RuntimeResources v-else-if="activeView === 'resources'" />
+      <WorkflowConfig v-else-if="activeView === 'workflow'" :project-id="activeProjectId" />
+      <RuntimeResources v-else-if="activeView === 'resources'" :project-id="activeProjectId" />
       <ProjectContextSettings
         v-else-if="activeView === 'settings' && settingsTab === 'project'"
         v-model="projectContext"
@@ -386,13 +396,14 @@ watch(
         @update:active-context-id="activeProjectContextId = $event"
         @sync-data="handleSyncProjectContextData"
       />
-      <SkillManagement v-else-if="activeView === 'settings' && settingsTab === 'skills'" />
-      <McpManagement v-else-if="activeView === 'settings' && settingsTab === 'mcps'" />
+      <SkillManagement v-else-if="activeView === 'settings' && settingsTab === 'skills'" :project-id="activeProjectId" />
+      <McpManagement v-else-if="activeView === 'settings' && settingsTab === 'mcps'" :project-id="activeProjectId" />
       <RuntimeSettings v-else-if="activeView === 'settings' && settingsTab === 'runtime'" />
       <ConversationWorkbench
         v-else-if="activeView === 'conversation'"
         :work-item-id="selectedWorkItemId"
         :target-session-id="targetSessionId"
+        :project-id="activeProjectId"
         @back="handleConversationBack"
         @open-artifact="selectedArtifact = $event"
         @show-confirmation="handleShowConfirmation"

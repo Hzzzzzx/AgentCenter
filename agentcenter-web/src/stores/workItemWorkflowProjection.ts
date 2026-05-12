@@ -145,6 +145,36 @@ export const useWorkItemWorkflowProjectionStore = defineStore('workItemWorkflowP
     const existing = workflowStore.instancesByWorkItemId[item.id]
     if (instance && (!existing || existing.id !== instance.id)) {
       workflowStore.upsertInstance(instance)
+      return
+    }
+    if (instance && existing.id === instance.id) {
+      workflowStore.upsertInstance(mergeSummaryIntoInstance(existing, instance))
+    }
+  }
+
+  function mergeSummaryIntoInstance(
+    existing: WorkflowInstanceDto,
+    summary: WorkflowInstanceDto,
+  ): WorkflowInstanceDto {
+    const summaryNodesById = new Map(summary.nodes.map((node) => [node.id, node]))
+    const existingNodeIds = new Set(existing.nodes.map((node) => node.id))
+    const mergedNodes = existing.nodes.map((node) => {
+      const summaryNode = summaryNodesById.get(node.id)
+      if (!summaryNode) return node
+      return {
+        ...node,
+        status: summaryNode.status,
+        errorMessage: summaryNode.errorMessage ?? node.errorMessage,
+        skillName: node.skillName ?? summaryNode.skillName,
+      }
+    })
+    const appendedSummaryNodes = summary.nodes.filter((node) => !existingNodeIds.has(node.id))
+
+    return {
+      ...existing,
+      status: summary.status,
+      currentNodeInstanceId: summary.currentNodeInstanceId,
+      nodes: [...mergedNodes, ...appendedSummaryNodes],
     }
   }
 

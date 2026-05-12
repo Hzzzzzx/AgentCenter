@@ -8,7 +8,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.agentcenter.bridge.application.RuntimeEventService;
+import com.agentcenter.bridge.application.ProjectRuntimeWorkspaceResolver;
 import com.agentcenter.bridge.application.runtime.SkillInvocationRequest;
+import com.agentcenter.bridge.infrastructure.persistence.mapper.WorkItemMapper;
 import com.agentcenter.bridge.infrastructure.runtime.opencode.transport.OpenCodeHttpCommandTransport;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -28,10 +30,13 @@ class OpenCodeRuntimeAdapterBuildPartsTest {
         OpenCodeMcpFileService mcpFileService = mock(OpenCodeMcpFileService.class);
         OpenCodeHttpCommandTransport commandTransport = mock(OpenCodeHttpCommandTransport.class);
         RuntimeEventService runtimeEventService = mock(RuntimeEventService.class);
+        WorkItemMapper workItemMapper = mock(WorkItemMapper.class);
+        ProjectRuntimeWorkspaceResolver workspaceResolver = mock(ProjectRuntimeWorkspaceResolver.class);
 
         adapter = new OpenCodeRuntimeAdapter(
                 processManager, eventSubscriber, objectMapper, skillFileService,
-                mcpFileService, commandTransport, runtimeEventService, "build", 180);
+                mcpFileService, commandTransport, runtimeEventService,
+                workItemMapper, workspaceResolver, "build", 180);
     }
 
     @Test

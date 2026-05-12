@@ -5,16 +5,22 @@
 
     <select id="findAll" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.WorkItemEntity">
         SELECT id, code, type, title, description, status, priority,
-               project_id, space_id, iteration_id, owner_user_id, assignee_user_id,
-               current_workflow_instance_id, version, created_at, updated_at
+               provider_id, external_work_item_id,
+               project_id, space_id, iteration_id,
+               project_context_id, project_space_id, project_iteration_id,
+               owner_user_id, assignee_user_id, current_workflow_instance_id,
+               extra_json, version, created_at, updated_at
         FROM work_item
         ORDER BY updated_at DESC, created_at DESC
     </select>
 
     <select id="findByScope" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.WorkItemEntity">
         SELECT id, code, type, title, description, status, priority,
-               project_id, space_id, iteration_id, owner_user_id, assignee_user_id,
-               current_workflow_instance_id, version, created_at, updated_at
+               provider_id, external_work_item_id,
+               project_id, space_id, iteration_id,
+               project_context_id, project_space_id, project_iteration_id,
+               owner_user_id, assignee_user_id, current_workflow_instance_id,
+               extra_json, version, created_at, updated_at
         FROM work_item
         <where>
             <if test="projectId != null and projectId != ''">
@@ -32,25 +38,49 @@
 
     <select id="findById" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.WorkItemEntity">
         SELECT id, code, type, title, description, status, priority,
-               project_id, space_id, iteration_id, owner_user_id, assignee_user_id,
-               current_workflow_instance_id, version, created_at, updated_at
+               provider_id, external_work_item_id,
+               project_id, space_id, iteration_id,
+               project_context_id, project_space_id, project_iteration_id,
+               owner_user_id, assignee_user_id, current_workflow_instance_id,
+               extra_json, version, created_at, updated_at
         FROM work_item WHERE id = #{id}
     </select>
 
     <select id="findByCode" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.WorkItemEntity">
         SELECT id, code, type, title, description, status, priority,
-               project_id, space_id, iteration_id, owner_user_id, assignee_user_id,
-               current_workflow_instance_id, version, created_at, updated_at
+               provider_id, external_work_item_id,
+               project_id, space_id, iteration_id,
+               project_context_id, project_space_id, project_iteration_id,
+               owner_user_id, assignee_user_id, current_workflow_instance_id,
+               extra_json, version, created_at, updated_at
         FROM work_item WHERE code = #{code}
+    </select>
+
+    <select id="findByProviderAndExternalId" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.WorkItemEntity">
+        SELECT id, code, type, title, description, status, priority,
+               provider_id, external_work_item_id,
+               project_id, space_id, iteration_id,
+               project_context_id, project_space_id, project_iteration_id,
+               owner_user_id, assignee_user_id, current_workflow_instance_id,
+               extra_json, version, created_at, updated_at
+        FROM work_item
+        WHERE provider_id = #{providerId}
+          AND external_work_item_id = #{externalWorkItemId}
     </select>
 
     <insert id="insert">
         INSERT INTO work_item (id, code, type, title, description, status, priority,
-                              project_id, space_id, iteration_id, owner_user_id, assignee_user_id,
-                              current_workflow_instance_id, version, created_at, updated_at)
+                              provider_id, external_work_item_id,
+                              project_id, space_id, iteration_id,
+                              project_context_id, project_space_id, project_iteration_id,
+                              owner_user_id, assignee_user_id, current_workflow_instance_id,
+                              extra_json, version, created_at, updated_at)
         VALUES (#{id}, #{code}, #{type}, #{title}, #{description}, #{status}, #{priority},
-                #{projectId}, #{spaceId}, #{iterationId}, #{ownerUserId}, #{assigneeUserId},
-                #{currentWorkflowInstanceId}, #{version}, #{createdAt}, #{updatedAt})
+                #{providerId}, #{externalWorkItemId},
+                #{projectId}, #{spaceId}, #{iterationId},
+                #{projectContextId}, #{projectSpaceId}, #{projectIterationId},
+                #{ownerUserId}, #{assigneeUserId}, #{currentWorkflowInstanceId},
+                #{extraJson}, #{version}, #{createdAt}, #{updatedAt})
     </insert>
 
     <update id="update">
@@ -64,15 +94,22 @@
 
     <update id="updateFromSync">
         UPDATE work_item
-        SET type = #{type},
+        SET code = #{code},
+            type = #{type},
             title = #{title},
             description = #{description},
             status = #{status},
             priority = #{priority},
+            provider_id = #{providerId},
+            external_work_item_id = #{externalWorkItemId},
             project_id = #{projectId},
             space_id = #{spaceId},
             iteration_id = #{iterationId},
+            project_context_id = #{projectContextId},
+            project_space_id = #{projectSpaceId},
+            project_iteration_id = #{projectIterationId},
             assignee_user_id = #{assigneeUserId},
+            extra_json = #{extraJson},
             updated_at = #{updatedAt}
         WHERE id = #{id}
     </update>

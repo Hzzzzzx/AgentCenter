@@ -115,6 +115,9 @@ export const useRuntimeStore = defineStore('runtime', () => {
       } else if (status) {
         markBusy()
       }
+      if (event.workflowInstanceId && shouldSyncWorkflowStatus(payload)) {
+        void syncWorkflowAndWorkItem(event)
+      }
     }
 
     if (event.eventType === 'MCP_CALL') {
@@ -402,6 +405,11 @@ export const useRuntimeStore = defineStore('runtime', () => {
       }
     }
     return ''
+  }
+
+  function shouldSyncWorkflowStatus(payload: RuntimePayload): boolean {
+    return textField(payload, ['status']) === 'workflow_completed'
+      || textField(payload, ['workflowStatus']) === 'COMPLETED'
   }
 
   return {

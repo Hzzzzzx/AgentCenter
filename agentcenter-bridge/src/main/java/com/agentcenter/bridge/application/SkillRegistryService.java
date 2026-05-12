@@ -226,7 +226,7 @@ public class SkillRegistryService {
                 existing.setValidationStatus("VALID");
                 existing.setValidationMessage(null);
                 skillMapper.update(existing);
-                renameWorkflowSkillReferences(previousName, nextSkillName);
+                renameWorkflowSkillReferences(resolvedProjectId, previousName, nextSkillName);
 
                 runtimeResourceService.refreshSkills(resolvedProjectId);
 
@@ -258,7 +258,7 @@ public class SkillRegistryService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Skill not found: " + skillId);
         }
 
-        int refCount = workflowMapper.countNodeDefinitionsBySkillName(existing.getName());
+        int refCount = workflowMapper.countNodeDefinitionsByProjectIdAndSkillName(resolvedProjectId, existing.getName());
         if (refCount > 0) {
             auditService.recordAudit(resolvedProjectId, "SKILL", skillId, "DELETE",
                     "REJECTED", "Skill referenced by " + refCount + " workflow node(s)", null, createdBy);
@@ -315,41 +315,40 @@ public class SkillRegistryService {
     }
 
     public String validateRegisteredRunnableSkill(String projectId, String skillName) {
+        if (skillName == null || skillName.isBlank()) {
+            return "Workflow node skill is required";
+        }
         String resolvedProjectId = ProjectDefaults.resolveProjectId(projectId);
-        RuntimeSkillEntity skill = resolveRunnableSkill(resolvedProjectId, skillName);
+        String requestedSkillName = skillName.trim();
+        RuntimeSkillEntity skill = skillMapper.findByProjectIdAndName(resolvedProjectId, requestedSkillName);
         if (skill == null) {
-            return "Skill is not registered for project " + resolvedProjectId + ": " + skillName;
+            String suggestion = closestSkillSuggestion(resolvedProjectId, requestedSkillName);
+            return "Skill is not registered for project " + resolvedProjectId + ": " + requestedSkillName
+                    + ". Use the exact project Skill name." + suggestion;
         }
         if (!"ENABLED".equals(skill.getStatus()) || !"VALID".equals(skill.getValidationStatus())) {
             String status = skill.getStatus() == null ? "UNKNOWN" : skill.getStatus();
             String validation = skill.getValidationStatus() == null ? "UNKNOWN" : skill.getValidationStatus();
-            return "Skill is not runnable: " + skillName + " status=" + status + ", validation=" + validation;
+            return "Skill is not runnable: " + requestedSkillName + " status=" + status + ", validation=" + validation;
         }
         return null;
     }
 
-    private RuntimeSkillEntity resolveRunnableSkill(String projectId, String requestedSkillName) {
-        RuntimeSkillEntity exact = skillMapper.findByProjectIdAndName(projectId, requestedSkillName);
-        if (exact != null) {
-            return exact;
-        }
+    private String closestSkillSuggestion(String projectId, String requestedSkillName) {
         String requestedNormalized = normalizeSkillName(requestedSkillName);
         if (requestedNormalized.isBlank()) {
-            return null;
+            return "";
         }
-        List<RuntimeSkillEntity> skills = skillMapper.findByProjectId(projectId);
-        RuntimeSkillEntity normalizedMatch = skills.stream()
-                .filter(skill -> requestedNormalized.equals(normalizeSkillName(skill.getName())))
-                .findFirst()
-                .orElse(null);
-        if (normalizedMatch != null) {
-            return normalizedMatch;
-        }
-        return skills.stream()
-                .filter(skill -> levenshteinDistance(requestedNormalized, normalizeSkillName(skill.getName())) <= 2)
+        RuntimeSkillEntity closest = skillMapper.findByProjectId(projectId).stream()
+                .filter(skill -> skill.getName() != null && !skill.getName().isBlank())
                 .min(java.util.Comparator.comparingInt(skill ->
                         levenshteinDistance(requestedNormalized, normalizeSkillName(skill.getName()))))
                 .orElse(null);
+        if (closest == null) {
+            return "";
+        }
+        int distance = levenshteinDistance(requestedNormalized, normalizeSkillName(closest.getName()));
+        return distance <= 3 ? " Did you mean: " + closest.getName() + "?" : "";
     }
 
     private String normalizeSkillName(String name) {
@@ -477,7 +476,7 @@ public class SkillRegistryService {
                     } else {
                         existing.setName(scanned.name());
                         existing.setDisplayName(scanned.name());
-                        renameWorkflowSkillReferences(previousName, scanned.name());
+                        renameWorkflowSkillReferences(projectId, previousName, scanned.name());
                     }
                     changed = true;
                 }
@@ -648,12 +647,12 @@ public class SkillRegistryService {
                 workspaceResolver.resolve(projectId), skillName, sourceDir);
     }
 
-    private void renameWorkflowSkillReferences(String previousName, String nextName) {
+    private void renameWorkflowSkillReferences(String projectId, String previousName, String nextName) {
         if (previousName == null || nextName == null || previousName.equals(nextName)) {
             return;
         }
-        int definitionCount = workflowMapper.renameSkillReferences(previousName, nextName);
-        int instanceCount = workflowMapper.renameNodeInstanceSkillName(previousName, nextName);
+        int definitionCount = workflowMapper.renameSkillReferencesByProjectId(projectId, previousName, nextName);
+        int instanceCount = workflowMapper.renameNodeInstanceSkillNameByProjectId(projectId, previousName, nextName);
         if (definitionCount > 0 || instanceCount > 0) {
             log.info("Renamed workflow skill references from '{}' to '{}' (definitions={}, instances={})",
                     previousName, nextName, definitionCount, instanceCount);

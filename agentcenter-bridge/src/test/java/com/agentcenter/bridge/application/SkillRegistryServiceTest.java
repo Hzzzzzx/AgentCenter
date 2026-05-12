@@ -36,23 +36,37 @@ class SkillRegistryServiceTest {
     }
 
     @Test
-    void shouldValidateSkillWhenOnlyTypoDiffers() {
+    void shouldRejectSkillWhenOnlyTypoDiffers() {
         RuntimeSkillEntity entity = runnableSkill("prd-design");
         when(skillMapper.findByProjectIdAndName("01DEFAULTPROJECT0000000000001", "prd-desingn")).thenReturn(null);
         when(skillMapper.findByProjectId("01DEFAULTPROJECT0000000000001")).thenReturn(List.of(entity));
 
         String error = service.validateRegisteredRunnableSkill("01DEFAULTPROJECT0000000000001", "prd-desingn");
 
-        assertThat(error).isNull();
+        assertThat(error)
+                .contains("Use the exact project Skill name")
+                .contains("Did you mean: prd-design?");
     }
 
     @Test
-    void shouldValidateSkillWhenSeparatorDiffers() {
+    void shouldRejectSkillWhenSeparatorDiffers() {
         RuntimeSkillEntity entity = runnableSkill("hld_design");
         when(skillMapper.findByProjectIdAndName("01DEFAULTPROJECT0000000000001", "hld-design")).thenReturn(null);
         when(skillMapper.findByProjectId("01DEFAULTPROJECT0000000000001")).thenReturn(List.of(entity));
 
         String error = service.validateRegisteredRunnableSkill("01DEFAULTPROJECT0000000000001", "hld-design");
+
+        assertThat(error)
+                .contains("Use the exact project Skill name")
+                .contains("Did you mean: hld_design?");
+    }
+
+    @Test
+    void shouldValidateExactRunnableSkill() {
+        RuntimeSkillEntity entity = runnableSkill("prd-design");
+        when(skillMapper.findByProjectIdAndName("01DEFAULTPROJECT0000000000001", "prd-design")).thenReturn(entity);
+
+        String error = service.validateRegisteredRunnableSkill("01DEFAULTPROJECT0000000000001", "prd-design");
 
         assertThat(error).isNull();
     }

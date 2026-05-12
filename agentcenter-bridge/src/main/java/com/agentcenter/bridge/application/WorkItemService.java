@@ -148,9 +148,14 @@ public class WorkItemService {
                 e.getDescription(),
                 WorkItemStatus.valueOf(e.getStatus()),
                 Priority.valueOf(e.getPriority()),
+                e.getProviderId(),
+                e.getExternalWorkItemId(),
                 e.getProjectId(),
                 e.getSpaceId(),
                 e.getIterationId(),
+                e.getProjectContextId(),
+                e.getProjectSpaceId(),
+                e.getProjectIterationId(),
                 e.getAssigneeUserId(),
                 e.getCurrentWorkflowInstanceId(),
                 buildWorkflowSummary(e.getCurrentWorkflowInstanceId()),
@@ -246,18 +251,24 @@ public class WorkItemService {
                             0))
                     .toList();
         }
-        return defaultStageNamesFor(item.type()).stream()
+        return defaultStageNamesFor(item.projectId(), item.type()).stream()
                 .map(label -> new OverviewStage(label, "PENDING", 0))
                 .toList();
     }
 
-    private List<String> defaultStageNamesFor(WorkItemType type) {
-        var definitions = workflowMapper.findDefinitionsByWorkItemType(type.name());
-        var definition = definitions.stream()
+    private List<String> defaultStageNamesFor(String projectId, WorkItemType type) {
+        String resolvedProjectId = ProjectDefaults.resolveProjectId(projectId);
+        var definitions = workflowMapper.findDefinitionsByProjectIdAndWorkItemType(resolvedProjectId, type.name());
+        if (definitions.isEmpty() && !ProjectDefaults.DEFAULT_PROJECT_ID.equals(resolvedProjectId)) {
+            definitions = workflowMapper.findDefinitionsByProjectIdAndWorkItemType(
+                    ProjectDefaults.DEFAULT_PROJECT_ID, type.name());
+        }
+        var availableDefinitions = definitions;
+        var definition = availableDefinitions.stream()
                 .filter(candidate -> "ENABLED".equals(candidate.getStatus()))
                 .filter(candidate -> Boolean.TRUE.equals(candidate.getIsDefault()))
                 .findFirst()
-                .orElseGet(() -> definitions.stream()
+                .orElseGet(() -> availableDefinitions.stream()
                         .filter(candidate -> "ENABLED".equals(candidate.getStatus()))
                         .findFirst()
                         .orElse(null));

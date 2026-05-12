@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { skillApi } from '../api/runtimeResources'
 import { DEFAULT_PROJECT_ID } from '../constants/projects'
 import type { RuntimeSkillDetailDto, SkillStatus } from '../api/types'
@@ -125,6 +125,10 @@ function formatTime(value: string | null | undefined) {
 }
 
 onMounted(loadSkills)
+
+watch(() => props.projectId, () => {
+  loadSkills()
+})
 </script>
 
 <template>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { mcpApi } from '../api/runtimeResources'
+import { DEFAULT_PROJECT_ID } from '../constants/projects'
 import type { ProjectMcpServerDto } from '../api/types'
 
 interface Props {
@@ -8,7 +9,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  projectId: '01DEFAULTPROJECT0000000000001',
+  projectId: DEFAULT_PROJECT_ID,
 })
 
 const mcps = ref<ProjectMcpServerDto[]>([])
@@ -111,6 +112,10 @@ function formatTime(value: string | null | undefined) {
 }
 
 onMounted(loadMcps)
+
+watch(() => props.projectId, () => {
+  loadMcps()
+})
 </script>
 
 <template>

@@ -42,6 +42,7 @@ AgentCenter 当前首页已经收敛为白色网页端工作台：
 | 6.75 | **[WORKFLOW-SKILL-ORCHESTRATION-TARGET-STATE.md](./WORKFLOW-SKILL-ORCHESTRATION-TARGET-STATE.md)** | **下一阶段目标态：工作流作为跨 Runtime Skill 编排器，节点状态协议、多轮交互 Dock、手动/自动推进边界** |
 | 6.8 | [RUNTIME-RESOURCE-MANAGEMENT-DESIGN.md](./RUNTIME-RESOURCE-MANAGEMENT-DESIGN.md) | Skill 管理、MCP 管理、运行资源刷新、OpenCode 生效和会话页状态展示 |
 | 6.85 | [PROJECT-CONTEXT-INTEGRATION-GUIDE.md](./PROJECT-CONTEXT-INTEGRATION-GUIDE.md) | 项目管理上下文、全局项目数据 Provider 注册/切换、CloudeReq 数据源、同步按钮和后续 Bridge API 对接指南 |
+| 6.86 | [ENTERPRISE-PROJECT-DATA-PROVIDER-GUIDE.md](./ENTERPRISE-PROJECT-DATA-PROVIDER-GUIDE.md) | 企业内部项目数据实现位对接指南：接口能力、字段映射、扩展字段和验证清单 |
 | 6.9 | [OPENCODE-BRIDGE-TARGET-STATE.md](./OPENCODE-BRIDGE-TARGET-STATE.md) | 长期目标状态草稿；其中旧 WebSocket 表述已被 M1 HTTP+SSE 设计取代 |
 | 7 | [OPENCODE-BRIDGE-CURRENT-STATE.md](./OPENCODE-BRIDGE-CURRENT-STATE.md) | 当前实现做到哪里、Mock 残留在哪里、哪些临时代码不要沿用 |
 | 8 | [AGENT-RUNTIME-WEBSOCKET-BRIDGE.md](./AGENT-RUNTIME-WEBSOCKET-BRIDGE.md) | 理解 Vue 工作台、Java Bridge 和 OpenCode Runtime 的 WebSocket 实时对接方案 |

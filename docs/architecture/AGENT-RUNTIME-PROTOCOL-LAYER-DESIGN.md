@@ -451,6 +451,8 @@ Provider 内部负责具体落地：
 
 这样可以避免 `.opencode` 路径泄漏到 `RuntimeResourceService` 和 `McpRegistryService`。
 
+Skill catalog 的事实源只允许是当前项目 Runtime 可发现/可安装的 Skill 资源及 Bridge 投影表，例如 OpenCode 的项目工作区 `.opencode/skills` 和 `runtime_skill`。`.sisyphus/` 是开发协作目录，不属于 Runtime 资源协议；服务启动、Runtime 初始化、Skill 发现、工作流编排顺序和提示词生成都不能依赖它。
+
 ## 12. 数据模型影响
 
 短期可以继续使用：

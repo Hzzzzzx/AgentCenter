@@ -4,5 +4,8 @@ import java.util.List;
 
 public record ProjectDataProviderSettingsDto(
         List<ProjectDataProviderDto> providers,
-        String activeProviderId
+        String activeProviderId,
+        String activeProjectContextId,
+        String activeProjectSpaceId,
+        String activeProjectIterationId
 ) {}

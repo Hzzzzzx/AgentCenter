@@ -65,9 +65,14 @@ export interface WorkItemDto {
   description: string | null
   status: WorkItemStatus
   priority: Priority
+  providerId?: string | null
+  externalWorkItemId?: string | null
   projectId: string | null
   spaceId: string | null
   iterationId: string | null
+  projectContextId?: string | null
+  projectSpaceId?: string | null
+  projectIterationId?: string | null
   assigneeUserId: string | null
   currentWorkflowInstanceId: string | null
   workflowSummary: WorkflowSummaryDto | null
@@ -113,6 +118,9 @@ export interface ProjectDataProviderDto {
 export interface ProjectDataProviderSettingsDto {
   providers: ProjectDataProviderDto[]
   activeProviderId: string
+  activeProjectContextId?: string | null
+  activeProjectSpaceId?: string | null
+  activeProjectIterationId?: string | null
 }
 
 export interface UpdateProjectDataProviderRequest {
@@ -120,6 +128,7 @@ export interface UpdateProjectDataProviderRequest {
 }
 
 export interface ProjectProviderWorkItemDto {
+  externalId?: string | null
   code: string
   type: WorkItemType
   title: string
@@ -129,18 +138,31 @@ export interface ProjectProviderWorkItemDto {
   project: string
   space: string
   iteration: string
+  projectContextId?: string | null
+  externalProjectId?: string | null
+  externalSpaceId?: string | null
+  externalIterationId?: string | null
   assigneeUserId: string | null
+  extraJson?: string | null
 }
 
 export interface ProjectDataSnapshotDto {
   providerId: string
   contexts: Array<{
     id: string
+    externalProjectId?: string | null
     project: string
+    externalCloudeReqProjectId?: string | null
     cloudeReqProject: string
+    externalSpaceId?: string | null
     space: string
+    externalIterationId?: string | null
     iteration: string
+    iterationStatus?: string | null
+    iterationStartAt?: string | null
+    iterationEndAt?: string | null
     active: boolean
+    extraJson?: string | null
   }>
   options: {
     cloudeReqProjects: string[]
@@ -160,6 +182,7 @@ export interface CreateWorkItemRequest {
 
 export interface WorkflowDefinitionDto {
   id: string
+  projectId: string
   workItemType: string
   name: string
   versionNo: number

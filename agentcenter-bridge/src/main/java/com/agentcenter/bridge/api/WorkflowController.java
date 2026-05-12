@@ -24,7 +24,10 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.text.Normalizer;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 @RestController
 @RequestMapping("/api")
 public class WorkflowController {
@@ -48,8 +51,11 @@ public class WorkflowController {
     }
 
     @GetMapping("/workflow-definitions")
-    public List<WorkflowDefinitionDto> listDefinitions() {
-        return workflowMapper.findAllDefinitions().stream()
+    public List<WorkflowDefinitionDto> listDefinitions(@RequestParam(required = false) String projectId) {
+        List<WorkflowDefinitionEntity> definitions = projectId == null || projectId.isBlank()
+                ? workflowMapper.findAllDefinitions()
+                : definitionsForProject(ProjectDefaults.resolveProjectId(projectId));
+        return definitions.stream()
                 .map(this::toDefinitionDto)
                 .toList();
     }
@@ -65,7 +71,9 @@ public class WorkflowController {
         if (request.nodes() == null || request.nodes().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Workflow definition must contain at least one node");
         }
-        String projectId = ProjectDefaults.resolveProjectId(request.projectId());
+        String projectId = ProjectDefaults.resolveProjectId(
+                request.projectId() != null ? request.projectId() : current.getProjectId());
+        boolean sameProject = projectId.equals(ProjectDefaults.resolveProjectId(current.getProjectId()));
         skillRegistryService.syncSkillsFromFilesystem(projectId);
         for (var node : request.nodes()) {
             requireRegisteredRunnableSkill(projectId, node.skillName());
@@ -80,18 +88,21 @@ public class WorkflowController {
                 ? request.isDefault()
                 : Boolean.TRUE.equals(current.getIsDefault());
         if (isDefault) {
-            workflowMapper.clearDefaultDefinitionsByWorkItemType(current.getWorkItemType());
+            workflowMapper.clearDefaultDefinitionsByProjectIdAndWorkItemType(projectId, current.getWorkItemType());
         }
 
-        current.setStatus(WorkflowDefinitionStatus.DISABLED.name());
-        current.setIsDefault(false);
-        workflowMapper.updateDefinition(current);
+        if (sameProject) {
+            current.setStatus(WorkflowDefinitionStatus.DISABLED.name());
+            current.setIsDefault(false);
+            workflowMapper.updateDefinition(current);
+        }
 
         WorkflowDefinitionEntity next = new WorkflowDefinitionEntity();
         next.setId(idGenerator.nextId());
+        next.setProjectId(projectId);
         next.setWorkItemType(current.getWorkItemType());
         next.setName(nonBlank(request.name(), current.getName()));
-        next.setVersionNo((current.getVersionNo() != null ? current.getVersionNo() : 1) + 1);
+        next.setVersionNo(sameProject ? (current.getVersionNo() != null ? current.getVersionNo() : 1) + 1 : 1);
         next.setStatus(WorkflowDefinitionStatus.ENABLED.name());
         next.setIsDefault(isDefault);
         workflowMapper.insertDefinition(next);
@@ -132,6 +143,7 @@ public class WorkflowController {
                 .toList();
         return new WorkflowDefinitionDto(
                 definition.getId(),
+                ProjectDefaults.resolveProjectId(definition.getProjectId()),
                 WorkItemType.valueOf(definition.getWorkItemType()),
                 definition.getName(),
                 definition.getVersionNo() != null ? definition.getVersionNo() : 1,
@@ -139,6 +151,31 @@ public class WorkflowController {
                 Boolean.TRUE.equals(definition.getIsDefault()),
                 nodes
         );
+    }
+
+    private List<WorkflowDefinitionEntity> definitionsForProject(String projectId) {
+        String resolvedProjectId = ProjectDefaults.resolveProjectId(projectId);
+        List<WorkflowDefinitionEntity> projectDefinitions = workflowMapper.findDefinitionsByProjectId(resolvedProjectId);
+        if (ProjectDefaults.DEFAULT_PROJECT_ID.equals(resolvedProjectId)) {
+            return projectDefinitions;
+        }
+
+        List<WorkflowDefinitionEntity> defaultDefinitions =
+                workflowMapper.findDefinitionsByProjectId(ProjectDefaults.DEFAULT_PROJECT_ID);
+        if (projectDefinitions.isEmpty()) {
+            return defaultDefinitions;
+        }
+
+        Set<String> projectTypes = projectDefinitions.stream()
+                .map(WorkflowDefinitionEntity::getWorkItemType)
+                .collect(java.util.stream.Collectors.toSet());
+        List<WorkflowDefinitionEntity> merged = new ArrayList<>(projectDefinitions);
+        defaultDefinitions.stream()
+                .filter(definition -> !projectTypes.contains(definition.getWorkItemType()))
+                .forEach(merged::add);
+        merged.sort(Comparator.comparing(WorkflowDefinitionEntity::getCreatedAt,
+                Comparator.nullsLast(Comparator.reverseOrder())));
+        return merged;
     }
 
     private WorkflowNodeDefinitionDto toNodeDefinitionDto(WorkflowNodeDefinitionEntity nodeDef) {
