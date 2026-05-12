@@ -137,6 +137,32 @@ describe('useRuntimeStore — SSE event handlers', () => {
     expect(workflowApi.getInstance).not.toHaveBeenCalled()
   })
 
+  it('STATUS workflow completion refreshes workflow and work item state', async () => {
+    const { workflowApi } = await import('../api/workflows')
+    const { workItemApi } = await import('../api/workItems')
+    const runtimeStore = useRuntimeStore()
+
+    runtimeStore.connectSSE('sess-1')
+    runtimeStore.markBusy()
+
+    capturedOnEvent!(makeEvent({
+      eventType: 'STATUS',
+      workflowInstanceId: 'inst-42',
+      workItemId: 'work-1',
+      payloadJson: JSON.stringify({
+        status: 'idle',
+        workflowStatus: 'COMPLETED',
+        kind: 'workflow_completed',
+      }),
+    }))
+
+    await vi.dynamicImportSettled()
+
+    expect(workflowApi.getInstance).toHaveBeenCalledWith('inst-42')
+    expect(workItemApi.getById).toHaveBeenCalledWith('work-1')
+    expect(runtimeStore.busy).toBe(false)
+  })
+
   it('CONFIRMATION_CREATED adds confirmation to pending list', () => {
     const runtimeStore = useRuntimeStore()
 

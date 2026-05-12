@@ -295,4 +295,65 @@ class M1ConfirmationAdvanceIntegrationTest {
         mockMvc.perform(post("/api/workflow-instances/" + instanceId + "/continue"))
                 .andExpect(status().isConflict());
     }
+
+    @Test
+    void continueWorkflow_publishesStatusEventWhenWorkflowCompletes() throws Exception {
+        String fe1234Id = findWorkItemIdByCode("FE1234");
+
+        MvcResult startResult = mockMvc.perform(
+                        post("/api/work-items/" + fe1234Id + "/start-workflow")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        var startJson = objectMapper.readTree(startResult.getResponse().getContentAsString());
+        String instanceId = startJson.at("/workflowInstance/id").asText();
+
+        List<Map<String, Object>> nodeRows = jdbcTemplate.queryForList("""
+                SELECT id, agent_session_id
+                FROM workflow_node_instance
+                WHERE workflow_instance_id = ?
+                ORDER BY sequence_no
+                """, instanceId);
+        assertThat(nodeRows).isNotEmpty();
+        String sessionId = nodeRows.stream()
+                .map(row -> (String) row.get("agent_session_id"))
+                .filter(id -> id != null && !id.isBlank())
+                .findFirst()
+                .orElseThrow();
+        String lastNodeId = (String) nodeRows.get(nodeRows.size() - 1).get("id");
+
+        jdbcTemplate.update("DELETE FROM confirmation_request WHERE workflow_instance_id = ?", instanceId);
+        jdbcTemplate.update("""
+                UPDATE workflow_node_instance
+                SET status = 'COMPLETED',
+                    agent_session_id = COALESCE(agent_session_id, ?),
+                    completed_at = datetime('now')
+                WHERE workflow_instance_id = ?
+                """, sessionId, instanceId);
+        jdbcTemplate.update("""
+                UPDATE workflow_instance
+                SET status = 'RUNNING',
+                    current_node_instance_id = ?,
+                    completed_at = NULL
+                WHERE id = ?
+                """, lastNodeId, instanceId);
+
+        mockMvc.perform(post("/api/workflow-instances/" + instanceId + "/continue"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.workflowInstance.status").value("COMPLETED"));
+
+        List<Map<String, Object>> events = jdbcTemplate.queryForList("""
+                SELECT session_id, work_item_id, workflow_node_instance_id, payload_json
+                FROM runtime_event
+                WHERE workflow_instance_id = ?
+                  AND event_type = 'STATUS'
+                  AND event_source = 'WORKFLOW'
+                  AND payload_json LIKE '%"workflowStatus":"COMPLETED"%'
+                """, instanceId);
+        assertThat(events).hasSize(1);
+        assertThat(events.get(0).get("session_id")).isEqualTo(sessionId);
+        assertThat(events.get(0).get("work_item_id")).isEqualTo(fe1234Id);
+        assertThat(events.get(0).get("workflow_node_instance_id")).isEqualTo(lastNodeId);
+    }
 }

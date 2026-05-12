@@ -245,6 +245,8 @@ public class WorkflowCommandService {
             instance.setCompletedAt(now);
             instance.setUpdatedAt(now);
             workflowMapper.updateInstance(instance);
+            touchWorkItem(instance.getWorkItemId(), now);
+            publishWorkflowCompletedEvent(instance, nodes);
             return buildResponse(instance);
         }
 
@@ -1161,6 +1163,7 @@ public class WorkflowCommandService {
             instance.setUpdatedAt(now);
             workflowMapper.updateInstance(instance);
             touchWorkItem(instance.getWorkItemId(), now);
+            publishWorkflowCompletedEvent(instance, nodes);
             return null;
         }
 
@@ -1268,6 +1271,7 @@ public class WorkflowCommandService {
             instance.setUpdatedAt(now);
             workflowMapper.updateInstance(instance);
             touchWorkItem(instance.getWorkItemId(), now);
+            publishWorkflowCompletedEvent(instance, nodes);
             return;
         }
 
@@ -1364,6 +1368,38 @@ public class WorkflowCommandService {
         }
         workItem.setUpdatedAt(now);
         workItemMapper.update(workItem);
+    }
+
+    private void publishWorkflowCompletedEvent(WorkflowInstanceEntity instance,
+                                               List<WorkflowNodeInstanceEntity> nodes) {
+        String currentNodeId = instance.getCurrentNodeInstanceId();
+        String sessionId = nodes.stream()
+                .filter(node -> currentNodeId != null && currentNodeId.equals(node.getId()))
+                .map(WorkflowNodeInstanceEntity::getAgentSessionId)
+                .filter(id -> id != null && !id.isBlank())
+                .findFirst()
+                .orElseGet(() -> nodes.stream()
+                        .map(WorkflowNodeInstanceEntity::getAgentSessionId)
+                        .filter(id -> id != null && !id.isBlank())
+                        .reduce((first, second) -> second)
+                        .orElse(null));
+        if (sessionId == null || sessionId.isBlank()) {
+            return;
+        }
+        runtimeEventService.publishEvent(new RuntimeEventDto(
+                null, sessionId, instance.getWorkItemId(), instance.getId(), currentNodeId,
+                RuntimeEventType.STATUS, RuntimeEventSource.WORKFLOW,
+                buildWorkflowCompletedPayload(instance), null
+        ));
+    }
+
+    private String buildWorkflowCompletedPayload(WorkflowInstanceEntity instance) {
+        return "{\"status\":\"idle\""
+                + ",\"kind\":\"workflow_completed\""
+                + ",\"workflowStatus\":\"" + escapeJson(instance.getStatus()) + "\""
+                + ",\"title\":\"工作流已完成\""
+                + ",\"summary\":\"所有工作流节点已完成\""
+                + ",\"workflowInstanceId\":\"" + escapeJson(instance.getId()) + "\"}";
     }
 
     private String buildNodeStatusMessage(SkillRunResult result,
