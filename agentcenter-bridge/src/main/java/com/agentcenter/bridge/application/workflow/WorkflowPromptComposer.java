@@ -20,8 +20,17 @@ public class WorkflowPromptComposer {
     }
 
     public SkillInvocationRequest composeInvocationRequest(String skillName, String inputContext) {
+        return composeInvocationRequest(skillName, inputContext, null);
+    }
+
+    public SkillInvocationRequest composeInvocationRequest(String skillName,
+                                                           String inputContext,
+                                                           WorkflowResumeState resumeState) {
         String instruction = instructionComposer.composeProtocolInstruction();
-        return SkillInvocationRequest.userPromptInjection(skillName, inputContext, instruction);
+        return SkillInvocationRequest.userPromptInjection(
+                skillName,
+                appendResumeState(inputContext, resumeState),
+                instruction);
     }
 
     public String composeNodePrompt(NodeExecutionContext context) {
@@ -118,6 +127,65 @@ public class WorkflowPromptComposer {
         sb.append("```text\n");
         sb.append(context.getSupplementalInput());
         sb.append("\n```\n\n");
+    }
+
+    private String appendResumeState(String inputContext, WorkflowResumeState resumeState) {
+        if (resumeState == null) {
+            return inputContext;
+        }
+
+        StringBuilder sb = new StringBuilder(inputContext == null ? "" : inputContext);
+        sb.append("\n\n---\n\n");
+        sb.append("## AGENTCENTER_RESUME_STATE\n\n");
+        sb.append("本段由 AgentCenter Bridge 每轮重新注入；如果对话历史、压缩摘要或子 Agent 结果与本段冲突，以本段为准。\n\n");
+        appendField(sb, "workflowInstanceId", resumeState.workflowInstanceId());
+        appendField(sb, "workflowNodeInstanceId", resumeState.workflowNodeInstanceId());
+        appendField(sb, "workItemId", resumeState.workItemId());
+        appendField(sb, "projectId", resumeState.projectId());
+        appendField(sb, "runtimeSessionId", resumeState.runtimeSessionId());
+        appendField(sb, "currentGate", resumeState.currentGate());
+        appendField(sb, "nodeStatus", resumeState.nodeStatus());
+        appendField(sb, "skillName", resumeState.skillName());
+        appendField(sb, "invocationId", resumeState.invocationId());
+
+        if (!resumeState.workflowSteps().isEmpty()) {
+            sb.append("\n### 工作流顺序\n");
+            for (WorkflowResumeState.WorkflowStep step : resumeState.workflowSteps()) {
+                sb.append("- ")
+                        .append(step.current() ? "[CURRENT] " : "")
+                        .append(step.orderNo()).append(". ")
+                        .append(nonBlank(step.nodeName(), step.nodeKey()))
+                        .append(" / key=").append(nonBlank(step.nodeKey(), "未提供"))
+                        .append(" / skill=").append(nonBlank(step.skillName(), "未提供"))
+                        .append(" / status=").append(nonBlank(step.status(), "未提供"))
+                        .append("\n");
+            }
+        }
+
+        if (resumeState.hasPendingInteractions()) {
+            sb.append("\n### 待处理交互\n");
+            for (WorkflowResumeState.PendingInteraction interaction : resumeState.pendingInteractions()) {
+                sb.append("- id=").append(nonBlank(interaction.id(), "未提供"))
+                        .append(" / type=").append(nonBlank(interaction.type(), "未提供"))
+                        .append(" / title=").append(nonBlank(interaction.title(), "未提供"))
+                        .append("\n");
+            }
+        } else {
+            sb.append("\n### 待处理交互\n");
+            sb.append("无。\n");
+        }
+
+        sb.append("\n### 压缩恢复与子 Agent 约束\n");
+        sb.append("- 当前只能执行 `[CURRENT]` 标记的节点；不要根据压缩后的对话摘要跳过 PRD/HLD/LLD 顺序。\n");
+        sb.append("- 只有当前节点真实完成、且待处理交互为空时，主 Agent 才能输出 READY_TO_ADVANCE。\n");
+        if (resumeState.hasPendingInteractions()) {
+            sb.append("- 当前仍有待处理交互，禁止输出 READY_TO_ADVANCE；请输出 NEEDS_USER_INPUT 或 IN_PROGRESS。\n");
+        }
+        sb.append("- 可以使用 OpenCode 子 Agent 执行检索、分析、验证或草稿任务，以降低主上下文噪音。\n");
+        sb.append("- 子 Agent 只能返回 SUBTASK_RESULT 摘要，不能输出 AGENTCENTER_NODE_STATE，不能代表主 Agent 推进工作流。\n");
+        sb.append("- 最终只允许主 Agent 在回复末尾输出一个 AGENTCENTER_NODE_STATE 状态块。\n");
+
+        return sb.toString();
     }
 
     private void appendField(StringBuilder sb, String label, String value) {

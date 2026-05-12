@@ -71,6 +71,14 @@ class FlywayMigrationTest {
                 SELECT COUNT(*)
                 FROM workflow_definition
                 WHERE status='ENABLED' AND is_default=1 AND version_no=1
+                  AND id IN (
+                    '01FEDEFAULTWFDEF00000000000002',
+                    '01USDEFAULTWFDEF00000000000002',
+                    '01TASKDEFAULTWFDEF000000000002',
+                    '01WORKDEFAULTWFDEF000000000002',
+                    '01BUGDEFAULTWFDEF0000000000002',
+                    '01VULNDEFAULTWFDEF000000000002'
+                  )
                 """,
                 Integer.class);
         assertThat(currentDefinitionCount).isEqualTo(6);
@@ -79,9 +87,19 @@ class FlywayMigrationTest {
                 """
                 SELECT COUNT(*)
                 FROM workflow_node_definition
-                WHERE required_confirmation <> 0
-                   OR allow_dynamic_actions <> 1
-                   OR confirmation_policy <> 'EVENT_DRIVEN'
+                WHERE workflow_definition_id IN (
+                    '01FEDEFAULTWFDEF00000000000002',
+                    '01USDEFAULTWFDEF00000000000002',
+                    '01TASKDEFAULTWFDEF000000000002',
+                    '01WORKDEFAULTWFDEF000000000002',
+                    '01BUGDEFAULTWFDEF0000000000002',
+                    '01VULNDEFAULTWFDEF000000000002'
+                  )
+                  AND (
+                    required_confirmation <> 0
+                    OR allow_dynamic_actions <> 1
+                    OR confirmation_policy <> 'EVENT_DRIVEN'
+                  )
                 """,
                 Integer.class);
         assertThat(ruleDrivenNodeCount).isZero();

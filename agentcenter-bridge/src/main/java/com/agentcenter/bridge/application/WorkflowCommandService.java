@@ -45,7 +45,10 @@ import com.agentcenter.bridge.domain.session.MessageStatus;
 import com.agentcenter.bridge.domain.session.SessionStatus;
 import com.agentcenter.bridge.domain.session.SessionType;
 import com.agentcenter.bridge.application.workflow.InteractionMapper;
+import com.agentcenter.bridge.application.workflow.WorkflowNodeTransitionGuard;
 import com.agentcenter.bridge.application.workflow.WorkflowPromptComposer;
+import com.agentcenter.bridge.application.workflow.WorkflowResumeState;
+import com.agentcenter.bridge.application.workflow.WorkflowTransitionDecision;
 import com.agentcenter.bridge.domain.workitem.Priority;
 import com.agentcenter.bridge.domain.workitem.WorkItemType;
 import com.agentcenter.bridge.domain.workflow.WorkflowNodeStatus;
@@ -53,7 +56,6 @@ import com.agentcenter.bridge.domain.workflow.WorkflowStatus;
 import com.agentcenter.bridge.domain.workflow.protocol.WorkflowNodeInteraction;
 import com.agentcenter.bridge.domain.workflow.protocol.WorkflowNodeState;
 import com.agentcenter.bridge.domain.workflow.protocol.WorkflowNodeStateParser;
-import com.agentcenter.bridge.domain.workflow.protocol.WorkflowNodeStateStatus;
 import com.agentcenter.bridge.infrastructure.id.IdGenerator;
 import com.agentcenter.bridge.infrastructure.persistence.entity.AgentMessageEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.ArtifactEntity;
@@ -99,6 +101,7 @@ public class WorkflowCommandService {
     private final ExecutorService workflowExecutor;
     private final InteractionMapper interactionMapper = new InteractionMapper();
     private final WorkflowPromptComposer workflowPromptComposer = new WorkflowPromptComposer();
+    private final WorkflowNodeTransitionGuard workflowNodeTransitionGuard = new WorkflowNodeTransitionGuard();
 
     public WorkflowCommandService(WorkflowMapper workflowMapper,
                                    WorkItemMapper workItemMapper,
@@ -505,6 +508,9 @@ public class WorkflowCommandService {
 
         String inputContext = buildInputContext(workItem, node, nodeDef, supplementalInput);
         String skillName = nodeDef.getSkillName();
+        List<ConfirmationRequestEntity> pendingBeforeRun = findPendingConfirmations(workItem.getId(), node.getId());
+        WorkflowResumeState resumeState = buildResumeState(
+                instance, node, nodeDefs, nodeDef, workItem, skillName, pendingBeforeRun, idGenerator.nextId());
         String toolCallId = workflowToolCallId(node, skillName);
         insertWorkflowContextMessageIfAbsent(node.getAgentSessionId(), node, nodeDef, workItem, inputContext);
 
@@ -525,7 +531,7 @@ public class WorkflowCommandService {
                         "Runtime session is not ready. Please check opencode serve and retry this node." + detail,
                         false);
             } else {
-                SkillInvocationRequest request = workflowPromptComposer.composeInvocationRequest(skillName, inputContext);
+                SkillInvocationRequest request = workflowPromptComposer.composeInvocationRequest(skillName, inputContext, resumeState);
                 result = runtimeGateway.runSkill(
                         workflowRuntimeType, node.getRuntimeSessionId(), request);
             }
@@ -534,9 +540,17 @@ public class WorkflowCommandService {
         WorkflowNodeState nodeState = result.success()
                 ? WorkflowNodeStateParser.parse(result.outputContent())
                 : WorkflowNodeState.defaultInProgress();
+        WorkflowTransitionDecision transitionDecision = result.success()
+                ? workflowNodeTransitionGuard.decide(instance, node, nodeState, result, resumeState)
+                : WorkflowTransitionDecision.accept(nodeState);
+        WorkflowNodeState effectiveNodeState = transitionDecision.effectiveState();
+        if (transitionDecision.rejected()) {
+            log.warn("Workflow node transition rejected: instance={}, node={}, reportedState={}, decision={}, reason={}",
+                    instance.getId(), node.getId(), nodeState.getStatus(), transitionDecision.type(), transitionDecision.reason());
+        }
 
         boolean shouldPersistFinalArtifact = result.success()
-                && nodeState.getStatus() == WorkflowNodeStateStatus.READY_TO_ADVANCE
+                && transitionDecision.acceptsReady()
                 && result.outputContent() != null;
 
         ArtifactEntity artifact = null;
@@ -574,7 +588,7 @@ public class WorkflowCommandService {
         statusMsg.setSessionId(sessionId);
         statusMsg.setRole(MessageRole.SYSTEM.name());
         statusMsg.setContent(buildNodeStatusMessage(
-                result, nodeDef, skillName, artifact, nodeState));
+                result, nodeDef, skillName, artifact, effectiveNodeState));
         statusMsg.setContentFormat(ContentFormat.TEXT.name());
         statusMsg.setStatus(MessageStatus.COMPLETED.name());
         statusMsg.setSeqNo(nextSeqNo);
@@ -591,13 +605,14 @@ public class WorkflowCommandService {
             workflowMapper.updateNodeInstance(node);
             createFailureConfirmation(instance, node, nodeDef, workItem, skillName, result.errorMessage(), now);
         } else {
-            switch (nodeState.getStatus()) {
+            node.setAgentStatePayloadJson(buildAgentStatePayloadJson(resumeState, transitionDecision, nodeState, effectiveNodeState));
+            switch (effectiveNodeState.getStatus()) {
                 case READY_TO_ADVANCE -> {
-                    node.setAgentState(nodeState.getStatus().name());
-                    node.setAgentStateReason(nodeState.getReason());
+                    node.setAgentState(effectiveNodeState.getStatus().name());
+                    node.setAgentStateReason(effectiveNodeState.getReason());
                     node.setAgentStateUpdatedAt(now);
-                    if (nodeState.getArtifactTitle() != null) {
-                        node.setAgentStateArtifactTitle(nodeState.getArtifactTitle());
+                    if (effectiveNodeState.getArtifactTitle() != null) {
+                        node.setAgentStateArtifactTitle(effectiveNodeState.getArtifactTitle());
                     }
 
                     if (isAutoRun(instance)) {
@@ -617,9 +632,17 @@ public class WorkflowCommandService {
                     }
                 }
                 case NEEDS_USER_INPUT -> {
-                    if (nodeState.getInteractions() != null && !nodeState.getInteractions().isEmpty()) {
+                    if (transitionDecision.reusesPendingInteraction()) {
+                        node.setStatus(WorkflowNodeStatus.WAITING_CONFIRMATION.name());
+
+                        node.setAgentState(effectiveNodeState.getStatus().name());
+                        node.setAgentStateReason(effectiveNodeState.getReason());
+                        node.setAgentStateUpdatedAt(now);
+
+                        markInstanceBlocked(instance, now);
+                    } else if (effectiveNodeState.getInteractions() != null && !effectiveNodeState.getInteractions().isEmpty()) {
                         int orderNo = 0;
-                        for (WorkflowNodeInteraction interaction : nodeState.getInteractions()) {
+                        for (WorkflowNodeInteraction interaction : effectiveNodeState.getInteractions()) {
                             ConfirmationRequestEntity confirmation = interactionMapper.toEntity(
                                     interaction, workItem.getId(), instance.getId(), node.getId(),
                                     node.getAgentSessionId(), workflowRuntimeType.name(),
@@ -634,33 +657,33 @@ public class WorkflowCommandService {
                     } else {
                         ConfirmationRequestEntity inputRequest = buildGenericInputConfirmation(
                                 instance, node, nodeDef, workItem, skillName,
-                                nodeState.getReason(), now);
+                                effectiveNodeState.getReason(), now);
                         confirmationMapper.insert(inputRequest);
                         pendingConfirmations.add(inputRequest);
                     }
                     node.setStatus(WorkflowNodeStatus.WAITING_CONFIRMATION.name());
 
-                    node.setAgentState(nodeState.getStatus().name());
-                    node.setAgentStateReason(nodeState.getReason());
+                    node.setAgentState(effectiveNodeState.getStatus().name());
+                    node.setAgentStateReason(effectiveNodeState.getReason());
                     node.setAgentStateUpdatedAt(now);
 
                     markInstanceBlocked(instance, now);
                 }
                 case BLOCKED -> {
                     createFailureConfirmation(instance, node, nodeDef, workItem, skillName,
-                            nodeState.getReason(), now);
+                            effectiveNodeState.getReason(), now);
                     node.setStatus(WorkflowNodeStatus.WAITING_CONFIRMATION.name());
 
-                    node.setAgentState(nodeState.getStatus().name());
-                    node.setAgentStateReason(nodeState.getReason());
+                    node.setAgentState(effectiveNodeState.getStatus().name());
+                    node.setAgentStateReason(effectiveNodeState.getReason());
                     node.setAgentStateUpdatedAt(now);
 
                     markInstanceBlocked(instance, now);
                 }
                 case IN_PROGRESS -> {
                     // Stays RUNNING — no artifact, no advance
-                    node.setAgentState(nodeState.getStatus().name());
-                    node.setAgentStateReason(nodeState.getReason());
+                    node.setAgentState(effectiveNodeState.getStatus().name());
+                    node.setAgentStateReason(effectiveNodeState.getReason());
                     node.setAgentStateUpdatedAt(now);
                 }
             }
@@ -671,8 +694,8 @@ public class WorkflowCommandService {
         }
         touchWorkItem(workItem.getId(), now);
 
-        String statePayload = nodeState.getStatus().name();
-        String stateReason = nodeState.getReason() != null ? nodeState.getReason() : "";
+        String statePayload = effectiveNodeState.getStatus().name();
+        String stateReason = effectiveNodeState.getReason() != null ? effectiveNodeState.getReason() : "";
         runtimeEventService.publishEvent(new RuntimeEventDto(
                 null, node.getAgentSessionId(), workItem.getId(),
                 instance.getId(), node.getId(),
@@ -689,6 +712,101 @@ public class WorkflowCommandService {
                     "{\"confirmationId\":\"" + confirmation.getId() + "\"}", null
             ));
         }
+    }
+
+    private List<ConfirmationRequestEntity> findPendingConfirmations(String workItemId, String nodeInstanceId) {
+        return confirmationMapper.findByWorkItemId(workItemId).stream()
+                .filter(confirmation -> nodeInstanceId.equals(confirmation.getWorkflowNodeInstanceId()))
+                .filter(confirmation -> ConfirmationStatus.PENDING.name().equals(confirmation.getStatus())
+                        || ConfirmationStatus.IN_CONVERSATION.name().equals(confirmation.getStatus()))
+                .toList();
+    }
+
+    private WorkflowResumeState buildResumeState(WorkflowInstanceEntity instance,
+                                                 WorkflowNodeInstanceEntity currentNode,
+                                                 List<WorkflowNodeDefinitionEntity> nodeDefs,
+                                                 WorkflowNodeDefinitionEntity currentNodeDef,
+                                                 WorkItemEntity workItem,
+                                                 String skillName,
+                                                 List<ConfirmationRequestEntity> pendingInteractions,
+                                                 String invocationId) {
+        Map<String, WorkflowNodeInstanceEntity> nodeByDefinitionId = workflowMapper
+                .findNodeInstancesByWorkflowInstanceId(instance.getId()).stream()
+                .collect(Collectors.toMap(
+                        WorkflowNodeInstanceEntity::getNodeDefinitionId,
+                        node -> node,
+                        (left, ignored) -> left));
+
+        List<WorkflowResumeState.WorkflowStep> steps = nodeDefs.stream()
+                .sorted(Comparator.comparingInt(WorkflowNodeDefinitionEntity::getOrderNo))
+                .map(definition -> {
+                    WorkflowNodeInstanceEntity stepNode = nodeByDefinitionId.get(definition.getId());
+                    boolean current = currentNode.getId().equals(stepNode != null ? stepNode.getId() : null);
+                    return new WorkflowResumeState.WorkflowStep(
+                            stepNode != null ? stepNode.getId() : null,
+                            definition.getId(),
+                            definition.getNodeKey(),
+                            definition.getName(),
+                            definition.getOrderNo(),
+                            definition.getSkillName(),
+                            definition.getStageKey(),
+                            stepNode != null ? stepNode.getStatus() : WorkflowNodeStatus.PENDING.name(),
+                            current);
+                })
+                .toList();
+
+        List<WorkflowResumeState.PendingInteraction> pending = pendingInteractions.stream()
+                .map(confirmation -> new WorkflowResumeState.PendingInteraction(
+                        confirmation.getId(),
+                        nonBlank(confirmation.getInteractionType(), confirmation.getRequestType()),
+                        confirmation.getTitle()))
+                .toList();
+
+        String currentGate = pending.isEmpty() ? "NODE_EXECUTION" : "PENDING_USER_INTERACTION";
+        return new WorkflowResumeState(
+                instance.getId(),
+                currentNode.getId(),
+                workItem.getId(),
+                workItem.getProjectId(),
+                currentNode.getRuntimeSessionId(),
+                currentGate,
+                currentNode.getStatus(),
+                skillName != null ? skillName : currentNodeDef.getSkillName(),
+                invocationId,
+                steps,
+                pending);
+    }
+
+    private String buildAgentStatePayloadJson(WorkflowResumeState resumeState,
+                                              WorkflowTransitionDecision decision,
+                                              WorkflowNodeState reportedState,
+                                              WorkflowNodeState effectiveState) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("{");
+        appendJsonStringField(sb, "invocationId", resumeState.invocationId());
+        appendJsonStringField(sb, "currentGate", resumeState.currentGate());
+        appendJsonStringField(sb, "reportedState", reportedState.getStatus().name());
+        appendJsonStringField(sb, "effectiveState", effectiveState.getStatus().name());
+        appendJsonStringField(sb, "transitionDecision", decision.type().name());
+        appendJsonStringField(sb, "transitionReason", decision.reason());
+        sb.append(",\"pendingInteractionIds\":[");
+        for (int i = 0; i < resumeState.pendingInteractions().size(); i++) {
+            if (i > 0) {
+                sb.append(",");
+            }
+            sb.append("\"").append(escapeJson(nonBlank(resumeState.pendingInteractions().get(i).id(), ""))).append("\"");
+        }
+        sb.append("]}");
+        return sb.toString();
+    }
+
+    private void appendJsonStringField(StringBuilder sb, String key, String value) {
+        if (sb.length() > 1) {
+            sb.append(",");
+        }
+        sb.append("\"").append(key).append("\":\"")
+                .append(escapeJson(value != null ? value : ""))
+                .append("\"");
     }
 
     private ConfirmationRequestEntity buildAdvanceConfirmation(WorkflowInstanceEntity instance,

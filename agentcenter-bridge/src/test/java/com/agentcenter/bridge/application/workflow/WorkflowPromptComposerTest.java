@@ -7,6 +7,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import com.agentcenter.bridge.application.runtime.SkillInvocationRequest;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class WorkflowPromptComposerTest {
@@ -230,6 +232,48 @@ class WorkflowPromptComposerTest {
             String prompt = composer.composeNodePrompt(context);
 
             assertTrue(prompt.contains("暂无描述"), "should show fallback for null description");
+        }
+    }
+
+    @Nested
+    @DisplayName("composeInvocationRequest")
+    class ComposeInvocationRequest {
+
+        @Test
+        @DisplayName("injects resume state and subagent policy into user prompt")
+        void composeInvocationRequest_withResumeState() {
+            WorkflowResumeState resumeState = new WorkflowResumeState(
+                    "wf-1",
+                    "node-2",
+                    "wi-1",
+                    "project-1",
+                    "runtime-1",
+                    "PENDING_USER_INTERACTION",
+                    "RUNNING",
+                    "hld-design",
+                    "invoke-1",
+                    List.of(
+                            new WorkflowResumeState.WorkflowStep(
+                                    "node-1", "def-1", "requirement_refine", "需求整理 (PRD)",
+                                    1, "prd-design", "PRD", "COMPLETED", false),
+                            new WorkflowResumeState.WorkflowStep(
+                                    "node-2", "def-2", "solution_design", "方案设计 (HLD)",
+                                    2, "hld-design", "HLD", "RUNNING", true)
+                    ),
+                    List.of(new WorkflowResumeState.PendingInteraction(
+                            "conf-1", "DECISION", "方案选择"))
+            );
+
+            SkillInvocationRequest request = composer.composeInvocationRequest(
+                    "hld-design", "# 输入上下文", resumeState);
+
+            assertTrue(request.userPrompt().contains("## AGENTCENTER_RESUME_STATE"));
+            assertTrue(request.userPrompt().contains("workflowInstanceId：wf-1"));
+            assertTrue(request.userPrompt().contains("[CURRENT] 2. 方案设计 (HLD)"));
+            assertTrue(request.userPrompt().contains("当前仍有待处理交互，禁止输出 READY_TO_ADVANCE"));
+            assertTrue(request.userPrompt().contains("可以使用 OpenCode 子 Agent"));
+            assertTrue(request.userPrompt().contains("子 Agent 只能返回 SUBTASK_RESULT"));
+            assertTrue(request.instructionPrompt().contains("AGENTCENTER_NODE_STATE"));
         }
     }
 

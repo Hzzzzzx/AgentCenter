@@ -13,6 +13,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import java.util.List;
+import java.util.Map;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -120,7 +123,7 @@ class WorkflowMidSessionInputRoutingIntegrationTest {
         assertThat(lastInputContext).contains("方案设计 (HLD)");
         assertThat(lastInputContext).contains("## 用户本轮输入");
         assertThat(lastInputContext).contains("补充信息：需要支持移动端");
-        assertThat(lastInputContext).contains("不要用“可在适当时机推进”");
+        assertThat(lastInputContext).contains("不要用“等待系统推进”“可在适当时机推进”");
     }
 
     @Test
@@ -142,6 +145,67 @@ class WorkflowMidSessionInputRoutingIntegrationTest {
         assertThat(lastInputContext).contains("## 用户本轮输入");
         assertThat(lastInputContext).contains("继续");
         assertThat(lastInputContext).contains("不要把它解读为推进确认");
+    }
+
+    @Test
+    void pendingConfirmationRejectsCompressedReadyAdvance() throws Exception {
+        StartedWorkflow wf = startWorkflowAndWait("FE1234");
+        TestWorkflowExecutorConfig.setSkillOutputForName(TestWorkflowExecutorConfig.HLD_SKILL_NAME, """
+                # LLD
+
+                压缩后误跳到了最后一步的输出。
+
+                <!-- AGENTCENTER_NODE_STATE
+                status: READY_TO_ADVANCE
+                reason: compressed context thought the node was complete
+                artifact_title: FE1234-LLD.md
+                -->
+                """.trim());
+
+        mockMvc.perform(post("/api/agent-sessions/" + wf.sessionId() + "/messages")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"继续\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.role").value("USER"));
+
+        List<Map<String, Object>> nodeRows = jdbcTemplate.queryForList("""
+                SELECT status, output_artifact_id, agent_state, agent_state_payload_json
+                FROM workflow_node_instance
+                WHERE id = ?
+                """, wf.nodeInstanceId());
+        assertThat(nodeRows).hasSize(1);
+        Map<String, Object> nodeRow = nodeRows.get(0);
+        assertThat(nodeRow.get("status")).isEqualTo("WAITING_CONFIRMATION");
+        assertThat(nodeRow.get("output_artifact_id")).isNull();
+        assertThat(nodeRow.get("agent_state")).isEqualTo("NEEDS_USER_INPUT");
+        assertThat(nodeRow.get("agent_state_payload_json").toString())
+                .contains("REJECT_KEEP_WAITING")
+                .contains("READY_TO_ADVANCE")
+                .contains(wf.confirmationId());
+
+        List<Map<String, Object>> pendingConfirmations = jdbcTemplate.queryForList("""
+                SELECT id
+                FROM confirmation_request
+                WHERE workflow_node_instance_id = ?
+                  AND status IN ('PENDING', 'IN_CONVERSATION')
+                """, wf.nodeInstanceId());
+        assertThat(pendingConfirmations)
+                .extracting(row -> row.get("id"))
+                .containsExactly(wf.confirmationId());
+
+        Integer hldArtifactCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM artifact WHERE workflow_node_instance_id = ?",
+                Integer.class,
+                wf.nodeInstanceId());
+        assertThat(hldArtifactCount).isZero();
+
+        String lastInputContext = TestWorkflowExecutorConfig.CAPTURED_INPUT_CONTEXTS.get(
+                TestWorkflowExecutorConfig.CAPTURED_INPUT_CONTEXTS.size() - 1);
+        assertThat(lastInputContext)
+                .contains("## AGENTCENTER_RESUME_STATE")
+                .contains("PENDING_USER_INTERACTION")
+                .contains("当前仍有待处理交互，禁止输出 READY_TO_ADVANCE")
+                .contains("子 Agent 只能返回 SUBTASK_RESULT");
     }
 
     @Test
