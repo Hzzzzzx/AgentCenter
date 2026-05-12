@@ -18,8 +18,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class ProjectDataSyncService {
@@ -31,6 +33,7 @@ public class ProjectDataSyncService {
     private final WorkItemMapper workItemMapper;
     private final ProjectContextMapper projectContextMapper;
     private final ProjectDataSyncHistoryService historyService;
+    private final ProjectWorkflowProvisioningService workflowProvisioningService;
     private final TransactionTemplate transactionTemplate;
     private final IdGenerator idGenerator;
 
@@ -38,12 +41,14 @@ public class ProjectDataSyncService {
                                   WorkItemMapper workItemMapper,
                                   ProjectContextMapper projectContextMapper,
                                   ProjectDataSyncHistoryService historyService,
+                                  ProjectWorkflowProvisioningService workflowProvisioningService,
                                   TransactionTemplate transactionTemplate,
                                   IdGenerator idGenerator) {
         this.settingsService = settingsService;
         this.workItemMapper = workItemMapper;
         this.projectContextMapper = projectContextMapper;
         this.historyService = historyService;
+        this.workflowProvisioningService = workflowProvisioningService;
         this.transactionTemplate = transactionTemplate;
         this.idGenerator = idGenerator;
     }
@@ -83,11 +88,13 @@ public class ProjectDataSyncService {
         String providerId = snapshot.providerId();
         String now = LocalDateTime.now().format(SQLITE_DATETIME);
         Map<String, ProjectContextDto> contextByProviderContextId = new HashMap<>();
+        Set<String> syncedProjectIds = new LinkedHashSet<>();
         SyncedScope activeScope = null;
 
         projectContextMapper.clearActiveContexts(providerId);
         for (ProjectContextDto context : snapshot.contexts()) {
             SyncedScope scope = upsertScopeFromContext(providerId, context, now);
+            syncedProjectIds.add(projectScopeId(providerId, scope.context().getExternalProjectId()));
             if (!isBlank(context.id())) {
                 contextByProviderContextId.put(context.id(), context);
             }
@@ -98,11 +105,14 @@ public class ProjectDataSyncService {
 
         for (ProjectProviderWorkItemDto item : snapshot.workItems()) {
             SyncedScope scope = upsertScopeFromWorkItem(providerId, item, contextByProviderContextId, now);
+            syncedProjectIds.add(projectScopeId(providerId, scope.context().getExternalProjectId()));
             if (activeScope == null) {
                 activeScope = scope;
             }
             upsertWorkItem(providerId, item, scope, now);
         }
+
+        workflowProvisioningService.ensureFeWorkflowForProjects(syncedProjectIds);
 
         if (activeScope != null) {
             settingsService.setActiveScope(

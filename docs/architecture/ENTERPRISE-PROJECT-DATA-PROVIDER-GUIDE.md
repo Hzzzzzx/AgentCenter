@@ -12,7 +12,7 @@
 | 前端 mock | 不允许作为运行数据源；本地测试数据也必须由后端 fixture provider 返回 |
 | 工作项查询 | 必须带 `providerId + projectId + spaceId + iterationId` 过滤；其中筛选键来自稳定外部 id，不使用展示名 |
 | 同步审计 | 每次 sync 写入 `project_data_sync_history` |
-| 任务编排 | `workflow_definition` 增加 `project_id`，按当前项目加载/保存，启动工作流按工作项项目优先匹配 |
+| 任务编排 | `workflow_definition` 增加 `project_id`，sync 会为每个项目补齐 FE 默认工作流副本，按当前项目加载/保存，启动工作流按工作项项目优先匹配 |
 | 扩展字段 | 使用 `extraJson`，不直接扩 AgentCenter 公共表结构 |
 
 ## 后端实现位
@@ -114,6 +114,8 @@ new ProjectDataSnapshotDto(
 | `iterationId` / `work_item.iteration_id` | `externalIterationId` |
 
 展示名只用于 UI 展示。企业内部如果项目名、空间名或 Sprint 名重复，只要 external id 稳定且唯一，就不会串数据。
+
+同步成功后，Bridge 会按 `${providerId}:${externalProjectId}` 为每个项目检查 FE 工作流定义。如果该项目没有自己的 FE 工作流，会从默认项目的 FE 默认工作流复制一份定义和节点；如果已经存在项目级 FE 工作流，则不会覆盖。企业 Provider 只需要保证 `externalProjectId` 稳定，后续项目级工作流配置会留在该项目自己的 `workflow_definition.project_id` 下。
 
 `ProjectProviderWorkItemDto` 对应 FE/US/TASK/WORK/BUG/VULN：
 

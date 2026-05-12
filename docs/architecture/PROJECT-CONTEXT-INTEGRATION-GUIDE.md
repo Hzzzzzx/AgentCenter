@@ -17,9 +17,10 @@ flowchart LR
   C --> D["project_context / project_space / project_iteration"]
   C --> E["work_item"]
   C --> F["project_data_sync_history"]
+  C --> J["项目级 FE workflow_definition 副本"]
   D --> G["标题栏和项目管理页"]
   E --> H["首页统计和工作项列表"]
-  D --> I["GET /api/workflow-definitions?projectId="]
+  J --> I["GET /api/workflow-definitions?projectId="]
 ```
 
 切换迭代时，前端重新请求：
@@ -64,9 +65,11 @@ Scope 参数不使用展示名：
 | `project_iteration` | Provider 下的迭代 |
 | `work_item` | 工作项；新增 `provider_id`、`external_work_item_id`、`project_context_id`、`project_space_id`、`project_iteration_id`、`extra_json` |
 | `project_data_sync_history` | 每次同步的 provider、状态、数量、active scope、错误信息 |
-| `workflow_definition` | 任务编排；新增 `project_id` |
+| `workflow_definition` | 任务编排；新增 `project_id`，同步项目时为每个项目补齐 FE 默认工作流副本 |
 
 `work_item` 的同步幂等键是 `(provider_id, external_work_item_id)`。前端查询必须带 `providerId` 和稳定 scope key，避免不同实现位返回同名项目/同名 Sprint 时串数据。
+
+FE 工作流的隔离规则是：每个项目使用自己的 `workflow_definition.project_id = providerId + ':' + externalProjectId`。`POST /api/project-data-providers/sync` 会检查本次同步出现的项目，如果没有 FE 工作流，就从默认项目复制一份 FE 默认工作流和节点；如果已经存在项目级 FE 工作流，则保留项目自己的版本，不会被后续同步覆盖。
 
 ## Frontend Wiring
 
@@ -108,3 +111,4 @@ Scope 参数不使用展示名：
 - 切换迭代后，首页 FE/US/TASK/WORK/BUG/VULN 统计和列表同步变化。
 - `project_data_sync_history` 能看到成功/失败记录。
 - 任务编排页按当前项目加载，保存后写入当前项目 `project_id`。
+- 每个同步出的项目都有自己的 FE 默认工作流副本，重复同步不会重复插入或覆盖项目级配置。

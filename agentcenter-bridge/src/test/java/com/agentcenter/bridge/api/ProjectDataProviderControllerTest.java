@@ -78,6 +78,46 @@ class ProjectDataProviderControllerTest {
                     .andExpect(jsonPath("$.stats[?(@.type == 'FE' && @.total == 1)]").exists())
                     .andExpect(jsonPath("$.stats[?(@.type == 'WORK' && @.total == 0)]").exists());
 
+            mockMvc.perform(get("/api/workflow-definitions")
+                            .param("projectId", "fixture-beta:beta-project-enterprise"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[?(@.projectId == 'fixture-beta:beta-project-enterprise' && @.workItemType == 'FE' && @.isDefault == true)]").exists());
+
+            mockMvc.perform(get("/api/workflow-definitions")
+                            .param("projectId", "fixture-beta:beta-project-security"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[?(@.projectId == 'fixture-beta:beta-project-security' && @.workItemType == 'FE' && @.isDefault == true)]").exists());
+
+            Integer provisionedFeWorkflowCount = jdbcTemplate.queryForObject("""
+                    SELECT COUNT(*) FROM workflow_definition
+                    WHERE project_id IN ('fixture-beta:beta-project-enterprise', 'fixture-beta:beta-project-security')
+                      AND work_item_type = 'FE'
+                      AND status = 'ENABLED'
+                      AND is_default = 1
+                    """, Integer.class);
+            assertEquals(2, provisionedFeWorkflowCount);
+
+            Integer provisionedFeNodeCount = jdbcTemplate.queryForObject("""
+                    SELECT COUNT(*) FROM workflow_node_definition wnd
+                    JOIN workflow_definition wd ON wd.id = wnd.workflow_definition_id
+                    WHERE wd.project_id = 'fixture-beta:beta-project-enterprise'
+                      AND wd.work_item_type = 'FE'
+                    """, Integer.class);
+            assertTrue(provisionedFeNodeCount != null && provisionedFeNodeCount > 0);
+
+            mockMvc.perform(post("/api/project-data-providers/sync"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.providerId").value("fixture-beta"));
+
+            Integer provisionedFeWorkflowCountAfterResync = jdbcTemplate.queryForObject("""
+                    SELECT COUNT(*) FROM workflow_definition
+                    WHERE project_id IN ('fixture-beta:beta-project-enterprise', 'fixture-beta:beta-project-security')
+                      AND work_item_type = 'FE'
+                      AND status = 'ENABLED'
+                      AND is_default = 1
+                    """, Integer.class);
+            assertEquals(2, provisionedFeWorkflowCountAfterResync);
+
             Integer contextCount = jdbcTemplate.queryForObject("""
                     SELECT COUNT(*) FROM project_context
                     WHERE provider_id = 'fixture-beta'
