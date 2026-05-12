@@ -84,6 +84,10 @@ public class WorkflowCommandService {
     private static final String WORKFLOW_MODE_AUTO = "AUTO";
     private static final String WORKFLOW_MODE_MANUAL_CONFIRM = "MANUAL_CONFIRM";
     private static final String WORKFLOW_MODE_START_OR_CONTINUE = "START_OR_CONTINUE";
+    private static final String FALLBACK_DECISION_OPTIONS_JSON = "["
+            + "{\"id\":\"REQUEST_OPTIONS\",\"label\":\"请 Agent 给出 2-3 个选项\"},"
+            + "{\"id\":\"CUSTOM_ANSWER\",\"label\":\"我直接补充答案\"}"
+            + "]";
     private static final Pattern MARKDOWN_DOCUMENT_HEADING =
             Pattern.compile("(?m)^#{1,6}\\s+\\S.*$");
     private static final Pattern MARKDOWN_FENCE =
@@ -1127,7 +1131,10 @@ public class WorkflowCommandService {
             String now) {
         ConfirmationRequestEntity confirmation = new ConfirmationRequestEntity();
         confirmation.setId(idGenerator.nextId());
-        confirmation.setRequestType(ConfirmationRequestType.INPUT_REQUIRED.name());
+        boolean choiceLike = looksLikeChoiceRequest(reason);
+        confirmation.setRequestType(choiceLike
+                ? ConfirmationRequestType.DECISION.name()
+                : ConfirmationRequestType.INPUT_REQUIRED.name());
         confirmation.setStatus(ConfirmationStatus.PENDING.name());
         confirmation.setWorkItemId(workItem.getId());
         confirmation.setWorkflowInstanceId(instance.getId());
@@ -1136,15 +1143,58 @@ public class WorkflowCommandService {
         confirmation.setRuntimeType(workflowRuntimeType.name());
         confirmation.setRuntimeSessionId(node.getRuntimeSessionId());
         confirmation.setSkillName(skillName);
-        confirmation.setTitle("%s %s · 需要补充输入".formatted(workItem.getCode(), nodeDef.getName()));
+        confirmation.setTitle("%s %s · %s".formatted(
+                workItem.getCode(),
+                nodeDef.getName(),
+                choiceLike ? "需要选择" : "需要补充输入"));
         confirmation.setContent(nonBlank(reason, "Agent 需要用户补充信息"));
         confirmation.setContextSummary(reason);
-        confirmation.setInteractionType("INPUT");
+        confirmation.setInteractionType(choiceLike ? "DECISION" : "INPUT");
+        if (choiceLike) {
+            confirmation.setOptionsJson(FALLBACK_DECISION_OPTIONS_JSON);
+            confirmation.setInteractionSchemaJson(fallbackDecisionSchemaJson(confirmation.getTitle(), confirmation.getContent()));
+        }
         confirmation.setInteractionRequired(1);
         confirmation.setPriority("MEDIUM");
         confirmation.setCreatedAt(now);
         confirmation.setUpdatedAt(now);
         return confirmation;
+    }
+
+    private boolean looksLikeChoiceRequest(String reason) {
+        if (reason == null || reason.isBlank()) {
+            return false;
+        }
+        String text = reason.toLowerCase();
+        return text.contains("选择")
+                || text.contains("选项")
+                || text.contains("方案")
+                || text.contains("路线")
+                || text.contains("策略")
+                || text.contains("取舍")
+                || text.contains("是否")
+                || text.contains("审批")
+                || text.contains("审阅")
+                || text.contains("通过")
+                || text.contains("驳回")
+                || text.contains("decision")
+                || text.contains("choose")
+                || text.contains("select")
+                || text.contains("option")
+                || text.contains("review")
+                || text.contains("approve");
+    }
+
+    private String fallbackDecisionSchemaJson(String title, String question) {
+        return "{"
+                + "\"type\":\"DECISION\","
+                + "\"title\":\"" + escapeJson(nonBlank(title, "需要选择")) + "\","
+                + "\"question\":\"" + escapeJson(nonBlank(question, "请选择下一步处理方式")) + "\","
+                + "\"selection\":\"single\","
+                + "\"options\":" + FALLBACK_DECISION_OPTIONS_JSON + ","
+                + "\"allowCustom\":true,"
+                + "\"required\":true"
+                + "}";
     }
 
     private SkillRunResult validateSkillRunnable(WorkItemEntity workItem, String skillName) {

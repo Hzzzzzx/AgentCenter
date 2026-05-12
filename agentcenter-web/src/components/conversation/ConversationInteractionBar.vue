@@ -75,6 +75,12 @@ const allowCustomChoice = computed(() =>
   activeSchema.value?.allowCustom === true
 )
 
+const activeUsesOptionControl = computed(() => {
+  const requestType = activeInteraction.value?.requestType
+  return requestType === 'DECISION'
+    || ((requestType === 'APPROVAL' || requestType === 'CONFIRM') && activeOptions.value.length > 0)
+})
+
 const activeFieldValues = computed(() => {
   if (!activeInteraction.value) return {}
   return fieldValues.value[activeInteraction.value.id] ?? {}
@@ -133,8 +139,14 @@ const canSubmitInput = computed(() => {
   return activeInput.value.trim().length > 0
 })
 const canSubmitChoice = computed(() => {
-  if (activeInteraction.value?.requestType !== 'DECISION') return true
-  if (activeOptions.value.length === 0) return activeInput.value.trim().length > 0
+  if (!activeUsesOptionControl.value) return true
+  if (!activeInteraction.value) return false
+  if (activeOptions.value.length === 0) {
+    if (allowCustomChoice.value) {
+      return (customInput.value[activeInteraction.value.id]?.trim()?.length ?? 0) > 0
+    }
+    return activeInput.value.trim().length > 0
+  }
   if (isMultiSelect.value) {
     const chosen = selectedChoices.value[activeInteraction.value.id]
     return (chosen?.size ?? 0) > 0 || (allowCustomChoice.value && (customInput.value[activeInteraction.value.id]?.trim()?.length ?? 0) > 0)
@@ -346,6 +358,7 @@ function fieldPlaceholder(field: InteractionField): string {
 function primaryActionLabel(item: ConfirmationRequestDto): string {
   if (item.requestType === 'INPUT_REQUIRED') return '提交补充'
   if (item.requestType === 'DECISION') return '提交选择'
+  if ((item.requestType === 'APPROVAL' || item.requestType === 'CONFIRM') && (schemaFor(item)?.options?.length ?? 0) > 0) return '提交选择'
   if (item.requestType === 'EXCEPTION') return '重试'
   if (item.requestType === 'PERMISSION') return '授权'
   return '确认'
@@ -387,6 +400,12 @@ function previewValueFor(item: ConfirmationRequestDto): string {
     const selected = options.find(option => option.id === choice || option.label === choice)
     return selected?.label ?? (choice || inputValues.value[item.id]?.trim() || '尚未选择')
   }
+  if ((item.requestType === 'APPROVAL' || item.requestType === 'CONFIRM') && (schema?.options?.length ?? 0) > 0) {
+    const options = schema?.options ?? []
+    const choice = selectedOptions.value[item.id] ?? options[0]?.id ?? ''
+    const selected = options.find(option => option.id === choice || option.label === choice)
+    return selected?.label ?? (choice || '尚未选择')
+  }
   return '待确认'
 }
 
@@ -398,6 +417,14 @@ function permissionBusyLabel(reply: 'once' | 'always' | 'reject'): string {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : '操作失败，请稍后重试'
+}
+
+function approvalActionForChoice(option?: InteractionOption, fallback = ''): ConfirmationActionType {
+  const text = `${option?.id ?? ''} ${option?.label ?? ''} ${fallback}`.toLowerCase()
+  if (/(reject|revise|return|fail|no|denied|不通过|退回|驳回|调整|拒绝|否)/.test(text)) {
+    return 'REJECT'
+  }
+  return 'APPROVE'
 }
 
 async function resolveActive(actionType: ConfirmationActionType, payload?: Record<string, unknown>, comment?: string) {
@@ -527,6 +554,25 @@ function handlePrimary() {
     void resolveActive(actionType, payload, selectedOpt?.label ?? choice)
     return
   }
+  if ((interaction.requestType === 'APPROVAL' || interaction.requestType === 'CONFIRM') && activeOptions.value.length > 0) {
+    if (activeOption.value === '__custom__') {
+      const customVal = customInput.value[interaction.id]?.trim()
+      if (!customVal) return
+      const payload: Record<string, unknown> = { choice: customVal, customChoice: customVal }
+      void resolveActive(approvalActionForChoice(undefined, customVal), payload, customVal)
+      return
+    }
+    const choice = activeOption.value
+    const selectedOpt = activeOptions.value.find(o => o.id === choice || o.label === choice)
+    if (!choice || !selectedOpt) return
+    const payload: Record<string, unknown> = {
+      choice,
+      choiceId: selectedOpt.id,
+      choiceLabel: selectedOpt.label,
+    }
+    void resolveActive(approvalActionForChoice(selectedOpt), payload, selectedOpt.label)
+    return
+  }
   if (interaction.requestType === 'EXCEPTION') {
     const input = activeInput.value.trim()
     if (input) {
@@ -636,7 +682,7 @@ function handleSecondary() {
           <strong>{{ interactionQuestion(activeInteraction) }}</strong>
         </div>
 
-        <div v-if="activeInteraction.requestType === 'DECISION'" class="interaction-bar__control interaction-bar__control--options">
+        <div v-if="activeUsesOptionControl" class="interaction-bar__control interaction-bar__control--options">
           <template v-if="activeOptions.length">
             <button
               v-for="(option, optionIndex) in activeOptions"
@@ -764,7 +810,7 @@ function handleSecondary() {
             <button
               type="button"
               class="interaction-bar__primary"
-              :disabled="!!busyAction || (activeInteraction.requestType === 'INPUT_REQUIRED' && !canSubmitInput) || (activeInteraction.requestType === 'DECISION' && !canSubmitChoice)"
+              :disabled="!!busyAction || (activeInteraction.requestType === 'INPUT_REQUIRED' && !canSubmitInput) || (activeUsesOptionControl && !canSubmitChoice)"
               @click="handlePrimary"
             >
               {{ busyAction ? '提交中...' : (activeInteraction.requestType === 'EXCEPTION' && activeInput.trim() ? '提交补充' : primaryActionLabel(activeInteraction)) }}

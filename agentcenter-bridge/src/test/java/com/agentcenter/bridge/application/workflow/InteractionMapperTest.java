@@ -276,18 +276,30 @@ class InteractionMapperTest {
     }
 
     @Test
-    void mapInteractionType_ranking_mapsToInputRequired() {
+    void mapInteractionType_ranking_mapsToDecision() {
         assertEquals(
-                ConfirmationRequestType.INPUT_REQUIRED.name(),
+                ConfirmationRequestType.DECISION.name(),
                 mapper.mapInteractionType(WorkflowNodeInteractionType.RANKING)
         );
     }
 
     @Test
-    void mapInteractionType_scale_mapsToInputRequired() {
+    void mapInteractionType_scale_mapsToDecision() {
         assertEquals(
-                ConfirmationRequestType.INPUT_REQUIRED.name(),
+                ConfirmationRequestType.DECISION.name(),
                 mapper.mapInteractionType(WorkflowNodeInteractionType.SCALE)
         );
+    }
+
+    @Test
+    void toEntity_scaleWithoutOptions_mapsToInputRequired() {
+        WorkflowNodeInteraction interaction = buildInteraction(WorkflowNodeInteractionType.SCALE);
+
+        ConfirmationRequestEntity entity = mapper.toEntity(
+                interaction, "WI-001", "WFI-001", "WNI-001",
+                "SES-001", "OPENCODE", "RT-SES-001", "planner"
+        );
+
+        assertEquals(ConfirmationRequestType.INPUT_REQUIRED.name(), entity.getRequestType());
     }
 }

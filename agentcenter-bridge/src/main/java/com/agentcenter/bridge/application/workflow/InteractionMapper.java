@@ -46,7 +46,7 @@ public class InteractionMapper {
                                                String skillName) {
         ConfirmationRequestEntity entity = new ConfirmationRequestEntity();
 
-        entity.setRequestType(mapInteractionType(interaction.getType()));
+        entity.setRequestType(mapInteractionType(interaction));
         entity.setStatus(ConfirmationStatus.PENDING.name());
 
         // Context fields
@@ -89,11 +89,21 @@ public class InteractionMapper {
             case APPROVAL, ARTIFACT_REVIEW -> ConfirmationRequestType.APPROVAL.name();
             case PERMISSION -> ConfirmationRequestType.PERMISSION.name();
             case BLOCKER -> ConfirmationRequestType.EXCEPTION.name();
-            case CUSTOM_FORM, RANKING, SCALE -> ConfirmationRequestType.INPUT_REQUIRED.name();
+            case CUSTOM_FORM -> ConfirmationRequestType.INPUT_REQUIRED.name();
+            case RANKING, SCALE -> ConfirmationRequestType.DECISION.name();
         };
     }
 
-
+    public String mapInteractionType(WorkflowNodeInteraction interaction) {
+        if (interaction == null) {
+            return ConfirmationRequestType.INPUT_REQUIRED.name();
+        }
+        WorkflowNodeInteractionType type = interaction.getType();
+        if (type == WorkflowNodeInteractionType.SCALE && interaction.getOptions().isEmpty()) {
+            return ConfirmationRequestType.INPUT_REQUIRED.name();
+        }
+        return mapInteractionType(type);
+    }
 
     String serializeOptions(WorkflowNodeInteraction interaction) {
         try {

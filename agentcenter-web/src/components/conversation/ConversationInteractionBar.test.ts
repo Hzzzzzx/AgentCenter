@@ -485,6 +485,71 @@ describe('ConversationInteractionBar.vue', () => {
     })
   })
 
+  it('submits custom text for DECISION with allowCustom and no preset options', async () => {
+    const wrapper = mount(ConversationInteractionBar, {
+      props: {
+        interactions: [
+          makeInteraction({
+            id: 'confirm-custom-only',
+            requestType: 'DECISION',
+            title: '补充自定义方案',
+            interactionSchemaJson: JSON.stringify({
+              selection: 'single',
+              allowCustom: true,
+            }),
+          }),
+        ],
+      },
+    })
+
+    const primary = wrapper.find('.interaction-bar__primary')
+    expect(primary.attributes('disabled')).toBeDefined()
+
+    await wrapper.find('input[placeholder="自定义输入..."]').setValue('请 Agent 先列出 3 个方案')
+    expect(primary.attributes('disabled')).toBeUndefined()
+    await primary.trigger('click')
+    await flushPromises()
+
+    expect(confirmationApi.resolve).toHaveBeenCalledWith('confirm-custom-only', {
+      actionType: 'CHOOSE',
+      payload: { choice: '请 Agent 先列出 3 个方案', customChoice: '请 Agent 先列出 3 个方案' },
+      comment: '请 Agent 先列出 3 个方案',
+    })
+  })
+
+  it('renders artifact review options instead of plain approval copy', async () => {
+    const wrapper = mount(ConversationInteractionBar, {
+      props: {
+        interactions: [
+          makeInteraction({
+            id: 'confirm-review',
+            requestType: 'APPROVAL',
+            interactionType: 'ARTIFACT_REVIEW',
+            title: '审阅 LLD 草稿',
+            optionsJson: JSON.stringify([
+              { id: 'PASS', label: '通过' },
+              { id: 'REVISE', label: '需要调整' },
+            ]),
+          }),
+        ],
+      },
+    })
+
+    expect(wrapper.findAll('.interaction-bar__option')).toHaveLength(2)
+    expect(wrapper.text()).toContain('通过')
+    expect(wrapper.text()).toContain('需要调整')
+
+    await wrapper.findAll('.interaction-bar__option')[1].trigger('click')
+    await wrapper.find('.interaction-bar__primary').trigger('click')
+    await flushPromises()
+
+    expect(confirmationApi.resolve).toHaveBeenCalledWith('confirm-review', {
+      actionType: 'REJECT',
+      payload: { choice: 'REVISE', choiceId: 'REVISE', choiceLabel: '需要调整' },
+      comment: '需要调整',
+    })
+  })
+
   it('renders multi-field form for INPUT_REQUIRED with fields array', async () => {
     const wrapper = mount(ConversationInteractionBar, {
       props: {

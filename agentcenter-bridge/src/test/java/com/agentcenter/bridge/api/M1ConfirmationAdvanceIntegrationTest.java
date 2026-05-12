@@ -150,6 +150,42 @@ class M1ConfirmationAdvanceIntegrationTest {
     }
 
     @Test
+    void needsUserInputWithChoiceReasonButNoInteractionsCreatesDecisionFallback() throws Exception {
+        TestWorkflowExecutorConfig.setSkillOutputForName(TestWorkflowExecutorConfig.HLD_SKILL_NAME, """
+                # HLD
+
+                当前存在多个路线，需要用户选择后继续。
+
+                <!-- AGENTCENTER_NODE_STATE
+                status: NEEDS_USER_INPUT
+                reason: 存在多个成本/风险差异明显的方案，需要用户选择
+                -->
+                """);
+        try {
+            String fe1234Id = findWorkItemIdByCode("FE1234");
+
+            MvcResult advancedResult = startAndAdvanceToSecondNode(fe1234Id);
+            var advancedJson = objectMapper.readTree(advancedResult.getResponse().getContentAsString());
+            String instanceId = advancedJson.at("/id").asText();
+
+            List<Map<String, Object>> confirmations = jdbcTemplate.queryForList(
+                    "SELECT request_type, interaction_type, options_json FROM confirmation_request " +
+                            "WHERE workflow_instance_id = ? AND status = 'PENDING'",
+                    instanceId);
+
+            assertThat(confirmations).hasSize(1);
+            Map<String, Object> confirmation = confirmations.get(0);
+            assertThat(confirmation.get("request_type")).isEqualTo("DECISION");
+            assertThat(confirmation.get("interaction_type")).isEqualTo("DECISION");
+            assertThat((String) confirmation.get("options_json"))
+                    .contains("请 Agent 给出 2-3 个选项")
+                    .contains("我直接补充答案");
+        } finally {
+            TestWorkflowExecutorConfig.clearSkillOutputOverrides();
+        }
+    }
+
+    @Test
     void rejectConfirmation_doesNotAdvanceWorkflow() throws Exception {
         String fe1234Id = findWorkItemIdByCode("FE1234");
 
