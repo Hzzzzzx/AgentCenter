@@ -61,17 +61,38 @@ public class WorkItemService {
     }
 
     public List<WorkItemDto> listWorkItems() {
-        return workItemMapper.findAll().stream()
+        return listWorkItems(null, null, null);
+    }
+
+    public List<WorkItemDto> listWorkItems(String projectId, String spaceId, String iterationId) {
+        if (isBlank(projectId) && isBlank(spaceId) && isBlank(iterationId)) {
+            return workItemMapper.findAll().stream()
+                    .map(this::toDto)
+                    .toList();
+        }
+        return workItemMapper.findByScope(clean(projectId), clean(spaceId), clean(iterationId)).stream()
                 .map(this::toDto)
                 .toList();
     }
 
     public WorkItemOverviewDto getOverview() {
-        var workItems = listWorkItems();
+        return getOverview(null, null, null);
+    }
+
+    public WorkItemOverviewDto getOverview(String projectId, String spaceId, String iterationId) {
+        var workItems = listWorkItems(projectId, spaceId, iterationId);
         var stats = Arrays.stream(WorkItemType.values())
                 .map(type -> buildOverviewTypeStat(type, workItems))
                 .toList();
         return new WorkItemOverviewDto("DATABASE", OffsetDateTime.now(ZoneOffset.UTC), stats);
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    private String clean(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     public WorkItemDto getWorkItem(String id) {

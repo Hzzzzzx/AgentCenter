@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => {
     items: [] as unknown[],
     selectedItem: null,
     loading: false,
+    setScope: vi.fn(),
     loadItems: vi.fn().mockResolvedValue(undefined),
     loadOverview: vi.fn().mockResolvedValue(undefined),
     refreshItem: vi.fn().mockResolvedValue({ workflowSummary: null }),
@@ -47,7 +48,12 @@ const mocks = vi.hoisted(() => {
     setActiveInstance: vi.fn(),
     upsertInstance: vi.fn(),
   }
-  return { sessionStore, confirmationStore, workItemStore, workflowStore }
+  const runtimeSettingsStore = {
+    activeProjectDataProviderId: 'fixture-alpha',
+    initFromStorage: vi.fn(),
+    loadProjectDataProviders: vi.fn().mockResolvedValue(undefined),
+  }
+  return { sessionStore, confirmationStore, workItemStore, workflowStore, runtimeSettingsStore }
 })
 
 // Mock stores that trigger API calls on mount
@@ -67,10 +73,40 @@ vi.mock('./stores/workflows', () => ({
   useWorkflowStore: vi.fn(() => mocks.workflowStore)
 }))
 
+vi.mock('./stores/runtimeSettings', () => ({
+  useRuntimeSettingsStore: vi.fn(() => mocks.runtimeSettingsStore)
+}))
+
+vi.mock('./api/projectDataProviders', () => ({
+  projectDataProviderApi: {
+    sync: vi.fn().mockResolvedValue({
+      providerId: 'fixture-alpha',
+      contexts: [
+        {
+          id: 'ctx-agentcenter',
+          project: 'AgentCenter',
+          cloudeReqProject: 'CloudeReq 研发项目',
+          space: '研发中台',
+          iteration: 'Sprint 14',
+          active: true,
+        },
+      ],
+      options: {
+        cloudeReqProjects: ['CloudeReq 研发项目'],
+        spaces: ['研发中台'],
+        iterations: ['Sprint 14', 'Sprint 15'],
+      },
+      workItems: [],
+      syncedAt: '2026-05-12T00:00:00Z',
+    }),
+  },
+}))
+
 describe('App.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.workItemStore.items = []
+    mocks.workItemStore.setScope.mockClear()
     mocks.workItemStore.loadItems.mockResolvedValue(undefined)
     mocks.workItemStore.loadOverview.mockResolvedValue(undefined)
     mocks.workItemStore.refreshItem.mockResolvedValue({ workflowSummary: null })

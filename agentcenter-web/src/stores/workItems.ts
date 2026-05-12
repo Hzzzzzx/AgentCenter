@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { workItemApi } from '../api/workItems'
+import type { WorkItemScopeQuery } from '../api/workItems'
 import type { WorkItemDto, CreateWorkItemRequest, WorkItemOverviewDto } from '../api/types'
 
 export const useWorkItemStore = defineStore('workItems', () => {
@@ -9,20 +10,29 @@ export const useWorkItemStore = defineStore('workItems', () => {
   const overview = ref<WorkItemOverviewDto | null>(null)
   const loading = ref(false)
   const overviewLoading = ref(false)
+  const activeScope = ref<WorkItemScopeQuery>({})
 
-  async function loadItems() {
+  function setScope(scope: WorkItemScopeQuery) {
+    activeScope.value = {
+      projectId: scope.projectId || null,
+      spaceId: scope.spaceId || null,
+      iterationId: scope.iterationId || null,
+    }
+  }
+
+  async function loadItems(scope: WorkItemScopeQuery = activeScope.value) {
     loading.value = true
     try {
-      items.value = await workItemApi.list()
+      items.value = await workItemApi.list(scope)
     } finally {
       loading.value = false
     }
   }
 
-  async function loadOverview() {
+  async function loadOverview(scope: WorkItemScopeQuery = activeScope.value) {
     overviewLoading.value = true
     try {
-      overview.value = await workItemApi.overview()
+      overview.value = await workItemApi.overview(scope)
     } finally {
       overviewLoading.value = false
     }
@@ -58,6 +68,8 @@ export const useWorkItemStore = defineStore('workItems', () => {
     overview,
     loading,
     overviewLoading,
+    activeScope,
+    setScope,
     loadItems,
     loadOverview,
     selectItem,

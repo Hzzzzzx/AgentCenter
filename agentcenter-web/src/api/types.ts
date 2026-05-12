@@ -103,6 +103,54 @@ export interface WorkItemOverviewDto {
   stats: WorkItemOverviewTypeStatDto[]
 }
 
+export interface ProjectDataProviderDto {
+  id: string
+  name: string
+  description: string
+  active: boolean
+}
+
+export interface ProjectDataProviderSettingsDto {
+  providers: ProjectDataProviderDto[]
+  activeProviderId: string
+}
+
+export interface UpdateProjectDataProviderRequest {
+  providerId: string
+}
+
+export interface ProjectProviderWorkItemDto {
+  code: string
+  type: WorkItemType
+  title: string
+  description: string | null
+  status: WorkItemStatus
+  priority: Priority
+  project: string
+  space: string
+  iteration: string
+  assigneeUserId: string | null
+}
+
+export interface ProjectDataSnapshotDto {
+  providerId: string
+  contexts: Array<{
+    id: string
+    project: string
+    cloudeReqProject: string
+    space: string
+    iteration: string
+    active: boolean
+  }>
+  options: {
+    cloudeReqProjects: string[]
+    spaces: string[]
+    iterations: string[]
+  }
+  workItems: ProjectProviderWorkItemDto[]
+  syncedAt: string
+}
+
 export interface CreateWorkItemRequest {
   type: WorkItemType
   title: string

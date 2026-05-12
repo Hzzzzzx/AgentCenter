@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, computed, reactive, onMounted, onUnmounted, watch } from 'vue'
 import AppShell from './components/shell/AppShell.vue'
 import HomeOverview from './views/HomeOverview.vue'
 import BoardView from './views/BoardView.vue'
@@ -11,6 +11,7 @@ import SkillManagement from './views/SkillManagement.vue'
 import McpManagement from './views/McpManagement.vue'
 import RuntimeSettings from './views/RuntimeSettings.vue'
 import { confirmationApi } from './api/confirmations'
+import { projectDataProviderApi } from './api/projectDataProviders'
 import { useSessionStore } from './stores/sessions'
 import { useConfirmationStore } from './stores/confirmations'
 import { useNotificationStore } from './stores/notifications'
@@ -18,7 +19,7 @@ import { useWorkflowStore } from './stores/workflows'
 import { useWorkItemStore } from './stores/workItems'
 import { useRuntimeSettingsStore } from './stores/runtimeSettings'
 import { useWorkItemWorkflowProjectionStore } from './stores/workItemWorkflowProjection'
-import type { AgentSessionDto, ArtifactDto, StartWorkflowResponse } from './api/types'
+import type { AgentSessionDto, ArtifactDto, ProjectDataSnapshotDto, StartWorkflowResponse } from './api/types'
 import type { ProjectContextOptions, ProjectContextSelection } from './types/projectContext'
 
 const activeView = ref('home')
@@ -77,6 +78,8 @@ const refreshTimerIds = new Set<number>()
 
 onMounted(async () => {
   runtimeSettingsStore.initFromStorage()
+  await runtimeSettingsStore.loadProjectDataProviders()
+  await loadProjectDataSnapshot(true)
   await refreshWorkItemState()
 })
 
@@ -88,6 +91,7 @@ onUnmounted(() => {
 })
 
 async function refreshWorkItemState() {
+  workItemStore.setScope(scopeForProjectContext())
   await workItemStore.loadItems()
   await workItemStore.loadOverview()
   workflowProjectionStore.syncWorkItemsFromList()
@@ -95,8 +99,18 @@ async function refreshWorkItemState() {
 }
 
 async function refreshOneWorkItemState(workItemId: string) {
+  workItemStore.setScope(scopeForProjectContext())
   await workflowProjectionStore.syncWorkItem(workItemId)
   await workItemStore.loadOverview()
+}
+
+function scopeForProjectContext() {
+  const context = projectContext.value
+  return {
+    projectId: context?.project ?? null,
+    spaceId: context?.space ?? null,
+    iterationId: context?.iteration ?? null,
+  }
 }
 
 function queueWorkflowRefresh(workItemId?: string | null) {
@@ -221,13 +235,14 @@ function handleProjectContextsUpdate(nextContexts: ProjectContextSelection[]) {
 function handleSyncProjectContextData() {
   if (projectContextSyncing.value) return
   projectContextSyncing.value = true
-  refreshWorkItemState()
+  loadProjectDataSnapshot(true)
+    .then(refreshWorkItemState)
     .then(() => {
       notificationStore.push({
         anchor: 'right-panel',
         tone: 'success',
         title: '同步完成',
-        message: '已从数据库刷新工作项、待确认与首页节点统计。',
+        message: '已按当前同步源刷新项目上下文、工作项与首页节点统计。',
         durationMs: 3600,
       })
     })
@@ -243,6 +258,33 @@ function handleSyncProjectContextData() {
     .finally(() => {
       projectContextSyncing.value = false
     })
+}
+
+async function loadProjectDataSnapshot(sync: boolean) {
+  const snapshot = sync
+    ? await projectDataProviderApi.sync()
+    : await projectDataProviderApi.snapshot()
+  applyProjectDataSnapshot(snapshot)
+}
+
+function applyProjectDataSnapshot(snapshot: ProjectDataSnapshotDto) {
+  projectContextOptions.cloudeReqProjects = snapshot.options.cloudeReqProjects
+  projectContextOptions.spaces = snapshot.options.spaces
+  projectContextOptions.iterations = snapshot.options.iterations
+
+  if (snapshot.contexts.length === 0) return
+  projectContexts.value = snapshot.contexts.map(context => ({
+    id: context.id,
+    project: context.project,
+    cloudeReqProject: context.cloudeReqProject,
+    space: context.space,
+    iteration: context.iteration,
+    active: context.active,
+  }))
+  activeProjectContextId.value = snapshot.contexts.find(context => context.active)?.id
+    ?? snapshot.contexts[0].id
+  projectContext.value = projectContexts.value.find(context => context.id === activeProjectContextId.value)
+    ?? projectContexts.value[0]
 }
 
 function rememberConversationReturnView() {
@@ -263,6 +305,43 @@ async function handleShowConfirmation(confirmationId: string) {
     console.error('Failed to select confirmation:', e)
   }
 }
+
+watch(
+  () => runtimeSettingsStore.activeProjectDataProviderId,
+  async (nextProviderId, previousProviderId) => {
+    if (!nextProviderId || !previousProviderId || nextProviderId === previousProviderId) return
+    projectContextSyncing.value = true
+    try {
+      await loadProjectDataSnapshot(true)
+      await refreshWorkItemState()
+      notificationStore.push({
+        anchor: 'right-panel',
+        tone: 'success',
+        title: '同步源已切换',
+        message: '项目、空间、迭代和工作项数据已按新的同步源刷新。',
+        durationMs: 3600,
+      })
+    } catch (e) {
+      notificationStore.push({
+        anchor: 'right-panel',
+        tone: 'error',
+        title: '同步源切换失败',
+        message: e instanceof Error ? e.message : '请稍后重试',
+        durationMs: 5200,
+      })
+    } finally {
+      projectContextSyncing.value = false
+    }
+  }
+)
+
+watch(
+  () => `${activeProjectContextId.value}:${projectContext.value?.project}:${projectContext.value?.space}:${projectContext.value?.iteration}`,
+  (next, previous) => {
+    if (!previous || next === previous) return
+    void refreshWorkItemState()
+  }
+)
 </script>
 
 <template>

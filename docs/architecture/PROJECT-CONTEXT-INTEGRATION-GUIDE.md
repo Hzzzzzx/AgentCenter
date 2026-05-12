@@ -1,6 +1,6 @@
 # Project Context Integration Guide
 
-> Status: frontend context management implemented; home overview stats are database-backed; enterprise storage/sync adapters pending
+> Status: frontend context management implemented; home overview stats are database-backed; global project-data provider switching and fixture sync implemented; enterprise provider pending
 > Scope: project management page, title bar project context, enterprise data source sync, home overview aggregation
 
 ## Goal
@@ -14,7 +14,7 @@ Project Context is the workspace-level scope used by AgentCenter to decide which
 - A `Sync Data` button that refreshes work items, confirmations, and the home overview from Bridge APIs.
 - Home overview top metrics loaded from the database-backed `/api/work-items/overview` API.
 
-The next implementation step is to replace the frontend placeholder data with Bridge APIs backed by persistent storage and enterprise system sync.
+The current implementation adds a Bridge-side project-data provider registry with fixture providers. The next implementation step is to replace fixture providers with an enterprise provider implementation while keeping the Web and Bridge API contracts stable.
 
 ## Current Frontend Shape
 
@@ -73,6 +73,15 @@ Recommended Bridge endpoints:
 | `POST` | `/api/project-contexts/{id}/activate` | Mark one configuration as active for the current user/workspace. |
 | `GET` | `/api/project-context-options` | Return selectable CloudeReq projects, spaces, and iterations. |
 | `POST` | `/api/project-context-options/sync` | Trigger enterprise data sync, persist refreshed mappings, and return refreshed options. |
+
+Implemented provider registry endpoints:
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/api/project-data-providers` | List registered project data providers and the current global provider. |
+| `PUT` | `/api/project-data-providers/active` | Switch the global project data provider. |
+| `GET` | `/api/project-data-providers/snapshot` | Return the active provider's projects, spaces, iterations, and fixture work item payload without syncing. |
+| `POST` | `/api/project-data-providers/sync` | Sync the active provider payload into AgentCenter `work_item`, then return the snapshot. |
 
 Recommended scoped additions after project context persistence lands:
 
@@ -172,6 +181,36 @@ Home top-card aggregation rules:
 - `waitingCount` counts work items whose current stages have pending or in-conversation confirmations.
 - `blockedCount` counts failed stages or blocked/failed workflow instances.
 - `nodeDistribution` groups work items by current waiting/running/failed/next node, not by frontend mock labels.
+
+## Provider Registry
+
+Bridge owns a stable provider contract:
+
+```java
+interface ProjectDataProvider {
+  String id();
+  String name();
+  String description();
+  ProjectDataSnapshotDto snapshot();
+}
+```
+
+The registry discovers Spring beans implementing this interface and exposes them through runtime settings. The first implementation uses global process-level selection because user/workspace-level isolation is deferred.
+
+Implemented fixture providers:
+
+| Provider | Purpose |
+|----------|---------|
+| `fixture-alpha` | Local test source for AgentCenter / 平台接入 with Sprint 14 and Sprint 15 data. |
+| `fixture-beta` | Local test source for 企业中台 / 安全治理 with Sprint 21, Sprint 22, and 长期治理 data. |
+
+Enterprise rollout should add a new provider bean, for example `enterprise-cloudereq`, and switch `agentcenter.project-context.provider` or the runtime settings dropdown to that provider id. Web code and project-management UI should not change.
+
+Current global setting scope:
+
+- One active project data provider for the running Bridge process.
+- Provider switch updates project options and triggers sync through the active provider.
+- User/workspace-specific provider selection is explicitly deferred.
 
 ## Frontend Wiring Plan
 

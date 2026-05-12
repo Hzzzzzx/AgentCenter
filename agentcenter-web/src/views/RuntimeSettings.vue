@@ -29,6 +29,7 @@ async function loadRuntimeStatus() {
 
 onMounted(() => {
   runtimeSettings.initFromStorage()
+  void runtimeSettings.loadProjectDataProviders()
   void loadRuntimeStatus()
 })
 </script>
@@ -85,6 +86,30 @@ onMounted(() => {
         >
           <span></span>
         </button>
+      </section>
+
+      <section class="runtime-settings__section">
+        <div class="runtime-settings__section-main">
+          <h2>项目数据同步源</h2>
+          <p>
+            选择当前全局使用的数据同步实现位。项目管理页、项目/空间/迭代选项，以及同步后的 FE、US、Task、Work 数据都会使用这个来源。
+          </p>
+        </div>
+        <select
+          class="runtime-settings__select"
+          aria-label="选择项目数据同步源"
+          :value="runtimeSettings.activeProjectDataProviderId"
+          :disabled="runtimeSettings.projectDataProviderLoading || runtimeSettings.projectDataProviders.length === 0"
+          @change="runtimeSettings.setProjectDataProvider(($event.target as HTMLSelectElement).value)"
+        >
+          <option
+            v-for="provider in runtimeSettings.projectDataProviders"
+            :key="provider.id"
+            :value="provider.id"
+          >
+            {{ provider.name }}
+          </option>
+        </select>
       </section>
 
       <section class="runtime-settings__summary" aria-label="当前执行策略">
@@ -243,6 +268,28 @@ onMounted(() => {
   background: var(--surface-hover);
   cursor: pointer;
   transition: background-color 0.16s ease, border-color 0.16s ease;
+}
+
+.runtime-settings__select {
+  flex: 0 0 220px;
+  min-width: 180px;
+  height: 36px;
+  padding: 0 34px 0 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  color: var(--text-primary);
+  background:
+    linear-gradient(45deg, transparent 50%, var(--text-secondary) 50%) right 14px center / 5px 5px no-repeat,
+    linear-gradient(135deg, var(--text-secondary) 50%, transparent 50%) right 9px center / 5px 5px no-repeat,
+    var(--bg-primary);
+  font-size: 13px;
+  font-weight: 700;
+  outline: none;
+}
+
+.runtime-settings__select:focus {
+  border-color: var(--brand-border);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-blue) 14%, transparent);
 }
 
 .runtime-settings__toggle span {

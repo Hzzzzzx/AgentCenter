@@ -4,6 +4,7 @@ export interface ProjectContextSelection {
   cloudeReqProject: string
   space: string
   iteration: string
+  active?: boolean
 }
 
 export interface ProjectContextOptions {

@@ -50,6 +50,25 @@ describe('useWorkItemStore', () => {
     expect(store.loading).toBe(false)
   })
 
+  it('passes the active project scope to list and overview calls', async () => {
+    const overview = {
+      source: 'DATABASE' as const,
+      refreshedAt: '2026-01-01T00:00:00Z',
+      stats: [],
+    }
+    const scope = { projectId: 'AgentCenter', spaceId: '研发中台', iterationId: 'Sprint 14' }
+    vi.mocked(workItemApi.list).mockResolvedValueOnce([mockWorkItem])
+    vi.mocked(workItemApi.overview).mockResolvedValueOnce(overview)
+
+    const store = useWorkItemStore()
+    store.setScope(scope)
+    await store.loadItems()
+    await store.loadOverview()
+
+    expect(workItemApi.list).toHaveBeenCalledWith(scope)
+    expect(workItemApi.overview).toHaveBeenCalledWith(scope)
+  })
+
   it('loadOverview populates database-backed overview stats', async () => {
     const overview = {
       source: 'DATABASE' as const,

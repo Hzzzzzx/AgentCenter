@@ -1,7 +1,7 @@
 # AgentCenter 架构文档入口
 
 > 状态：讨论基线
-> 最近更新：2026-05-11
+> 最近更新：2026-05-12
 >
 > ⚠️ **M1 实施决策**：OpenCode Bridge M1 采用 HTTP+SSE 方案，详见 [ADR-001](./ADR-001-OPENCODE-BRIDGE-SSE-REST.md)。后续实现以 [OPENCODE-BRIDGE-EXECUTION-DESIGN.md](./OPENCODE-BRIDGE-EXECUTION-DESIGN.md) 为准。
 >
@@ -41,7 +41,7 @@ AgentCenter 当前首页已经收敛为白色网页端工作台：
 | 6.7 | [WORKFLOW-CONVERSATION-CLOSURE-DESIGN.md](./WORKFLOW-CONVERSATION-CLOSURE-DESIGN.md) | 首页工作项、后台工作流、任务会话和右侧待确认的闭环实施设计 |
 | 6.75 | **[WORKFLOW-SKILL-ORCHESTRATION-TARGET-STATE.md](./WORKFLOW-SKILL-ORCHESTRATION-TARGET-STATE.md)** | **下一阶段目标态：工作流作为跨 Runtime Skill 编排器，节点状态协议、多轮交互 Dock、手动/自动推进边界** |
 | 6.8 | [RUNTIME-RESOURCE-MANAGEMENT-DESIGN.md](./RUNTIME-RESOURCE-MANAGEMENT-DESIGN.md) | Skill 管理、MCP 管理、运行资源刷新、OpenCode 生效和会话页状态展示 |
-| 6.85 | [PROJECT-CONTEXT-INTEGRATION-GUIDE.md](./PROJECT-CONTEXT-INTEGRATION-GUIDE.md) | 项目管理上下文、CloudeReq 数据源、同步按钮和后续 Bridge API 对接指南 |
+| 6.85 | [PROJECT-CONTEXT-INTEGRATION-GUIDE.md](./PROJECT-CONTEXT-INTEGRATION-GUIDE.md) | 项目管理上下文、全局项目数据 Provider 注册/切换、CloudeReq 数据源、同步按钮和后续 Bridge API 对接指南 |
 | 6.9 | [OPENCODE-BRIDGE-TARGET-STATE.md](./OPENCODE-BRIDGE-TARGET-STATE.md) | 长期目标状态草稿；其中旧 WebSocket 表述已被 M1 HTTP+SSE 设计取代 |
 | 7 | [OPENCODE-BRIDGE-CURRENT-STATE.md](./OPENCODE-BRIDGE-CURRENT-STATE.md) | 当前实现做到哪里、Mock 残留在哪里、哪些临时代码不要沿用 |
 | 8 | [AGENT-RUNTIME-WEBSOCKET-BRIDGE.md](./AGENT-RUNTIME-WEBSOCKET-BRIDGE.md) | 理解 Vue 工作台、Java Bridge 和 OpenCode Runtime 的 WebSocket 实时对接方案 |

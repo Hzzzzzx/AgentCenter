@@ -11,6 +11,25 @@
         ORDER BY updated_at DESC, created_at DESC
     </select>
 
+    <select id="findByScope" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.WorkItemEntity">
+        SELECT id, code, type, title, description, status, priority,
+               project_id, space_id, iteration_id, owner_user_id, assignee_user_id,
+               current_workflow_instance_id, version, created_at, updated_at
+        FROM work_item
+        <where>
+            <if test="projectId != null and projectId != ''">
+                project_id = #{projectId}
+            </if>
+            <if test="spaceId != null and spaceId != ''">
+                AND space_id = #{spaceId}
+            </if>
+            <if test="iterationId != null and iterationId != ''">
+                AND iteration_id = #{iterationId}
+            </if>
+        </where>
+        ORDER BY updated_at DESC, created_at DESC
+    </select>
+
     <select id="findById" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.WorkItemEntity">
         SELECT id, code, type, title, description, status, priority,
                project_id, space_id, iteration_id, owner_user_id, assignee_user_id,
@@ -40,6 +59,21 @@
             priority = #{priority}, assignee_user_id = #{assigneeUserId},
             current_workflow_instance_id = #{currentWorkflowInstanceId},
             version = #{version}, updated_at = #{updatedAt}
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateFromSync">
+        UPDATE work_item
+        SET type = #{type},
+            title = #{title},
+            description = #{description},
+            status = #{status},
+            priority = #{priority},
+            project_id = #{projectId},
+            space_id = #{spaceId},
+            iteration_id = #{iterationId},
+            assignee_user_id = #{assigneeUserId},
+            updated_at = #{updatedAt}
         WHERE id = #{id}
     </update>
 
