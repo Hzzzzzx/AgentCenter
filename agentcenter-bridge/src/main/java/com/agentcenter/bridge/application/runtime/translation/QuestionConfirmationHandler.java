@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.agentcenter.bridge.api.dto.ResolveConfirmationRequest;
 import com.agentcenter.bridge.api.dto.RuntimeEventDto;
 import com.agentcenter.bridge.application.RuntimeEventService;
+import com.agentcenter.bridge.application.confirmation.ConfirmationCreatedEventPayloadBuilder;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeEventEnvelope;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationActionType;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationRequestType;
@@ -43,15 +44,18 @@ public class QuestionConfirmationHandler {
     private final ConfirmationMapper confirmationMapper;
     private final RuntimeEventService runtimeEventService;
     private final ObjectProvider<OpenCodeRuntimeAdapter> runtimeAdapterProvider;
+    private final ConfirmationCreatedEventPayloadBuilder confirmationCreatedPayloadBuilder;
     private final ObjectMapper objectMapper;
 
     public QuestionConfirmationHandler(ConfirmationMapper confirmationMapper,
                                        RuntimeEventService runtimeEventService,
                                        ObjectProvider<OpenCodeRuntimeAdapter> runtimeAdapterProvider,
+                                       ConfirmationCreatedEventPayloadBuilder confirmationCreatedPayloadBuilder,
                                        ObjectMapper objectMapper) {
         this.confirmationMapper = confirmationMapper;
         this.runtimeEventService = runtimeEventService;
         this.runtimeAdapterProvider = runtimeAdapterProvider;
+        this.confirmationCreatedPayloadBuilder = confirmationCreatedPayloadBuilder;
         this.objectMapper = objectMapper != null ? objectMapper : new ObjectMapper();
     }
 
@@ -345,20 +349,7 @@ public class QuestionConfirmationHandler {
     }
 
     private String confirmationCreatedPayload(ConfirmationRequestEntity entity) {
-        try {
-            Map<String, Object> payload = new LinkedHashMap<>();
-            payload.put("confirmationId", entity.getId());
-            payload.put("requestType", entity.getRequestType());
-            payload.put("interactionType", entity.getInteractionType());
-            payload.put("title", entity.getTitle());
-            payload.put("question", entity.getContent());
-            if (entity.getOptionsJson() != null && !entity.getOptionsJson().isBlank()) {
-                payload.put("options", entity.getOptionsJson());
-            }
-            return objectMapper.writeValueAsString(payload);
-        } catch (Exception e) {
-            return "{\"confirmationId\":\"" + entity.getId() + "\"}";
-        }
+        return confirmationCreatedPayloadBuilder.buildPayload(entity);
     }
 
     private String text(JsonNode node, String field) {

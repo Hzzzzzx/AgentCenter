@@ -25,6 +25,7 @@ export const useRuntimeStore = defineStore('runtime', () => {
   const lastNodeStateReason = ref<string | null>(null)
   const seenEventIds = new Set<string>()
   const seenEventIdOrder: string[] = []
+  const liveStreamDeltaKeys = new Set<string>()
   const streamQueue: string[] = []
   let finalSyncTimer: ReturnType<typeof setTimeout> | null = null
   let streamFlushTimer: ReturnType<typeof setTimeout> | null = null
@@ -79,6 +80,7 @@ export const useRuntimeStore = defineStore('runtime', () => {
     }
     clearFinalSyncTimer()
     resetStreamingOutput()
+    liveStreamDeltaKeys.clear()
     connected.value = false
   }
 
@@ -86,6 +88,7 @@ export const useRuntimeStore = defineStore('runtime', () => {
     events.value = []
     seenEventIds.clear()
     seenEventIdOrder.length = 0
+    liveStreamDeltaKeys.clear()
   }
 
   function applyRuntimeEvent(event: RuntimeEventDto) {
@@ -94,12 +97,23 @@ export const useRuntimeStore = defineStore('runtime', () => {
       const payload = parsePayload(event.payloadJson)
       const text = textField(payload, ['delta', 'text', 'label'])
       if (text && shouldApplyAssistantDelta(event)) {
-        if (!streamingText.value && streamQueue.length === 0) {
-          clearFinalSyncTimer()
-          finalSyncAttempts = 0
-          lastUserSeqNo = latestUserSeqNo()
+        const messageId = typeof payload.messageId === 'string' ? payload.messageId : ''
+        const rawEventType = typeof payload.rawEventType === 'string' ? payload.rawEventType : ''
+        const deltaKey = messageId ? `${messageId}\0${text}` : ''
+        const isSnapshot = rawEventType === 'session.messages.snapshot'
+        if (isSnapshot && deltaKey && liveStreamDeltaKeys.has(deltaKey)) {
+          // skip: same messageId+text already applied from a live SSE delta
+        } else {
+          if (!isSnapshot && deltaKey) {
+            liveStreamDeltaKeys.add(deltaKey)
+          }
+          if (!streamingText.value && streamQueue.length === 0) {
+            clearFinalSyncTimer()
+            finalSyncAttempts = 0
+            lastUserSeqNo = latestUserSeqNo()
+          }
+          queueStreamingText(text)
         }
-        queueStreamingText(text)
       }
     }
 
@@ -328,6 +342,7 @@ export const useRuntimeStore = defineStore('runtime', () => {
     }
     streamQueue.length = 0
     streamingText.value = ''
+    liveStreamDeltaKeys.clear()
   }
 
   function markBusy() {

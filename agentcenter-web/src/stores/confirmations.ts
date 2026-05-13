@@ -7,6 +7,9 @@ export const useConfirmationStore = defineStore('confirmations', () => {
   const pendingConfirmations = ref<ConfirmationRequestDto[]>([])
   const currentConfirmation = ref<ConfirmationRequestDto | null>(null)
   const loading = ref(false)
+  const recoveringIds = ref<Set<string>>(new Set())
+  const recoverySyncTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  const RECOVERY_SYNC_DELAY_MS = 1200
 
   async function loadPending() {
     loading.value = true
@@ -16,6 +19,7 @@ export const useConfirmationStore = defineStore('confirmations', () => {
         confirmationApi.list('IN_CONVERSATION'),
       ])
       pendingConfirmations.value = [...pending, ...inConversation]
+      syncRecoveringWithPending()
     } finally {
       loading.value = false
     }
@@ -50,13 +54,15 @@ export const useConfirmationStore = defineStore('confirmations', () => {
       const payload = event.payloadJson ? JSON.parse(event.payloadJson) : {}
       const id = payload.id || payload.confirmationId
       if (id && payload.requestType) {
-        if (!isCompleteConfirmationPayload(payload)) {
+        if (pendingConfirmations.value.some((c) => c.id === id)) {
+          return
+        }
+        const confirmation: Record<string, unknown> = { ...payload, id }
+        if (!isCompleteConfirmationPayload(confirmation)) {
           loadPending()
           return
         }
-        if (!pendingConfirmations.value.some((c) => c.id === id)) {
-          pendingConfirmations.value.push({ ...payload, id } as ConfirmationRequestDto)
-        }
+        pendingConfirmations.value.push(confirmation as unknown as ConfirmationRequestDto)
       } else {
         loadPending()
       }
@@ -68,10 +74,6 @@ export const useConfirmationStore = defineStore('confirmations', () => {
   function isCompleteConfirmationPayload(payload: Record<string, unknown>): boolean {
     return typeof payload.status === 'string'
       && typeof payload.title === 'string'
-      && 'agentSessionId' in payload
-      && 'workflowInstanceId' in payload
-      && 'workflowNodeInstanceId' in payload
-      && ('optionsJson' in payload || 'interactionSchemaJson' in payload)
   }
 
   function removeFromPending(event: RuntimeEventDto) {
@@ -93,7 +95,40 @@ export const useConfirmationStore = defineStore('confirmations', () => {
     if (currentConfirmation.value?.id === id) {
       currentConfirmation.value = null
     }
+    clearRecovering(id)
   }
 
-  return { pendingConfirmations, currentConfirmation, loading, loadPending, selectConfirmation, resolveConfirmation, rejectConfirmation, addFromEvent, removeFromPending, removeById }
+  function markRecovering(id: string) {
+    recoveringIds.value = new Set([...recoveringIds.value, id])
+    scheduleRecoverySync(id)
+  }
+
+  function clearRecovering(id: string) {
+    const timer = recoverySyncTimers.get(id)
+    if (timer) {
+      clearTimeout(timer)
+      recoverySyncTimers.delete(id)
+    }
+    const next = new Set(recoveringIds.value)
+    next.delete(id)
+    recoveringIds.value = next
+  }
+
+  function scheduleRecoverySync(id: string) {
+    const existing = recoverySyncTimers.get(id)
+    if (existing) clearTimeout(existing)
+    recoverySyncTimers.set(id, setTimeout(() => {
+      recoverySyncTimers.delete(id)
+      void loadPending()
+    }, RECOVERY_SYNC_DELAY_MS))
+  }
+
+  function syncRecoveringWithPending() {
+    const activeIds = new Set(pendingConfirmations.value.map((confirmation) => confirmation.id))
+    for (const id of recoveringIds.value) {
+      if (!activeIds.has(id)) clearRecovering(id)
+    }
+  }
+
+  return { pendingConfirmations, currentConfirmation, loading, recoveringIds, loadPending, selectConfirmation, resolveConfirmation, rejectConfirmation, addFromEvent, removeFromPending, removeById, markRecovering, clearRecovering }
 })

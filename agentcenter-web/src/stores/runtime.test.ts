@@ -629,4 +629,62 @@ describe('useRuntimeStore — SSE event handlers', () => {
     expect(runtimeStore.streamingText).toBe('')
     expect(runtimeStore.busy).toBe(false)
   })
+
+  it('skips snapshot ASSISTANT_DELTA when same messageId+text was already applied from a live delta', () => {
+    vi.useFakeTimers()
+    const runtimeStore = useRuntimeStore()
+
+    runtimeStore.connectSSE('sess-1')
+
+    capturedOnEvent!(makeEvent({
+      eventType: 'ASSISTANT_DELTA',
+      id: 'evt-live-1',
+      payloadJson: JSON.stringify({
+        messageId: 'msg-1',
+        rawEventType: 'message.part.delta',
+        delta: 'hello',
+      }),
+    }))
+
+    capturedOnEvent!(makeEvent({
+      eventType: 'ASSISTANT_DELTA',
+      id: 'evt-snapshot-1',
+      payloadJson: JSON.stringify({
+        messageId: 'msg-1',
+        rawEventType: 'session.messages.snapshot',
+        delta: 'hello',
+      }),
+    }))
+
+    vi.advanceTimersByTime(40)
+    expect(runtimeStore.streamingText).toBe('hello')
+  })
+
+  it('does not deduplicate snapshot ASSISTANT_DELTA without messageId', () => {
+    vi.useFakeTimers()
+    const runtimeStore = useRuntimeStore()
+
+    runtimeStore.connectSSE('sess-1')
+
+    capturedOnEvent!(makeEvent({
+      eventType: 'ASSISTANT_DELTA',
+      id: 'evt-live-no-message-id',
+      payloadJson: JSON.stringify({
+        rawEventType: 'message.part.delta',
+        delta: 'hello',
+      }),
+    }))
+
+    capturedOnEvent!(makeEvent({
+      eventType: 'ASSISTANT_DELTA',
+      id: 'evt-snapshot-no-message-id',
+      payloadJson: JSON.stringify({
+        rawEventType: 'session.messages.snapshot',
+        delta: 'hello',
+      }),
+    }))
+
+    vi.advanceTimersByTime(40)
+    expect(runtimeStore.streamingText).toBe('hellohello')
+  })
 })

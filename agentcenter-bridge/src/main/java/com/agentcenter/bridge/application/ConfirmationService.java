@@ -708,11 +708,23 @@ public class ConfirmationService {
         }
 
         String finalPayloadJson = payloadJson;
+        Runnable safeAfterCommit = afterCommitAction != null
+                ? () -> {
+                    try {
+                        afterCommitAction.run();
+                    } catch (Exception e) {
+                        log.warn("conversation.confirmation_after_commit status=failed confirmation={} error={}",
+                                capturedId, errorMessage(e), e);
+                        publishAfterCommitFailureEvent(sessionId, capturedWorkItemId,
+                                capturedWorkflowInstanceId, capturedNodeInstanceId, capturedId, e);
+                    }
+                }
+                : null;
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                if (afterCommitAction != null) {
-                    runAfterCommitAction(capturedId, afterCommitAction);
+                if (safeAfterCommit != null) {
+                    safeAfterCommit.run();
                 }
                 // dispatch must run first — CONFIRMATION_RESOLVED signals "state already updated"
                 runtimeEventService.publishCommittedEvent(new RuntimeEventDto(
@@ -728,6 +740,31 @@ public class ConfirmationService {
                 ));
             }
         });
+    }
+
+    private void publishAfterCommitFailureEvent(String sessionId, String workItemId,
+                                                 String workflowInstanceId, String nodeInstanceId,
+                                                 String confirmationId, Exception error) {
+        if (sessionId == null || sessionId.isBlank()) return;
+        String payloadJson;
+        try {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("kind", "confirmation_response");
+            payload.put("status", "failed");
+            payload.put("title", "提交后恢复失败");
+            payload.put("summary", errorMessage(error));
+            payload.put("confirmationId", confirmationId);
+            payload.put("recoverable", true);
+            payload.put("rawEventType", "after_commit_action.failed");
+            payloadJson = objectMapper.writeValueAsString(payload);
+        } catch (Exception e) {
+            payloadJson = "{\"kind\":\"confirmation_response\",\"status\":\"failed\",\"confirmationId\":\""
+                    + confirmationId + "\"}";
+        }
+        runtimeEventService.publishCommittedEvent(new RuntimeEventDto(
+                null, sessionId, workItemId, workflowInstanceId, nodeInstanceId,
+                RuntimeEventType.ERROR, RuntimeEventSource.BRIDGE, payloadJson, null
+        ));
     }
 
     private void runAfterCommitAction(String confirmationId, Runnable afterCommitAction) {

@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.agentcenter.bridge.api.dto.RuntimeEventDto;
 import com.agentcenter.bridge.application.RuntimeEventService;
+import com.agentcenter.bridge.application.confirmation.ConfirmationCreatedEventPayloadBuilder;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationRequestType;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationStatus;
 import com.agentcenter.bridge.domain.runtime.RuntimeEventSource;
@@ -38,14 +39,17 @@ public class PermissionConfirmationHandler {
     private final ConfirmationMapper confirmationMapper;
     private final RuntimeEventService runtimeEventService;
     private final ObjectProvider<OpenCodeRuntimeAdapter> runtimeAdapterProvider;
+    private final ConfirmationCreatedEventPayloadBuilder confirmationCreatedPayloadBuilder;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public PermissionConfirmationHandler(ConfirmationMapper confirmationMapper,
-                                          RuntimeEventService runtimeEventService,
-                                          ObjectProvider<OpenCodeRuntimeAdapter> runtimeAdapterProvider) {
+                                           RuntimeEventService runtimeEventService,
+                                           ObjectProvider<OpenCodeRuntimeAdapter> runtimeAdapterProvider,
+                                           ConfirmationCreatedEventPayloadBuilder confirmationCreatedPayloadBuilder) {
         this.confirmationMapper = confirmationMapper;
         this.runtimeEventService = runtimeEventService;
         this.runtimeAdapterProvider = runtimeAdapterProvider;
+        this.confirmationCreatedPayloadBuilder = confirmationCreatedPayloadBuilder;
     }
 
     @Transactional
@@ -84,9 +88,10 @@ public class PermissionConfirmationHandler {
         confirmationMapper.insert(entity);
 
         runtimeEventService.publishEvent(new RuntimeEventDto(
-                null, agentSessionId, null, null, null,
+                null, agentSessionId, entity.getWorkItemId(), entity.getWorkflowInstanceId(),
+                entity.getWorkflowNodeInstanceId(),
                 RuntimeEventType.CONFIRMATION_CREATED, RuntimeEventSource.BRIDGE,
-                "{\"confirmationId\":\"" + entity.getId() + "\"}", null
+                confirmationCreatedPayloadBuilder.buildPayload(entity), null
         ));
         log.info("Created PERMISSION confirmation id={} for agentSession={}", entity.getId(), agentSessionId);
     }

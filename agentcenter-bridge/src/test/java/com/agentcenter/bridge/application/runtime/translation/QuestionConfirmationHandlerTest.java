@@ -16,6 +16,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import com.agentcenter.bridge.api.dto.ResolveConfirmationRequest;
 import com.agentcenter.bridge.api.dto.RuntimeEventDto;
 import com.agentcenter.bridge.application.RuntimeEventService;
+import com.agentcenter.bridge.application.confirmation.ConfirmationCreatedEventPayloadBuilder;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeEventEnvelope;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationActionType;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationRequestType;
@@ -33,6 +34,7 @@ class QuestionConfirmationHandlerTest {
     private RuntimeEventService runtimeEventService;
     private OpenCodeRuntimeAdapter adapter;
     private ObjectProvider<OpenCodeRuntimeAdapter> adapterProvider;
+    private ConfirmationCreatedEventPayloadBuilder confirmationCreatedEventPayloadBuilder;
     private ObjectMapper objectMapper;
     private QuestionConfirmationHandler handler;
 
@@ -43,10 +45,16 @@ class QuestionConfirmationHandlerTest {
         runtimeEventService = mock(RuntimeEventService.class);
         adapter = mock(OpenCodeRuntimeAdapter.class);
         adapterProvider = mock(ObjectProvider.class);
+        confirmationCreatedEventPayloadBuilder = mock(ConfirmationCreatedEventPayloadBuilder.class);
         objectMapper = new ObjectMapper();
         when(adapterProvider.getIfAvailable()).thenReturn(adapter);
+        when(confirmationCreatedEventPayloadBuilder.buildPayload(any(ConfirmationRequestEntity.class)))
+                .thenAnswer(invocation -> {
+                    ConfirmationRequestEntity entity = invocation.getArgument(0);
+                    return "{\"confirmationId\":\"" + entity.getId() + "\"}";
+                });
         handler = new QuestionConfirmationHandler(confirmationMapper, runtimeEventService,
-                adapterProvider, objectMapper);
+                adapterProvider, confirmationCreatedEventPayloadBuilder, objectMapper);
     }
 
     @Test

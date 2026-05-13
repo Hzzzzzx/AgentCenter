@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { useConfirmationStore } from '../../stores/confirmations'
 import { useNotificationStore } from '../../stores/notifications'
-import { parseInteractionSchema, type InteractionField } from '../conversation/interactions/interactionSchema'
+import { parseInteractionSchema, type InteractionField, type InteractionOption } from '../conversation/interactions/interactionSchema'
 import type {
   ConfirmationActionType,
   ConfirmationRequestDto,
@@ -23,11 +23,15 @@ const emit = defineEmits<{
 
 const confirmationStore = useConfirmationStore()
 const notificationStore = useNotificationStore()
-const busyAction = ref<'approve' | 'reject' | 'submit' | 'retry' | 'skip' | null>(null)
+const busyAction = ref<'approve' | 'reject' | 'submit' | 'retry' | 'skip' | 'permission-once' | 'permission-always' | null>(null)
 const modalOpen = ref(false)
-const selectedOption = ref<{id: string, label: string} | null>(null)
+const selectedOption = ref<InteractionOption | null>(null)
+const selectedChoiceIds = ref<Set<string>>(new Set())
+const customChoice = ref('')
+const reviewComment = ref('')
 const supplementText = ref('')
 const fieldValues = ref<Record<string, string>>({})
+const recovering = ref(false)
 
 const typeLabels: Record<ConfirmationRequestType, string> = {
   CONFIRM: '确认',
@@ -60,20 +64,38 @@ const workItemCode = computed(() => props.confirmation.workItemCode ?? props.wor
 const workItemType = computed(() => props.confirmation.workItemType ?? props.workItem?.type ?? '事项')
 const workItemTitle = computed(() => props.confirmation.workItemTitle ?? props.workItem?.title ?? '未关联工作项')
 const workflowNodeName = computed(() => props.confirmation.workflowNodeName ?? props.confirmation.title)
-const parsedOptions = computed(() => parseOptions(props.confirmation.optionsJson))
+const parsedOptions = computed<InteractionOption[]>(() => interactionSchema.value?.options ?? [])
 const isDecision = computed(() => props.confirmation.requestType === 'DECISION')
 const isInputRequired = computed(() => props.confirmation.requestType === 'INPUT_REQUIRED')
 const isException = computed(() => props.confirmation.requestType === 'EXCEPTION')
+const isPermission = computed(() => props.confirmation.requestType === 'PERMISSION')
 const interactionSchema = computed(() => parseInteractionSchema(props.confirmation))
+const isMultiSelect = computed(() => interactionSchema.value?.selection === 'multi')
+const allowCustomChoice = computed(() => interactionSchema.value?.allowCustom === true)
+const isArtifactReview = computed(() => props.confirmation.interactionType === 'ARTIFACT_REVIEW')
+const usesOptionControl = computed(() => {
+  if (isDecision.value) return true
+  return (props.confirmation.requestType === 'APPROVAL' || props.confirmation.requestType === 'CONFIRM')
+    && parsedOptions.value.length > 0
+})
 const inputFields = computed<InteractionField[]>(() => interactionSchema.value?.fields ?? [])
 const interactionQuestion = computed(() => interactionSchema.value?.question?.trim() ?? '')
 const interactionTitle = computed(() => interactionSchema.value?.title?.trim() || '补充信息')
-const canSubmitDecision = computed(() => {
-  return parsedOptions.value.length > 0 ? !!selectedOption.value : !!supplementText.value.trim()
+const choiceInteractionTitle = computed(() => {
+  if (isArtifactReview.value) return '审阅产物'
+  if (isDecision.value) return '选择处理路径'
+  return '选择处理结果'
+})
+const canSubmitChoice = computed(() => {
+  if (!usesOptionControl.value) return true
+  const hasCustom = allowCustomChoice.value && customChoice.value.trim().length > 0
+  if (parsedOptions.value.length === 0) return hasCustom || supplementText.value.trim().length > 0
+  if (isMultiSelect.value) return selectedChoiceIds.value.size > 0 || hasCustom
+  return !!selectedOption.value || hasCustom
 })
 const canSubmitInput = computed(() => {
   if (inputFields.value.length > 0) {
-    return inputFields.value.every(field => !field.required || (fieldValues.value[field.id]?.trim().length ?? 0) > 0)
+    return inputFields.value.every(field => isFieldComplete(field))
   }
   return !!supplementText.value.trim()
 })
@@ -84,57 +106,11 @@ const rejectLabel = computed(() => {
   return '拒绝'
 })
 
-function optionText(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : String(value ?? '').trim()
-}
-
-function normalizeOption(item: unknown): {id: string, label: string} | null {
-  if (typeof item === 'string') {
-    const text = item.trim()
-    return text ? { id: text, label: text } : null
-  }
-
-  if (!item || typeof item !== 'object') return null
-
-  const record = item as Record<string, unknown>
-  const id = optionText(record.id ?? record.value ?? record.key ?? record.label)
-  const label = optionText(record.label ?? record.name ?? record.title ?? record.value ?? record.id ?? id)
-  if (!id && !label) return null
-  return {
-    id: id || label,
-    label: label || id,
-  }
-}
-
-function normalizeOptions(raw: unknown): {id: string, label: string}[] {
-  if (!Array.isArray(raw)) return []
-  return raw
-    .map(normalizeOption)
-    .filter((option): option is {id: string, label: string} => !!option)
-}
-
-function parseOptions(raw: string | null): {id: string, label: string}[] {
-  if (!raw || !raw.trim()) return []
-  try {
-    const parsed = JSON.parse(raw)
-    if (Array.isArray(parsed)) {
-      return normalizeOptions(parsed)
-    }
-    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.options)) {
-      return normalizeOptions(parsed.options)
-    }
-  } catch {
-    // Fall through to the tolerant text splitter below.
-  }
-  return raw
-    .split(/\s*(?:\/|、|，|,|；|;)\s*/)
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .map(s => ({ id: s, label: s }))
-}
-
 function openDialog() {
   selectedOption.value = parsedOptions.value[0] ?? null
+  selectedChoiceIds.value = new Set()
+  customChoice.value = ''
+  reviewComment.value = ''
   supplementText.value = ''
   fieldValues.value = {}
   modalOpen.value = true
@@ -162,6 +138,78 @@ function fieldPlaceholder(field: InteractionField): string {
   return field.type === 'textarea' ? '输入你的回答...' : '输入答案...'
 }
 
+function fieldRawValue(field: InteractionField): string {
+  if (field.type === 'checkbox') return fieldValues.value[field.id] === 'true' ? 'true' : 'false'
+  return fieldValues.value[field.id]?.trim() ?? ''
+}
+
+function fieldDisplayValue(field: InteractionField, value: string): string {
+  if (field.type === 'checkbox') return value === 'true' ? '是' : (field.required ? '否' : '')
+  if (field.type === 'select') return field.options?.find(option => option.value === value)?.label ?? value
+  return value
+}
+
+function isFieldComplete(field: InteractionField): boolean {
+  if (!field.required) return true
+  if (field.type === 'checkbox') return fieldRawValue(field) === 'true'
+  return fieldRawValue(field).length > 0
+}
+
+function collectFieldPayload() {
+  const fields = inputFields.value.reduce<Record<string, string>>((acc, field) => {
+    acc[field.id] = fieldRawValue(field)
+    return acc
+  }, {})
+  const input = inputFields.value
+    .map(field => fieldDisplayValue(field, fields[field.id]))
+    .filter(Boolean)
+    .join('\n')
+  return { input, fields }
+}
+
+function isChoiceSelected(option: InteractionOption): boolean {
+  return isMultiSelect.value ? selectedChoiceIds.value.has(option.id) : selectedOption.value?.id === option.id
+}
+
+function toggleChoice(optionId: string) {
+  const next = new Set(selectedChoiceIds.value)
+  if (next.has(optionId)) next.delete(optionId)
+  else next.add(optionId)
+  selectedChoiceIds.value = next
+}
+
+function approvalActionForChoice(option?: InteractionOption, fallback = ''): ConfirmationActionType {
+  const text = `${option?.id ?? ''} ${option?.label ?? ''} ${fallback}`.toLowerCase()
+  if (/(reject|revise|return|fail|no|denied|不通过|退回|驳回|调整|拒绝|否)/.test(text)) {
+    return 'REJECT'
+  }
+  return 'APPROVE'
+}
+
+function workflowActionForChoice(optionId: string | undefined): ConfirmationActionType | null {
+  if (props.confirmation.interactionType !== 'WORKFLOW_ADVANCE' || !optionId) return null
+  const validActions: ConfirmationActionType[] = ['ENTER_SESSION', 'APPROVE', 'REJECT', 'SUPPLEMENT', 'CHOOSE', 'RETRY', 'SKIP', 'ADVANCE']
+  return validActions.includes(optionId as ConfirmationActionType) ? optionId as ConfirmationActionType : null
+}
+
+function choiceActionType(option?: InteractionOption, fallback = ''): ConfirmationActionType {
+  const workflowAction = workflowActionForChoice(option?.id)
+  if (workflowAction) return workflowAction
+  if (isDecision.value) return 'CHOOSE'
+  return approvalActionForChoice(option, fallback)
+}
+
+function withReviewComment(payload: Record<string, unknown>) {
+  const remark = reviewComment.value.trim()
+  if (remark) payload.remark = remark
+  return payload
+}
+
+function choiceComment(label: string): string {
+  const remark = reviewComment.value.trim()
+  return remark ? `${label}\n${remark}` : label
+}
+
 async function handleApprove() {
   if (busyAction.value) return
   busyAction.value = 'approve'
@@ -173,6 +221,8 @@ async function handleApprove() {
       title: '确认已通过',
       message: `${workItemCode.value} 已进入后续流程`,
     })
+    confirmationStore.markRecovering(props.confirmation.id)
+    recovering.value = true
     emit('resolved', props.confirmation.id)
   } catch (error) {
     notificationStore.push({
@@ -195,21 +245,47 @@ async function resolveWith(actionType: ConfirmationActionType, payload?: Record<
     title: '交互已提交',
     message: `${workItemCode.value} 已收到你的处理结果`,
   })
+  confirmationStore.markRecovering(props.confirmation.id)
+  recovering.value = true
   emit('resolved', props.confirmation.id)
 }
 
-async function handleDecision() {
-  if (busyAction.value || !canSubmitDecision.value) return
+async function handleChoice() {
+  if (busyAction.value || !canSubmitChoice.value) return
   busyAction.value = 'submit'
   try {
+    const custom = customChoice.value.trim()
+    if (isMultiSelect.value) {
+      const selected = parsedOptions.value.filter(option => selectedChoiceIds.value.has(option.id))
+      const choiceIds = selected.map(option => option.id)
+      const choiceLabels = selected.map(option => option.label)
+      const choices = custom ? [...choiceLabels, custom] : choiceLabels
+      const payload: Record<string, unknown> = {
+        choiceIds,
+        choiceLabels,
+        choices,
+      }
+      if (custom) payload.customChoice = custom
+      const label = choices.join('，')
+      await resolveWith(choiceActionType(selected[0], custom), withReviewComment(payload), choiceComment(label))
+      return
+    }
+
+    if (custom) {
+      const payload = withReviewComment({ choice: custom, customChoice: custom })
+      await resolveWith(choiceActionType(undefined, custom), payload, choiceComment(custom))
+      return
+    }
+
     const opt = parsedOptions.value.length > 0 ? selectedOption.value : null
-    const choice = opt?.label ?? supplementText.value.trim()
-    const isWorkflowAdvance = props.confirmation.interactionType === 'WORKFLOW_ADVANCE'
-    const VALID_ACTION_TYPES: ConfirmationActionType[] = ['ENTER_SESSION', 'APPROVE', 'REJECT', 'SUPPLEMENT', 'CHOOSE', 'RETRY', 'SKIP', 'ADVANCE']
-    const actionType: ConfirmationActionType = (isWorkflowAdvance && opt?.id && VALID_ACTION_TYPES.includes(opt.id as ConfirmationActionType))
-      ? opt.id as ConfirmationActionType
-      : 'CHOOSE'
-    await resolveWith(actionType, { choice }, choice)
+    if (opt) {
+      const payload = withReviewComment({ choice: opt.id, choiceId: opt.id, choiceLabel: opt.label })
+      await resolveWith(choiceActionType(opt), payload, choiceComment(opt.label))
+      return
+    }
+
+    const choice = supplementText.value.trim()
+    await resolveWith(choiceActionType(undefined, choice), { choice }, choice)
   } catch (error) {
     notificationStore.push({
       anchor: 'right-panel',
@@ -228,14 +304,7 @@ async function handleSupplement() {
   busyAction.value = 'submit'
   try {
     if (inputFields.value.length > 0) {
-      const fields = inputFields.value.reduce<Record<string, string>>((acc, field) => {
-        acc[field.id] = fieldValues.value[field.id]?.trim() ?? ''
-        return acc
-      }, {})
-      const input = inputFields.value
-        .map(field => fields[field.id])
-        .filter(Boolean)
-        .join('\n')
+      const { input, fields } = collectFieldPayload()
       await resolveWith('SUPPLEMENT', { input, fields }, input)
       return
     }
@@ -319,6 +388,41 @@ function enterSession() {
   modalOpen.value = false
   emit('handle', props.confirmation.id)
 }
+
+async function handlePermissionDecision(reply: 'once' | 'always' | 'reject') {
+  if (busyAction.value) return
+  busyAction.value = reply === 'reject' ? 'reject' : `permission-${reply}`
+  const actionType: ConfirmationActionType = reply === 'reject' ? 'REJECT' : 'APPROVE'
+  try {
+    await confirmationStore.resolveConfirmation(props.confirmation.id, {
+      actionType,
+      payload: { reply },
+      comment: reply,
+    }, { remove: false })
+    notificationStore.push({
+      anchor: 'right-panel',
+      tone: reply === 'reject' ? 'warning' : 'success',
+      title: reply === 'reject' ? '权限已拒绝' : '权限已允许',
+      message: reply === 'always' ? 'OpenCode 本次会话内的同类请求会自动允许' : `${workItemCode.value} 已收到处理结果`,
+    })
+    if (reply !== 'reject') {
+      confirmationStore.markRecovering(props.confirmation.id)
+      recovering.value = true
+    }
+    if (reply === 'reject') emit('rejected', props.confirmation.id)
+    else emit('resolved', props.confirmation.id)
+  } catch (error) {
+    notificationStore.push({
+      anchor: 'right-panel',
+      tone: 'error',
+      title: '提交失败',
+      message: errorMessage(error),
+      durationMs: 5200,
+    })
+  } finally {
+    busyAction.value = null
+  }
+}
 </script>
 
 <template>
@@ -399,31 +503,85 @@ function enterSession() {
           </div>
         </dl>
 
-        <section v-if="isDecision" class="confirmation-dialog__interaction">
-          <div class="confirmation-dialog__interaction-title">选择处理路径</div>
-          <div v-if="parsedOptions.length" class="confirmation-dialog__options" role="radiogroup" aria-label="选择处理路径">
+        <section v-if="recovering" class="confirmation-dialog__interaction">
+          <div class="confirmation-dialog__recovering">
+            <span class="confirmation-dialog__recovering-dot"></span>
+            <strong>已提交，等待 Agent 继续</strong>
+          </div>
+        </section>
+
+        <section v-else-if="isPermission" class="confirmation-dialog__interaction">
+          <div class="confirmation-dialog__interaction-title">权限授权</div>
+          <p v-if="interactionQuestion" class="confirmation-dialog__question">{{ interactionQuestion }}</p>
+          <div class="confirmation-dialog__permission-actions">
+            <button class="confirmation-card__action confirmation-card__action--approve" :disabled="!!busyAction" @click="handlePermissionDecision('once')">
+              {{ busyAction === 'permission-once' ? '允许中...' : '允许一次' }}
+            </button>
+            <button class="confirmation-card__action confirmation-card__action--approve" :disabled="!!busyAction" @click="handlePermissionDecision('always')">
+              {{ busyAction === 'permission-always' ? '允许中...' : '本次会话允许同类请求' }}
+            </button>
+            <button class="confirmation-card__action confirmation-card__action--reject" :disabled="!!busyAction" @click="handlePermissionDecision('reject')">
+              {{ busyAction === 'reject' ? '处理中...' : '拒绝授权' }}
+            </button>
+          </div>
+        </section>
+
+        <section v-else-if="usesOptionControl" class="confirmation-dialog__interaction">
+          <div class="confirmation-dialog__interaction-title">{{ choiceInteractionTitle }}</div>
+          <p v-if="interactionQuestion" class="confirmation-dialog__question">{{ interactionQuestion }}</p>
+          <div v-if="parsedOptions.length" class="confirmation-dialog__options" :role="isMultiSelect ? 'group' : 'radiogroup'" aria-label="选择处理路径">
             <label
               v-for="option in parsedOptions"
               :key="option.id"
               class="confirmation-dialog__option"
-              :class="{ 'confirmation-dialog__option--selected': selectedOption?.id === option.id }"
+              :class="{ 'confirmation-dialog__option--selected': isChoiceSelected(option) }"
             >
               <input
-                type="radio"
+                :type="isMultiSelect ? 'checkbox' : 'radio'"
                 name="confirmation-option"
-                :value="option.label"
-                :checked="selectedOption?.id === option.id"
-                @change="selectedOption = option"
+                :value="option.id"
+                :checked="isChoiceSelected(option)"
+                @change="isMultiSelect ? toggleChoice(option.id) : (selectedOption = option)"
               >
-              <span>{{ option.label }}</span>
+              <span class="confirmation-dialog__option-copy">
+                <strong>{{ option.label }}</strong>
+                <span v-if="option.description" class="confirmation-dialog__option-desc">{{ option.description }}</span>
+              </span>
             </label>
           </div>
+          <label v-if="allowCustomChoice" class="confirmation-dialog__custom-choice">
+            <span>自定义选择</span>
+            <input
+              v-model="customChoice"
+              class="confirmation-dialog__input"
+              type="text"
+              placeholder="输入自定义处理方式..."
+            >
+          </label>
           <textarea
-            v-else
+            v-if="!parsedOptions.length && !allowCustomChoice"
             v-model="supplementText"
             class="confirmation-dialog__textarea"
             rows="4"
             placeholder="输入你希望 Agent 采用的处理方式..."
+          />
+          <textarea
+            v-if="isArtifactReview"
+            v-model="reviewComment"
+            class="confirmation-dialog__textarea confirmation-dialog__review-note"
+            rows="3"
+            placeholder="补充审阅备注..."
+          />
+        </section>
+
+        <section v-else-if="isException" class="confirmation-dialog__interaction">
+          <div class="confirmation-dialog__interaction-title">异常处理</div>
+          <p v-if="confirmation.contextSummary" class="confirmation-dialog__question">{{ confirmation.contextSummary }}</p>
+          <textarea
+            v-model="supplementText"
+            class="confirmation-dialog__textarea"
+            rows="3"
+            placeholder="补充异常处理信息后继续当前节点..."
           />
         </section>
 
@@ -450,6 +608,35 @@ function enterSession() {
                 :placeholder="fieldPlaceholder(field)"
                 @input="(event: Event) => setFieldValue(field.id, (event.target as HTMLTextAreaElement).value)"
               />
+              <select
+                v-else-if="field.type === 'select'"
+                :id="fieldInputId(field)"
+                :value="fieldValues[field.id] ?? ''"
+                class="confirmation-dialog__input confirmation-dialog__field-input"
+                @change="(event: Event) => setFieldValue(field.id, (event.target as HTMLSelectElement).value)"
+              >
+                <option value="">请选择...</option>
+                <option
+                  v-for="option in field.options ?? []"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ option.label }}
+                </option>
+              </select>
+              <label
+                v-else-if="field.type === 'checkbox'"
+                :for="fieldInputId(field)"
+                class="confirmation-dialog__checkbox"
+              >
+                <input
+                  :id="fieldInputId(field)"
+                  type="checkbox"
+                  :checked="fieldValues[field.id] === 'true'"
+                  @change="(event: Event) => setFieldValue(field.id, (event.target as HTMLInputElement).checked ? 'true' : 'false')"
+                >
+                <span>已确认</span>
+              </label>
               <input
                 v-else
                 :id="fieldInputId(field)"
@@ -472,12 +659,12 @@ function enterSession() {
 
         <footer class="confirmation-dialog__actions">
           <button
-            v-if="(confirmation.status === 'PENDING' || confirmation.status === 'IN_CONVERSATION') && isDecision"
+            v-if="(confirmation.status === 'PENDING' || confirmation.status === 'IN_CONVERSATION') && usesOptionControl"
             class="confirmation-card__action confirmation-card__action--approve"
-            :disabled="!!busyAction || !canSubmitDecision"
-            @click="handleDecision"
+            :disabled="!!busyAction || !canSubmitChoice"
+            @click="handleChoice"
           >
-            {{ busyAction === 'submit' ? '提交中...' : '提交选择' }}
+            {{ busyAction === 'submit' ? '提交中...' : (isArtifactReview ? '提交审阅' : '提交选择') }}
           </button>
           <button
             v-else-if="(confirmation.status === 'PENDING' || confirmation.status === 'IN_CONVERSATION') && isInputRequired"
@@ -491,9 +678,9 @@ function enterSession() {
             v-else-if="(confirmation.status === 'PENDING' || confirmation.status === 'IN_CONVERSATION') && isException"
             class="confirmation-card__action confirmation-card__action--approve"
             :disabled="!!busyAction"
-            @click="handleRetry"
+            @click="supplementText.trim() ? handleSupplement() : handleRetry()"
           >
-            {{ busyAction === 'retry' ? '重试中...' : '重试' }}
+            {{ busyAction === 'submit' ? '提交中...' : (supplementText.trim() ? '提交补充' : '重试') }}
           </button>
           <button
             v-else-if="confirmation.status === 'PENDING' || confirmation.status === 'IN_CONVERSATION'"
@@ -863,6 +1050,26 @@ function enterSession() {
   flex: 0 0 auto;
 }
 
+.confirmation-dialog__option-copy {
+  display: grid;
+  gap: 3px;
+  line-height: 1.35;
+}
+
+.confirmation-dialog__option-desc {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.confirmation-dialog__custom-choice {
+  display: grid;
+  gap: 6px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 850;
+}
+
 .confirmation-dialog__fields {
   display: grid;
   gap: 12px;
@@ -932,5 +1139,47 @@ function enterSession() {
   justify-content: flex-end;
   gap: 8px;
   padding-top: 2px;
+}
+
+.confirmation-dialog__permission-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.confirmation-dialog__checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.confirmation-dialog__checkbox input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-blue);
+}
+
+.confirmation-dialog__recovering {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.confirmation-dialog__recovering-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent-blue);
+  animation: pulse-dot 1.2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
 </style>

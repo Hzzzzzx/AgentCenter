@@ -2,6 +2,7 @@ package com.agentcenter.bridge.application.runtime.translation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -15,6 +16,7 @@ import org.springframework.beans.factory.ObjectProvider;
 
 import com.agentcenter.bridge.api.dto.RuntimeEventDto;
 import com.agentcenter.bridge.application.RuntimeEventService;
+import com.agentcenter.bridge.application.confirmation.ConfirmationCreatedEventPayloadBuilder;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationRequestType;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationStatus;
 import com.agentcenter.bridge.domain.runtime.RuntimeEventType;
@@ -28,6 +30,7 @@ class PermissionConfirmationHandlerTest {
     private RuntimeEventService runtimeEventService;
     private OpenCodeRuntimeAdapter adapter;
     private ObjectProvider<OpenCodeRuntimeAdapter> adapterProvider;
+    private ConfirmationCreatedEventPayloadBuilder confirmationCreatedEventPayloadBuilder;
     private PermissionConfirmationHandler handler;
 
     @BeforeEach
@@ -37,9 +40,15 @@ class PermissionConfirmationHandlerTest {
         runtimeEventService = mock(RuntimeEventService.class);
         adapter = mock(OpenCodeRuntimeAdapter.class);
         adapterProvider = mock(ObjectProvider.class);
+        confirmationCreatedEventPayloadBuilder = mock(ConfirmationCreatedEventPayloadBuilder.class);
         when(adapterProvider.getIfAvailable()).thenReturn(adapter);
+        when(confirmationCreatedEventPayloadBuilder.buildPayload(any(ConfirmationRequestEntity.class)))
+                .thenAnswer(invocation -> {
+                    ConfirmationRequestEntity entity = invocation.getArgument(0);
+                    return "{\"confirmationId\":\"" + entity.getId() + "\"}";
+                });
         handler = new PermissionConfirmationHandler(
-                confirmationMapper, runtimeEventService, adapterProvider);
+                confirmationMapper, runtimeEventService, adapterProvider, confirmationCreatedEventPayloadBuilder);
     }
 
     @Test

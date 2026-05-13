@@ -2,7 +2,6 @@ package com.agentcenter.bridge.infrastructure.runtime.opencode;
 
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -874,7 +873,6 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
                                             long cancelGeneration,
                                             long deadline,
                                             int retryCount) {
-        Map<String, Integer> streamedTextLengths = new HashMap<>();
         int pollErrorRetryCount = 0;
         while (System.nanoTime() < deadline) {
             if (wasCancelled(opencodeSessionId, cancelGeneration)) {
@@ -896,7 +894,6 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
                 }
                 continue;
             }
-            publishAssistantTextSnapshotDeltas(opencodeSessionId, messages, knownMessageIds, streamedTextLengths);
             String text = extractNewAssistantText(messages, knownMessageIds);
             if (text != null && !text.isBlank()) {
                 publishAssistantCompleted(opencodeSessionId);
@@ -1197,85 +1194,6 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
             return normalized;
         }
         return normalized.substring(0, LOG_FIELD_LIMIT) + "...";
-    }
-
-    private void publishAssistantTextSnapshotDeltas(String opencodeSessionId,
-                                                    JsonNode messages,
-                                                    Set<String> knownMessageIds,
-                                                    Map<String, Integer> streamedTextLengths) {
-        if (messages == null || !messages.isArray()) {
-            return;
-        }
-        for (JsonNode message : messages) {
-            JsonNode info = message.path("info");
-            String id = info.path("id").asText("");
-            if (id.isBlank() || knownMessageIds.contains(id)) {
-                continue;
-            }
-            if (!"assistant".equals(info.path("role").asText(""))) {
-                continue;
-            }
-            if ("tool-calls".equals(info.path("finish").asText(""))) {
-                continue;
-            }
-
-            String text = collectTextParts(message);
-            int previousLength = streamedTextLengths.getOrDefault(id, 0);
-            if (text.length() <= previousLength) {
-                continue;
-            }
-
-            String delta = text.substring(previousLength);
-            streamedTextLengths.put(id, text.length());
-            publishAssistantDelta(opencodeSessionId, id, delta);
-        }
-    }
-
-    private String collectTextParts(JsonNode message) {
-        StringBuilder result = new StringBuilder();
-        for (JsonNode part : message.path("parts")) {
-            if (!"text".equals(part.path("type").asText(""))) {
-                continue;
-            }
-            String text = part.path("text").asText("");
-            if (!text.isBlank()) {
-                if (!result.isEmpty()) {
-                    result.append("\n\n");
-                }
-                result.append(text);
-            }
-        }
-        return result.toString();
-    }
-
-    private void publishAssistantDelta(String opencodeSessionId, String messageId, String delta) {
-        if (delta == null || delta.isEmpty()) {
-            return;
-        }
-        String agentSessionId = eventSubscriber.getAgentSessionId(opencodeSessionId);
-        if (agentSessionId == null || agentSessionId.isBlank()) {
-            return;
-        }
-        try {
-            ObjectNode payload = objectMapper.createObjectNode();
-            payload.put("delta", delta);
-            payload.put("messageId", messageId);
-            payload.put("rawEventType", "session.messages.snapshot");
-            payload.put("rawPartType", "text");
-            runtimeEventService.publishEvent(new RuntimeEventDto(
-                    null,
-                    agentSessionId,
-                    eventSubscriber.getWorkItemId(agentSessionId),
-                    eventSubscriber.getWorkflowInstanceId(agentSessionId),
-                    eventSubscriber.getWorkflowNodeInstanceId(agentSessionId),
-                    RuntimeEventType.ASSISTANT_DELTA,
-                    RuntimeEventSource.OPENCODE,
-                    payload.toString(),
-                    null
-            ));
-        } catch (Exception e) {
-            log.debug("Failed to publish assistant delta for opencode session {}", opencodeSessionId, e);
-        }
     }
 
     private void publishAssistantCompleted(String opencodeSessionId) {

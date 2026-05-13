@@ -34,6 +34,7 @@ import com.agentcenter.bridge.api.dto.WorkflowInstanceDto;
 import com.agentcenter.bridge.api.dto.WorkflowNodeInstanceDto;
 import com.agentcenter.bridge.api.dto.WorkflowVersionDto;
 import com.agentcenter.bridge.application.artifact.ArtifactBlockParser;
+import com.agentcenter.bridge.application.confirmation.ConfirmationCreatedEventPayloadBuilder;
 import com.agentcenter.bridge.application.runtime.RuntimeGateway;
 import com.agentcenter.bridge.application.runtime.SkillInvocationRequest;
 import com.agentcenter.bridge.application.runtime.SkillRunResult;
@@ -110,6 +111,7 @@ public class WorkflowCommandService {
     private final RuntimeEventService runtimeEventService;
     private final RuntimeGateway runtimeGateway;
     private final SkillRegistryService skillRegistryService;
+    private final ConfirmationCreatedEventPayloadBuilder confirmationCreatedPayloadBuilder;
     private final IdGenerator idGenerator;
     private final RuntimeType workflowRuntimeType;
     private final ExecutorService workflowExecutor;
@@ -126,6 +128,7 @@ public class WorkflowCommandService {
                                    RuntimeEventService runtimeEventService,
                                    RuntimeGateway runtimeGateway,
                                    SkillRegistryService skillRegistryService,
+                                   ConfirmationCreatedEventPayloadBuilder confirmationCreatedPayloadBuilder,
                                    IdGenerator idGenerator,
                                    @Value("${agentcenter.runtime.default-type:OPENCODE}") String defaultRuntimeType,
                                    @Qualifier("workflowExecutor") ExecutorService workflowExecutor) {
@@ -138,6 +141,7 @@ public class WorkflowCommandService {
         this.runtimeEventService = runtimeEventService;
         this.runtimeGateway = runtimeGateway;
         this.skillRegistryService = skillRegistryService;
+        this.confirmationCreatedPayloadBuilder = confirmationCreatedPayloadBuilder;
         this.idGenerator = idGenerator;
         this.workflowRuntimeType = RuntimeType.valueOf(defaultRuntimeType.toUpperCase());
         this.workflowExecutor = workflowExecutor;
@@ -935,7 +939,7 @@ public class WorkflowCommandService {
                     null, node.getAgentSessionId(), workItem.getId(),
                     instance.getId(), node.getId(),
                     RuntimeEventType.CONFIRMATION_CREATED, RuntimeEventSource.BRIDGE,
-                    "{\"confirmationId\":\"" + confirmation.getId() + "\"}", null
+                    confirmationCreatedPayloadBuilder.buildPayload(confirmation), null
             ));
         }
     }
@@ -1129,7 +1133,7 @@ public class WorkflowCommandService {
                 null, node.getAgentSessionId(), workItem.getId(),
                 instance.getId(), node.getId(),
                 RuntimeEventType.CONFIRMATION_CREATED, RuntimeEventSource.BRIDGE,
-                "{\"confirmationId\":\"" + confirmation.getId() + "\"}", null
+                confirmationCreatedPayloadBuilder.buildPayload(confirmation), null
         ));
     }
 

@@ -117,7 +117,7 @@ describe('ConfirmationCard.vue', () => {
 
     expect(confirmationApi.resolve).toHaveBeenCalledWith('conf-1', {
       actionType: 'CHOOSE',
-      payload: { choice: '低成本方案' },
+      payload: { choice: '低成本方案', choiceId: '低成本方案', choiceLabel: '低成本方案' },
       comment: '低成本方案',
     })
     expect(wrapper.emitted('resolved')![0]).toEqual(['conf-1'])
@@ -136,7 +136,7 @@ describe('ConfirmationCard.vue', () => {
 
     await openDialog(wrapper)
     expect(document.body.textContent).not.toContain('[object Object]')
-    const option = document.body.querySelector<HTMLInputElement>('input[value="严格校验"]')
+    const option = document.body.querySelector<HTMLInputElement>('input[value="STRICT"]')
     expect(option).toBeTruthy()
     option!.checked = true
     option!.dispatchEvent(new Event('change'))
@@ -146,8 +146,87 @@ describe('ConfirmationCard.vue', () => {
 
     expect(confirmationApi.resolve).toHaveBeenCalledWith('conf-1', {
       actionType: 'CHOOSE',
-      payload: { choice: '严格校验' },
+      payload: { choice: 'STRICT', choiceId: 'STRICT', choiceLabel: '严格校验' },
       comment: '严格校验',
+    })
+  })
+
+  it('submits DECISION confirmation with multi-select and custom choice', async () => {
+    const { confirmationApi } = await import('../../api/confirmations')
+    const wrapper = mountCard({
+      ...pendingConfirmation,
+      requestType: 'DECISION',
+      interactionSchemaJson: JSON.stringify({
+        selection: 'multi',
+        allowCustom: true,
+        options: [
+          { id: 'FAST', label: '快速验证', description: '先跑关键链路' },
+          { id: 'FULL', label: '完整回归', description: '覆盖全部用例' },
+        ],
+      }),
+    })
+
+    await openDialog(wrapper)
+    expect(document.body.textContent).toContain('先跑关键链路')
+    const fast = document.body.querySelector<HTMLInputElement>('input[value="FAST"]')!
+    fast.checked = true
+    fast.dispatchEvent(new Event('change'))
+    const custom = document.body.querySelector<HTMLInputElement>('input[placeholder="输入自定义处理方式..."]')!
+    custom.value = '再补一轮冒烟'
+    custom.dispatchEvent(new Event('input'))
+    await wrapper.vm.$nextTick()
+
+    await document.body.querySelector<HTMLButtonElement>('.confirmation-card__action--approve')!.click()
+    await vi.dynamicImportSettled()
+
+    expect(confirmationApi.resolve).toHaveBeenCalledWith('conf-1', {
+      actionType: 'CHOOSE',
+      payload: {
+        choiceIds: ['FAST'],
+        choiceLabels: ['快速验证'],
+        choices: ['快速验证', '再补一轮冒烟'],
+        customChoice: '再补一轮冒烟',
+      },
+      comment: '快速验证，再补一轮冒烟',
+    })
+  })
+
+  it('renders ARTIFACT_REVIEW approval options with review note', async () => {
+    const { confirmationApi } = await import('../../api/confirmations')
+    const wrapper = mountCard({
+      ...pendingConfirmation,
+      requestType: 'APPROVAL',
+      interactionType: 'ARTIFACT_REVIEW',
+      title: '审阅 LLD 草稿',
+      optionsJson: JSON.stringify([
+        { id: 'PASS', label: '通过', description: '进入实现' },
+        { id: 'REVISE', label: '需要调整', description: '补充风险和验证' },
+      ]),
+    })
+
+    await openDialog(wrapper)
+    expect(document.body.textContent).toContain('审阅产物')
+    expect(document.body.textContent).toContain('补充风险和验证')
+    const revise = document.body.querySelector<HTMLInputElement>('input[value="REVISE"]')!
+    revise.checked = true
+    revise.dispatchEvent(new Event('change'))
+    const note = document.body.querySelector<HTMLTextAreaElement>('.confirmation-dialog__review-note')!
+    note.value = '补上失败回滚策略'
+    note.dispatchEvent(new Event('input'))
+    await wrapper.vm.$nextTick()
+
+    await document.body.querySelector<HTMLButtonElement>('.confirmation-card__action--approve')!.click()
+    await vi.dynamicImportSettled()
+
+    expect(confirmationApi.resolve).toHaveBeenCalledWith('conf-1', {
+      actionType: 'REJECT',
+      payload: {
+        choice: 'REVISE',
+        choiceId: 'REVISE',
+        choiceLabel: '需要调整',
+        remark: '补上失败回滚策略',
+      },
+      comment: '需要调整\n补上失败回滚策略',
     })
   })
 
@@ -230,6 +309,57 @@ describe('ConfirmationCard.vue', () => {
         },
       },
       comment: '企业管理员\n只覆盖 PRD 阶段，不做 HLD\n页面出现三个必填输入框',
+    })
+    expect(wrapper.emitted('resolved')![0]).toEqual(['conf-1'])
+  })
+
+  it('renders and submits INPUT_REQUIRED select and checkbox fields', async () => {
+    const { confirmationApi } = await import('../../api/confirmations')
+    const wrapper = mountCard({
+      ...pendingConfirmation,
+      requestType: 'INPUT_REQUIRED',
+      title: '补充发布参数',
+      interactionSchemaJson: JSON.stringify({
+        title: '补充发布参数',
+        fields: [
+          {
+            id: 'priority',
+            label: '优先级',
+            type: 'select',
+            required: true,
+            options: [
+              { value: 'low', label: '低' },
+              { value: 'high', label: '高' },
+            ],
+          },
+          { id: 'accepted', label: '我确认风险', type: 'checkbox', required: true },
+        ],
+      }),
+    })
+
+    await openDialog(wrapper)
+    const submitButton = document.body.querySelector<HTMLButtonElement>('.confirmation-card__action--approve')!
+    expect(submitButton.disabled).toBe(true)
+
+    const priority = document.body.querySelector<HTMLSelectElement>('#confirmation-field-priority')!
+    const accepted = document.body.querySelector<HTMLInputElement>('#confirmation-field-accepted')!
+    priority.value = 'high'
+    priority.dispatchEvent(new Event('change'))
+    accepted.checked = true
+    accepted.dispatchEvent(new Event('change'))
+    await wrapper.vm.$nextTick()
+
+    expect(submitButton.disabled).toBe(false)
+    await submitButton.click()
+    await vi.dynamicImportSettled()
+
+    expect(confirmationApi.resolve).toHaveBeenCalledWith('conf-1', {
+      actionType: 'SUPPLEMENT',
+      payload: {
+        input: '高\n是',
+        fields: { priority: 'high', accepted: 'true' },
+      },
+      comment: '高\n是',
     })
     expect(wrapper.emitted('resolved')![0]).toEqual(['conf-1'])
   })

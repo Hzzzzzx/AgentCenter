@@ -25,6 +25,7 @@ const notificationStore = useNotificationStore()
 const activeId = ref<string | null>(null)
 const REVIEW_TAB_ID = '__review__'
 const busyAction = ref<string | null>(null)
+const recoveringConfirmationId = ref<string | null>(null)
 const selectedOptions = ref<Record<string, string>>({})
 const inputValues = ref<Record<string, string>>({})
 const selectedChoices = ref<Record<string, Set<string>>>({})
@@ -43,6 +44,14 @@ const typeLabels: Record<ConfirmationRequestType, string> = {
 const visibleInteractions = computed(() =>
   props.interactions.filter((item) => item.status === 'PENDING' || item.status === 'IN_CONVERSATION')
 )
+
+const recoveringInteractionId = computed(() => {
+  if (!recoveringConfirmationId.value) return null
+  const id = recoveringConfirmationId.value
+  if (confirmationStore.recoveringIds.has(id)) return id
+  recoveringConfirmationId.value = null
+  return null
+})
 
 const activeInteraction = computed(() => {
   if (activeId.value === REVIEW_TAB_ID) return null
@@ -134,7 +143,7 @@ const canSubmitInput = computed(() => {
   if (!activeInteraction.value) return false
   if (activeFields.value.length > 0) {
     const vals = fieldValues.value[activeInteraction.value.id] ?? {}
-    return activeFields.value.every(f => !f.required || (vals[f.id]?.trim()?.length ?? 0) > 0)
+    return activeFields.value.every(field => isFieldComplete(field, vals))
   }
   return activeInput.value.trim().length > 0
 })
@@ -355,6 +364,35 @@ function fieldPlaceholder(field: InteractionField): string {
   return field.type === 'textarea' ? '输入你的回答...' : '输入答案...'
 }
 
+function fieldRawValue(field: InteractionField, values: Record<string, string>): string {
+  if (field.type === 'checkbox') return values[field.id] === 'true' ? 'true' : 'false'
+  return values[field.id]?.trim() ?? ''
+}
+
+function fieldDisplayValue(field: InteractionField, value: string): string {
+  if (field.type === 'checkbox') return value === 'true' ? '是' : (field.required ? '否' : '')
+  if (field.type === 'select') return field.options?.find(option => option.value === value)?.label ?? value
+  return value
+}
+
+function isFieldComplete(field: InteractionField, values: Record<string, string>): boolean {
+  if (!field.required) return true
+  if (field.type === 'checkbox') return fieldRawValue(field, values) === 'true'
+  return fieldRawValue(field, values).length > 0
+}
+
+function collectFieldPayload(fields: InteractionField[], values: Record<string, string>) {
+  const payloadFields = fields.reduce<Record<string, string>>((acc, field) => {
+    acc[field.id] = fieldRawValue(field, values)
+    return acc
+  }, {})
+  const input = fields
+    .map(field => fieldDisplayValue(field, payloadFields[field.id]))
+    .filter(Boolean)
+    .join('\n')
+  return { input, fields: payloadFields }
+}
+
 function primaryActionLabel(item: ConfirmationRequestDto): string {
   if (item.requestType === 'INPUT_REQUIRED') return '提交补充'
   if (item.requestType === 'DECISION') return '提交选择'
@@ -379,7 +417,7 @@ function previewValueFor(item: ConfirmationRequestDto): string {
     if (fields.length) {
       const values = fieldValues.value[item.id] ?? {}
       const answered = fields
-        .map(field => values[field.id]?.trim())
+        .map(field => fieldDisplayValue(field, fieldRawValue(field, values)))
         .filter((value): value is string => Boolean(value))
       return answered.length ? answered.join('；') : '尚未填写'
     }
@@ -433,13 +471,15 @@ async function resolveActive(actionType: ConfirmationActionType, payload?: Recor
   busyAction.value = `${interaction.id}:${actionType}`
   emit('submitting', interaction.id)
   try {
-    await confirmationStore.resolveConfirmation(interaction.id, { actionType, payload, comment })
+    await confirmationStore.resolveConfirmation(interaction.id, { actionType, payload, comment }, { remove: false })
     notificationStore.push({
       anchor: 'right-panel',
       tone: 'success',
       title: '交互已提交',
       message: `${interaction.title} 已收到处理结果`,
     })
+    confirmationStore.markRecovering(interaction.id)
+    recoveringConfirmationId.value = interaction.id
     emit('resolved', interaction.id)
   } catch (error) {
     notificationStore.push({
@@ -465,13 +505,17 @@ async function handlePermissionDecision(reply: 'once' | 'always' | 'reject') {
       actionType,
       payload: { reply },
       comment: reply,
-    })
+    }, { remove: false })
     notificationStore.push({
       anchor: 'right-panel',
       tone: reply === 'reject' ? 'warning' : 'success',
       title: reply === 'reject' ? '权限已拒绝' : '权限已允许',
       message: reply === 'always' ? 'OpenCode 本次会话内的同类请求会自动允许' : `${interaction.title} 已收到处理结果`,
     })
+    if (reply !== 'reject') {
+      confirmationStore.markRecovering(interaction.id)
+      recoveringConfirmationId.value = interaction.id
+    }
     if (reply === 'reject') emit('rejected', interaction.id)
     else emit('resolved', interaction.id)
   } catch (error) {
@@ -497,7 +541,8 @@ function handlePrimary() {
   if (interaction.requestType === 'INPUT_REQUIRED') {
     if (activeFields.value.length > 0) {
       const vals = fieldValues.value[interaction.id] ?? {}
-      void resolveActive('SUPPLEMENT', { input: Object.values(vals).join('\n'), fields: vals })
+      const payload = collectFieldPayload(activeFields.value, vals)
+      void resolveActive('SUPPLEMENT', payload, payload.input || undefined)
       return
     }
     const input = activeInput.value.trim()
@@ -598,7 +643,7 @@ function handleSecondary() {
   }
   busyAction.value = `${interaction.id}:REJECT`
   emit('submitting', interaction.id)
-  confirmationStore.resolveConfirmation(interaction.id, { actionType: 'REJECT' })
+  confirmationStore.resolveConfirmation(interaction.id, { actionType: 'REJECT' }, { remove: false })
     .then(() => {
       notificationStore.push({
         anchor: 'right-panel',
@@ -676,7 +721,11 @@ function handleSecondary() {
     </div>
 
     <div v-else-if="activeInteraction" class="interaction-bar__body">
-      <div class="interaction-bar__main">
+      <div v-if="recoveringInteractionId === activeInteraction.id" class="interaction-bar__recovering">
+        <span class="interaction-bar__recovering-dot"></span>
+        <strong>已提交，等待 Agent 继续</strong>
+      </div>
+      <div v-else class="interaction-bar__main">
         <div class="interaction-bar__copy">
           <span class="interaction-bar__type">{{ typeLabels[activeInteraction.requestType] }}</span>
           <strong>{{ interactionQuestion(activeInteraction) }}</strong>
@@ -742,6 +791,35 @@ function handleSecondary() {
                   rows="2"
                   @input="(e: Event) => setFieldValue(field.id, (e.target as HTMLTextAreaElement).value)"
                 ></textarea>
+                <select
+                  v-else-if="field.type === 'select'"
+                  :id="'field-' + field.id"
+                  :value="activeFieldValues[field.id] ?? ''"
+                  class="interaction-bar__input interaction-bar__field-input"
+                  @change="(e: Event) => setFieldValue(field.id, (e.target as HTMLSelectElement).value)"
+                >
+                  <option value="">请选择...</option>
+                  <option
+                    v-for="option in field.options ?? []"
+                    :key="option.value"
+                    :value="option.value"
+                  >
+                    {{ option.label }}
+                  </option>
+                </select>
+                <label
+                  v-else-if="field.type === 'checkbox'"
+                  :for="'field-' + field.id"
+                  class="interaction-bar__checkbox"
+                >
+                  <input
+                    :id="'field-' + field.id"
+                    type="checkbox"
+                    :checked="activeFieldValues[field.id] === 'true'"
+                    @change="(e: Event) => setFieldValue(field.id, (e.target as HTMLInputElement).checked ? 'true' : 'false')"
+                  >
+                  <span>已确认</span>
+                </label>
                 <input
                   v-else
                   :id="'field-' + field.id"
@@ -924,6 +1002,37 @@ function handleSecondary() {
 .interaction-bar__tab--active {
   border-color: var(--accent-blue);
   background: var(--brand-soft);
+}
+
+.interaction-bar__recovering {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 30%, var(--border-color));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--accent-blue) 6%, var(--bg-card));
+  color: var(--accent-blue);
+  font-size: 12px;
+}
+
+.interaction-bar__recovering strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.interaction-bar__recovering-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent-blue);
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
 
 .interaction-bar__main {
@@ -1256,6 +1365,22 @@ function handleSecondary() {
 
 .interaction-bar__field-input {
   width: 100%;
+}
+
+.interaction-bar__checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.interaction-bar__checkbox input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-blue);
 }
 
 @media (max-width: 760px) {

@@ -229,7 +229,7 @@ class OpenCodeRuntimeAdapterCreateSessionTest {
     }
 
     @Test
-    void runSkillPublishesAssistantSnapshotDeltasWhilePollingMessages() throws Exception {
+    void runSkillPublishesAssistantCompletedButNoSnapshotDeltas() throws Exception {
         ObjectNode ackPayload = objectMapper.createObjectNode();
         RuntimeAckEnvelope ack = new RuntimeAckEnvelope(
                 null, "agentcenter.runtime.v1", null,
@@ -268,17 +268,18 @@ class OpenCodeRuntimeAdapterCreateSessionTest {
 
         ArgumentCaptor<RuntimeEventDto> eventCaptor = ArgumentCaptor.forClass(RuntimeEventDto.class);
         verify(runtimeEventService, atLeastOnce()).publishEvent(eventCaptor.capture());
-        var assistantEvents = eventCaptor.getAllValues().stream()
-                .filter(event -> event.eventType() == RuntimeEventType.ASSISTANT_DELTA
-                        || event.eventType() == RuntimeEventType.ASSISTANT_COMPLETED)
+        var assistantDeltas = eventCaptor.getAllValues().stream()
+                .filter(event -> event.eventType() == RuntimeEventType.ASSISTANT_DELTA)
+                .toList();
+        var assistantCompleted = eventCaptor.getAllValues().stream()
+                .filter(event -> event.eventType() == RuntimeEventType.ASSISTANT_COMPLETED)
                 .toList();
 
-        assertEquals(3, assistantEvents.size());
-        assertEquals(RuntimeEventType.ASSISTANT_DELTA, assistantEvents.get(0).eventType());
-        assertTrue(assistantEvents.get(0).payloadJson().contains("\"delta\":\"第一段\""));
-        assertEquals(RuntimeEventType.ASSISTANT_DELTA, assistantEvents.get(1).eventType());
-        assertTrue(assistantEvents.get(1).payloadJson().contains("\"delta\":\"第二段\""));
-        assertEquals(RuntimeEventType.ASSISTANT_COMPLETED, assistantEvents.get(2).eventType());
+        // No ASSISTANT_DELTA should be published from snapshot polling
+        assertEquals(0, assistantDeltas.size(),
+                "polling should not publish ASSISTANT_DELTA events; SSE is the live streaming source");
+        // Exactly one ASSISTANT_COMPLETED for the final output
+        assertEquals(1, assistantCompleted.size());
     }
 
     @Test

@@ -595,7 +595,56 @@ describe('ConversationInteractionBar.vue', () => {
         input: 'AuthService\n认证服务模块\n3',
         fields: { name: 'AuthService', desc: '认证服务模块', count: '3' },
       },
-      comment: undefined,
+      comment: 'AuthService\n认证服务模块\n3',
+    })
+  })
+
+  it('renders select and checkbox fields for INPUT_REQUIRED', async () => {
+    const wrapper = mount(ConversationInteractionBar, {
+      props: {
+        interactions: [
+          makeInteraction({
+            id: 'confirm-field-controls',
+            requestType: 'INPUT_REQUIRED',
+            title: '补充发布参数',
+            interactionSchemaJson: JSON.stringify({
+              fields: [
+                {
+                  id: 'priority',
+                  label: '优先级',
+                  type: 'select',
+                  required: true,
+                  options: [
+                    { value: 'low', label: '低' },
+                    { value: 'high', label: '高' },
+                  ],
+                },
+                { id: 'accepted', label: '我确认风险', type: 'checkbox', required: true },
+              ],
+            }),
+          }),
+        ],
+      },
+    })
+
+    const primary = wrapper.find('.interaction-bar__primary')
+    expect(primary.attributes('disabled')).toBeDefined()
+
+    await wrapper.find('#field-priority').setValue('high')
+    expect(primary.attributes('disabled')).toBeDefined()
+
+    await wrapper.find('#field-accepted').setValue(true)
+    expect(primary.attributes('disabled')).toBeUndefined()
+    await primary.trigger('click')
+    await flushPromises()
+
+    expect(confirmationApi.resolve).toHaveBeenCalledWith('confirm-field-controls', {
+      actionType: 'SUPPLEMENT',
+      payload: {
+        input: '高\n是',
+        fields: { priority: 'high', accepted: 'true' },
+      },
+      comment: '高\n是',
     })
   })
 
