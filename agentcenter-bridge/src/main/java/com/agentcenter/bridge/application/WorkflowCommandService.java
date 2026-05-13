@@ -927,7 +927,7 @@ public class WorkflowCommandService {
                 null, node.getAgentSessionId(), workItem.getId(),
                 instance.getId(), node.getId(),
                 RuntimeEventType.SKILL_COMPLETED, RuntimeEventSource.WORKFLOW,
-                buildSkillCompletedPayload(skillName, toolCallId, result, statePayload, stateReason),
+                buildSkillCompletedPayload(skillName, toolCallId, result, statePayload, stateReason, artifact),
                 null
         ));
 
@@ -1324,11 +1324,17 @@ public class WorkflowCommandService {
         return "{\"skillName\":\"" + escapeJson(skillName) + "\",\"toolCallId\":\"" + escapeJson(toolCallId) + "\"}";
     }
 
-    private String buildSkillCompletedPayload(String skillName, String toolCallId, SkillRunResult result, String nodeState, String nodeStateReason) {
+    private String buildSkillCompletedPayload(String skillName, String toolCallId, SkillRunResult result, String nodeState, String nodeStateReason, ArtifactEntity artifact) {
         StringBuilder sb = new StringBuilder();
         sb.append("{\"skillName\":\"").append(escapeJson(skillName)).append("\"");
         sb.append(",\"toolCallId\":\"").append(escapeJson(toolCallId)).append("\"");
         sb.append(",\"success\":").append(result.success());
+        if (artifact != null && artifact.getId() != null && !artifact.getId().isBlank()) {
+            String title = artifact.getTitle() == null ? "" : artifact.getTitle();
+            sb.append(",\"artifactId\":\"").append(escapeJson(artifact.getId())).append("\"");
+            sb.append(",\"artifactTitle\":\"").append(escapeJson(title)).append("\"");
+            sb.append(",\"title\":\"").append(escapeJson(title)).append("\"");
+        }
         if (!result.success() && result.errorMessage() != null && !result.errorMessage().isBlank()) {
             String errorMessage = result.errorMessage();
             sb.append(",\"isError\":true");
@@ -1888,23 +1894,7 @@ public class WorkflowCommandService {
         }
         sb.append("\n");
 
-        if (node.getInputArtifactId() != null) {
-            ArtifactEntity input = artifactMapper.findById(node.getInputArtifactId());
-            if (input != null && input.getContent() != null) {
-                sb.append("## 上游产物\n");
-                appendField(sb, "artifactId", input.getId());
-                appendField(sb, "title", input.getTitle());
-                appendField(sb, "type", input.getArtifactType());
-                appendField(sb, "sourceNodeInstanceId", input.getWorkflowNodeInstanceId());
-                sb.append("\n### 上游产物内容\n\n");
-                sb.append("```markdown\n");
-                sb.append(input.getContent());
-                sb.append("\n```\n\n");
-            }
-        } else {
-            sb.append("## 上游产物\n");
-            sb.append("无。该节点应基于工作项本身生成结果。\n\n");
-        }
+        appendUpstreamArtifacts(sb, node);
 
         appendResolvedInteractionHistory(sb, workItem.getId(), node.getId());
         appendSupplementalInput(sb, supplementalInput);
@@ -1920,6 +1910,61 @@ public class WorkflowCommandService {
         sb.append("- 如果当前 Runtime 不能使用 Question，再在输出末尾按 AgentCenter 节点状态协议声明 NEEDS_USER_INPUT。\n");
         sb.append("- 如果信息已经足够，请输出当前 Skill 的最终 Markdown 结果。\n");
         return sb.toString();
+    }
+
+    private void appendUpstreamArtifacts(StringBuilder sb, WorkflowNodeInstanceEntity node) {
+        List<ArtifactEntity> upstreamArtifacts = findUpstreamArtifacts(node);
+        sb.append("## 上游产物\n");
+        if (upstreamArtifacts.isEmpty()) {
+            sb.append("无。该节点应基于工作项本身生成结果。\n\n");
+            return;
+        }
+
+        if (upstreamArtifacts.size() > 1) {
+            sb.append("以下为当前节点之前所有已完成节点的产物，请综合使用；不要只依赖对话历史。\n\n");
+        }
+
+        for (int i = 0; i < upstreamArtifacts.size(); i++) {
+            ArtifactEntity input = upstreamArtifacts.get(i);
+            if (upstreamArtifacts.size() > 1) {
+                sb.append("### 上游产物 ").append(i + 1)
+                        .append("：").append(nonBlank(input.getTitle(), input.getId()))
+                        .append("\n");
+            }
+            appendField(sb, "artifactId", input.getId());
+            appendField(sb, "title", input.getTitle());
+            appendField(sb, "type", input.getArtifactType());
+            appendField(sb, "sourceNodeInstanceId", input.getWorkflowNodeInstanceId());
+            sb.append("\n### 上游产物内容\n\n");
+            sb.append("```markdown\n");
+            sb.append(input.getContent());
+            sb.append("\n```\n\n");
+        }
+    }
+
+    private List<ArtifactEntity> findUpstreamArtifacts(WorkflowNodeInstanceEntity node) {
+        java.util.Set<String> artifactIds = new java.util.LinkedHashSet<>();
+        Integer currentSequence = node.getSequenceNo();
+
+        if (node.getWorkflowInstanceId() != null && currentSequence != null) {
+            workflowMapper.findNodeInstancesByWorkflowInstanceId(node.getWorkflowInstanceId()).stream()
+                    .filter(candidate -> !node.getId().equals(candidate.getId()))
+                    .filter(candidate -> candidate.getSequenceNo() != null)
+                    .filter(candidate -> candidate.getSequenceNo() < currentSequence)
+                    .sorted(Comparator.comparingInt(WorkflowNodeInstanceEntity::getSequenceNo))
+                    .map(WorkflowNodeInstanceEntity::getOutputArtifactId)
+                    .filter(id -> id != null && !id.isBlank())
+                    .forEach(artifactIds::add);
+        }
+
+        if (node.getInputArtifactId() != null && !node.getInputArtifactId().isBlank()) {
+            artifactIds.add(node.getInputArtifactId());
+        }
+
+        return artifactIds.stream()
+                .map(artifactMapper::findById)
+                .filter(artifact -> artifact != null && artifact.getContent() != null)
+                .toList();
     }
 
     private void appendResolvedInteractionHistory(StringBuilder sb, String workItemId, String nodeInstanceId) {

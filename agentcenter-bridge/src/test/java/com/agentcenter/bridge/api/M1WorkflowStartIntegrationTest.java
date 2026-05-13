@@ -135,6 +135,14 @@ class M1WorkflowStartIntegrationTest {
                 assertThat(objectMapper.readTree(event.get("payloadJson").asText()).hasNonNull("toolCallId")).isTrue();
             }
         }
+        var completedEvent = java.util.stream.StreamSupport.stream(events.spliterator(), false)
+                .filter(e -> "SKILL_COMPLETED".equals(e.get("eventType").asText()))
+                .findFirst()
+                .orElseThrow();
+        var completedPayload = objectMapper.readTree(completedEvent.get("payloadJson").asText());
+        assertThat(completedPayload.get("artifactId").asText()).isEqualTo(firstNode.get("outputArtifactId").asText());
+        assertThat(completedPayload.get("artifactTitle").asText()).contains("PRD");
+        assertThat(completedPayload.get("title").asText()).isEqualTo(completedPayload.get("artifactTitle").asText());
         assertThat(java.util.stream.StreamSupport.stream(events.spliterator(), false)
                 .allMatch(e -> instanceId.equals(e.get("workflowInstanceId").asText()))).isTrue();
 
@@ -235,6 +243,41 @@ class M1WorkflowStartIntegrationTest {
         assertThat(pendingConfirmations.get(0).get("request_type")).isEqualTo("DECISION");
         assertThat(pendingConfirmations.get(0).get("workflow_node_instance_id")).isEqualTo(waitingNodeId);
         assertThat(pendingConfirmations.get(0).get("interaction_type")).isNotEqualTo("WORKFLOW_ADVANCE");
+    }
+
+    @Test
+    void startWorkflow_autoMode_lldInputIncludesAllCompletedUpstreamArtifacts() throws Exception {
+        String fe1234Id = findWorkItemIdByCode("FE1234");
+        TestWorkflowExecutorConfig.setSkillOutputForName(TestWorkflowExecutorConfig.HLD_SKILL_NAME, """
+                # HLD
+
+                测试 HLD 输出
+
+                <!-- AGENTCENTER_NODE_STATE
+                status: READY_TO_ADVANCE
+                reason: HLD complete
+                artifact_title: FE1234-方案设计 (HLD).md
+                -->
+                """.trim());
+
+        mockMvc.perform(
+                        post("/api/work-items/" + fe1234Id + "/start-workflow")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"mode\": \"AUTO\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.workflowInstance.status").value("COMPLETED"));
+
+        int lldInvocationIndex = TestWorkflowExecutorConfig.CAPTURED_SKILL_NAMES
+                .indexOf(TestWorkflowExecutorConfig.LLD_SKILL_NAME);
+        assertThat(lldInvocationIndex).isGreaterThanOrEqualTo(0);
+        String lldInputContext = TestWorkflowExecutorConfig.CAPTURED_INPUT_CONTEXTS.get(lldInvocationIndex);
+
+        assertThat(lldInputContext)
+                .contains("以下为当前节点之前所有已完成节点的产物")
+                .contains("FE1234-需求整理 (PRD).md")
+                .contains("测试 PRD 输出")
+                .contains("FE1234-方案设计 (HLD).md")
+                .contains("测试 HLD 输出");
     }
 
     @Test
