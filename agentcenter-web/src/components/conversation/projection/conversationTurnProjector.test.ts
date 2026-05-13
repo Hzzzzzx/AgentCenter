@@ -1258,6 +1258,34 @@ describe('projectConversationTurns', () => {
     expect(turns[0].answer.text).toContain('---')
   })
 
+  it('keeps context anchor as a visible execution step, not answer text', () => {
+    const turns = projectConversationTurns(makeInput({
+      runtimeEvents: [
+        makeEvent({
+          id: 'ev-context-anchor',
+          eventType: 'PROCESS_TRACE',
+          payloadJson: JSON.stringify({
+            kind: 'context_anchor',
+            status: 'completed',
+            title: '已恢复工作流上下文',
+            summary: '检测到 OpenCode 上下文压缩，已重新注入当前节点和上游产物。',
+          }),
+        }),
+      ],
+    }))
+
+    expect(turns).toHaveLength(1)
+    expect(turns[0].answer.text).toBe('')
+    expect(turns[0].steps).toHaveLength(1)
+    expect(turns[0].steps[0].kind).toBe('context')
+    expect(turns[0].steps[0].title).toBe('已恢复工作流上下文')
+    const part = turns[0].steps[0].parts[0]
+    expect(part.type).toBe('text')
+    if (part.type === 'text') {
+      expect(part.text).toContain('已重新注入当前节点')
+    }
+  })
+
   // ── 11. Empty input ──
   it('returns empty array for empty input', () => {
     const turns = projectConversationTurns(makeInput())

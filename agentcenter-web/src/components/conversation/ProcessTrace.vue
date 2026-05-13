@@ -226,6 +226,8 @@ function kindLabel(kind: string): string {
     case 'tool_call': return '工具调用'
     case 'node_status': return '状态'
     case 'confirmation': return '确认点'
+    case 'context_anchor': return '上下文恢复'
+    case 'compaction': return '上下文压缩'
     case 'error': return '异常'
     default: return '过程'
   }

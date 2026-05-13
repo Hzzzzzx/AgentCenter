@@ -159,6 +159,7 @@ class AgentSessionServiceTest {
                 mock(McpRegistryService.class),
                 mock(WorkItemMapper.class),
                 confirmationCreatedEventPayloadBuilder,
+                mock(WorkflowContextAnchorService.class),
                 2,
                 0);
     }

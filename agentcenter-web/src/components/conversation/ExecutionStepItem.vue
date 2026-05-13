@@ -58,6 +58,7 @@ function kindLabel(step: ExecutionStep): string {
     case 'status': return '状态'
     case 'error': return '异常'
     case 'subtask': return '子任务'
+    case 'context': return step.title === '已恢复工作流上下文' ? '上下文' : '过程'
     default: return '过程'
   }
 }

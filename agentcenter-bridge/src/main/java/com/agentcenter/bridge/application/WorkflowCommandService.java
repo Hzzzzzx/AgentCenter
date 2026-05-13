@@ -111,6 +111,7 @@ public class WorkflowCommandService {
     private final RuntimeGateway runtimeGateway;
     private final SkillRegistryService skillRegistryService;
     private final ConfirmationCreatedEventPayloadBuilder confirmationCreatedPayloadBuilder;
+    private final WorkflowContextAnchorService workflowContextAnchorService;
     private final IdGenerator idGenerator;
     private final RuntimeType workflowRuntimeType;
     private final ExecutorService workflowExecutor;
@@ -128,6 +129,7 @@ public class WorkflowCommandService {
                                    RuntimeGateway runtimeGateway,
                                    SkillRegistryService skillRegistryService,
                                    ConfirmationCreatedEventPayloadBuilder confirmationCreatedPayloadBuilder,
+                                   WorkflowContextAnchorService workflowContextAnchorService,
                                    IdGenerator idGenerator,
                                    @Value("${agentcenter.runtime.default-type:OPENCODE}") String defaultRuntimeType,
                                    @Qualifier("workflowExecutor") ExecutorService workflowExecutor) {
@@ -141,6 +143,7 @@ public class WorkflowCommandService {
         this.runtimeGateway = runtimeGateway;
         this.skillRegistryService = skillRegistryService;
         this.confirmationCreatedPayloadBuilder = confirmationCreatedPayloadBuilder;
+        this.workflowContextAnchorService = workflowContextAnchorService;
         this.idGenerator = idGenerator;
         this.workflowRuntimeType = RuntimeType.valueOf(defaultRuntimeType.toUpperCase());
         this.workflowExecutor = workflowExecutor;
@@ -730,13 +733,22 @@ public class WorkflowCommandService {
                 .filter(d -> d.getId().equals(node.getNodeDefinitionId()))
                 .findFirst().orElseThrow();
 
-        String inputContext = buildInputContext(workItem, node, nodeDef, supplementalInput);
+        WorkflowContextAnchorService.ContextAnchorDecision contextAnchor =
+                workflowContextAnchorService.decide(node.getAgentSessionId(), node.getId());
+        String inputContext = buildInputContext(
+                workItem,
+                node,
+                nodeDef,
+                supplementalInput,
+                workflowContextAnchorService.inputSection(contextAnchor));
         String skillName = nodeDef.getSkillName();
         List<ConfirmationRequestEntity> pendingBeforeRun = findPendingConfirmations(workItem.getId(), node.getId());
         WorkflowResumeState resumeState = buildResumeState(
                 instance, node, nodeDefs, nodeDef, workItem, skillName, pendingBeforeRun, idGenerator.nextId());
         String toolCallId = workflowToolCallId(node, skillName);
         insertWorkflowContextMessageIfAbsent(node.getAgentSessionId(), node, nodeDef, workItem, inputContext);
+        workflowContextAnchorService.publishContextAnchor(
+                contextAnchor, node.getAgentSessionId(), workItem.getId(), instance.getId(), node.getId());
 
         runtimeEventService.publishEvent(new RuntimeEventDto(
                 null, node.getAgentSessionId(), workItem.getId(),
@@ -1855,13 +1867,21 @@ public class WorkflowCommandService {
     private String buildInputContext(WorkItemEntity workItem,
                                      WorkflowNodeInstanceEntity node,
                                      WorkflowNodeDefinitionEntity nodeDef) {
-        return buildInputContext(workItem, node, nodeDef, null);
+        return buildInputContext(workItem, node, nodeDef, null, null);
     }
 
     private String buildInputContext(WorkItemEntity workItem,
                                      WorkflowNodeInstanceEntity node,
                                      WorkflowNodeDefinitionEntity nodeDef,
                                      String supplementalInput) {
+        return buildInputContext(workItem, node, nodeDef, supplementalInput, null);
+    }
+
+    private String buildInputContext(WorkItemEntity workItem,
+                                     WorkflowNodeInstanceEntity node,
+                                     WorkflowNodeDefinitionEntity nodeDef,
+                                     String supplementalInput,
+                                     String contextAnchorSection) {
         StringBuilder sb = new StringBuilder();
         sb.append("# 工作流节点执行输入\n\n");
         sb.append("## 工作项\n");
@@ -1894,6 +1914,7 @@ public class WorkflowCommandService {
         }
         sb.append("\n");
 
+        appendContextAnchor(sb, contextAnchorSection);
         appendUpstreamArtifacts(sb, node);
 
         appendResolvedInteractionHistory(sb, workItem.getId(), node.getId());
@@ -1910,6 +1931,13 @@ public class WorkflowCommandService {
         sb.append("- 如果当前 Runtime 不能使用 Question，再在输出末尾按 AgentCenter 节点状态协议声明 NEEDS_USER_INPUT。\n");
         sb.append("- 如果信息已经足够，请输出当前 Skill 的最终 Markdown 结果。\n");
         return sb.toString();
+    }
+
+    private void appendContextAnchor(StringBuilder sb, String contextAnchorSection) {
+        if (contextAnchorSection == null || contextAnchorSection.isBlank()) {
+            return;
+        }
+        sb.append(contextAnchorSection);
     }
 
     private void appendUpstreamArtifacts(StringBuilder sb, WorkflowNodeInstanceEntity node) {

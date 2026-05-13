@@ -1346,6 +1346,8 @@ function promptPayloadText(payload: Record<string, unknown>, keys: string[]): st
 function promptEventTitle(event: RuntimeEventDto, payload: Record<string, unknown>): string {
   const title = promptPayloadText(payload, ['title', 'label', 'summary'])
   if (event.eventType === 'PROCESS_TRACE' && payload.kind === 'prompt_debug') return '发送给运行引擎的 prompt_async 请求'
+  if (event.eventType === 'PROCESS_TRACE' && payload.kind === 'context_anchor') return '已恢复工作流上下文'
+  if (event.eventType === 'PROCESS_TRACE' && payload.kind === 'compaction') return 'OpenCode 上下文压缩'
   if (event.eventType === 'SKILL_STARTED') return `开始执行 Skill：${promptPayloadText(payload, ['skillName', 'label']) || '未命名'}`
   if (event.eventType === 'SKILL_COMPLETED') return `Skill 执行完成：${promptPayloadText(payload, ['skillName', 'label']) || '未命名'}`
   if (event.eventType === 'MCP_CALL') return `工具调用：${promptPayloadText(payload, ['toolName', 'command', 'label']) || 'MCP'}`
@@ -1360,6 +1362,8 @@ function promptEventTitle(event: RuntimeEventDto, payload: Record<string, unknow
 
 function promptEventNote(event: RuntimeEventDto, payload: Record<string, unknown>): string {
   if (event.eventType === 'PROCESS_TRACE' && payload.kind === 'prompt_debug') return '本轮输入给 Agent 的 prompt_async 请求，用来核对 Agent 收到了什么上下文。'
+  if (event.eventType === 'PROCESS_TRACE' && payload.kind === 'context_anchor') return '检测到压缩后，Bridge 为下一次工作流节点输入补回当前节点和上游产物锚点。'
+  if (event.eventType === 'PROCESS_TRACE' && payload.kind === 'compaction') return 'OpenCode 报告会话上下文已压缩，下一次工作流输入可能需要重新注入锚点。'
   if (event.eventType === 'ASSISTANT_DELTA') return 'Agent 的增量文本片段，通常会拼接进当前流式回复。'
   if (event.eventType === 'ASSISTANT_COMPLETED') return 'Agent 本轮回复结束信号，表示流式输出收束。'
   if (event.eventType === 'SKILL_STARTED') return '运行时开始调用 Skill。投影为 tool 类型 ExecutionStep，按 toolCallId 跟踪生命周期。'
@@ -1377,6 +1381,8 @@ function promptEventNote(event: RuntimeEventDto, payload: Record<string, unknown
 
 function promptEventUiDisplay(event: RuntimeEventDto, payload: Record<string, unknown>): string {
   if (event.eventType === 'PROCESS_TRACE' && payload.kind === 'prompt_debug') return '显示在 Prompt Debug 的输入区，不进入对话正文。'
+  if (event.eventType === 'PROCESS_TRACE' && payload.kind === 'context_anchor') return '显示为执行过程中的折叠记录；完整注入内容仍以 prompt_debug 为准。'
+  if (event.eventType === 'PROCESS_TRACE' && payload.kind === 'compaction') return '显示为运行过程事件，不进入对话正文。'
   if (event.eventType === 'ASSISTANT_DELTA') return '显示为对话区实时流式回复的一部分。'
   if (event.eventType === 'ASSISTANT_COMPLETED') return '通常不单独显示正文，只影响回复完成状态。'
   if (event.eventType === 'SKILL_STARTED' || event.eventType === 'SKILL_COMPLETED' || event.eventType === 'MCP_CALL' || payload.kind === 'tool_call') {
@@ -1443,6 +1449,8 @@ function isPromptDebugTimelineEvent(event: RuntimeEventDto, payload: Record<stri
     return payload.kind === 'tool_call'
       || payload.kind === 'reasoning_summary'
       || payload.kind === 'permission'
+      || payload.kind === 'context_anchor'
+      || payload.kind === 'compaction'
       || payload.kind === 'error'
   }
   return [

@@ -948,6 +948,38 @@ class OpenCodeRuntimeEventTranslatorTest {
         assertEquals("session.idle", result.get(0).payload().path("rawEventType").asText());
     }
 
+    @Test
+    void compactionPartProducesProcessTrace() throws Exception {
+        String json = """
+        {
+          "type": "message.part.updated",
+          "properties": {
+            "part": {
+              "type": "compaction",
+              "id": "compact_p1",
+              "messageID": "msg_compact_1",
+              "auto": true,
+              "tokens": {"before": 120000, "after": 18000}
+            }
+          }
+        }
+        """;
+        RuntimeRawEvent raw = rawEvent("message.part.updated", json);
+        List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
+
+        assertEquals(1, result.size());
+        RuntimeEventEnvelope env = result.get(0);
+        assertEquals(RuntimeEventTypes.PROCESS_TRACE, env.type());
+        assertEquals("compaction", env.payload().path("kind").asText());
+        assertEquals("completed", env.payload().path("status").asText());
+        assertEquals("上下文压缩", env.payload().path("title").asText());
+        assertEquals("OpenCode 自动压缩了上下文", env.payload().path("summary").asText());
+        assertEquals("message.part.updated", env.payload().path("rawEventType").asText());
+        assertEquals("compaction", env.payload().path("rawPartType").asText());
+        assertEquals("compact_p1", env.payload().path("partId").asText());
+        assertTrue(env.payload().has("tokens"));
+    }
+
     // --- New Mapping Tests: file, patch, artifact, retry, subtask, agent-handoff ---
 
     @Test

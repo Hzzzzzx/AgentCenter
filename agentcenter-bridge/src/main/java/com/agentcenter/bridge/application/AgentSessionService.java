@@ -85,6 +85,7 @@ public class AgentSessionService {
     private final McpRegistryService mcpRegistryService;
     private final WorkItemMapper workItemMapper;
     private final ConfirmationCreatedEventPayloadBuilder confirmationCreatedPayloadBuilder;
+    private final WorkflowContextAnchorService workflowContextAnchorService;
     private final int safeAutoRetryLimit;
     private final long safeAutoRetryBackoffMs;
     private final ExecutorService messageExecutor = Executors.newCachedThreadPool(runnable -> {
@@ -109,6 +110,7 @@ public class AgentSessionService {
                                McpRegistryService mcpRegistryService,
                                WorkItemMapper workItemMapper,
                                ConfirmationCreatedEventPayloadBuilder confirmationCreatedPayloadBuilder,
+                               WorkflowContextAnchorService workflowContextAnchorService,
                                @Value("${agentcenter.runtime.guard.retry-limit:2}") int safeAutoRetryLimit,
                                @Value("${agentcenter.runtime.guard.retry-backoff-ms:700}") long safeAutoRetryBackoffMs) {
         this.sessionMapper = sessionMapper;
@@ -127,6 +129,7 @@ public class AgentSessionService {
         this.mcpRegistryService = mcpRegistryService;
         this.workItemMapper = workItemMapper;
         this.confirmationCreatedPayloadBuilder = confirmationCreatedPayloadBuilder;
+        this.workflowContextAnchorService = workflowContextAnchorService;
         this.safeAutoRetryLimit = normalizeRetryLimit(safeAutoRetryLimit);
         this.safeAutoRetryBackoffMs = normalizeRetryBackoffMs(safeAutoRetryBackoffMs);
     }
@@ -299,6 +302,12 @@ public class AgentSessionService {
                                         WorkflowInstanceEntity instance,
                                         String nodeInstanceId,
                                         String requestedPrompt) {
+        if (nodeInstanceId != null && workflowContextAnchorService.recoveryRequired(session.getId(), nodeInstanceId)) {
+            workflowCommandService.resumeNodeAfterInteraction(
+                    nodeInstanceId, continueCurrentPrompt(requestedPrompt));
+            return;
+        }
+
         String now = java.time.LocalDateTime.now().format(SQLITE_DATETIME);
         instance.setStatus(WorkflowStatus.RUNNING.name());
         instance.setUpdatedAt(now);

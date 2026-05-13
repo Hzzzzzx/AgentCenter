@@ -148,6 +148,62 @@ class WorkflowMidSessionInputRoutingIntegrationTest {
     }
 
     @Test
+    void continueCurrentAfterOpenCodeCompactionResumesWithFullNodeContext() throws Exception {
+        StartedWorkflow wf = startWorkflowAndWait("FE1234");
+
+        jdbcTemplate.update("""
+                INSERT INTO runtime_event (
+                    id, session_id, work_item_id, workflow_instance_id, workflow_node_instance_id,
+                    event_type, event_source, payload_json, seq_no, created_at
+                ) VALUES (?, ?, ?, ?, ?, 'PROCESS_TRACE', 'OPENCODE', ?, 100, datetime('now'))
+                """,
+                "evt-compaction-" + wf.nodeInstanceId(),
+                wf.sessionId(),
+                wf.workItemId(),
+                wf.instanceId(),
+                wf.nodeInstanceId(),
+                """
+                {"kind":"compaction","status":"completed","title":"上下文压缩","summary":"OpenCode 自动压缩了上下文","rawPartType":"compaction"}
+                """.trim());
+
+        int skillCountBefore = TestWorkflowExecutorConfig.CAPTURED_SKILL_NAMES.size();
+
+        mockMvc.perform(post("/api/agent-sessions/" + wf.sessionId() + "/messages")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"请继续当前节点未完成的回答，不要重新开始节点，也不要重复发送或复述工作流节点提示词。\",\"workflowUserAction\":\"CONTINUE_CURRENT\",\"workflowNodeInstanceId\":\""
+                                + wf.nodeInstanceId() + "\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.role").value("USER"));
+
+        assertThat(TestWorkflowExecutorConfig.CAPTURED_SKILL_NAMES.size())
+                .isGreaterThan(skillCountBefore);
+        String lastInputContext = TestWorkflowExecutorConfig.CAPTURED_INPUT_CONTEXTS.get(
+                TestWorkflowExecutorConfig.CAPTURED_INPUT_CONTEXTS.size() - 1);
+        assertThat(lastInputContext)
+                .contains("## 上游产物")
+                .contains("测试 PRD 输出")
+                .contains("## AGENTCENTER_CONTEXT_ANCHOR")
+                .contains("RECOVERED_AFTER_OPENCODE_COMPACTION")
+                .contains("## AGENTCENTER_RESUME_STATE")
+                .contains("PENDING_USER_INTERACTION")
+                .contains("检测到 OpenCode 已发生上下文压缩")
+                .contains("请以 AgentCenter 本轮输入上下文中的工作项、当前节点、上游产物、待处理交互和用户回答为准");
+
+        List<Map<String, Object>> anchorEvents = jdbcTemplate.queryForList("""
+                SELECT payload_json
+                FROM runtime_event
+                WHERE session_id = ?
+                  AND workflow_node_instance_id = ?
+                  AND event_type = 'PROCESS_TRACE'
+                  AND payload_json LIKE '%"kind":"context_anchor"%'
+                """, wf.sessionId(), wf.nodeInstanceId());
+        assertThat(anchorEvents).hasSize(1);
+        assertThat(anchorEvents.get(0).get("payload_json").toString())
+                .contains("已恢复工作流上下文")
+                .contains("opencode_compaction");
+    }
+
+    @Test
     void pendingConfirmationRejectsCompressedReadyAdvance() throws Exception {
         StartedWorkflow wf = startWorkflowAndWait("FE1234");
         TestWorkflowExecutorConfig.setSkillOutputForName(TestWorkflowExecutorConfig.HLD_SKILL_NAME, """

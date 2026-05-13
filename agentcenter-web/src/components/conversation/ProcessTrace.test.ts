@@ -151,6 +151,25 @@ describe('ProcessTrace', () => {
     expect(wrapper.find('.process-trace').exists()).toBe(false)
   })
 
+  it('labels context anchor traces as context recovery', async () => {
+    const wrapper = mount(ProcessTrace, {
+      props: {
+        events: [
+          makeTraceEvent({
+            id: 'evt-context-anchor',
+            payloadJson: '{"kind":"context_anchor","status":"completed","title":"已恢复工作流上下文","summary":"已重新注入当前节点和上游产物"}',
+          }),
+        ],
+        nodeId: 'node-1',
+      },
+    })
+
+    await wrapper.find('.process-trace__toggle').trigger('click')
+
+    expect(wrapper.text()).toContain('上下文恢复')
+    expect(wrapper.text()).toContain('已重新注入当前节点和上游产物')
+  })
+
   it('does not create placeholder rows when showWhenEmpty is true', () => {
     const wrapper = mount(ProcessTrace, {
       props: {

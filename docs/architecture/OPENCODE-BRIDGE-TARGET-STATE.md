@@ -108,6 +108,15 @@ opencode serve --hostname 127.0.0.1 --port <managed-port>
 
 `opencode run --session` 可以续接 session，但仍然是命令式单次调用，不是目标架构。
 
+### 3.3 OpenCode 上下文压缩恢复
+
+OpenCode 可能在长会话中产生 `compaction` 消息片段，表示底层上下文已被压缩。AgentCenter 不能假设 Runtime 仍记得工作流当前节点、上游产物和待处理交互，应按以下规则恢复：
+
+- OpenCode Adapter 将 `part.type=compaction` 翻译为 `PROCESS_TRACE`，`payload.kind=compaction`。
+- Bridge 根据同一 `agent_session + workflow_node_instance` 的最近事件判断：当最近一次 `compaction` 晚于最近一次 `prompt_debug` 或 `context_anchor` 时，下一次工作流节点执行需要注入恢复锚点。
+- 恢复锚点不重复发送完整历史对话，只在本轮节点输入中声明压缩事实，并重新提供 AgentCenter 已持有的工作项、当前节点、上游产物和待处理交互。
+- 注入后 Bridge 发布 `PROCESS_TRACE kind=context_anchor`，前端只在执行过程里折叠展示“已恢复工作流上下文”；完整发送给 Runtime 的内容仍通过 `prompt_debug` 查看，不进入主对话正文。
+
 ## 4. 领域对象关系
 
 ```mermaid

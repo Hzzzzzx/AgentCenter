@@ -760,6 +760,9 @@ function normalizeMarkdownText(text: string): string {
 
 function stepTitle(payload: ParsedPayload, eventType: string, kind: StepKind): string {
   if (kind === 'context') {
+    if (payload.kind === 'context_anchor') {
+      return payloadText(payload, ['title', 'label']) || '已恢复工作流上下文'
+    }
     const text = renderableContextText(payload)
     if (text) {
       const heading = text.match(/(^|\n)#{1,6}[ \t]+([^\n]+)/)?.[2]?.trim()
@@ -832,7 +835,8 @@ function buildStepFromToolLifecycle(lifecycle: ToolLifecycle, order: number): Ex
 }
 
 function isVisibleExecutionStep(step: ExecutionStep): boolean {
-  if (step.kind === 'context' || step.kind === 'status') return false
+  if (step.kind === 'context') return isContextAnchorStep(step)
+  if (step.kind === 'status') return false
   if (step.parts.length === 0) return false
   if (step.kind === 'decision') {
     const decision = step.parts.find(part => part.type === 'decision')
@@ -846,6 +850,11 @@ function isVisibleExecutionStep(step: ExecutionStep): boolean {
     }
   }
   return step.parts.some(part => part.type !== 'raw')
+}
+
+function isContextAnchorStep(step: ExecutionStep): boolean {
+  return step.title === '已恢复工作流上下文'
+    && step.parts.some(part => part.type === 'text')
 }
 
 function isGenericInteractionQuestion(question: string | undefined): boolean {
