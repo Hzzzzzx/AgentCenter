@@ -4,12 +4,15 @@ import type {
   ProjectDataSnapshotDto,
   ProjectDataSyncHistoryDto,
   UpdateProjectDataProviderRequest,
+  UpdateProjectDataScopeRequest,
 } from './types'
 
 export const projectDataProviderApi = {
   settings: () => get<ProjectDataProviderSettingsDto>('/project-data-providers'),
   setActive: (data: UpdateProjectDataProviderRequest) =>
     put<ProjectDataProviderSettingsDto>('/project-data-providers/active', data),
+  setActiveScope: (data: UpdateProjectDataScopeRequest) =>
+    put<ProjectDataProviderSettingsDto>('/project-data-providers/active-scope', data),
   snapshot: () => get<ProjectDataSnapshotDto>('/project-data-providers/snapshot'),
   sync: () => post<ProjectDataSnapshotDto>('/project-data-providers/sync'),
   syncHistory: (providerId?: string, limit = 20) => {

@@ -1,7 +1,12 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { projectDataProviderApi } from '../api/projectDataProviders'
-import type { ProjectDataProviderDto, StartWorkflowRequest } from '../api/types'
+import type {
+  ProjectDataProviderDto,
+  ProjectDataProviderSettingsDto,
+  StartWorkflowRequest,
+  UpdateProjectDataScopeRequest,
+} from '../api/types'
 
 const STORAGE_KEY = 'agentcenter.runtimeSettings'
 const DEFAULT_BATCH_START_WORKFLOW_LIMIT = 5
@@ -20,6 +25,9 @@ export const useRuntimeSettingsStore = defineStore('runtimeSettings', () => {
   const batchStartWorkflowLimit = ref(DEFAULT_BATCH_START_WORKFLOW_LIMIT)
   const projectDataProviders = ref<ProjectDataProviderDto[]>([])
   const activeProjectDataProviderId = ref('')
+  const activeExternalProjectId = ref<string | null>(null)
+  const activeExternalSpaceId = ref<string | null>(null)
+  const activeExternalIterationId = ref<string | null>(null)
   const projectDataProviderLoading = ref(false)
 
   const workflowRunMode = computed<NonNullable<StartWorkflowRequest['mode']>>(() =>
@@ -45,8 +53,7 @@ export const useRuntimeSettingsStore = defineStore('runtimeSettings', () => {
     projectDataProviderLoading.value = true
     try {
       const settings = await projectDataProviderApi.settings()
-      projectDataProviders.value = settings.providers
-      activeProjectDataProviderId.value = settings.activeProviderId
+      applyProjectDataProviderSettings(settings)
     } finally {
       projectDataProviderLoading.value = false
     }
@@ -57,11 +64,28 @@ export const useRuntimeSettingsStore = defineStore('runtimeSettings', () => {
     projectDataProviderLoading.value = true
     try {
       const settings = await projectDataProviderApi.setActive({ providerId })
-      projectDataProviders.value = settings.providers
-      activeProjectDataProviderId.value = settings.activeProviderId
+      applyProjectDataProviderSettings(settings)
     } finally {
       projectDataProviderLoading.value = false
     }
+  }
+
+  async function setProjectDataScope(scope: UpdateProjectDataScopeRequest) {
+    projectDataProviderLoading.value = true
+    try {
+      const settings = await projectDataProviderApi.setActiveScope(scope)
+      applyProjectDataProviderSettings(settings)
+    } finally {
+      projectDataProviderLoading.value = false
+    }
+  }
+
+  function applyProjectDataProviderSettings(settings: ProjectDataProviderSettingsDto) {
+    projectDataProviders.value = settings.providers
+    activeProjectDataProviderId.value = settings.activeProviderId
+    activeExternalProjectId.value = settings.activeExternalProjectId ?? null
+    activeExternalSpaceId.value = settings.activeExternalSpaceId ?? null
+    activeExternalIterationId.value = settings.activeExternalIterationId ?? null
   }
 
   function initFromStorage() {
@@ -104,6 +128,9 @@ export const useRuntimeSettingsStore = defineStore('runtimeSettings', () => {
     batchStartWorkflowLimit,
     projectDataProviders,
     activeProjectDataProviderId,
+    activeExternalProjectId,
+    activeExternalSpaceId,
+    activeExternalIterationId,
     projectDataProviderLoading,
     workflowRunMode,
     setAutoRunWorkflow,
@@ -111,6 +138,8 @@ export const useRuntimeSettingsStore = defineStore('runtimeSettings', () => {
     setBatchStartWorkflowLimit,
     loadProjectDataProviders,
     setProjectDataProvider,
+    setProjectDataScope,
+    applyProjectDataProviderSettings,
     initFromStorage,
   }
 })

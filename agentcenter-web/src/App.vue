@@ -20,7 +20,7 @@ import { useWorkItemStore } from './stores/workItems'
 import { useRuntimeSettingsStore } from './stores/runtimeSettings'
 import { useWorkItemWorkflowProjectionStore } from './stores/workItemWorkflowProjection'
 import { DEFAULT_PROJECT_ID } from './constants/projects'
-import type { AgentSessionDto, ArtifactDto, ProjectDataSnapshotDto, StartWorkflowResponse, WorkItemType } from './api/types'
+import type { AgentSessionDto, ArtifactDto, ProjectDataSnapshotDto, StartWorkflowResponse, WorkItemDto, WorkItemType } from './api/types'
 import type { ProjectContextOptions, ProjectContextSelection } from './types/projectContext'
 
 type BatchStartWorkflowsPayload = {
@@ -50,6 +50,7 @@ const projectContextOptions = reactive<ProjectContextOptions>({
 const projectContexts = ref<ProjectContextSelection[]>([])
 const activeProjectContextId = ref(projectContexts.value[0]?.id ?? '')
 const projectContextSyncing = ref(false)
+const projectContextSaving = ref(false)
 const projectContext = computed<ProjectContextSelection>({
   get: () => (
     projectContexts.value.find((item) => item.id === activeProjectContextId.value)
@@ -88,6 +89,12 @@ const workItemStore = useWorkItemStore()
 const runtimeSettingsStore = useRuntimeSettingsStore()
 const workflowProjectionStore = useWorkItemWorkflowProjectionStore()
 const refreshTimerIds = new Set<number>()
+const workflowWatchTimerByWorkItemId = new Map<string, number>()
+const workflowWatchAttemptsByWorkItemId = new Map<string, number>()
+const workflowRefreshDelaysMs = [600, 1500, 3000, 5000, 8000, 12000]
+const workflowWatchDelayMs = 15000
+const workflowWatchIntervalMs = 15000
+const workflowWatchMaxAttempts = 80
 
 onMounted(async () => {
   runtimeSettingsStore.initFromStorage()
@@ -111,6 +118,8 @@ onUnmounted(() => {
     window.clearTimeout(timerId)
   }
   refreshTimerIds.clear()
+  workflowWatchTimerByWorkItemId.clear()
+  workflowWatchAttemptsByWorkItemId.clear()
 })
 
 async function refreshWorkItemState() {
@@ -121,10 +130,11 @@ async function refreshWorkItemState() {
   await confirmationStore.loadPending()
 }
 
-async function refreshOneWorkItemState(workItemId: string) {
+async function refreshOneWorkItemState(workItemId: string): Promise<WorkItemDto> {
   workItemStore.setScope(scopeForProjectContext())
-  await workflowProjectionStore.syncWorkItem(workItemId)
+  const item = await workflowProjectionStore.syncWorkItem(workItemId)
   await workItemStore.loadOverview()
+  return item
 }
 
 function scopeForProjectContext() {
@@ -153,8 +163,7 @@ function unique(values: string[]) {
 }
 
 function queueWorkflowRefresh(workItemId?: string | null) {
-  const delays = [600, 1500, 3000, 5000, 8000, 12000]
-  for (const delay of delays) {
+  for (const delay of workflowRefreshDelaysMs) {
     const timerId = window.setTimeout(async () => {
       refreshTimerIds.delete(timerId)
       if (workItemId) {
@@ -166,6 +175,72 @@ function queueWorkflowRefresh(workItemId?: string | null) {
     }, delay)
     refreshTimerIds.add(timerId)
   }
+  if (workItemId) {
+    startWorkflowWatch(workItemId)
+  }
+}
+
+function startWorkflowWatch(workItemId: string) {
+  clearWorkflowWatch(workItemId)
+  workflowWatchAttemptsByWorkItemId.set(workItemId, 0)
+  scheduleWorkflowWatch(workItemId, workflowWatchDelayMs)
+}
+
+function scheduleWorkflowWatch(workItemId: string, delayMs: number) {
+  const timerId = window.setTimeout(async () => {
+    refreshTimerIds.delete(timerId)
+    workflowWatchTimerByWorkItemId.delete(workItemId)
+
+    const attempts = workflowWatchAttemptsByWorkItemId.get(workItemId) ?? 0
+    const shouldContinue = await refreshWorkflowAndShouldContinue(workItemId)
+    if (!shouldContinue) {
+      workflowWatchAttemptsByWorkItemId.delete(workItemId)
+      return
+    }
+
+    const nextAttempts = attempts + 1
+    if (nextAttempts >= workflowWatchMaxAttempts) {
+      workflowWatchAttemptsByWorkItemId.delete(workItemId)
+      return
+    }
+
+    workflowWatchAttemptsByWorkItemId.set(workItemId, nextAttempts)
+    scheduleWorkflowWatch(workItemId, workflowWatchIntervalMs)
+  }, delayMs)
+
+  workflowWatchTimerByWorkItemId.set(workItemId, timerId)
+  refreshTimerIds.add(timerId)
+}
+
+function clearWorkflowWatch(workItemId: string) {
+  const timerId = workflowWatchTimerByWorkItemId.get(workItemId)
+  if (timerId !== undefined) {
+    window.clearTimeout(timerId)
+    refreshTimerIds.delete(timerId)
+  }
+  workflowWatchTimerByWorkItemId.delete(workItemId)
+}
+
+async function refreshWorkflowAndShouldContinue(workItemId: string): Promise<boolean> {
+  try {
+    const item = await refreshOneWorkItemState(workItemId)
+    await confirmationStore.loadPending()
+    return shouldContinueWorkflowWatch(item)
+  } catch (error) {
+    console.error('Failed to refresh running workflow state:', error)
+    return true
+  }
+}
+
+function shouldContinueWorkflowWatch(item: WorkItemDto): boolean {
+  const projection = workflowProjectionStore.projectionFor(item)
+  const workflowStatus = projection.workflowInstance?.status ?? item.workflowSummary?.status ?? null
+  if (workflowStatus === 'RUNNING') {
+    return true
+  }
+  return projection.commandState === 'RUNNING'
+    || projection.commandState === 'STARTING'
+    || projection.nodes.some((node) => node.status === 'RUNNING')
 }
 
 function handleSelectWorkItem(id: string) {
@@ -332,6 +407,9 @@ async function loadProjectDataSnapshot(sync: boolean) {
   const snapshot = sync
     ? await projectDataProviderApi.sync()
     : await projectDataProviderApi.snapshot()
+  if (sync) {
+    await runtimeSettingsStore.loadProjectDataProviders()
+  }
   applyProjectDataSnapshot(snapshot)
 }
 
@@ -356,10 +434,67 @@ function applyProjectDataSnapshot(snapshot: ProjectDataSnapshotDto) {
     active: context.active,
     extraJson: context.extraJson,
   }))
-  activeProjectContextId.value = projectContexts.value.find((context) => context.active)?.id
+  activeProjectContextId.value = projectContexts.value.find(matchesSavedProjectScope)?.id
+    ?? projectContexts.value.find((context) => context.active)?.id
     ?? projectContexts.value.find((context) => context.id === activeProjectContextId.value)?.id
     ?? projectContexts.value[0]?.id
     ?? ''
+}
+
+function matchesSavedProjectScope(context: ProjectContextSelection) {
+  const externalProjectId = runtimeSettingsStore.activeExternalProjectId
+  if (!externalProjectId || context.externalProjectId !== externalProjectId) return false
+  const externalSpaceId = runtimeSettingsStore.activeExternalSpaceId
+  if (externalSpaceId && context.externalSpaceId !== externalSpaceId) return false
+  const externalIterationId = runtimeSettingsStore.activeExternalIterationId
+  if (externalIterationId && context.externalIterationId !== externalIterationId) return false
+  return true
+}
+
+async function handleSaveProjectContext(context: ProjectContextSelection) {
+  if (!context.id || projectContextSaving.value) return
+  projectContextSaving.value = true
+  try {
+    await runtimeSettingsStore.setProjectDataScope({
+      providerId: runtimeSettingsStore.activeProjectDataProviderId || null,
+      projectId: scopeProjectIdFor(context),
+      spaceId: firstNonBlank(context.externalSpaceId, context.space),
+      iterationId: firstNonBlank(context.externalIterationId, context.iteration),
+      externalProjectId: firstNonBlank(context.externalProjectId, context.project),
+      externalSpaceId: firstNonBlank(context.externalSpaceId, context.space),
+      externalIterationId: firstNonBlank(context.externalIterationId, context.iteration),
+    })
+    projectContext.value = context
+    await refreshWorkItemState()
+    notificationStore.push({
+      anchor: 'right-panel',
+      tone: 'success',
+      title: '项目选择已保存',
+      message: '已按企业同步源的稳定 ID 更新当前项目、空间和迭代。',
+      durationMs: 3200,
+    })
+  } catch (e) {
+    notificationStore.push({
+      anchor: 'right-panel',
+      tone: 'error',
+      title: '保存项目选择失败',
+      message: e instanceof Error ? e.message : '请先同步企业项目数据后重试',
+      durationMs: 5200,
+    })
+  } finally {
+    projectContextSaving.value = false
+  }
+}
+
+function handleTitleProjectContextUpdate(value: ProjectContextSelection) {
+  const matched = projectContexts.value.find((context) =>
+    context.project === value.project
+    && context.space === value.space
+    && context.iteration === value.iteration
+  )
+  if (matched) {
+    void handleSaveProjectContext(matched)
+  }
 }
 
 function rememberConversationReturnView() {
@@ -410,13 +545,6 @@ watch(
   }
 )
 
-watch(
-  () => `${activeProjectContextId.value}:${projectContext.value.project}:${projectContext.value.space}:${projectContext.value.iteration}`,
-  (next, previous) => {
-    if (!previous || next === previous) return
-    void refreshWorkItemState()
-  }
-)
 </script>
 
 <template>
@@ -434,7 +562,7 @@ watch(
     @start-workflow="handleStartWorkflow"
     @enter-work-item-conversation="handleEnterWorkItemConversation"
     @confirmations-changed="handleConfirmationsChanged"
-    @update-project-context="projectContext = $event"
+    @update-project-context="handleTitleProjectContextUpdate"
     @close-artifact="selectedArtifact = null"
   >
     <template #center>
@@ -458,7 +586,9 @@ watch(
         :active-context-id="activeProjectContextId"
         :options="projectContextOptions"
         :syncing="projectContextSyncing"
+        :saving="projectContextSaving"
         @update:active-context-id="activeProjectContextId = $event"
+        @save-selection="handleSaveProjectContext"
         @sync-data="handleSyncProjectContextData"
       />
       <SkillManagement v-else-if="activeView === 'settings' && settingsTab === 'skills'" :project-id="activeProjectId" />

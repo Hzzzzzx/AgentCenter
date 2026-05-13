@@ -4,6 +4,7 @@ import com.agentcenter.bridge.api.dto.ProjectDataProviderSettingsDto;
 import com.agentcenter.bridge.api.dto.ProjectDataSnapshotDto;
 import com.agentcenter.bridge.api.dto.ProjectDataSyncHistoryDto;
 import com.agentcenter.bridge.api.dto.UpdateProjectDataProviderRequest;
+import com.agentcenter.bridge.api.dto.UpdateProjectDataScopeRequest;
 import com.agentcenter.bridge.application.projectcontext.ProjectDataProviderSettingsService;
 import com.agentcenter.bridge.application.projectcontext.ProjectDataSyncService;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -37,6 +38,11 @@ public class ProjectDataProviderController {
     @PutMapping("/active")
     public ProjectDataProviderSettingsDto setActive(@RequestBody UpdateProjectDataProviderRequest request) {
         return settingsService.setActiveProvider(request.providerId());
+    }
+
+    @PutMapping("/active-scope")
+    public ProjectDataProviderSettingsDto setActiveScope(@RequestBody UpdateProjectDataScopeRequest request) {
+        return settingsService.setActiveScope(request);
     }
 
     @GetMapping("/snapshot")

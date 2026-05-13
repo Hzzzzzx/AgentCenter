@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { ProjectContextOptions, ProjectContextSelection } from '../types/projectContext'
 
 const props = defineProps<{
@@ -8,16 +8,23 @@ const props = defineProps<{
   activeContextId: string
   options: ProjectContextOptions
   syncing?: boolean
+  saving?: boolean
 }>()
 
 const emit = defineEmits<{
   'update:modelValue': [value: ProjectContextSelection]
   'update:activeContextId': [value: string]
+  'save-selection': [value: ProjectContextSelection]
   'sync-data': []
 }>()
 
 type ProjectContextField = keyof Omit<ProjectContextSelection, 'id'>
 
+const draftContextId = ref(props.modelValue.id)
+const draftContext = computed(() =>
+  props.contexts.find((context) => context.id === draftContextId.value)
+  ?? props.modelValue
+)
 const projectOptions = computed(() => unique(props.contexts.map((context) => context.project)))
 const cloudeReqProjectOptions = computed(() =>
   unique(contextsForProject().map((context) => context.cloudeReqProject))
@@ -38,8 +45,13 @@ function updateSelection(field: ProjectContextField, event: Event) {
 }
 
 function selectContext(context: ProjectContextSelection) {
-  emit('update:activeContextId', context.id)
-  emit('update:modelValue', context)
+  draftContextId.value = context.id
+}
+
+function saveSelection() {
+  const context = draftContext.value
+  if (!context.id) return
+  emit('save-selection', context)
 }
 
 function findContextFor(field: ProjectContextField, value: string) {
@@ -62,14 +74,14 @@ function findContextFor(field: ProjectContextField, value: string) {
 }
 
 function contextsForProject() {
-  const project = props.modelValue.project
+  const project = draftContext.value.project
   const matches = props.contexts.filter((context) => context.project === project)
   return matches.length > 0 ? matches : props.contexts
 }
 
 function contextsForProjectAndSpace() {
-  const project = props.modelValue.project
-  const space = props.modelValue.space
+  const project = draftContext.value.project
+  const space = draftContext.value.space
   const matches = props.contexts.filter((context) =>
     context.project === project && context.space === space
   )
@@ -79,6 +91,26 @@ function contextsForProjectAndSpace() {
 function unique(values: Array<string | null | undefined>) {
   return Array.from(new Set(values.filter((value): value is string => Boolean(value))))
 }
+
+watch(
+  () => props.modelValue.id,
+  (id) => {
+    draftContextId.value = id
+  }
+)
+
+watch(
+  () => props.contexts,
+  (contexts) => {
+    if (contexts.length === 0) {
+      draftContextId.value = ''
+      return
+    }
+    if (!contexts.some((context) => context.id === draftContextId.value)) {
+      draftContextId.value = props.modelValue.id || contexts[0].id
+    }
+  }
+)
 </script>
 
 <template>
@@ -88,9 +120,14 @@ function unique(values: Array<string | null | undefined>) {
         <h1 class="project-context__title">项目管理</h1>
         <p class="project-context__subtitle">维护当前工作台的项目、企业数据源和生效上下文。</p>
       </div>
-      <button class="project-context__sync" type="button" :disabled="props.syncing" @click="emit('sync-data')">
-        {{ props.syncing ? '同步中' : '同步数据' }}
-      </button>
+      <div class="project-context__actions">
+        <button class="project-context__save" type="button" :disabled="props.saving || !draftContext.id" @click="saveSelection">
+          {{ props.saving ? '保存中' : '保存选择' }}
+        </button>
+        <button class="project-context__sync" type="button" :disabled="props.syncing" @click="emit('sync-data')">
+          {{ props.syncing ? '同步中' : '同步数据' }}
+        </button>
+      </div>
     </header>
 
     <div class="project-context__layout">
@@ -113,6 +150,7 @@ function unique(values: Array<string | null | undefined>) {
             <span class="project-context__item-top">
               <strong>{{ context.project }}</strong>
               <em v-if="context.id === props.activeContextId">生效中</em>
+              <em v-else-if="context.id === draftContext.id">待保存</em>
             </span>
             <span class="project-context__item-meta">
               <span>{{ context.cloudeReqProject }}</span>
@@ -130,7 +168,7 @@ function unique(values: Array<string | null | undefined>) {
         <div class="project-context__panel-head">
           <div>
             <strong>当前生效上下文</strong>
-            <span>从后端同步源选择，切换后立即影响工作台筛选</span>
+            <span>从企业同步源选择，保存后影响工作台筛选</span>
           </div>
         </div>
 
@@ -139,7 +177,7 @@ function unique(values: Array<string | null | undefined>) {
             <span>项目</span>
             <select
               aria-label="选择项目"
-              :value="props.modelValue.project"
+              :value="draftContext.project"
               :disabled="projectOptions.length === 0"
               @change="updateSelection('project', $event)"
             >
@@ -154,7 +192,7 @@ function unique(values: Array<string | null | undefined>) {
             <span>CloudeReq 项目</span>
             <select
               aria-label="选择 CloudeReq 项目"
-              :value="props.modelValue.cloudeReqProject"
+              :value="draftContext.cloudeReqProject"
               :disabled="cloudeReqProjectOptions.length === 0"
               @change="updateSelection('cloudeReqProject', $event)"
             >
@@ -169,7 +207,7 @@ function unique(values: Array<string | null | undefined>) {
             <span>空间</span>
             <select
               aria-label="选择空间"
-              :value="props.modelValue.space"
+              :value="draftContext.space"
               :disabled="spaceOptions.length === 0"
               @change="updateSelection('space', $event)"
             >
@@ -184,7 +222,7 @@ function unique(values: Array<string | null | undefined>) {
             <span>迭代</span>
             <select
               aria-label="选择迭代"
-              :value="props.modelValue.iteration"
+              :value="draftContext.iteration"
               :disabled="iterationOptions.length === 0"
               @change="updateSelection('iteration', $event)"
             >
@@ -231,7 +269,14 @@ function unique(values: Array<string | null | undefined>) {
   font-size: 13px;
 }
 
+.project-context__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .project-context__sync,
+.project-context__save,
 .project-context__add {
   appearance: none;
   display: inline-flex;
@@ -251,14 +296,21 @@ function unique(values: Array<string | null | undefined>) {
 }
 
 .project-context__sync:hover,
+.project-context__save:hover,
 .project-context__add:hover {
   filter: brightness(0.96);
 }
 
-.project-context__sync:disabled {
+.project-context__sync:disabled,
+.project-context__save:disabled {
   cursor: default;
   opacity: 0.58;
   filter: grayscale(0.2);
+}
+
+.project-context__save {
+  color: var(--accent-blue);
+  background: var(--bg-card);
 }
 
 .project-context__layout {

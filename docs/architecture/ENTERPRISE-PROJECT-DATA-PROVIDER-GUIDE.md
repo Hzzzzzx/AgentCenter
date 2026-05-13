@@ -1,6 +1,7 @@
 # 企业项目数据 Provider 接入指南
 
 > 适用版本：本次整改后的 Project Data Provider 版本。目标是企业内部只实现一个后端 Provider，不改前端 mock、不改 AgentCenter Web，即可切换到企业内部项目、空间、迭代、FE/US/TASK/WORK/BUG/VULN 和项目级任务编排数据。
+> 设计优先级：企业内部真实数据源是主契约；`fixture-alpha` / `fixture-beta` 只作为外部开发、演示和回归测试用 mock Provider，必须迁就企业 Provider 的交互和字段语义。
 
 ## 和上一版的差异
 
@@ -11,6 +12,8 @@
 | 项目/空间/迭代选项 | 只能来自 Bridge 的 `/api/project-data-providers/sync` 或 `/snapshot` |
 | 前端 mock | 不允许作为运行数据源；本地测试数据也必须由后端 fixture provider 返回 |
 | 工作项查询 | 必须带 `providerId + projectId + spaceId + iterationId` 过滤；其中筛选键来自稳定外部 id，不使用展示名 |
+| 选择保存 | “选择项目/空间/迭代”和“同步数据”分离；保存选择写入 Bridge active scope，sync 不覆盖已保存选择 |
+| 同步结果 | `sync` 返回 `syncStats.total/created/updated/skipped/failed`，便于企业内部联调判断本次同步效果 |
 | 同步审计 | 每次 sync 写入 `project_data_sync_history` |
 | 任务编排 | `workflow_definition` 增加 `project_id`，sync 会为每个项目补齐 FE 默认工作流副本，按当前项目加载/保存，启动工作流按工作项项目优先匹配 |
 | 扩展字段 | 使用 `extraJson`，不直接扩 AgentCenter 公共表结构 |
@@ -155,6 +158,7 @@ new ProjectDataSnapshotDto(
 |--------|----------|------|
 | `GET` | `/api/project-data-providers` | Provider 列表、当前 provider、当前生效 scope |
 | `PUT` | `/api/project-data-providers/active` | 切换全局 provider |
+| `PUT` | `/api/project-data-providers/active-scope` | 保存当前项目/空间/迭代选择，不触发同步 |
 | `GET` | `/api/project-data-providers/snapshot` | 只读快照，不写库 |
 | `POST` | `/api/project-data-providers/sync` | 拉取 provider 快照并写库 |
 | `GET` | `/api/project-data-providers/sync-history?providerId=&limit=` | 同步历史 |
@@ -164,6 +168,19 @@ new ProjectDataSnapshotDto(
 | `PUT` | `/api/workflow-definitions/{id}` | 保存当前项目任务编排新版本 |
 
 企业内部适配完成后，验证重点是前端请求必须出现 `providerId`，并且切换迭代后 `projectId/spaceId/iterationId` 一起变化。`projectId` 应该形如 `enterprise-cloudereq:PROJ-1001`，`spaceId/iterationId` 应该是企业接口的稳定 id，而不是中文展示名。
+
+保存选择请求示例：
+
+```json
+{
+  "providerId": "enterprise-cloudereq",
+  "externalProjectId": "PROJ-1001",
+  "externalSpaceId": "SPACE-20",
+  "externalIterationId": "ITER-2026-05"
+}
+```
+
+保存成功后，`GET /api/project-data-providers` 会返回 `activeExternalProjectId`、`activeExternalSpaceId`、`activeExternalIterationId`。前端据此回显当前生效上下文；再次 `POST /api/project-data-providers/sync` 时，如果该 scope 仍存在，Bridge 会保留它，不会被 Provider 默认 active context 覆盖。
 
 ## 扩展字段策略
 

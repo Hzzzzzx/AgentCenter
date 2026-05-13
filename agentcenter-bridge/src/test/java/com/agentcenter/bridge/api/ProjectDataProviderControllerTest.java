@@ -43,7 +43,8 @@ class ProjectDataProviderControllerTest {
             mockMvc.perform(post("/api/project-data-providers/sync"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.providerId").value("fixture-beta"))
-                    .andExpect(jsonPath("$.contexts[0].project").value("企业中台"));
+                    .andExpect(jsonPath("$.contexts[0].project").value("企业中台"))
+                    .andExpect(jsonPath("$.syncStats.total").value(6));
 
             mockMvc.perform(get("/api/project-data-providers/sync-history")
                             .param("providerId", "fixture-beta"))
@@ -88,6 +89,22 @@ class ProjectDataProviderControllerTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$[?(@.projectId == 'fixture-beta:beta-project-security' && @.workItemType == 'FE' && @.isDefault == true)]").exists());
 
+            mockMvc.perform(put("/api/project-data-providers/active-scope")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {
+                                      "providerId":"fixture-beta",
+                                      "externalProjectId":"beta-project-security",
+                                      "externalSpaceId":"beta-space-security",
+                                      "externalIterationId":"beta-long-governance"
+                                    }
+                                    """))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.activeProviderId").value("fixture-beta"))
+                    .andExpect(jsonPath("$.activeExternalProjectId").value("beta-project-security"))
+                    .andExpect(jsonPath("$.activeExternalSpaceId").value("beta-space-security"))
+                    .andExpect(jsonPath("$.activeExternalIterationId").value("beta-long-governance"));
+
             Integer provisionedFeWorkflowCount = jdbcTemplate.queryForObject("""
                     SELECT COUNT(*) FROM workflow_definition
                     WHERE project_id IN ('fixture-beta:beta-project-enterprise', 'fixture-beta:beta-project-security')
@@ -107,7 +124,15 @@ class ProjectDataProviderControllerTest {
 
             mockMvc.perform(post("/api/project-data-providers/sync"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.providerId").value("fixture-beta"));
+                    .andExpect(jsonPath("$.providerId").value("fixture-beta"))
+                    .andExpect(jsonPath("$.syncStats.total").value(6));
+
+            mockMvc.perform(get("/api/project-data-providers"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.activeProviderId").value("fixture-beta"))
+                    .andExpect(jsonPath("$.activeExternalProjectId").value("beta-project-security"))
+                    .andExpect(jsonPath("$.activeExternalSpaceId").value("beta-space-security"))
+                    .andExpect(jsonPath("$.activeExternalIterationId").value("beta-long-governance"));
 
             Integer provisionedFeWorkflowCountAfterResync = jdbcTemplate.queryForObject("""
                     SELECT COUNT(*) FROM workflow_definition

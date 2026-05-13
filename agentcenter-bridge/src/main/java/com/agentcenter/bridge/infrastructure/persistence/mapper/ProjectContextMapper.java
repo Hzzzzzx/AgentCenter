@@ -19,6 +19,7 @@ public interface ProjectContextMapper {
     ProjectContextEntity findContextByProviderAndExternalProjectId(
             @Param("providerId") String providerId,
             @Param("externalProjectId") String externalProjectId);
+    ProjectContextEntity findContextById(@Param("id") String id);
     void clearActiveContexts(@Param("providerId") String providerId);
     void insertContext(ProjectContextEntity entity);
     void updateContext(ProjectContextEntity entity);
@@ -27,6 +28,7 @@ public interface ProjectContextMapper {
             @Param("providerId") String providerId,
             @Param("projectContextId") String projectContextId,
             @Param("externalSpaceId") String externalSpaceId);
+    ProjectSpaceEntity findSpaceById(@Param("id") String id);
     void insertSpace(ProjectSpaceEntity entity);
     void updateSpace(ProjectSpaceEntity entity);
 
@@ -34,6 +36,7 @@ public interface ProjectContextMapper {
             @Param("providerId") String providerId,
             @Param("projectSpaceId") String projectSpaceId,
             @Param("externalIterationId") String externalIterationId);
+    ProjectIterationEntity findIterationById(@Param("id") String id);
     void insertIteration(ProjectIterationEntity entity);
     void updateIteration(ProjectIterationEntity entity);
 

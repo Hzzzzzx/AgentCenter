@@ -2,6 +2,7 @@ package com.agentcenter.bridge.application.projectcontext;
 
 import com.agentcenter.bridge.api.dto.ProjectDataSnapshotDto;
 import com.agentcenter.bridge.api.dto.ProjectDataSyncHistoryDto;
+import com.agentcenter.bridge.api.dto.ProjectDataSyncStatsDto;
 import com.agentcenter.bridge.api.dto.ProjectProviderWorkItemDto;
 import com.agentcenter.bridge.api.dto.ProjectContextDto;
 import com.agentcenter.bridge.infrastructure.id.IdGenerator;
@@ -68,16 +69,26 @@ public class ProjectDataSyncService {
             }
             SyncResult result = transactionTemplate.execute(status -> syncSnapshot(snapshot));
             SyncedScope activeScope = result != null ? result.activeScope() : null;
+            ProjectDataSyncStatsDto stats = result != null
+                    ? result.stats()
+                    : new ProjectDataSyncStatsDto(snapshot.workItems().size(), 0, 0, 0, 0);
             historyService.markSuccess(
                     history,
                     snapshot.contexts().size(),
                     snapshot.workItems().size(),
                     activeScope != null ? activeScope.context().getId() : null,
                     activeScope != null ? activeScope.space().getId() : null,
-                    activeScope != null ? activeScope.iteration().getId() : null,
+                    activeScope != null && activeScope.iteration() != null ? activeScope.iteration().getId() : null,
                     syncResultJson(snapshot, activeScope)
             );
-            return snapshot;
+            return new ProjectDataSnapshotDto(
+                    snapshot.providerId(),
+                    snapshot.contexts(),
+                    snapshot.options(),
+                    snapshot.workItems(),
+                    snapshot.syncedAt(),
+                    stats
+            );
         } catch (RuntimeException e) {
             historyService.markFailed(history, e.getMessage());
             throw e;
@@ -89,39 +100,67 @@ public class ProjectDataSyncService {
         String now = LocalDateTime.now().format(SQLITE_DATETIME);
         Map<String, ProjectContextDto> contextByProviderContextId = new HashMap<>();
         Set<String> syncedProjectIds = new LinkedHashSet<>();
-        SyncedScope activeScope = null;
+        Set<String> syncedScopeKeys = new LinkedHashSet<>();
+        SyncedScope providerActiveScope = null;
+        SyncedScope firstScope = null;
+        int created = 0;
+        int updated = 0;
 
         projectContextMapper.clearActiveContexts(providerId);
         for (ProjectContextDto context : snapshot.contexts()) {
             SyncedScope scope = upsertScopeFromContext(providerId, context, now);
             syncedProjectIds.add(projectScopeId(providerId, scope.context().getExternalProjectId()));
+            if (firstScope == null) {
+                firstScope = scope;
+            }
+            syncedScopeKeys.add(scopeKey(providerId, scope));
             if (!isBlank(context.id())) {
                 contextByProviderContextId.put(context.id(), context);
             }
-            if (context.active() && activeScope == null) {
-                activeScope = scope;
+            if (context.active() && providerActiveScope == null) {
+                providerActiveScope = scope;
             }
         }
 
         for (ProjectProviderWorkItemDto item : snapshot.workItems()) {
             SyncedScope scope = upsertScopeFromWorkItem(providerId, item, contextByProviderContextId, now);
             syncedProjectIds.add(projectScopeId(providerId, scope.context().getExternalProjectId()));
-            if (activeScope == null) {
-                activeScope = scope;
+            if (firstScope == null) {
+                firstScope = scope;
             }
-            upsertWorkItem(providerId, item, scope, now);
+            syncedScopeKeys.add(scopeKey(providerId, scope));
+            UpsertWorkItemResult upsertResult = upsertWorkItem(providerId, item, scope, now);
+            if (upsertResult == UpsertWorkItemResult.CREATED) {
+                created++;
+            } else {
+                updated++;
+            }
         }
 
         workflowProvisioningService.ensureFeWorkflowForProjects(syncedProjectIds);
 
+        SyncedScope activeScope = firstNonNull(
+                resolveSavedScope(providerId, syncedScopeKeys),
+                providerActiveScope,
+                firstScope
+        );
         if (activeScope != null) {
             settingsService.setActiveScope(
                     activeScope.context().getId(),
                     activeScope.space().getId(),
-                    activeScope.iteration().getId()
+                    activeScope.iteration() != null ? activeScope.iteration().getId() : null
             );
+        } else {
+            settingsService.setActiveScope(null, null, null);
         }
-        return new SyncResult(activeScope);
+        ProjectDataSyncStatsDto stats = new ProjectDataSyncStatsDto(
+                snapshot.workItems().size(),
+                created,
+                updated,
+                0,
+                0
+        );
+        return new SyncResult(activeScope, stats);
     }
 
     public List<ProjectDataSyncHistoryDto> listHistory(String providerId, int limit) {
@@ -356,7 +395,7 @@ public class ProjectDataSyncService {
         return existing;
     }
 
-    private void upsertWorkItem(String providerId, ProjectProviderWorkItemDto item, SyncedScope scope, String now) {
+    private UpsertWorkItemResult upsertWorkItem(String providerId, ProjectProviderWorkItemDto item, SyncedScope scope, String now) {
         String externalWorkItemId = requireNonBlank(firstNonBlank(item.externalId(), item.code()), "externalId");
         WorkItemEntity existing = workItemMapper.findByProviderAndExternalId(providerId, externalWorkItemId);
         if (existing == null) {
@@ -376,12 +415,13 @@ public class ProjectDataSyncService {
             entity.setCreatedAt(now);
             entity.setUpdatedAt(now);
             workItemMapper.insert(entity);
-            return;
+            return UpsertWorkItemResult.CREATED;
         }
 
         applyWorkItemSyncFields(providerId, externalWorkItemId, item, scope, existing);
         existing.setUpdatedAt(now);
         workItemMapper.updateFromSync(existing);
+        return UpsertWorkItemResult.UPDATED;
     }
 
     private void applyWorkItemSyncFields(String providerId,
@@ -422,6 +462,78 @@ public class ProjectDataSyncService {
         return providerId + ":" + requireNonBlank(externalProjectId, "externalProjectId");
     }
 
+    private SyncedScope resolveSavedScope(String providerId, Set<String> syncedScopeKeys) {
+        ProjectDataProviderSettingsService.ActiveScopeIds ids = settingsService.activeScopeIds(providerId);
+        if (ids.projectContextId() == null || ids.projectSpaceId() == null) {
+            return null;
+        }
+        ProjectContextEntity context = projectContextMapper.findContextById(ids.projectContextId());
+        ProjectSpaceEntity space = projectContextMapper.findSpaceById(ids.projectSpaceId());
+        ProjectIterationEntity iteration = ids.projectIterationId() == null
+                ? null
+                : projectContextMapper.findIterationById(ids.projectIterationId());
+        if (context == null || space == null) {
+            return null;
+        }
+        if (!providerId.equals(context.getProviderId()) || !providerId.equals(space.getProviderId())) {
+            return null;
+        }
+        if (!context.getId().equals(space.getProjectContextId())) {
+            return null;
+        }
+        if (iteration != null
+                && (!providerId.equals(iteration.getProviderId())
+                || !space.getId().equals(iteration.getProjectSpaceId()))) {
+            return null;
+        }
+        if (!syncedScopeStillExists(providerId, syncedScopeKeys, context, space, iteration)) {
+            return null;
+        }
+        return new SyncedScope(context, space, iteration);
+    }
+
+    private boolean syncedScopeStillExists(String providerId,
+                                           Set<String> syncedScopeKeys,
+                                           ProjectContextEntity context,
+                                           ProjectSpaceEntity space,
+                                           ProjectIterationEntity iteration) {
+        if (iteration != null) {
+            return syncedScopeKeys.contains(scopeKey(providerId, context, space, iteration));
+        }
+        String prefix = providerId
+                + "|"
+                + context.getExternalProjectId()
+                + "|"
+                + space.getExternalSpaceId()
+                + "|";
+        return syncedScopeKeys.stream().anyMatch(key -> key.startsWith(prefix));
+    }
+
+    private String scopeKey(String providerId, SyncedScope scope) {
+        return scopeKey(providerId, scope.context(), scope.space(), scope.iteration());
+    }
+
+    private String scopeKey(String providerId,
+                            ProjectContextEntity context,
+                            ProjectSpaceEntity space,
+                            ProjectIterationEntity iteration) {
+        return providerId
+                + "|"
+                + context.getExternalProjectId()
+                + "|"
+                + space.getExternalSpaceId()
+                + "|"
+                + (iteration != null ? iteration.getExternalIterationId() : "");
+    }
+
+    @SafeVarargs
+    private final <T> T firstNonNull(T... values) {
+        for (T value : values) {
+            if (value != null) return value;
+        }
+        return null;
+    }
+
     private String clean(String value) {
         return isBlank(value) ? null : value.trim();
     }
@@ -436,5 +548,13 @@ public class ProjectDataSyncService {
             ProjectIterationEntity iteration
     ) {}
 
-    private record SyncResult(SyncedScope activeScope) {}
+    private record SyncResult(
+            SyncedScope activeScope,
+            ProjectDataSyncStatsDto stats
+    ) {}
+
+    private enum UpsertWorkItemResult {
+        CREATED,
+        UPDATED
+    }
 }

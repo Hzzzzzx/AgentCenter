@@ -40,6 +40,14 @@
           AND external_project_id = #{externalProjectId}
     </select>
 
+    <select id="findContextById" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.ProjectContextEntity">
+        SELECT id, provider_id, external_project_id, project_name,
+               external_cloude_req_project_id, cloude_req_project_name,
+               active, extra_json, created_at, updated_at
+        FROM project_context
+        WHERE id = #{id}
+    </select>
+
     <update id="clearActiveContexts">
         UPDATE project_context
         SET active = 0,
@@ -80,6 +88,13 @@
           AND external_space_id = #{externalSpaceId}
     </select>
 
+    <select id="findSpaceById" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.ProjectSpaceEntity">
+        SELECT id, provider_id, project_context_id, external_space_id,
+               space_name, extra_json, created_at, updated_at
+        FROM project_space
+        WHERE id = #{id}
+    </select>
+
     <insert id="insertSpace">
         INSERT INTO project_space (
             id, provider_id, project_context_id, external_space_id,
@@ -107,6 +122,14 @@
         WHERE provider_id = #{providerId}
           AND project_space_id = #{projectSpaceId}
           AND external_iteration_id = #{externalIterationId}
+    </select>
+
+    <select id="findIterationById" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.ProjectIterationEntity">
+        SELECT id, provider_id, project_context_id, project_space_id,
+               external_iteration_id, iteration_name, status,
+               start_at, end_at, extra_json, created_at, updated_at
+        FROM project_iteration
+        WHERE id = #{id}
     </select>
 
     <insert id="insertIteration">

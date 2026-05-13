@@ -121,10 +121,23 @@ export interface ProjectDataProviderSettingsDto {
   activeProjectContextId?: string | null
   activeProjectSpaceId?: string | null
   activeProjectIterationId?: string | null
+  activeExternalProjectId?: string | null
+  activeExternalSpaceId?: string | null
+  activeExternalIterationId?: string | null
 }
 
 export interface UpdateProjectDataProviderRequest {
   providerId: string
+}
+
+export interface UpdateProjectDataScopeRequest {
+  providerId?: string | null
+  projectId?: string | null
+  spaceId?: string | null
+  iterationId?: string | null
+  externalProjectId?: string | null
+  externalSpaceId?: string | null
+  externalIterationId?: string | null
 }
 
 export interface ProjectProviderWorkItemDto {
@@ -171,6 +184,13 @@ export interface ProjectDataSnapshotDto {
   }
   workItems: ProjectProviderWorkItemDto[]
   syncedAt: string
+  syncStats?: {
+    total: number
+    created: number
+    updated: number
+    skipped: number
+    failed: number
+  } | null
 }
 
 export interface ProjectDataSyncHistoryDto {

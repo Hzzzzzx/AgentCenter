@@ -2,7 +2,11 @@ package com.agentcenter.bridge.application.projectcontext;
 
 import com.agentcenter.bridge.api.dto.ProjectDataProviderDto;
 import com.agentcenter.bridge.api.dto.ProjectDataProviderSettingsDto;
+import com.agentcenter.bridge.api.dto.UpdateProjectDataScopeRequest;
+import com.agentcenter.bridge.infrastructure.persistence.entity.ProjectContextEntity;
+import com.agentcenter.bridge.infrastructure.persistence.entity.ProjectIterationEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.ProjectProviderSettingEntity;
+import com.agentcenter.bridge.infrastructure.persistence.entity.ProjectSpaceEntity;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.ProjectContextMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -37,6 +41,7 @@ public class ProjectDataProviderSettingsService {
     public ProjectDataProviderSettingsDto getSettings() {
         var setting = ensureSetting();
         String activeProviderId = setting.getActiveProviderId();
+        ActiveExternalScope activeExternalScope = activeExternalScopeFor(setting, activeProviderId);
         var providers = registry.providers().stream()
                 .map(provider -> new ProjectDataProviderDto(
                         provider.id(),
@@ -50,7 +55,10 @@ public class ProjectDataProviderSettingsService {
                 activeProviderId,
                 setting.getActiveProjectContextId(),
                 setting.getActiveProjectSpaceId(),
-                setting.getActiveProjectIterationId()
+                setting.getActiveProjectIterationId(),
+                activeExternalScope.externalProjectId(),
+                activeExternalScope.externalSpaceId(),
+                activeExternalScope.externalIterationId()
         );
     }
 
@@ -75,6 +83,77 @@ public class ProjectDataProviderSettingsService {
         return getSettings();
     }
 
+    @Transactional
+    public ProjectDataProviderSettingsDto setActiveScope(UpdateProjectDataScopeRequest request) {
+        String providerId = clean(request.providerId());
+        if (providerId == null) {
+            providerId = ensureSetting().getActiveProviderId();
+        }
+        try {
+            registry.require(providerId);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
+
+        String externalProjectId = stripProviderPrefix(
+                firstNonBlank(request.externalProjectId(), request.projectId()),
+                providerId
+        );
+        String externalSpaceId = firstNonBlank(request.externalSpaceId(), request.spaceId());
+        String externalIterationId = firstNonBlank(request.externalIterationId(), request.iterationId());
+        if (externalProjectId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "externalProjectId is required");
+        }
+        if (externalSpaceId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "externalSpaceId is required");
+        }
+
+        ProjectContextEntity context = projectContextMapper.findContextByProviderAndExternalProjectId(
+                providerId,
+                externalProjectId
+        );
+        if (context == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "SCOPE_INVALID: project scope is not synced"
+            );
+        }
+        ProjectSpaceEntity space = projectContextMapper.findSpaceByProviderAndExternalSpaceId(
+                providerId,
+                context.getId(),
+                externalSpaceId
+        );
+        if (space == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "SCOPE_INVALID: space scope is not synced"
+            );
+        }
+        ProjectIterationEntity iteration = null;
+        if (externalIterationId != null) {
+            iteration = projectContextMapper.findIterationByProviderAndExternalIterationId(
+                    providerId,
+                    space.getId(),
+                    externalIterationId
+            );
+            if (iteration == null) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "SCOPE_INVALID: iteration scope is not synced"
+                );
+            }
+        }
+
+        var setting = ensureSetting();
+        setting.setActiveProviderId(providerId);
+        setting.setActiveProjectContextId(context.getId());
+        setting.setActiveProjectSpaceId(space.getId());
+        setting.setActiveProjectIterationId(iteration != null ? iteration.getId() : null);
+        setting.setUpdatedAt(now());
+        projectContextMapper.updateSetting(setting);
+        return getSettings();
+    }
+
     public ProjectDataProvider activeProvider() {
         return registry.require(ensureSetting().getActiveProviderId());
     }
@@ -87,6 +166,18 @@ public class ProjectDataProviderSettingsService {
         setting.setActiveProjectIterationId(projectIterationId);
         setting.setUpdatedAt(now());
         projectContextMapper.updateSetting(setting);
+    }
+
+    public ActiveScopeIds activeScopeIds(String providerId) {
+        var setting = ensureSetting();
+        if (!setting.getActiveProviderId().equals(providerId)) {
+            return new ActiveScopeIds(null, null, null);
+        }
+        return new ActiveScopeIds(
+                setting.getActiveProjectContextId(),
+                setting.getActiveProjectSpaceId(),
+                setting.getActiveProjectIterationId()
+        );
     }
 
     private ProjectProviderSettingEntity ensureSetting() {
@@ -126,7 +217,51 @@ public class ProjectDataProviderSettingsService {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
+    private ActiveExternalScope activeExternalScopeFor(ProjectProviderSettingEntity setting, String activeProviderId) {
+        ProjectContextEntity context = projectContextMapper.findContextById(setting.getActiveProjectContextId());
+        if (context == null || !activeProviderId.equals(context.getProviderId())) {
+            return new ActiveExternalScope(null, null, null);
+        }
+        ProjectSpaceEntity space = projectContextMapper.findSpaceById(setting.getActiveProjectSpaceId());
+        String externalSpaceId = space != null && activeProviderId.equals(space.getProviderId())
+                ? space.getExternalSpaceId()
+                : null;
+        ProjectIterationEntity iteration = projectContextMapper.findIterationById(setting.getActiveProjectIterationId());
+        String externalIterationId = iteration != null && activeProviderId.equals(iteration.getProviderId())
+                ? iteration.getExternalIterationId()
+                : null;
+        return new ActiveExternalScope(
+                context.getExternalProjectId(),
+                externalSpaceId,
+                externalIterationId
+        );
+    }
+
+    private String firstNonBlank(String primary, String fallback) {
+        String cleanPrimary = clean(primary);
+        return cleanPrimary != null ? cleanPrimary : clean(fallback);
+    }
+
+    private String stripProviderPrefix(String value, String providerId) {
+        String cleaned = clean(value);
+        if (cleaned == null) return null;
+        String prefix = providerId + ":";
+        return cleaned.startsWith(prefix) ? cleaned.substring(prefix.length()) : cleaned;
+    }
+
     private String now() {
         return LocalDateTime.now().format(SQLITE_DATETIME);
     }
+
+    public record ActiveScopeIds(
+            String projectContextId,
+            String projectSpaceId,
+            String projectIterationId
+    ) {}
+
+    private record ActiveExternalScope(
+            String externalProjectId,
+            String externalSpaceId,
+            String externalIterationId
+    ) {}
 }

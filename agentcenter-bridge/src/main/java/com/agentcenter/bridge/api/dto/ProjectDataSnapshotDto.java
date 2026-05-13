@@ -8,5 +8,16 @@ public record ProjectDataSnapshotDto(
         List<ProjectContextDto> contexts,
         ProjectContextOptionsDto options,
         List<ProjectProviderWorkItemDto> workItems,
-        OffsetDateTime syncedAt
-) {}
+        OffsetDateTime syncedAt,
+        ProjectDataSyncStatsDto syncStats
+) {
+    public ProjectDataSnapshotDto(
+            String providerId,
+            List<ProjectContextDto> contexts,
+            ProjectContextOptionsDto options,
+            List<ProjectProviderWorkItemDto> workItems,
+            OffsetDateTime syncedAt
+    ) {
+        this(providerId, contexts, options, workItems, syncedAt, null);
+    }
+}

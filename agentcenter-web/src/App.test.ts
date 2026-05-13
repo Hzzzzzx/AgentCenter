@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import App from './App.vue'
+import type { WorkItemDto } from './api/types'
 
 const mocks = vi.hoisted(() => {
   const sessionStore = {
@@ -50,9 +51,13 @@ const mocks = vi.hoisted(() => {
   }
   const runtimeSettingsStore = {
     activeProjectDataProviderId: 'fixture-alpha',
+    activeExternalProjectId: null,
+    activeExternalSpaceId: null,
+    activeExternalIterationId: null,
     batchStartWorkflowLimit: 5,
     initFromStorage: vi.fn(),
     loadProjectDataProviders: vi.fn().mockResolvedValue(undefined),
+    setProjectDataScope: vi.fn().mockResolvedValue(undefined),
   }
   return { sessionStore, confirmationStore, workItemStore, workflowStore, runtimeSettingsStore }
 })
@@ -106,6 +111,7 @@ vi.mock('./api/projectDataProviders', () => ({
     }),
     snapshot: vi.fn(),
     setActive: vi.fn(),
+    setActiveScope: vi.fn(),
     syncHistory: vi.fn(),
   },
 }))
@@ -140,6 +146,8 @@ describe('App.vue', () => {
     mocks.workItemStore.loadOverview.mockResolvedValue(undefined)
     mocks.workItemStore.refreshItem.mockResolvedValue({ workflowSummary: null })
     mocks.confirmationStore.loadPending.mockResolvedValue(undefined)
+    mocks.runtimeSettingsStore.setProjectDataScope.mockResolvedValue(undefined)
+    mocks.workflowStore.instancesByWorkItemId = {}
   })
 
   afterEach(() => {
@@ -177,7 +185,20 @@ describe('App.vue', () => {
     await projectSelect.setValue('平台接入')
     await flushPromises()
 
+    expect(wrapper.find('.title-bar__context-project').text()).toBe('AgentCenter')
+    await wrapper.find('.project-context__save').trigger('click')
+    await flushPromises()
+
     expect(wrapper.find('.title-bar__context-project').text()).toBe('平台接入')
+    expect(mocks.runtimeSettingsStore.setProjectDataScope).toHaveBeenCalledWith({
+      providerId: 'fixture-alpha',
+      projectId: 'fixture-alpha:alpha-project-platform',
+      spaceId: 'alpha-space-platform',
+      iterationId: 'alpha-sprint-15',
+      externalProjectId: 'alpha-project-platform',
+      externalSpaceId: 'alpha-space-platform',
+      externalIterationId: 'alpha-sprint-15',
+    })
 
     const iterationSelect = wrapper.find('.title-bar__iteration')
     expect((iterationSelect.element as HTMLSelectElement).value).toBe('Sprint 15')
@@ -240,4 +261,85 @@ describe('App.vue', () => {
     expect(mocks.workItemStore.loadItems).toHaveBeenCalledTimes(initialLoadCalls)
     wrapper.unmount()
   })
+
+  it('keeps refreshing a running workflow after the startup refresh window', async () => {
+    vi.useFakeTimers()
+    let refreshCount = 0
+    const runningItem = makeWorkflowItem('RUNNING', 'RUNNING')
+    const completedItem = makeWorkflowItem('COMPLETED', 'COMPLETED')
+    mocks.workItemStore.refreshItem.mockImplementation(async () => {
+      refreshCount += 1
+      const item = refreshCount < 9 ? runningItem : completedItem
+      mocks.workItemStore.items = [item]
+      return item
+    })
+
+    const wrapper = mount(App, {
+      global: {
+        plugins: [createPinia()],
+      },
+    })
+    await flushPromises()
+
+    await wrapper.findComponent({ name: 'HomeOverview' }).vm.$emit('start-workflow', 'work-1', {
+      workflowInstance: null,
+      session: null,
+      artifacts: [],
+      events: [],
+      confirmation: null,
+    })
+    await flushPromises()
+
+    await vi.advanceTimersByTimeAsync(12000)
+    await flushPromises()
+    const callsAfterStartupWindow = mocks.workItemStore.refreshItem.mock.calls.length
+
+    await vi.advanceTimersByTimeAsync(3000)
+    await flushPromises()
+    expect(mocks.workItemStore.refreshItem.mock.calls.length).toBeGreaterThan(callsAfterStartupWindow)
+    const callsAfterFirstWatch = mocks.workItemStore.refreshItem.mock.calls.length
+
+    await vi.advanceTimersByTimeAsync(15000)
+    await flushPromises()
+    expect(mocks.workItemStore.refreshItem.mock.calls.length).toBeGreaterThan(callsAfterFirstWatch)
+    const callsAfterCompleted = mocks.workItemStore.refreshItem.mock.calls.length
+
+    await vi.advanceTimersByTimeAsync(30000)
+    await flushPromises()
+    expect(mocks.workItemStore.refreshItem.mock.calls.length).toBe(callsAfterCompleted)
+
+    wrapper.unmount()
+  })
 })
+
+function makeWorkflowItem(workflowStatus: 'RUNNING' | 'COMPLETED', nodeStatus: 'RUNNING' | 'COMPLETED'): WorkItemDto {
+  return {
+    id: 'work-1',
+    code: 'US1204',
+    type: 'US',
+    title: '消息中心订阅设置',
+    description: null,
+    status: workflowStatus === 'COMPLETED' ? 'DONE' : 'IN_PROGRESS',
+    priority: 'HIGH',
+    providerId: null,
+    externalWorkItemId: null,
+    projectId: null,
+    spaceId: null,
+    iterationId: null,
+    projectContextId: null,
+    projectSpaceId: null,
+    projectIterationId: null,
+    assigneeUserId: null,
+    currentWorkflowInstanceId: 'wf-1',
+    workflowSummary: {
+      instanceId: 'wf-1',
+      status: workflowStatus,
+      currentNodeInstanceId: 'node-2',
+      currentStageKey: 'solution_design',
+      nodes: [{ id: 'node-2', definitionName: '方案设计', skillName: 'hld-design', status: nodeStatus, errorMessage: null }],
+      stages: [{ id: 'node-2', stageKey: 'solution_design', name: '方案设计', skillName: 'hld-design', status: nodeStatus, dynamicNodeCount: 0, recoveryCount: 0, pendingConfirmationCount: 0, latestSummary: null, errorMessage: null }],
+    },
+    createdAt: '2026-05-07T00:00:00Z',
+    updatedAt: '2026-05-07T00:00:00Z',
+  }
+}
