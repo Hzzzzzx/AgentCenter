@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type {
   ConfirmationActionType,
   ConfirmationRequestDto,
@@ -56,6 +56,7 @@ const emit = defineEmits<{
 
 const options = computed<InteractionOption[]>(() => props.schema?.options ?? [])
 const fields = computed<InteractionField[]>(() => props.schema?.fields ?? [])
+const activeFieldId = ref('')
 const isMultiSelect = computed(() => props.schema?.selection === 'multi')
 const allowCustomChoice = computed(() => props.schema?.allowCustom === true)
 const customChoiceText = computed(() => props.customChoice.trim())
@@ -71,6 +72,11 @@ const usesOptionControl = computed(() => {
   if (props.confirmation.requestType === 'DECISION') return true
   return (props.confirmation.requestType === 'APPROVAL' || props.confirmation.requestType === 'CONFIRM')
     && options.value.length > 0
+})
+const visibleFields = computed<InteractionField[]>(() => {
+  if (fields.value.length <= 1) return fields.value
+  const activeField = fields.value.find(field => field.id === activeFieldId.value) ?? fields.value[0]
+  return activeField ? [activeField] : []
 })
 const effectiveSelectedOptionId = computed(() => {
   if (allowCustomChoice.value && customChoiceText.value) return '__custom__'
@@ -117,6 +123,16 @@ const secondaryLabel = computed(() => {
   return '拒绝'
 })
 
+watch(fields, (nextFields) => {
+  if (!nextFields.length) {
+    activeFieldId.value = ''
+    return
+  }
+  if (!nextFields.some(field => field.id === activeFieldId.value)) {
+    activeFieldId.value = nextFields[0].id
+  }
+}, { immediate: true })
+
 function buttonBusyLabel(reply: 'once' | 'always' | 'reject') {
   if (!props.busyAction?.includes(reply)) return null
   if (reply === 'always') return '正在允许本次会话...'
@@ -128,6 +144,36 @@ function isChoiceSelected(option: InteractionOption): boolean {
   return isMultiSelect.value
     ? selectedChoiceSet.value.has(option.id)
     : effectiveSelectedOptionId.value === option.id
+}
+
+function isFieldActive(field: InteractionField): boolean {
+  return fields.value.length <= 1 || activeFieldId.value === field.id
+}
+
+function selectField(fieldId: string) {
+  activeFieldId.value = fieldId
+}
+
+function isFieldAnswered(field: InteractionField): boolean {
+  return isFieldComplete(field, props.fieldValues)
+}
+
+function allowsFieldCustom(field: InteractionField): boolean {
+  return field.type === 'select' && field.allowCustom === true
+}
+
+function hasPresetFieldValue(field: InteractionField, value: string): boolean {
+  return (field.options ?? []).some(option => option.value === value)
+}
+
+function fieldSelectValue(field: InteractionField): string {
+  const value = props.fieldValues[field.id] ?? ''
+  return hasPresetFieldValue(field, value) ? value : ''
+}
+
+function fieldCustomValue(field: InteractionField): string {
+  const value = props.fieldValues[field.id] ?? ''
+  return value && !hasPresetFieldValue(field, value) ? value : ''
 }
 
 function fieldInputId(field: InteractionField): string {
@@ -150,6 +196,10 @@ function updateReviewComment(event: Event) {
 
 function updateFieldValue(fieldId: string, event: Event) {
   emit('update:fieldValue', fieldId, (event.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value)
+}
+
+function updateFieldCustomValue(fieldId: string, event: Event) {
+  emit('update:fieldValue', fieldId, (event.target as HTMLInputElement).value)
 }
 
 function updateCheckboxField(fieldId: string, event: Event) {
@@ -298,10 +348,32 @@ function submitReject() {
         ></textarea>
       </div>
 
-      <div v-else-if="isInputRequired" class="interaction-bar__control">
+      <div
+        v-else-if="isInputRequired"
+        class="interaction-bar__control"
+        :class="{ 'interaction-bar__control--fields': fields.length > 0 }"
+      >
         <template v-if="fields.length > 0">
+          <div v-if="fields.length > 1" class="interaction-bar__field-tabs" role="tablist" aria-label="待回答问题">
+            <button
+              v-for="(field, fieldIndex) in fields"
+              :key="field.id"
+              type="button"
+              class="interaction-bar__field-tab"
+              :class="{
+                'interaction-bar__field-tab--active': isFieldActive(field),
+                'interaction-bar__field-tab--answered': isFieldAnswered(field),
+              }"
+              role="tab"
+              :aria-selected="isFieldActive(field)"
+              @click="selectField(field.id)"
+            >
+              <span class="interaction-bar__field-tab-index">{{ fieldIndex + 1 }}</span>
+              <span>{{ field.label }}</span>
+            </button>
+          </div>
           <div class="interaction-bar__fields">
-            <div v-for="field in fields" :key="field.id" class="interaction-bar__field">
+            <div v-for="field in visibleFields" :key="field.id" class="interaction-bar__field" role="tabpanel">
               <label :for="fieldInputId(field)" class="interaction-bar__field-label">
                 {{ field.label }}
                 <span v-if="field.required" class="interaction-bar__field-required">*</span>
@@ -318,18 +390,29 @@ function submitReject() {
                 rows="2"
                 @input="(event: Event) => updateFieldValue(field.id, event)"
               ></textarea>
-              <select
-                v-else-if="field.type === 'select'"
-                :id="fieldInputId(field)"
-                :value="fieldValues[field.id] ?? ''"
-                class="interaction-bar__input interaction-bar__field-input"
-                @change="(event: Event) => updateFieldValue(field.id, event)"
-              >
-                <option value="">请选择...</option>
-                <option v-for="option in field.options ?? []" :key="option.value" :value="option.value">
-                  {{ option.label }}
-                </option>
-              </select>
+              <template v-else-if="field.type === 'select'">
+                <select
+                  :id="fieldInputId(field)"
+                  :value="allowsFieldCustom(field) ? fieldSelectValue(field) : fieldValues[field.id] ?? ''"
+                  class="interaction-bar__input interaction-bar__field-input"
+                  @change="(event: Event) => updateFieldValue(field.id, event)"
+                >
+                  <option value="">请选择...</option>
+                  <option v-for="option in field.options ?? []" :key="option.value" :value="option.value">
+                    {{ option.label }}
+                  </option>
+                </select>
+                <label v-if="allowsFieldCustom(field)" class="interaction-bar__field-custom">
+                  <span>自定义选择</span>
+                  <input
+                    :value="fieldCustomValue(field)"
+                    class="interaction-bar__input interaction-bar__field-input"
+                    type="text"
+                    placeholder="输入自己的选择..."
+                    @input="(event: Event) => updateFieldCustomValue(field.id, event)"
+                  >
+                </label>
+              </template>
               <label v-else-if="field.type === 'checkbox'" :for="fieldInputId(field)" class="interaction-bar__checkbox">
                 <input
                   :id="fieldInputId(field)"
@@ -515,8 +598,26 @@ function submitReject() {
         <p v-if="fields.length && dialogQuestion" class="confirmation-dialog__question">
           {{ dialogQuestion }}
         </p>
+        <div v-if="fields.length > 1" class="confirmation-dialog__field-tabs" role="tablist" aria-label="待回答问题">
+          <button
+            v-for="(field, fieldIndex) in fields"
+            :key="field.id"
+            type="button"
+            class="confirmation-dialog__field-tab"
+            :class="{
+              'confirmation-dialog__field-tab--active': isFieldActive(field),
+              'confirmation-dialog__field-tab--answered': isFieldAnswered(field),
+            }"
+            role="tab"
+            :aria-selected="isFieldActive(field)"
+            @click="selectField(field.id)"
+          >
+            <span class="confirmation-dialog__field-tab-index">{{ fieldIndex + 1 }}</span>
+            <span>{{ field.label }}</span>
+          </button>
+        </div>
         <div v-if="fields.length" class="confirmation-dialog__fields">
-          <div v-for="field in fields" :key="field.id" class="confirmation-dialog__field">
+          <div v-for="field in visibleFields" :key="field.id" class="confirmation-dialog__field" role="tabpanel">
             <label :for="fieldInputId(field)" class="confirmation-dialog__field-label">
               {{ field.label }}
               <span v-if="field.required" class="confirmation-dialog__field-required">*</span>
@@ -533,18 +634,29 @@ function submitReject() {
               :placeholder="fieldPlaceholder(field)"
               @input="(event: Event) => updateFieldValue(field.id, event)"
             />
-            <select
-              v-else-if="field.type === 'select'"
-              :id="fieldInputId(field)"
-              :value="fieldValues[field.id] ?? ''"
-              class="confirmation-dialog__input confirmation-dialog__field-input"
-              @change="(event: Event) => updateFieldValue(field.id, event)"
-            >
-              <option value="">请选择...</option>
-              <option v-for="option in field.options ?? []" :key="option.value" :value="option.value">
-                {{ option.label }}
-              </option>
-            </select>
+            <template v-else-if="field.type === 'select'">
+              <select
+                :id="fieldInputId(field)"
+                :value="allowsFieldCustom(field) ? fieldSelectValue(field) : fieldValues[field.id] ?? ''"
+                class="confirmation-dialog__input confirmation-dialog__field-input"
+                @change="(event: Event) => updateFieldValue(field.id, event)"
+              >
+                <option value="">请选择...</option>
+                <option v-for="option in field.options ?? []" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
+              <label v-if="allowsFieldCustom(field)" class="confirmation-dialog__field-custom">
+                <span>自定义选择</span>
+                <input
+                  :value="fieldCustomValue(field)"
+                  class="confirmation-dialog__input confirmation-dialog__field-input"
+                  type="text"
+                  placeholder="输入自己的选择..."
+                  @input="(event: Event) => updateFieldCustomValue(field.id, event)"
+                >
+              </label>
+            </template>
             <label v-else-if="field.type === 'checkbox'" :for="fieldInputId(field)" class="confirmation-dialog__checkbox">
               <input
                 :id="fieldInputId(field)"
@@ -698,10 +810,73 @@ function submitReject() {
   gap: 8px;
 }
 
+.interaction-bar__control--fields {
+  display: grid;
+}
+
 .interaction-bar__control--options,
 .interaction-bar__fields {
   display: grid;
   gap: 8px;
+}
+
+.interaction-bar__field-tabs,
+.confirmation-dialog__field-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.interaction-bar__field-tab,
+.confirmation-dialog__field-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  max-width: 170px;
+  padding: 0 9px;
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.interaction-bar__field-tab span:last-child,
+.confirmation-dialog__field-tab span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.interaction-bar__field-tab-index,
+.confirmation-dialog__field-tab-index {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--bg-primary);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.interaction-bar__field-tab--active,
+.confirmation-dialog__field-tab--active {
+  border-color: var(--accent-blue);
+  background: var(--brand-soft);
+  color: var(--text-primary);
+}
+
+.interaction-bar__field-tab--answered .interaction-bar__field-tab-index,
+.confirmation-dialog__field-tab--answered .confirmation-dialog__field-tab-index {
+  background: var(--success);
+  color: var(--on-success);
 }
 
 .interaction-bar__option,
@@ -786,7 +961,8 @@ function submitReject() {
 }
 
 .interaction-bar__custom-choice,
-.interaction-bar__field {
+.interaction-bar__field,
+.interaction-bar__field-custom {
   display: grid;
   gap: 5px;
   min-width: 0;
@@ -794,6 +970,8 @@ function submitReject() {
 
 .interaction-bar__field-label,
 .confirmation-dialog__field-label,
+.interaction-bar__field-custom,
+.confirmation-dialog__field-custom,
 .confirmation-dialog__custom-choice {
   color: var(--text-primary);
   font-size: 12px;
@@ -927,6 +1105,7 @@ function submitReject() {
 .confirmation-dialog__options,
 .confirmation-dialog__fields,
 .confirmation-dialog__field,
+.confirmation-dialog__field-custom,
 .confirmation-dialog__custom-choice,
 .confirmation-dialog__permission-actions {
   display: grid;

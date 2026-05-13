@@ -59,6 +59,7 @@ describe('parseInteractionSchema', () => {
             label: 'Scope',
             type: 'select',
             required: true,
+            allow_custom: true,
             options: [
               { value: 'interaction', label: 'Interaction' },
               { id: 'artifact', label: 'Artifact' },
@@ -77,6 +78,7 @@ describe('parseInteractionSchema', () => {
       { value: 'interaction', label: 'Interaction' },
       { value: 'artifact', label: 'Artifact' },
     ])
+    expect(schema!.fields![2].allowCustom).toBe(true)
     expect(schema!.options).toBeUndefined()
   })
 

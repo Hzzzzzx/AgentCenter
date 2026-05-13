@@ -16,6 +16,7 @@ export interface InteractionField {
   required?: boolean
   placeholder?: string
   options?: { label: string; value: string }[]
+  allowCustom?: boolean
 }
 
 export interface InteractionSchema {
@@ -182,6 +183,8 @@ function normalizeField(item: unknown): InteractionField | null {
   if (placeholder) field.placeholder = placeholder
   const options = normalizeFieldOptions(record.options)
   if (options) field.options = options
+  const allowCustom = record.allowCustom ?? record.allow_custom ?? record.custom
+  if (typeof allowCustom === 'boolean') field.allowCustom = allowCustom
   return field
 }
 

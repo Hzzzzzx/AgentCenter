@@ -133,6 +133,61 @@ class QuestionConfirmationHandlerTest {
     }
 
     @Test
+    void createQuestionConfirmationPreservesOptionsForEachQuestionInMultiQuestionForm() throws Exception {
+        ObjectNode payload = (ObjectNode) objectMapper.readTree("""
+                {
+                  "requestId": "q_multi_options",
+                  "questions": [
+                    {
+                      "header": "目标用户",
+                      "question": "优先服务哪类用户？",
+                      "options": ["产品负责人", "DevOps 工程师", "测试负责人"],
+                      "custom": false
+                    },
+                    {
+                      "header": "范围边界",
+                      "question": "本次覆盖哪些范围？",
+                      "options": ["只覆盖 PRD", "覆盖 PRD 和 HLD", "覆盖完整链路"],
+                      "custom": false
+                    },
+                    {
+                      "header": "验收标准",
+                      "question": "用哪类标准证明完成？",
+                      "options": ["UI 可见", "接口通过", "端到端通过"],
+                      "custom": false
+                    }
+                  ]
+                }
+                """);
+        RuntimeEventEnvelope envelope = new RuntimeEventEnvelope(
+                "runtime-event", "question.requested", null, null, null,
+                RuntimeType.OPENCODE, "agent-1", "ses_1", "work-1", "wf-1", "node-1",
+                payload, OffsetDateTime.now());
+
+        handler.createQuestionConfirmation(envelope);
+
+        ArgumentCaptor<ConfirmationRequestEntity> entityCaptor =
+                ArgumentCaptor.forClass(ConfirmationRequestEntity.class);
+        verify(confirmationMapper).insert(entityCaptor.capture());
+        ConfirmationRequestEntity entity = entityCaptor.getValue();
+
+        assertEquals(ConfirmationRequestType.INPUT_REQUIRED.name(), entity.getRequestType());
+        assertNull(entity.getOptionsJson());
+        var schema = objectMapper.readTree(entity.getInteractionSchemaJson());
+        assertEquals("需要你回答 3 个问题", schema.path("title").asText());
+        assertEquals("select", schema.path("fields").get(0).path("type").asText());
+        assertEquals("目标用户", schema.path("fields").get(0).path("label").asText());
+        assertTrue(schema.path("fields").get(0).path("allowCustom").asBoolean());
+        assertEquals("产品负责人", schema.path("fields").get(0).path("options").get(0).path("label").asText());
+        assertEquals("select", schema.path("fields").get(1).path("type").asText());
+        assertTrue(schema.path("fields").get(1).path("allowCustom").asBoolean());
+        assertEquals("覆盖 PRD 和 HLD", schema.path("fields").get(1).path("options").get(1).path("value").asText());
+        assertEquals("select", schema.path("fields").get(2).path("type").asText());
+        assertTrue(schema.path("fields").get(2).path("allowCustom").asBoolean());
+        assertEquals("端到端通过", schema.path("fields").get(2).path("options").get(2).path("label").asText());
+    }
+
+    @Test
     void respondQuestionSendsChoiceLabelToOpenCode() {
         ConfirmationRequestEntity entity = questionEntity(ConfirmationRequestType.DECISION.name());
         ResolveConfirmationRequest request = new ResolveConfirmationRequest(

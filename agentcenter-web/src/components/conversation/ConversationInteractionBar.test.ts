@@ -284,7 +284,7 @@ describe('ConversationInteractionBar.vue', () => {
     expect(wrapper.emitted('resolved')?.[0]).toEqual(['confirm-3'])
   })
 
-  it('keeps multi-question prompts visible while editing answers', async () => {
+  it('switches multi-question prompts by tab while editing answers', async () => {
     const wrapper = mount(ConversationInteractionBar, {
       props: {
         interactions: [
@@ -317,14 +317,18 @@ describe('ConversationInteractionBar.vue', () => {
       },
     })
 
+    const tabs = wrapper.findAll('.interaction-bar__field-tab')
+    expect(tabs).toHaveLength(2)
     const textareas = wrapper.findAll('textarea')
     expect(wrapper.text()).toContain('请确认目标用户是谁？')
-    expect(wrapper.text()).toContain('请说明验收标准是什么？')
+    expect(wrapper.text()).not.toContain('请说明验收标准是什么？')
     expect(textareas[0].attributes('placeholder')).toBe('输入你的回答...')
 
     await textareas[0].setValue('企业项目经理')
 
     expect(wrapper.text()).toContain('请确认目标用户是谁？')
+    await tabs[1].trigger('click')
+    expect(wrapper.text()).not.toContain('请确认目标用户是谁？')
     expect(wrapper.text()).toContain('请说明验收标准是什么？')
   })
 
@@ -635,20 +639,23 @@ describe('ConversationInteractionBar.vue', () => {
     })
 
     expect(wrapper.find('.interaction-bar__fields').exists()).toBe(true)
-    expect(wrapper.findAll('.interaction-bar__field')).toHaveLength(3)
+    expect(wrapper.findAll('.interaction-bar__field-tab')).toHaveLength(3)
+    expect(wrapper.findAll('.interaction-bar__field')).toHaveLength(1)
     expect(wrapper.find('label[for="field-name"]').text()).toContain('模块名称')
     expect(wrapper.find('label[for="field-name"] .interaction-bar__field-required').exists()).toBe(true)
 
     const nameInput = wrapper.find('#field-name')
-    const descTextarea = wrapper.find('#field-desc')
-    const countInput = wrapper.find('#field-count')
-
     expect(nameInput.exists()).toBe(true)
-    expect(descTextarea.exists()).toBe(true)
-    expect(countInput.exists()).toBe(true)
-
     await nameInput.setValue('AuthService')
+
+    await wrapper.findAll('.interaction-bar__field-tab')[1].trigger('click')
+    const descTextarea = wrapper.find('#field-desc')
+    expect(descTextarea.exists()).toBe(true)
     await descTextarea.setValue('认证服务模块')
+
+    await wrapper.findAll('.interaction-bar__field-tab')[2].trigger('click')
+    const countInput = wrapper.find('#field-count')
+    expect(countInput.exists()).toBe(true)
     await countInput.setValue('3')
     await wrapper.find('.interaction-bar__primary').trigger('click')
     await flushPromises()
@@ -678,6 +685,7 @@ describe('ConversationInteractionBar.vue', () => {
                   label: '优先级',
                   type: 'select',
                   required: true,
+                  allowCustom: true,
                   options: [
                     { value: 'low', label: '低' },
                     { value: 'high', label: '高' },
@@ -694,9 +702,10 @@ describe('ConversationInteractionBar.vue', () => {
     const primary = wrapper.find('.interaction-bar__primary')
     expect(primary.attributes('disabled')).toBeDefined()
 
-    await wrapper.find('#field-priority').setValue('high')
+    await wrapper.find('input[placeholder="输入自己的选择..."]').setValue('紧急')
     expect(primary.attributes('disabled')).toBeDefined()
 
+    await wrapper.findAll('.interaction-bar__field-tab')[1].trigger('click')
     await wrapper.find('#field-accepted').setValue(true)
     expect(primary.attributes('disabled')).toBeUndefined()
     await primary.trigger('click')
@@ -705,10 +714,10 @@ describe('ConversationInteractionBar.vue', () => {
     expect(confirmationApi.resolve).toHaveBeenCalledWith('confirm-field-controls', {
       actionType: 'SUPPLEMENT',
       payload: {
-        input: '高\n是',
-        fields: { priority: 'high', accepted: 'true' },
+        input: '紧急\n是',
+        fields: { priority: '紧急', accepted: 'true' },
       },
-      comment: '高\n是',
+      comment: '紧急\n是',
     })
   })
 

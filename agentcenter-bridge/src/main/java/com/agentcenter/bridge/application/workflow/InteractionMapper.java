@@ -172,6 +172,9 @@ public class InteractionMapper {
         m.put("label", field.getLabel());
         m.put("type", field.getType());
         m.put("required", field.isRequired());
+        if (field.isAllowCustom()) {
+            m.put("allowCustom", true);
+        }
         if (field.getPlaceholder() != null && !field.getPlaceholder().isBlank()) {
             m.put("placeholder", field.getPlaceholder());
         }

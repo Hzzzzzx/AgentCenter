@@ -207,7 +207,7 @@ class InteractionMapperTest {
                         "请选择范围", List.of(
                                 new WorkflowNodeInteraction.FieldOption("interaction", "交互闭环"),
                                 new WorkflowNodeInteraction.FieldOption("artifact", "产物审阅")
-                        )),
+                        ), true),
                 new WorkflowNodeInteraction.InteractionField("email", "邮箱", "email", false)
         ));
 
@@ -228,6 +228,7 @@ class InteractionMapperTest {
         assertEquals("请输入姓名", fields.get(0).get("placeholder").asText());
         assertEquals("scope", fields.get(1).get("id").asText());
         assertEquals("select", fields.get(1).get("type").asText());
+        assertTrue(fields.get(1).get("allowCustom").asBoolean());
         assertEquals("请选择范围", fields.get(1).get("placeholder").asText());
         assertEquals("interaction", fields.get(1).get("options").get(0).get("value").asText());
         assertEquals("交互闭环", fields.get(1).get("options").get(0).get("label").asText());

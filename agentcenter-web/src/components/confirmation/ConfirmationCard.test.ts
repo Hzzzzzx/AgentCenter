@@ -310,17 +310,26 @@ describe('ConfirmationCard.vue', () => {
     expect(document.body.textContent).toContain('目标用户')
     expect(document.body.textContent).toContain('范围边界')
     expect(document.body.textContent).toContain('验收标准')
+    expect(document.body.querySelectorAll('.confirmation-dialog__field-tab')).toHaveLength(3)
+    expect(document.body.querySelector('#confirmation-field-PRD-SCOPE')).toBeNull()
 
     const submitButton = document.body.querySelector<HTMLButtonElement>('.confirmation-card__action--approve')!
     expect(submitButton.disabled).toBe(true)
 
     const audience = document.body.querySelector<HTMLTextAreaElement>('#confirmation-field-PRD-AUDIENCE')!
-    const scope = document.body.querySelector<HTMLTextAreaElement>('#confirmation-field-PRD-SCOPE')!
-    const acceptance = document.body.querySelector<HTMLTextAreaElement>('#confirmation-field-PRD-ACCEPTANCE')!
     audience.value = '企业管理员'
     audience.dispatchEvent(new Event('input'))
+
+    const tabs = [...document.body.querySelectorAll<HTMLButtonElement>('.confirmation-dialog__field-tab')]
+    await tabs[1].click()
+    await wrapper.vm.$nextTick()
+    const scope = document.body.querySelector<HTMLTextAreaElement>('#confirmation-field-PRD-SCOPE')!
     scope.value = '只覆盖 PRD 阶段，不做 HLD'
     scope.dispatchEvent(new Event('input'))
+
+    await tabs[2].click()
+    await wrapper.vm.$nextTick()
+    const acceptance = document.body.querySelector<HTMLTextAreaElement>('#confirmation-field-PRD-ACCEPTANCE')!
     acceptance.value = '页面出现三个必填输入框'
     acceptance.dispatchEvent(new Event('input'))
     await wrapper.vm.$nextTick()
@@ -358,6 +367,7 @@ describe('ConfirmationCard.vue', () => {
             label: '优先级',
             type: 'select',
             required: true,
+            allowCustom: true,
             options: [
               { value: 'low', label: '低' },
               { value: 'high', label: '高' },
@@ -372,10 +382,14 @@ describe('ConfirmationCard.vue', () => {
     const submitButton = document.body.querySelector<HTMLButtonElement>('.confirmation-card__action--approve')!
     expect(submitButton.disabled).toBe(true)
 
-    const priority = document.body.querySelector<HTMLSelectElement>('#confirmation-field-priority')!
+    const customPriority = document.body.querySelector<HTMLInputElement>('input[placeholder="输入自己的选择..."]')!
+    customPriority.value = '紧急'
+    customPriority.dispatchEvent(new Event('input'))
+
+    const tabs = [...document.body.querySelectorAll<HTMLButtonElement>('.confirmation-dialog__field-tab')]
+    await tabs[1].click()
+    await wrapper.vm.$nextTick()
     const accepted = document.body.querySelector<HTMLInputElement>('#confirmation-field-accepted')!
-    priority.value = 'high'
-    priority.dispatchEvent(new Event('change'))
     accepted.checked = true
     accepted.dispatchEvent(new Event('change'))
     await wrapper.vm.$nextTick()
@@ -387,10 +401,10 @@ describe('ConfirmationCard.vue', () => {
     expect(confirmationApi.resolve).toHaveBeenCalledWith('conf-1', {
       actionType: 'SUPPLEMENT',
       payload: {
-        input: '高\n是',
-        fields: { priority: 'high', accepted: 'true' },
+        input: '紧急\n是',
+        fields: { priority: '紧急', accepted: 'true' },
       },
-      comment: '高\n是',
+      comment: '紧急\n是',
     })
     expect(wrapper.emitted('resolved')![0]).toEqual(['conf-1'])
   })

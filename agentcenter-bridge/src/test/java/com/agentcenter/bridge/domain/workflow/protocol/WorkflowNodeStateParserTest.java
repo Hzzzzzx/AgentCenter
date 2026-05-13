@@ -276,6 +276,7 @@ class WorkflowNodeStateParserTest {
 	                        label: 范围边界
 	                        type: select
 	                        required: true
+	                        allowCustom: true
 	                        placeholder: 请选择本次覆盖范围
 	                        options:
 	                          - value: workflow-interaction
@@ -294,6 +295,7 @@ class WorkflowNodeStateParserTest {
 
 	        assertEquals(2, fields.size());
 	        assertEquals("select", fields.get(0).getType());
+	        assertTrue(fields.get(0).isAllowCustom());
 	        assertEquals("请选择本次覆盖范围", fields.get(0).getPlaceholder());
 	        assertEquals(2, fields.get(0).getOptions().size());
 	        assertEquals("workflow-interaction", fields.get(0).getOptions().get(0).getValue());

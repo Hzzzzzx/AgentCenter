@@ -152,6 +152,7 @@ public class WorkflowNodeInteraction {
         private boolean required = true;
         private String placeholder;
         private List<FieldOption> options;
+        private boolean allowCustom;
 
         public InteractionField() {
             this.options = new ArrayList<>();
@@ -163,12 +164,18 @@ public class WorkflowNodeInteraction {
 
         public InteractionField(String id, String label, String type, boolean required,
                                 String placeholder, List<FieldOption> options) {
+            this(id, label, type, required, placeholder, options, false);
+        }
+
+        public InteractionField(String id, String label, String type, boolean required,
+                                String placeholder, List<FieldOption> options, boolean allowCustom) {
             this.id = id;
             this.label = label;
             this.type = type;
             this.required = required;
             this.placeholder = placeholder;
             this.options = options != null ? new ArrayList<>(options) : new ArrayList<>();
+            this.allowCustom = allowCustom;
         }
 
         public String getId() { return id; }
@@ -187,6 +194,8 @@ public class WorkflowNodeInteraction {
         public void setOptions(List<FieldOption> options) {
             this.options = options != null ? new ArrayList<>(options) : new ArrayList<>();
         }
+        public boolean isAllowCustom() { return allowCustom; }
+        public void setAllowCustom(boolean allowCustom) { this.allowCustom = allowCustom; }
 
         @Override
         public boolean equals(Object o) {

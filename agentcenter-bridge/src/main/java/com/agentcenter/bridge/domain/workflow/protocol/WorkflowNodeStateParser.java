@@ -207,7 +207,7 @@ public final class WorkflowNodeStateParser {
 
     private static WorkflowNodeInteraction.InteractionField parseFieldItem(String text) {
         String id = null, label = null, type = "text", placeholder = null;
-        boolean required = true;
+        boolean required = true, allowCustom = false;
         List<WorkflowNodeInteraction.FieldOption> options = new ArrayList<>();
         String[] lines = text.split("\\n");
         Matcher m = ITEM_HEADER.matcher(lines[0]);
@@ -243,6 +243,7 @@ public final class WorkflowNodeStateParser {
                         case "label" -> label = kv.group(2).trim();
                         case "type" -> type = kv.group(2).trim();
                         case "required" -> required = parseBoolean(kv.group(2).trim());
+                        case "allowCustom", "allow_custom", "custom" -> allowCustom = parseBoolean(kv.group(2).trim());
                         case "placeholder" -> placeholder = kv.group(2).trim();
                         default -> {}
                     }
@@ -257,7 +258,8 @@ public final class WorkflowNodeStateParser {
         }
 
         return id != null
-                ? new WorkflowNodeInteraction.InteractionField(id, label, type, required, placeholder, options)
+                ? new WorkflowNodeInteraction.InteractionField(id, label, type, required, placeholder, options,
+                        allowCustom)
                 : null;
     }
 

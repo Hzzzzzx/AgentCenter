@@ -194,9 +194,15 @@ public class QuestionConfirmationHandler {
                 ObjectNode field = fields.addObject();
                 field.put("id", item.id());
                 field.put("label", firstNonBlank(item.header(), item.question(), item.id()));
-                field.put("type", "textarea");
                 field.put("required", true);
                 field.put("placeholder", item.question());
+                if (item.options().isEmpty()) {
+                    field.put("type", "textarea");
+                } else {
+                    field.put("type", "select");
+                    field.put("allowCustom", true);
+                    field.set("options", fieldOptionArray(item.options()));
+                }
             }
         }
 
@@ -252,6 +258,19 @@ public class QuestionConfirmationHandler {
         for (QuestionOption option : options) {
             ObjectNode node = array.addObject();
             node.put("id", option.label());
+            node.put("label", option.label());
+            if (!option.description().isBlank()) {
+                node.put("description", option.description());
+            }
+        }
+        return array;
+    }
+
+    private ArrayNode fieldOptionArray(List<QuestionOption> options) {
+        ArrayNode array = objectMapper.createArrayNode();
+        for (QuestionOption option : options) {
+            ObjectNode node = array.addObject();
+            node.put("value", option.label());
             node.put("label", option.label());
             if (!option.description().isBlank()) {
                 node.put("description", option.description());
