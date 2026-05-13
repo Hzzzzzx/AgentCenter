@@ -437,11 +437,11 @@ public class WorkItemService {
                 ))
                 .toList();
 
-        String currentStageKey = stageNodes.stream()
-                .filter(ni -> ni.getId().equals(instance.getCurrentNodeInstanceId()))
-                .findFirst()
-                .map(ni -> stageKey(ni, definitionById.get(ni.getNodeDefinitionId())))
-                .orElse(null);
+        String currentStageKey = resolveCurrentStageKey(
+                instance.getCurrentNodeInstanceId(),
+                allNodeInstances,
+                stageNodes,
+                definitionById);
 
         return new WorkflowSummaryDto(
                 instance.getId(),
@@ -488,25 +488,54 @@ public class WorkItemService {
         return stageKey != null && stageKey.equals(child.getStageKey());
     }
 
+    private String resolveCurrentStageKey(String currentNodeInstanceId,
+                                          List<WorkflowNodeInstanceEntity> allNodeInstances,
+                                          List<WorkflowNodeInstanceEntity> stageNodes,
+                                          Map<String, WorkflowNodeDefinitionEntity> definitionById) {
+        if (currentNodeInstanceId == null) {
+            return null;
+        }
+        WorkflowNodeInstanceEntity currentNode = allNodeInstances.stream()
+                .filter(node -> currentNodeInstanceId.equals(node.getId()))
+                .findFirst()
+                .orElse(null);
+        if (currentNode == null) {
+            return null;
+        }
+        if (isStageNode(currentNode)) {
+            return stageKey(currentNode, definitionById.get(currentNode.getNodeDefinitionId()));
+        }
+        return stageNodes.stream()
+                .filter(stage -> belongsToStage(
+                        currentNode,
+                        stage,
+                        stageKey(stage, definitionById.get(stage.getNodeDefinitionId()))))
+                .findFirst()
+                .map(stage -> stageKey(stage, definitionById.get(stage.getNodeDefinitionId())))
+                .orElse(currentNode.getStageKey());
+    }
+
     private String aggregateStageStatus(WorkflowNodeInstanceEntity stage,
                                         List<WorkflowNodeInstanceEntity> children) {
-        if (stage.getStatus() != null && !"PENDING".equals(stage.getStatus())) {
-            return stage.getStatus();
-        }
-        if (children.stream().anyMatch(node -> "WAITING_CONFIRMATION".equals(node.getStatus()))) {
+        String stageStatus = stage.getStatus();
+        if ("WAITING_CONFIRMATION".equals(stageStatus)
+                || children.stream().anyMatch(node -> "WAITING_CONFIRMATION".equals(node.getStatus()))) {
             return "WAITING_CONFIRMATION";
         }
-        if (children.stream().anyMatch(node -> "FAILED".equals(node.getStatus()))) {
+        if ("FAILED".equals(stageStatus)
+                || children.stream().anyMatch(node -> "FAILED".equals(node.getStatus()))) {
             return "FAILED";
         }
-        if (children.stream().anyMatch(node -> "RUNNING".equals(node.getStatus()))) {
+        if ("RUNNING".equals(stageStatus)
+                || children.stream().anyMatch(node -> "RUNNING".equals(node.getStatus()))) {
             return "RUNNING";
         }
-        if (!children.isEmpty() && children.stream().allMatch(node ->
-                "COMPLETED".equals(node.getStatus()) || "SKIPPED".equals(node.getStatus()))) {
+        if (!children.isEmpty()
+                && !"SKIPPED".equals(stageStatus)
+                && children.stream().allMatch(node -> isNodeComplete(node.getStatus()))) {
             return "COMPLETED";
         }
-        return stage.getStatus();
+        return stageStatus;
     }
 
     private int confirmationCount(WorkflowNodeInstanceEntity node, Map<String, Long> pendingConfirmationsByNode) {

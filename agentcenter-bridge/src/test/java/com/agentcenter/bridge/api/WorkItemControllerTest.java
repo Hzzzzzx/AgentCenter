@@ -140,6 +140,97 @@ class WorkItemControllerTest {
         }
     }
 
+    @Test
+    void workflowSummaryResolvesDynamicCurrentNodeStage() throws Exception {
+        var result = mockMvc.perform(get("/api/work-items"))
+                .andExpect(status().isOk())
+                .andReturn();
+        var workItemId = findIdByCode(result.getResponse().getContentAsString(), "FE1234");
+        var workflowDefinitionId = jdbcTemplate.queryForObject("""
+                SELECT id FROM workflow_definition
+                WHERE work_item_type = 'FE' AND status = 'ENABLED'
+                ORDER BY is_default DESC, version_no DESC
+                LIMIT 1
+                """, String.class);
+        var nodeDefinitionId = jdbcTemplate.queryForObject("""
+                SELECT id FROM workflow_node_definition
+                WHERE workflow_definition_id = ?
+                ORDER BY order_no
+                LIMIT 1
+                """, String.class, workflowDefinitionId);
+        var stageKey = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(stage_key, node_key) FROM workflow_node_definition
+                WHERE id = ?
+                """, String.class, nodeDefinitionId);
+        var skillName = jdbcTemplate.queryForObject("""
+                SELECT skill_name FROM workflow_node_definition
+                WHERE id = ?
+                """, String.class, nodeDefinitionId);
+        var workflowInstanceId = "wf_summary_dynamic_child_test";
+        var stageNodeId = "wn_summary_dynamic_stage_test";
+        var childNodeId = "wn_summary_dynamic_child_test";
+        var confirmationId = "cr_summary_dynamic_child_test";
+        var childSummary = "等待用户补充异常处理信息";
+
+        try {
+            jdbcTemplate.update("""
+                    INSERT INTO workflow_instance (
+                        id, work_item_id, workflow_definition_id, status,
+                        current_node_instance_id, started_at
+                    )
+                    VALUES (?, ?, ?, 'RUNNING', ?, datetime('now'))
+                    """, workflowInstanceId, workItemId, workflowDefinitionId, childNodeId);
+            jdbcTemplate.update("""
+                    INSERT INTO workflow_node_instance (
+                        id, workflow_instance_id, node_definition_id, status,
+                        node_kind, origin, stage_key, skill_name, summary, sequence_no
+                    )
+                    VALUES (?, ?, ?, 'COMPLETED', 'STAGE', 'DEFINITION', ?, ?, '阶段已进入执行', 1)
+                    """, stageNodeId, workflowInstanceId, nodeDefinitionId, stageKey, skillName);
+            jdbcTemplate.update("""
+                    INSERT INTO workflow_node_instance (
+                        id, workflow_instance_id, node_definition_id, status,
+                        node_kind, origin, parent_node_instance_id, stage_key,
+                        skill_name, summary, sequence_no
+                    )
+                    VALUES (?, ?, ?, 'WAITING_CONFIRMATION', 'RECOVERY', 'AGENT',
+                            ?, ?, ?, ?, 2)
+                    """, childNodeId, workflowInstanceId, nodeDefinitionId,
+                    stageNodeId, stageKey, skillName, childSummary);
+            jdbcTemplate.update("""
+                    INSERT INTO confirmation_request (
+                        id, request_type, status, work_item_id, workflow_instance_id,
+                        workflow_node_instance_id, title, priority
+                    )
+                    VALUES (?, 'EXCEPTION', 'PENDING', ?, ?, ?, '需要补充异常处理信息', 'HIGH')
+                    """, confirmationId, workItemId, workflowInstanceId, childNodeId);
+            jdbcTemplate.update("""
+                    UPDATE work_item
+                    SET current_workflow_instance_id = ?
+                    WHERE id = ?
+                    """, workflowInstanceId, workItemId);
+
+            mockMvc.perform(get("/api/work-items/" + workItemId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.workflowSummary.currentNodeInstanceId").value(childNodeId))
+                    .andExpect(jsonPath("$.workflowSummary.currentStageKey").value(stageKey))
+                    .andExpect(jsonPath("$.workflowSummary.nodes[0].id").value(stageNodeId))
+                    .andExpect(jsonPath("$.workflowSummary.nodes[0].status").value("WAITING_CONFIRMATION"))
+                    .andExpect(jsonPath("$.workflowSummary.stages[0].id").value(stageNodeId))
+                    .andExpect(jsonPath("$.workflowSummary.stages[0].stageKey").value(stageKey))
+                    .andExpect(jsonPath("$.workflowSummary.stages[0].status").value("WAITING_CONFIRMATION"))
+                    .andExpect(jsonPath("$.workflowSummary.stages[0].dynamicNodeCount").value(1))
+                    .andExpect(jsonPath("$.workflowSummary.stages[0].recoveryCount").value(1))
+                    .andExpect(jsonPath("$.workflowSummary.stages[0].pendingConfirmationCount").value(1))
+                    .andExpect(jsonPath("$.workflowSummary.stages[0].latestSummary").value(childSummary));
+        } finally {
+            jdbcTemplate.update("UPDATE work_item SET current_workflow_instance_id = NULL WHERE id = ?", workItemId);
+            jdbcTemplate.update("DELETE FROM confirmation_request WHERE id = ?", confirmationId);
+            jdbcTemplate.update("DELETE FROM workflow_node_instance WHERE id IN (?, ?)", childNodeId, stageNodeId);
+            jdbcTemplate.update("DELETE FROM workflow_instance WHERE id = ?", workflowInstanceId);
+        }
+    }
+
     private String findIdByCode(String responseBody, String code) throws Exception {
         var array = objectMapper.readTree(responseBody);
         for (var node : array) {
