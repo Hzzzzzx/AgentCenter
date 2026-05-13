@@ -1,7 +1,7 @@
 # AgentCenter 架构文档入口
 
 > 状态：讨论基线
-> 最近更新：2026-05-12
+> 最近更新：2026-05-13
 >
 > ⚠️ **M1 实施决策**：OpenCode Bridge M1 采用 HTTP+SSE 方案，详见 [ADR-001](./ADR-001-OPENCODE-BRIDGE-SSE-REST.md)。后续实现以 [OPENCODE-BRIDGE-EXECUTION-DESIGN.md](./OPENCODE-BRIDGE-EXECUTION-DESIGN.md) 为准。
 >
@@ -43,6 +43,8 @@ AgentCenter 当前首页已经收敛为白色网页端工作台：
 | 6.8 | [RUNTIME-RESOURCE-MANAGEMENT-DESIGN.md](./RUNTIME-RESOURCE-MANAGEMENT-DESIGN.md) | Skill 管理、MCP 管理、运行资源刷新、OpenCode 生效和会话页状态展示 |
 | 6.85 | [PROJECT-CONTEXT-INTEGRATION-GUIDE.md](./PROJECT-CONTEXT-INTEGRATION-GUIDE.md) | 项目管理上下文、全局项目数据 Provider 注册/切换、CloudeReq 数据源、同步按钮和后续 Bridge API 对接指南 |
 | 6.86 | [ENTERPRISE-PROJECT-DATA-PROVIDER-GUIDE.md](./ENTERPRISE-PROJECT-DATA-PROVIDER-GUIDE.md) | 企业内部项目数据实现位对接指南：接口能力、字段映射、扩展字段和验证清单 |
+| 6.865 | **[CLOUDREQ-INTEGRATION-TOPLEVEL-ADJUSTMENT.md](./CLOUDREQ-INTEGRATION-TOPLEVEL-ADJUSTMENT.md)** | **CloudReq 外部集成顶层调整方案：外部 ID 映射层、选择/同步解耦、低冲突增量合并策略** |
+| 6.866 | [CLOUDREQ-PM-INTERACTION-IMPLEMENTATION-PLAN.md](./CLOUDREQ-PM-INTERACTION-IMPLEMENTATION-PLAN.md) | CloudReq 项目管理交互改造实施方案：接口入参/出参收敛、保存与同步解耦、回显降级与验收清单 |
 | 6.9 | [OPENCODE-BRIDGE-TARGET-STATE.md](./OPENCODE-BRIDGE-TARGET-STATE.md) | 长期目标状态草稿；其中旧 WebSocket 表述已被 M1 HTTP+SSE 设计取代 |
 | 7 | [OPENCODE-BRIDGE-CURRENT-STATE.md](./OPENCODE-BRIDGE-CURRENT-STATE.md) | 当前实现做到哪里、Mock 残留在哪里、哪些临时代码不要沿用 |
 | 8 | [AGENT-RUNTIME-WEBSOCKET-BRIDGE.md](./AGENT-RUNTIME-WEBSOCKET-BRIDGE.md) | 理解 Vue 工作台、Java Bridge 和 OpenCode Runtime 的 WebSocket 实时对接方案 |
