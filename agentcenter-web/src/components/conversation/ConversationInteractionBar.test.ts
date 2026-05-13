@@ -167,6 +167,38 @@ describe('ConversationInteractionBar.vue', () => {
     expect(wrapper.emitted('resolved')?.[0]).toEqual(['confirm-2'])
   })
 
+  it('uses option actionType instead of guessing from option text', async () => {
+    const wrapper = mount(ConversationInteractionBar, {
+      props: {
+        interactions: [
+          makeInteraction({
+            id: 'confirm-action-type',
+            requestType: 'DECISION',
+            interactionType: 'WORKFLOW_ADVANCE',
+            title: '选择推进动作',
+            interactionSchemaJson: JSON.stringify({
+              selection: 'single',
+              options: [
+                { id: 'go-next', label: '继续下一步', actionType: 'ADVANCE' },
+                { id: 'more-work', label: '继续完善', actionType: 'SUPPLEMENT' },
+              ],
+            }),
+          }),
+        ],
+      },
+    })
+
+    await wrapper.findAll('.interaction-bar__option')[0].trigger('click')
+    await wrapper.find('.interaction-bar__primary').trigger('click')
+    await flushPromises()
+
+    expect(confirmationApi.resolve).toHaveBeenCalledWith('confirm-action-type', {
+      actionType: 'ADVANCE',
+      payload: { choice: 'go-next', choiceId: 'go-next', choiceLabel: '继续下一步' },
+      comment: '继续下一步',
+    })
+  })
+
   it('announces submission before the resolve request completes', async () => {
     let resolveRequest!: (value: ConfirmationRequestDto) => void
     vi.mocked(confirmationApi.resolve).mockReturnValueOnce(new Promise((resolve) => {
@@ -410,8 +442,33 @@ describe('ConversationInteractionBar.vue', () => {
         choiceLabels: ['方案A', '方案C'],
         choices: ['方案A', '方案C'],
       },
-      comment: JSON.stringify(['方案A', '方案C']),
+      comment: '方案A，方案C',
     })
+  })
+
+  it('offers explicit reject for exception interactions', async () => {
+    const wrapper = mount(ConversationInteractionBar, {
+      props: {
+        interactions: [
+          makeInteraction({
+            id: 'confirm-exception-reject',
+            requestType: 'EXCEPTION',
+            title: '执行异常',
+            contextSummary: '当前节点执行失败。',
+          }),
+        ],
+      },
+    })
+
+    const rejectButton = wrapper.findAll('button').find(button => button.text() === '拒绝')
+    expect(rejectButton).toBeTruthy()
+    await rejectButton!.trigger('click')
+    await flushPromises()
+
+    expect(confirmationApi.resolve).toHaveBeenCalledWith('confirm-exception-reject', {
+      actionType: 'REJECT',
+    })
+    expect(wrapper.emitted('rejected')?.[0]).toEqual(['confirm-exception-reject'])
   })
 
   it('renders custom input for DECISION with allowCustom: true', async () => {
@@ -538,15 +595,22 @@ describe('ConversationInteractionBar.vue', () => {
     expect(wrapper.findAll('.interaction-bar__option')).toHaveLength(2)
     expect(wrapper.text()).toContain('通过')
     expect(wrapper.text()).toContain('需要调整')
+    expect(wrapper.find('.interaction-bar__review-note').exists()).toBe(true)
 
     await wrapper.findAll('.interaction-bar__option')[1].trigger('click')
+    await wrapper.find('.interaction-bar__review-note').setValue('补上失败回滚策略')
     await wrapper.find('.interaction-bar__primary').trigger('click')
     await flushPromises()
 
     expect(confirmationApi.resolve).toHaveBeenCalledWith('confirm-review', {
       actionType: 'REJECT',
-      payload: { choice: 'REVISE', choiceId: 'REVISE', choiceLabel: '需要调整' },
-      comment: '需要调整',
+      payload: {
+        choice: 'REVISE',
+        choiceId: 'REVISE',
+        choiceLabel: '需要调整',
+        remark: '补上失败回滚策略',
+      },
+      comment: '需要调整\n补上失败回滚策略',
     })
   })
 

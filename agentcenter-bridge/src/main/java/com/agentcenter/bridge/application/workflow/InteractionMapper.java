@@ -111,15 +111,7 @@ public class InteractionMapper {
                 return null;
             }
             List<Map<String, String>> optionMaps = interaction.getOptions().stream()
-                    .map(opt -> {
-                        Map<String, String> m = new LinkedHashMap<>();
-                        m.put("id", opt.getId());
-                        m.put("label", opt.getLabel());
-                        if (opt.getDescription() != null) {
-                            m.put("description", opt.getDescription());
-                        }
-                        return m;
-                    })
+                    .map(this::optionMap)
                     .collect(Collectors.toList());
             return objectMapper.writeValueAsString(optionMaps);
         } catch (Exception e) {
@@ -140,29 +132,14 @@ public class InteractionMapper {
 
             if (interaction.getOptions() != null && !interaction.getOptions().isEmpty()) {
                 List<Map<String, String>> optionList = interaction.getOptions().stream()
-                        .map(opt -> {
-                            Map<String, String> m = new LinkedHashMap<>();
-                            m.put("id", opt.getId());
-                            m.put("label", opt.getLabel());
-                            if (opt.getDescription() != null) {
-                                m.put("description", opt.getDescription());
-                            }
-                            return m;
-                        })
+                        .map(this::optionMap)
                         .collect(Collectors.toList());
                 schema.put("options", optionList);
             }
 
             if (interaction.getFields() != null && !interaction.getFields().isEmpty()) {
                 List<Map<String, Object>> fieldList = interaction.getFields().stream()
-                        .map(f -> {
-                            Map<String, Object> m = new LinkedHashMap<>();
-                            m.put("id", f.getId());
-                            m.put("label", f.getLabel());
-                            m.put("type", f.getType());
-                            m.put("required", f.isRequired());
-                            return m;
-                        })
+                        .map(this::fieldMap)
                         .collect(Collectors.toList());
                 schema.put("fields", fieldList);
             }
@@ -174,5 +151,41 @@ public class InteractionMapper {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private Map<String, String> optionMap(WorkflowNodeInteraction.InteractionOption opt) {
+        Map<String, String> m = new LinkedHashMap<>();
+        m.put("id", opt.getId());
+        m.put("label", opt.getLabel());
+        if (opt.getDescription() != null) {
+            m.put("description", opt.getDescription());
+        }
+        if (opt.getActionType() != null && !opt.getActionType().isBlank()) {
+            m.put("actionType", opt.getActionType());
+        }
+        return m;
+    }
+
+    private Map<String, Object> fieldMap(WorkflowNodeInteraction.InteractionField field) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", field.getId());
+        m.put("label", field.getLabel());
+        m.put("type", field.getType());
+        m.put("required", field.isRequired());
+        if (field.getPlaceholder() != null && !field.getPlaceholder().isBlank()) {
+            m.put("placeholder", field.getPlaceholder());
+        }
+        if (!field.getOptions().isEmpty()) {
+            List<Map<String, String>> options = field.getOptions().stream()
+                    .map(option -> {
+                        Map<String, String> optionMap = new LinkedHashMap<>();
+                        optionMap.put("value", option.getValue());
+                        optionMap.put("label", option.getLabel());
+                        return optionMap;
+                    })
+                    .collect(Collectors.toList());
+            m.put("options", options);
+        }
+        return m;
     }
 }

@@ -3,6 +3,16 @@ import { computed, ref } from 'vue'
 import { useConfirmationStore } from '../../stores/confirmations'
 import { useNotificationStore } from '../../stores/notifications'
 import { parseInteractionSchema, type InteractionField, type InteractionOption } from '../conversation/interactions/interactionSchema'
+import {
+  buildInputSubmission,
+  buildMultiChoiceSubmission,
+  buildSingleChoiceSubmission,
+  fieldPlaceholder,
+  fieldQuestion,
+  isFieldComplete as isFieldCompleteFromMap,
+  toResolveRequest,
+  usesOptionControl as shouldUseOptionControl,
+} from '../conversation/interactions/interactionSubmit'
 import type {
   ConfirmationActionType,
   ConfirmationRequestDto,
@@ -74,9 +84,7 @@ const isMultiSelect = computed(() => interactionSchema.value?.selection === 'mul
 const allowCustomChoice = computed(() => interactionSchema.value?.allowCustom === true)
 const isArtifactReview = computed(() => props.confirmation.interactionType === 'ARTIFACT_REVIEW')
 const usesOptionControl = computed(() => {
-  if (isDecision.value) return true
-  return (props.confirmation.requestType === 'APPROVAL' || props.confirmation.requestType === 'CONFIRM')
-    && parsedOptions.value.length > 0
+  return shouldUseOptionControl(props.confirmation.requestType, interactionSchema.value)
 })
 const inputFields = computed<InteractionField[]>(() => interactionSchema.value?.fields ?? [])
 const interactionQuestion = computed(() => interactionSchema.value?.question?.trim() ?? '')
@@ -128,43 +136,8 @@ function fieldInputId(field: InteractionField): string {
   return `confirmation-field-${field.id}`
 }
 
-function fieldQuestion(field: InteractionField): string | null {
-  const placeholder = field.placeholder?.trim()
-  if (!placeholder || placeholder === field.label.trim()) return null
-  return placeholder
-}
-
-function fieldPlaceholder(field: InteractionField): string {
-  return field.type === 'textarea' ? '输入你的回答...' : '输入答案...'
-}
-
-function fieldRawValue(field: InteractionField): string {
-  if (field.type === 'checkbox') return fieldValues.value[field.id] === 'true' ? 'true' : 'false'
-  return fieldValues.value[field.id]?.trim() ?? ''
-}
-
-function fieldDisplayValue(field: InteractionField, value: string): string {
-  if (field.type === 'checkbox') return value === 'true' ? '是' : (field.required ? '否' : '')
-  if (field.type === 'select') return field.options?.find(option => option.value === value)?.label ?? value
-  return value
-}
-
 function isFieldComplete(field: InteractionField): boolean {
-  if (!field.required) return true
-  if (field.type === 'checkbox') return fieldRawValue(field) === 'true'
-  return fieldRawValue(field).length > 0
-}
-
-function collectFieldPayload() {
-  const fields = inputFields.value.reduce<Record<string, string>>((acc, field) => {
-    acc[field.id] = fieldRawValue(field)
-    return acc
-  }, {})
-  const input = inputFields.value
-    .map(field => fieldDisplayValue(field, fields[field.id]))
-    .filter(Boolean)
-    .join('\n')
-  return { input, fields }
+  return isFieldCompleteFromMap(field, fieldValues.value)
 }
 
 function isChoiceSelected(option: InteractionOption): boolean {
@@ -178,41 +151,11 @@ function toggleChoice(optionId: string) {
   selectedChoiceIds.value = next
 }
 
-function approvalActionForChoice(option?: InteractionOption, fallback = ''): ConfirmationActionType {
-  const text = `${option?.id ?? ''} ${option?.label ?? ''} ${fallback}`.toLowerCase()
-  if (/(reject|revise|return|fail|no|denied|不通过|退回|驳回|调整|拒绝|否)/.test(text)) {
-    return 'REJECT'
-  }
-  return 'APPROVE'
-}
-
-function workflowActionForChoice(optionId: string | undefined): ConfirmationActionType | null {
-  if (props.confirmation.interactionType !== 'WORKFLOW_ADVANCE' || !optionId) return null
-  const validActions: ConfirmationActionType[] = ['ENTER_SESSION', 'APPROVE', 'REJECT', 'SUPPLEMENT', 'CHOOSE', 'RETRY', 'SKIP', 'ADVANCE']
-  return validActions.includes(optionId as ConfirmationActionType) ? optionId as ConfirmationActionType : null
-}
-
-function choiceActionType(option?: InteractionOption, fallback = ''): ConfirmationActionType {
-  const workflowAction = workflowActionForChoice(option?.id)
-  if (workflowAction) return workflowAction
-  if (isDecision.value) return 'CHOOSE'
-  return approvalActionForChoice(option, fallback)
-}
-
-function withReviewComment(payload: Record<string, unknown>) {
-  const remark = reviewComment.value.trim()
-  if (remark) payload.remark = remark
-  return payload
-}
-
-function choiceComment(label: string): string {
-  const remark = reviewComment.value.trim()
-  return remark ? `${label}\n${remark}` : label
-}
-
 async function handleApprove() {
   if (busyAction.value) return
   busyAction.value = 'approve'
+  confirmationStore.markRecovering(props.confirmation.id)
+  recovering.value = true
   try {
     await confirmationStore.resolveConfirmation(props.confirmation.id, { actionType: 'APPROVE' }, { remove: false })
     notificationStore.push({
@@ -221,10 +164,10 @@ async function handleApprove() {
       title: '确认已通过',
       message: `${workItemCode.value} 已进入后续流程`,
     })
-    confirmationStore.markRecovering(props.confirmation.id)
-    recovering.value = true
     emit('resolved', props.confirmation.id)
   } catch (error) {
+    confirmationStore.clearRecovering(props.confirmation.id)
+    recovering.value = false
     notificationStore.push({
       anchor: 'right-panel',
       tone: 'error',
@@ -237,17 +180,29 @@ async function handleApprove() {
   }
 }
 
-async function resolveWith(actionType: ConfirmationActionType, payload?: Record<string, unknown>, comment?: string) {
-  await confirmationStore.resolveConfirmation(props.confirmation.id, { actionType, payload, comment }, { remove: false })
-  notificationStore.push({
-    anchor: 'right-panel',
-    tone: 'success',
-    title: '交互已提交',
-    message: `${workItemCode.value} 已收到你的处理结果`,
-  })
+async function resolveWith(
+  actionType: ConfirmationActionType,
+  payload?: Record<string, unknown>,
+  comment?: string,
+  outcome: 'resolved' | 'rejected' = actionType === 'REJECT' ? 'rejected' : 'resolved',
+) {
   confirmationStore.markRecovering(props.confirmation.id)
   recovering.value = true
-  emit('resolved', props.confirmation.id)
+  try {
+    await confirmationStore.resolveConfirmation(props.confirmation.id, toResolveRequest({ actionType, payload, comment }), { remove: false })
+  } catch (error) {
+    confirmationStore.clearRecovering(props.confirmation.id)
+    recovering.value = false
+    throw error
+  }
+  notificationStore.push({
+    anchor: 'right-panel',
+    tone: outcome === 'rejected' ? 'warning' : 'success',
+    title: outcome === 'rejected' ? '交互已拒绝' : '交互已提交',
+    message: `${workItemCode.value} 已收到你的处理结果`,
+  })
+  if (outcome === 'rejected') emit('rejected', props.confirmation.id)
+  else emit('resolved', props.confirmation.id)
 }
 
 async function handleChoice() {
@@ -256,36 +211,28 @@ async function handleChoice() {
   try {
     const custom = customChoice.value.trim()
     if (isMultiSelect.value) {
-      const selected = parsedOptions.value.filter(option => selectedChoiceIds.value.has(option.id))
-      const choiceIds = selected.map(option => option.id)
-      const choiceLabels = selected.map(option => option.label)
-      const choices = custom ? [...choiceLabels, custom] : choiceLabels
-      const payload: Record<string, unknown> = {
-        choiceIds,
-        choiceLabels,
-        choices,
-      }
-      if (custom) payload.customChoice = custom
-      const label = choices.join('，')
-      await resolveWith(choiceActionType(selected[0], custom), withReviewComment(payload), choiceComment(label))
+      const submission = buildMultiChoiceSubmission({
+        requestType: props.confirmation.requestType,
+        interactionType: props.confirmation.interactionType,
+        options: parsedOptions.value,
+        selectedIds: Array.from(selectedChoiceIds.value),
+        customChoice: custom,
+        remark: reviewComment.value,
+      })
+      if (submission) await resolveWith(submission.actionType, submission.payload, submission.comment)
       return
     }
 
-    if (custom) {
-      const payload = withReviewComment({ choice: custom, customChoice: custom })
-      await resolveWith(choiceActionType(undefined, custom), payload, choiceComment(custom))
-      return
-    }
-
-    const opt = parsedOptions.value.length > 0 ? selectedOption.value : null
-    if (opt) {
-      const payload = withReviewComment({ choice: opt.id, choiceId: opt.id, choiceLabel: opt.label })
-      await resolveWith(choiceActionType(opt), payload, choiceComment(opt.label))
-      return
-    }
-
-    const choice = supplementText.value.trim()
-    await resolveWith(choiceActionType(undefined, choice), { choice }, choice)
+    const submission = buildSingleChoiceSubmission({
+      requestType: props.confirmation.requestType,
+      interactionType: props.confirmation.interactionType,
+      options: parsedOptions.value,
+      selectedId: selectedOption.value?.id,
+      customChoice: custom,
+      fallbackChoice: supplementText.value,
+      remark: reviewComment.value,
+    })
+    if (submission) await resolveWith(submission.actionType, submission.payload, submission.comment)
   } catch (error) {
     notificationStore.push({
       anchor: 'right-panel',
@@ -303,13 +250,8 @@ async function handleSupplement() {
   if (busyAction.value || !canSubmitInput.value) return
   busyAction.value = 'submit'
   try {
-    if (inputFields.value.length > 0) {
-      const { input, fields } = collectFieldPayload()
-      await resolveWith('SUPPLEMENT', { input, fields }, input)
-      return
-    }
-    const input = supplementText.value.trim()
-    await resolveWith('SUPPLEMENT', { input }, input)
+    const submission = buildInputSubmission(inputFields.value, fieldValues.value, supplementText.value)
+    if (submission) await resolveWith(submission.actionType, submission.payload, submission.comment)
   } catch (error) {
     notificationStore.push({
       anchor: 'right-panel',
@@ -363,14 +305,7 @@ async function handleReject() {
   if (busyAction.value) return
   busyAction.value = 'reject'
   try {
-    await confirmationStore.resolveConfirmation(props.confirmation.id, { actionType: 'REJECT' }, { remove: false })
-    notificationStore.push({
-      anchor: 'right-panel',
-      tone: 'warning',
-      title: '已拒绝确认',
-      message: `${workItemCode.value} 已暂停推进`,
-    })
-    emit('rejected', props.confirmation.id)
+    await resolveWith('REJECT', undefined, undefined, 'rejected')
   } catch (error) {
     notificationStore.push({
       anchor: 'right-panel',
@@ -393,6 +328,8 @@ async function handlePermissionDecision(reply: 'once' | 'always' | 'reject') {
   if (busyAction.value) return
   busyAction.value = reply === 'reject' ? 'reject' : `permission-${reply}`
   const actionType: ConfirmationActionType = reply === 'reject' ? 'REJECT' : 'APPROVE'
+  confirmationStore.markRecovering(props.confirmation.id)
+  recovering.value = true
   try {
     await confirmationStore.resolveConfirmation(props.confirmation.id, {
       actionType,
@@ -405,13 +342,11 @@ async function handlePermissionDecision(reply: 'once' | 'always' | 'reject') {
       title: reply === 'reject' ? '权限已拒绝' : '权限已允许',
       message: reply === 'always' ? 'OpenCode 本次会话内的同类请求会自动允许' : `${workItemCode.value} 已收到处理结果`,
     })
-    if (reply !== 'reject') {
-      confirmationStore.markRecovering(props.confirmation.id)
-      recovering.value = true
-    }
     if (reply === 'reject') emit('rejected', props.confirmation.id)
     else emit('resolved', props.confirmation.id)
   } catch (error) {
+    confirmationStore.clearRecovering(props.confirmation.id)
+    recovering.value = false
     notificationStore.push({
       anchor: 'right-panel',
       tone: 'error',
@@ -506,7 +441,7 @@ async function handlePermissionDecision(reply: 'once' | 'always' | 'reject') {
         <section v-if="recovering" class="confirmation-dialog__interaction">
           <div class="confirmation-dialog__recovering">
             <span class="confirmation-dialog__recovering-dot"></span>
-            <strong>已提交，等待 Agent 继续</strong>
+            <strong>已提交，正在恢复并同步状态</strong>
           </div>
         </section>
 
@@ -697,6 +632,14 @@ async function handlePermissionDecision(reply: 'once' | 'always' | 'reject') {
             @click="handleSkip"
           >
             {{ busyAction === 'skip' ? '处理中...' : '跳过' }}
+          </button>
+          <button
+            v-if="(confirmation.status === 'PENDING' || confirmation.status === 'IN_CONVERSATION') && isException"
+            class="confirmation-card__action confirmation-card__action--reject"
+            :disabled="!!busyAction"
+            @click="handleReject"
+          >
+            {{ busyAction === 'reject' ? '处理中...' : '拒绝' }}
           </button>
           <button
             v-else-if="confirmation.status === 'PENDING' || confirmation.status === 'IN_CONVERSATION'"

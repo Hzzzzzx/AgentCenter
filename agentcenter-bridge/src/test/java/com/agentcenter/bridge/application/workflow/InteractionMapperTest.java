@@ -44,8 +44,8 @@ class InteractionMapperTest {
         interaction.setSelection("single");
         interaction.setAllowCustom(true);
         interaction.setOptions(List.of(
-                new WorkflowNodeInteraction.InteractionOption("A", "方案A", "快速实施"),
-                new WorkflowNodeInteraction.InteractionOption("B", "方案B", "稳妥实施")
+                new WorkflowNodeInteraction.InteractionOption("A", "方案A", "快速实施", "CHOOSE"),
+                new WorkflowNodeInteraction.InteractionOption("B", "方案B", "稳妥实施", "REJECT")
         ));
         return interaction;
     }
@@ -175,10 +175,12 @@ class InteractionMapperTest {
         assertEquals("A", optionA.get("id").asText());
         assertEquals("方案A", optionA.get("label").asText());
         assertEquals("快速实施", optionA.get("description").asText());
+        assertEquals("CHOOSE", optionA.get("actionType").asText());
 
         JsonNode optionB = options.get(1);
         assertEquals("B", optionB.get("id").asText());
         assertEquals("方案B", optionB.get("label").asText());
+        assertEquals("REJECT", optionB.get("actionType").asText());
     }
 
     @ParameterizedTest
@@ -199,7 +201,13 @@ class InteractionMapperTest {
     void toEntity_withFields() throws Exception {
         WorkflowNodeInteraction interaction = buildInteraction(WorkflowNodeInteractionType.CUSTOM_FORM);
         interaction.setFields(List.of(
-                new WorkflowNodeInteraction.InteractionField("name", "姓名", "text", true),
+                new WorkflowNodeInteraction.InteractionField("name", "姓名", "text", true,
+                        "请输入姓名", null),
+                new WorkflowNodeInteraction.InteractionField("scope", "范围", "select", true,
+                        "请选择范围", List.of(
+                                new WorkflowNodeInteraction.FieldOption("interaction", "交互闭环"),
+                                new WorkflowNodeInteraction.FieldOption("artifact", "产物审阅")
+                        )),
                 new WorkflowNodeInteraction.InteractionField("email", "邮箱", "email", false)
         ));
 
@@ -212,12 +220,18 @@ class InteractionMapperTest {
         JsonNode schema = objectMapper.readTree(entity.getInteractionSchemaJson());
         assertTrue(schema.has("fields"));
         JsonNode fields = schema.get("fields");
-        assertEquals(2, fields.size());
+        assertEquals(3, fields.size());
         assertEquals("name", fields.get(0).get("id").asText());
         assertEquals("姓名", fields.get(0).get("label").asText());
         assertEquals("text", fields.get(0).get("type").asText());
         assertTrue(fields.get(0).get("required").asBoolean());
-        assertFalse(fields.get(1).get("required").asBoolean());
+        assertEquals("请输入姓名", fields.get(0).get("placeholder").asText());
+        assertEquals("scope", fields.get(1).get("id").asText());
+        assertEquals("select", fields.get(1).get("type").asText());
+        assertEquals("请选择范围", fields.get(1).get("placeholder").asText());
+        assertEquals("interaction", fields.get(1).get("options").get(0).get("value").asText());
+        assertEquals("交互闭环", fields.get(1).get("options").get(0).get("label").asText());
+        assertFalse(fields.get(2).get("required").asBoolean());
     }
 
     @Test

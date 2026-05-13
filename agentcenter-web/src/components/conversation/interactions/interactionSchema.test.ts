@@ -28,7 +28,7 @@ describe('parseInteractionSchema', () => {
       interactionSchemaJson: JSON.stringify({
         selection: 'single',
         options: [
-          { id: 'a', label: 'Option A', description: 'Desc A' },
+          { id: 'a', label: 'Option A', description: 'Desc A', actionType: 'ADVANCE' },
           { id: 'b', label: 'Option B' },
         ],
         allowCustom: true,
@@ -42,7 +42,7 @@ describe('parseInteractionSchema', () => {
     expect(schema!.interactionType).toBe('DECISION')
     expect(schema!.selection).toBe('single')
     expect(schema!.options).toHaveLength(2)
-    expect(schema!.options![0]).toEqual({ id: 'a', label: 'Option A', description: 'Desc A' })
+    expect(schema!.options![0]).toEqual({ id: 'a', label: 'Option A', description: 'Desc A', actionType: 'ADVANCE' })
     expect(schema!.allowCustom).toBe(true)
     expect(schema!.title).toBe('Test Title')
     expect(schema!.question).toBe('What should we do?')
@@ -54,15 +54,29 @@ describe('parseInteractionSchema', () => {
         fields: [
           { id: 'name', label: 'Name', type: 'text' as const, required: true },
           { id: 'reason', label: 'Reason', type: 'textarea' as const, placeholder: 'Why?' },
+          {
+            id: 'scope',
+            label: 'Scope',
+            type: 'select',
+            required: true,
+            options: [
+              { value: 'interaction', label: 'Interaction' },
+              { id: 'artifact', label: 'Artifact' },
+            ],
+          },
         ],
       }),
     })
 
     const schema = parseInteractionSchema(confirmation)
 
-    expect(schema!.fields).toHaveLength(2)
+    expect(schema!.fields).toHaveLength(3)
     expect(schema!.fields![0]).toEqual({ id: 'name', label: 'Name', type: 'text', required: true })
     expect(schema!.fields![1].placeholder).toBe('Why?')
+    expect(schema!.fields![2].options).toEqual([
+      { value: 'interaction', label: 'Interaction' },
+      { value: 'artifact', label: 'Artifact' },
+    ])
     expect(schema!.options).toBeUndefined()
   })
 
@@ -117,8 +131,8 @@ describe('parseInteractionSchema', () => {
       interactionSchemaJson: JSON.stringify({
         selection: 'single',
         options: [
-          { value: 'APPROVE', label: '允许' },
-          { value: 'REJECT', label: '拒绝' },
+        { value: 'APPROVE', label: '允许', action_type: 'APPROVE' },
+        { value: 'REJECT', label: '拒绝' },
         ],
       }),
     })
@@ -126,9 +140,49 @@ describe('parseInteractionSchema', () => {
     const schema = parseInteractionSchema(confirmation)
 
     expect(schema!.options).toEqual([
-      { id: 'APPROVE', label: '允许' },
+      { id: 'APPROVE', label: '允许', actionType: 'APPROVE' },
       { id: 'REJECT', label: '拒绝' },
     ])
+  })
+
+  it('provides default artifact review options when the backend omits them', () => {
+    const confirmation = makeConfirmation({
+      requestType: 'APPROVAL',
+      interactionType: 'ARTIFACT_REVIEW',
+      optionsJson: null,
+    })
+
+    const schema = parseInteractionSchema(confirmation)
+
+    expect(schema!.options).toEqual([
+      {
+        id: 'APPROVE',
+        label: '通过',
+        description: '产物可接受，继续推进下一步',
+        actionType: 'APPROVE',
+      },
+      {
+        id: 'REVISE',
+        label: '需要调整',
+        description: '补充审阅备注，让 Agent 继续完善',
+        actionType: 'REJECT',
+      },
+    ])
+  })
+
+  it('normalizes snake-case custom and multiple selection metadata', () => {
+    const confirmation = makeConfirmation({
+      interactionSchemaJson: JSON.stringify({
+        selection: 'multiple',
+        allow_custom: true,
+        options: [{ id: 'A', label: '方案 A' }],
+      }),
+    })
+
+    const schema = parseInteractionSchema(confirmation)
+
+    expect(schema!.selection).toBe('multi')
+    expect(schema!.allowCustom).toBe(true)
   })
 
   it('returns schema without options when optionsJson is null', () => {

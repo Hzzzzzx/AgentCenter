@@ -24,6 +24,10 @@ public final class WorkflowNodeStateParser {
             "\\s*-\\s+id:\\s*(.+)"
     );
 
+    private static final Pattern LIST_KV_HEADER = Pattern.compile(
+            "\\s*-\\s+(\\w+):\\s*(.+)"
+    );
+
     private WorkflowNodeStateParser() {}
 
     public static String stripStateBlock(String text) {
@@ -182,7 +186,7 @@ public final class WorkflowNodeStateParser {
     }
 
     private static WorkflowNodeInteraction.InteractionOption parseOptionItem(String text) {
-        String id = null, label = null, description = null;
+        String id = null, label = null, description = null, actionType = null;
         String[] lines = text.split("\\n");
         Matcher m = ITEM_HEADER.matcher(lines[0]);
         if (m.matches()) id = m.group(1).trim();
@@ -193,32 +197,107 @@ public final class WorkflowNodeStateParser {
                 switch (kv.group(1)) {
                     case "label" -> label = kv.group(2).trim();
                     case "description" -> description = kv.group(2).trim();
+                    case "actionType", "action_type", "action" -> actionType = kv.group(2).trim();
                     default -> {}
                 }
             }
         }
-        return id != null ? new WorkflowNodeInteraction.InteractionOption(id, label, description) : null;
+        return id != null ? new WorkflowNodeInteraction.InteractionOption(id, label, description, actionType) : null;
     }
 
     private static WorkflowNodeInteraction.InteractionField parseFieldItem(String text) {
-        String id = null, label = null, type = "text";
+        String id = null, label = null, type = "text", placeholder = null;
         boolean required = true;
+        List<WorkflowNodeInteraction.FieldOption> options = new ArrayList<>();
         String[] lines = text.split("\\n");
         Matcher m = ITEM_HEADER.matcher(lines[0]);
         if (m.matches()) id = m.group(1).trim();
+
+        int propertyIndent = countIndent(lines[0]) + 2;
+        String currentSubKey = null;
+        StringBuilder subBuffer = new StringBuilder();
+
+        for (int i = 1; i < lines.length; i++) {
+            String line = lines[i];
+            int indent = countIndent(line);
+            String trimmed = line.trim();
+            if (trimmed.isEmpty()) continue;
+
+            if (indent == propertyIndent) {
+                if (currentSubKey != null) {
+                    if ("options".equals(currentSubKey)) {
+                        options = parseFieldOptions(subBuffer.toString());
+                    }
+                    currentSubKey = null;
+                    subBuffer = new StringBuilder();
+                }
+
+                Matcher kv = KV_PATTERN.matcher(trimmed);
+                if (kv.matches()) {
+                    String key = kv.group(1);
+                    if ("options".equals(key)) {
+                        currentSubKey = key;
+                        continue;
+                    }
+                    switch (key) {
+                        case "label" -> label = kv.group(2).trim();
+                        case "type" -> type = kv.group(2).trim();
+                        case "required" -> required = parseBoolean(kv.group(2).trim());
+                        case "placeholder" -> placeholder = kv.group(2).trim();
+                        default -> {}
+                    }
+                }
+            } else if (indent > propertyIndent && currentSubKey != null) {
+                subBuffer.append(line).append('\n');
+            }
+        }
+
+        if (currentSubKey != null && "options".equals(currentSubKey)) {
+            options = parseFieldOptions(subBuffer.toString());
+        }
+
+        return id != null
+                ? new WorkflowNodeInteraction.InteractionField(id, label, type, required, placeholder, options)
+                : null;
+    }
+
+    private static List<WorkflowNodeInteraction.FieldOption> parseFieldOptions(String section) {
+        List<ItemSpan> spans = findKeyedListItems(section);
+        List<WorkflowNodeInteraction.FieldOption> result = new ArrayList<>();
+        for (ItemSpan span : spans) {
+            WorkflowNodeInteraction.FieldOption option = parseFieldOptionItem(span.text());
+            if (option != null) result.add(option);
+        }
+        return result;
+    }
+
+    private static WorkflowNodeInteraction.FieldOption parseFieldOptionItem(String text) {
+        String value = null, label = null;
+        String[] lines = text.split("\\n");
+        Matcher header = LIST_KV_HEADER.matcher(lines[0]);
+        if (header.matches()) {
+            String key = header.group(1);
+            String firstValue = header.group(2).trim();
+            if ("value".equals(key) || "id".equals(key)) value = firstValue;
+            if ("label".equals(key)) label = firstValue;
+        }
 
         for (int i = 1; i < lines.length; i++) {
             Matcher kv = KV_PATTERN.matcher(lines[i].trim());
             if (kv.matches()) {
                 switch (kv.group(1)) {
+                    case "value", "id" -> value = kv.group(2).trim();
                     case "label" -> label = kv.group(2).trim();
-                    case "type" -> type = kv.group(2).trim();
-                    case "required" -> required = parseBoolean(kv.group(2).trim());
                     default -> {}
                 }
             }
         }
-        return id != null ? new WorkflowNodeInteraction.InteractionField(id, label, type, required) : null;
+
+        String resolvedValue = firstNonBlank(value, label);
+        String resolvedLabel = firstNonBlank(label, value);
+        return resolvedValue.isBlank()
+                ? null
+                : new WorkflowNodeInteraction.FieldOption(resolvedValue, resolvedLabel);
     }
 
     private static List<ItemSpan> findListItems(String section, int targetIndent) {
@@ -228,6 +307,36 @@ public final class WorkflowNodeStateParser {
         for (int i = 0; i < lines.length; i++) {
             int indent = countIndent(lines[i]);
             if (Math.abs(indent - targetIndent) <= 1 && lines[i].trim().startsWith("- id:")) {
+                positions.add(i);
+            }
+        }
+
+        List<ItemSpan> spans = new ArrayList<>();
+        for (int i = 0; i < positions.size(); i++) {
+            int startLine = positions.get(i);
+            int endLine = (i + 1 < positions.size()) ? positions.get(i + 1) : lines.length;
+
+            StringBuilder sb = new StringBuilder();
+            for (int j = startLine; j < endLine; j++) {
+                sb.append(lines[j]).append('\n');
+            }
+            spans.add(new ItemSpan(sb.toString()));
+        }
+
+        return spans;
+    }
+
+    private static List<ItemSpan> findKeyedListItems(String section) {
+        String[] lines = section.split("\\n");
+        List<Integer> positions = new ArrayList<>();
+        int targetIndent = -1;
+
+        for (int i = 0; i < lines.length; i++) {
+            Matcher matcher = LIST_KV_HEADER.matcher(lines[i]);
+            if (!matcher.matches()) continue;
+            int indent = countIndent(lines[i]);
+            if (targetIndent < 0) targetIndent = indent;
+            if (Math.abs(indent - targetIndent) <= 1) {
                 positions.add(i);
             }
         }
@@ -277,6 +386,16 @@ public final class WorkflowNodeStateParser {
 
     private static boolean parseBoolean(String value) {
         return value != null && "true".equalsIgnoreCase(value.trim());
+    }
+
+    private static String firstNonBlank(String... values) {
+        if (values == null) return "";
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value.trim();
+            }
+        }
+        return "";
     }
 
     @FunctionalInterface

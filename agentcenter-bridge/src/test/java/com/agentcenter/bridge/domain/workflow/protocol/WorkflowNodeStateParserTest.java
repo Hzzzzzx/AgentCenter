@@ -92,9 +92,11 @@ class WorkflowNodeStateParserTest {
                       - id: A
                         label: 双写
                         description: 更安全
+                        actionType: CHOOSE
                       - id: B
                         label: 直接切换
                         description: 风险较高
+                        action_type: REJECT
                     allow_custom: true
                     required: true
                 -->""";
@@ -118,12 +120,14 @@ class WorkflowNodeStateParserTest {
 
         List<WorkflowNodeInteraction.InteractionOption> options = interaction.getOptions();
         assertEquals(2, options.size());
-        assertEquals("A", options.get(0).getId());
-        assertEquals("双写", options.get(0).getLabel());
-        assertEquals("更安全", options.get(0).getDescription());
-        assertEquals("B", options.get(1).getId());
-        assertEquals("直接切换", options.get(1).getLabel());
-    }
+	        assertEquals("A", options.get(0).getId());
+	        assertEquals("双写", options.get(0).getLabel());
+	        assertEquals("更安全", options.get(0).getDescription());
+	        assertEquals("CHOOSE", options.get(0).getActionType());
+	        assertEquals("B", options.get(1).getId());
+	        assertEquals("直接切换", options.get(1).getLabel());
+	        assertEquals("REJECT", options.get(1).getActionType());
+	    }
 
     @Test
     @DisplayName("parse_needsUserInput_withMultipleInteractions")
@@ -252,8 +256,50 @@ class WorkflowNodeStateParserTest {
 
         assertEquals("db_notes", fields.get(2).getId());
         assertEquals("textarea", fields.get(2).getType());
-        assertFalse(fields.get(2).isRequired());
-    }
+	        assertFalse(fields.get(2).isRequired());
+	    }
+
+	    @Test
+	    @DisplayName("parse_interactionsWithSelectableFieldMetadata")
+	    void parse_interactionsWithSelectableFieldMetadata() {
+	        String text = """
+	                <!-- AGENTCENTER_NODE_STATE
+	                status: NEEDS_USER_INPUT
+	                reason: 需要选择范围
+	                interactions:
+	                  - id: PRD-SCOPE-FORM
+	                    type: CUSTOM_FORM
+	                    title: 选择 PRD 边界
+	                    question: 请先选择常见边界，开放项再补充说明
+	                    fields:
+	                      - id: scope
+	                        label: 范围边界
+	                        type: select
+	                        required: true
+	                        placeholder: 请选择本次覆盖范围
+	                        options:
+	                          - value: workflow-interaction
+	                            label: 工作流交互闭环
+	                          - value: artifact-review
+	                            label: 产物审阅闭环
+	                      - id: include-risk
+	                        label: 包含风险说明
+	                        type: checkbox
+	                        required: false
+	                -->""";
+
+	        WorkflowNodeState state = WorkflowNodeStateParser.parse(text);
+	        WorkflowNodeInteraction interaction = state.getInteractions().get(0);
+	        List<WorkflowNodeInteraction.InteractionField> fields = interaction.getFields();
+
+	        assertEquals(2, fields.size());
+	        assertEquals("select", fields.get(0).getType());
+	        assertEquals("请选择本次覆盖范围", fields.get(0).getPlaceholder());
+	        assertEquals(2, fields.get(0).getOptions().size());
+	        assertEquals("workflow-interaction", fields.get(0).getOptions().get(0).getValue());
+	        assertEquals("工作流交互闭环", fields.get(0).getOptions().get(0).getLabel());
+	        assertEquals("checkbox", fields.get(1).getType());
+	    }
 
     @Test
     @DisplayName("parse_allowCustomFlag")

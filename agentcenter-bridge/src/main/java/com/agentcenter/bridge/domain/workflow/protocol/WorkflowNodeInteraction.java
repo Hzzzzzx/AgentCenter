@@ -105,13 +105,19 @@ public class WorkflowNodeInteraction {
         private String id;
         private String label;
         private String description;
+        private String actionType;
 
         public InteractionOption() {}
 
         public InteractionOption(String id, String label, String description) {
+            this(id, label, description, null);
+        }
+
+        public InteractionOption(String id, String label, String description, String actionType) {
             this.id = id;
             this.label = label;
             this.description = description;
+            this.actionType = actionType;
         }
 
         public String getId() { return id; }
@@ -120,6 +126,8 @@ public class WorkflowNodeInteraction {
         public void setLabel(String label) { this.label = label; }
         public String getDescription() { return description; }
         public void setDescription(String description) { this.description = description; }
+        public String getActionType() { return actionType; }
+        public void setActionType(String actionType) { this.actionType = actionType; }
 
         @Override
         public boolean equals(Object o) {
@@ -142,14 +150,25 @@ public class WorkflowNodeInteraction {
         private String label;
         private String type;
         private boolean required = true;
+        private String placeholder;
+        private List<FieldOption> options;
 
-        public InteractionField() {}
+        public InteractionField() {
+            this.options = new ArrayList<>();
+        }
 
         public InteractionField(String id, String label, String type, boolean required) {
+            this(id, label, type, required, null, null);
+        }
+
+        public InteractionField(String id, String label, String type, boolean required,
+                                String placeholder, List<FieldOption> options) {
             this.id = id;
             this.label = label;
             this.type = type;
             this.required = required;
+            this.placeholder = placeholder;
+            this.options = options != null ? new ArrayList<>(options) : new ArrayList<>();
         }
 
         public String getId() { return id; }
@@ -160,6 +179,14 @@ public class WorkflowNodeInteraction {
         public void setType(String type) { this.type = type; }
         public boolean isRequired() { return required; }
         public void setRequired(boolean required) { this.required = required; }
+        public String getPlaceholder() { return placeholder; }
+        public void setPlaceholder(String placeholder) { this.placeholder = placeholder; }
+        public List<FieldOption> getOptions() {
+            return options != null ? Collections.unmodifiableList(options) : Collections.emptyList();
+        }
+        public void setOptions(List<FieldOption> options) {
+            this.options = options != null ? new ArrayList<>(options) : new ArrayList<>();
+        }
 
         @Override
         public boolean equals(Object o) {
@@ -171,6 +198,38 @@ public class WorkflowNodeInteraction {
         @Override
         public int hashCode() {
             return Objects.hash(id, label);
+        }
+    }
+
+    /**
+     * A selectable option within a select/radio-like input field.
+     */
+    public static class FieldOption {
+        private String value;
+        private String label;
+
+        public FieldOption() {}
+
+        public FieldOption(String value, String label) {
+            this.value = value;
+            this.label = label;
+        }
+
+        public String getValue() { return value; }
+        public void setValue(String value) { this.value = value; }
+        public String getLabel() { return label; }
+        public void setLabel(String label) { this.label = label; }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (!(o instanceof FieldOption that)) return false;
+            return Objects.equals(value, that.value) && Objects.equals(label, that.label);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(value, label);
         }
     }
 }

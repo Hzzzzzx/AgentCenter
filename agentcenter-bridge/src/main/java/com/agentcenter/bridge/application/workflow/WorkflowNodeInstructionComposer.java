@@ -51,9 +51,11 @@ public class WorkflowNodeInstructionComposer {
                   - id: A
                     label: 方案A
                     description: 描述A
+                    actionType: CHOOSE
                   - id: B
                     label: 方案B
                     description: 描述B
+                    actionType: CHOOSE
                 allow_custom: true
                 required: true
             -->
@@ -65,7 +67,9 @@ public class WorkflowNodeInstructionComposer {
             - 在 OpenCode Runtime 中，需要用户澄清、选择、确认或授权时，优先使用 OpenCode 原生 Question 交互；AgentCenter Bridge 会将 Question 翻译为平台待确认。
             - 当不能使用 OpenCode Question，或需要明确声明节点完成/阻塞状态时，再使用本 `AGENTCENTER_NODE_STATE` 协议。
             - 如果你要让用户在有限方案中选择，必须在 `interactions` 中输出 `type: DECISION` 和 `options`；不要只写 `NEEDS_USER_INPUT` 的 `reason`。
-            - 只有开放式补充信息才使用 `INPUT` / `ASK_USER`；能枚举 2-3 个互斥选择时优先给选项。
+            - 只有开放式补充信息才使用 `INPUT` / `ASK_USER`；能枚举 2-4 个互斥选择时优先给 `DECISION`，能用下拉/勾选表达时优先给 `CUSTOM_FORM` 的 `select` / `checkbox` 字段。
+            - 选择型 `options` 可以声明 `actionType`：ADVANCE / SUPPLEMENT / RETRY / SKIP / APPROVE / REJECT / CHOOSE。平台会优先使用 `actionType`，不要依赖选项文案触发动作。
+            - 需求澄清类问题不要默认让用户自由长文本输入；除非问题本身无法枚举答案，否则先提供常见选项和“自定义补充”入口。
             - 如果你不输出状态块，平台默认视为 IN_PROGRESS，不会推进。
             - 只有 READY_TO_ADVANCE 才会保存最终 artifact 并允许进入下一节点。
             - NEEDS_USER_INPUT 下用户回答后，平台会将回答作为新输入回灌给你继续执行。

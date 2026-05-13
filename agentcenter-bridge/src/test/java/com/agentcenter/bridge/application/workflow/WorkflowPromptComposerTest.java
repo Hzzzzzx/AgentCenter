@@ -336,7 +336,7 @@ class WorkflowPromptComposerTest {
             assertTrue(instruction.contains("不要把可执行的用户输入回复成“等待系统推进”"), "should avoid rigid system-progress wording");
             assertTrue(instruction.contains("由系统继续推进"), "should warn against placeholder advance wording");
             assertTrue(instruction.contains("type: DECISION"), "should require structured decision choices");
-            assertTrue(instruction.contains("2-3 个互斥选择"), "should prefer options for finite choices");
+            assertTrue(instruction.contains("2-4 个互斥选择"), "should prefer options for finite choices");
         }
     }
 

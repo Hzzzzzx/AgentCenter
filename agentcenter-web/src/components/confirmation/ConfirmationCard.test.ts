@@ -151,6 +151,37 @@ describe('ConfirmationCard.vue', () => {
     })
   })
 
+  it('uses option actionType for decision submissions', async () => {
+    const { confirmationApi } = await import('../../api/confirmations')
+    const wrapper = mountCard({
+      ...pendingConfirmation,
+      requestType: 'DECISION',
+      interactionType: 'WORKFLOW_ADVANCE',
+      interactionSchemaJson: JSON.stringify({
+        selection: 'single',
+        options: [
+          { id: 'next-node', label: '进入下一阶段', actionType: 'ADVANCE' },
+          { id: 'revise-current', label: '继续完善当前阶段', actionType: 'SUPPLEMENT' },
+        ],
+      }),
+    })
+
+    await openDialog(wrapper)
+    const option = document.body.querySelector<HTMLInputElement>('input[value="next-node"]')
+    expect(option).toBeTruthy()
+    option!.checked = true
+    option!.dispatchEvent(new Event('change'))
+    await wrapper.vm.$nextTick()
+    await document.body.querySelector<HTMLButtonElement>('.confirmation-card__action--approve')!.click()
+    await vi.dynamicImportSettled()
+
+    expect(confirmationApi.resolve).toHaveBeenCalledWith('conf-1', {
+      actionType: 'ADVANCE',
+      payload: { choice: 'next-node', choiceId: 'next-node', choiceLabel: '进入下一阶段' },
+      comment: '进入下一阶段',
+    })
+  })
+
   it('submits DECISION confirmation with multi-select and custom choice', async () => {
     const { confirmationApi } = await import('../../api/confirmations')
     const wrapper = mountCard({
@@ -376,7 +407,31 @@ describe('ConfirmationCard.vue', () => {
     expect(confirmationApi.resolve).toHaveBeenCalledWith('conf-1', { actionType: 'REJECT' })
     expect(wrapper.emitted('rejected')).toBeTruthy()
     expect(wrapper.emitted('rejected')![0]).toEqual(['conf-1'])
-    expect(notificationStore.rightPanelNotifications[0].title).toBe('已拒绝确认')
+    expect(notificationStore.rightPanelNotifications[0].title).toBe('交互已拒绝')
+  })
+
+  it('offers skip and reject for EXCEPTION confirmations', async () => {
+    const { confirmationApi } = await import('../../api/confirmations')
+    const wrapper = mountCard({
+      ...pendingConfirmation,
+      requestType: 'EXCEPTION',
+      title: '执行异常',
+      contextSummary: '当前节点执行失败。',
+    })
+
+    await openDialog(wrapper)
+    expect(document.body.textContent).toContain('跳过')
+    expect(document.body.textContent).toContain('拒绝')
+
+    const reject = [...document.body.querySelectorAll<HTMLButtonElement>('.confirmation-card__action')]
+      .find((button) => button.textContent?.includes('拒绝'))!
+    await reject.click()
+    await vi.dynamicImportSettled()
+
+    expect(confirmationApi.resolve).toHaveBeenCalledWith('conf-1', {
+      actionType: 'REJECT',
+    })
+    expect(wrapper.emitted('rejected')![0]).toEqual(['conf-1'])
   })
 
   it('shows error notification when approve fails', async () => {
