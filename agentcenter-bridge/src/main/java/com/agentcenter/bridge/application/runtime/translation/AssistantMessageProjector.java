@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import com.agentcenter.bridge.application.AgentMessageWriteService;
 import com.agentcenter.bridge.application.artifact.ArtifactCaptureService;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeEventEnvelope;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeEventTypes;
@@ -16,7 +17,6 @@ import com.agentcenter.bridge.domain.session.MessageRole;
 import com.agentcenter.bridge.domain.session.MessageStatus;
 import com.agentcenter.bridge.infrastructure.id.IdGenerator;
 import com.agentcenter.bridge.infrastructure.persistence.entity.AgentMessageEntity;
-import com.agentcenter.bridge.infrastructure.persistence.mapper.AgentMessageMapper;
 
 @Component
 public class AssistantMessageProjector {
@@ -25,15 +25,15 @@ public class AssistantMessageProjector {
     private static final DateTimeFormatter SQLITE_DATETIME =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    private final AgentMessageMapper agentMessageMapper;
+    private final AgentMessageWriteService messageWriteService;
     private final IdGenerator idGenerator;
     private final ArtifactCaptureService artifactCaptureService;
     private final ConcurrentHashMap<String, StringBuilder> buffers = new ConcurrentHashMap<>();
 
-    public AssistantMessageProjector(AgentMessageMapper agentMessageMapper,
+    public AssistantMessageProjector(AgentMessageWriteService messageWriteService,
                                      IdGenerator idGenerator,
                                      ArtifactCaptureService artifactCaptureService) {
-        this.agentMessageMapper = agentMessageMapper;
+        this.messageWriteService = messageWriteService;
         this.idGenerator = idGenerator;
         this.artifactCaptureService = artifactCaptureService;
     }
@@ -78,7 +78,6 @@ public class AssistantMessageProjector {
             buffer.setLength(0);
         }
         if (content.isBlank()) return;
-        if (isDuplicateLatestAssistant(agentSessionId, content)) return;
 
         try {
             AgentMessageEntity message = new AgentMessageEntity();
@@ -88,10 +87,12 @@ public class AssistantMessageProjector {
             message.setContent(content);
             message.setContentFormat(ContentFormat.MARKDOWN.name());
             message.setStatus(MessageStatus.COMPLETED.name());
-            message.setSeqNo(nextMessageSeqNo(agentSessionId));
             message.setCreatedBy("runtime-projector");
             message.setCreatedAt(LocalDateTime.now().format(SQLITE_DATETIME));
-            agentMessageMapper.insert(message);
+            boolean inserted = messageWriteService.insertWithNextSeqNoIfAbsent(
+                    message,
+                    existing -> isDuplicateLatestAssistant(existing, content));
+            if (!inserted) return;
             try {
                 artifactCaptureService.captureFromAssistantMessage(message);
             } catch (Exception artifactError) {
@@ -106,18 +107,13 @@ public class AssistantMessageProjector {
         }
     }
 
-    private boolean isDuplicateLatestAssistant(String agentSessionId, String content) {
-        return agentMessageMapper.findBySessionId(agentSessionId).stream()
-                .filter(m -> MessageRole.ASSISTANT.name().equals(m.getRole()))
-                .reduce((first, second) -> second)
-                .map(m -> content.equals(m.getContent()))
-                .orElse(false);
-    }
-
-    private int nextMessageSeqNo(String agentSessionId) {
-        return agentMessageMapper.findBySessionId(agentSessionId).stream()
-                .mapToInt(m -> m.getSeqNo() != null ? m.getSeqNo() : 0)
-                .max()
-                .orElse(0) + 1;
+    private boolean isDuplicateLatestAssistant(Iterable<AgentMessageEntity> existing, String content) {
+        AgentMessageEntity latestAssistant = null;
+        for (AgentMessageEntity message : existing) {
+            if (MessageRole.ASSISTANT.name().equals(message.getRole())) {
+                latestAssistant = message;
+            }
+        }
+        return latestAssistant != null && content.equals(latestAssistant.getContent());
     }
 }

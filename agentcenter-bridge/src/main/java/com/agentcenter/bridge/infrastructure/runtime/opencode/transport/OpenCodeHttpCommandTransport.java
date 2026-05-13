@@ -200,7 +200,10 @@ public class OpenCodeHttpCommandTransport implements RuntimeCommandTransport {
         try {
             response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(OpenCodeTextEncoding.WIRE_CHARSET));
         } catch (IOException e) {
-            log.warn("Failed to fetch messages for {}: {}", opencodeSessionId, e.getMessage());
+            log.warn("Failed to fetch messages for {} at {}: {}",
+                    opencodeSessionId,
+                    request.uri().getPath(),
+                    errorMessage(e));
             return null;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -211,6 +214,13 @@ public class OpenCodeHttpCommandTransport implements RuntimeCommandTransport {
             return null;
         }
         return parseBody(response.body());
+    }
+
+    private String errorMessage(Exception error) {
+        String message = error.getMessage();
+        return message != null && !message.isBlank()
+                ? error.getClass().getSimpleName() + ": " + message
+                : error.getClass().getSimpleName();
     }
 
     private HttpRequest buildPost(String baseUrl, String path, ObjectNode body,

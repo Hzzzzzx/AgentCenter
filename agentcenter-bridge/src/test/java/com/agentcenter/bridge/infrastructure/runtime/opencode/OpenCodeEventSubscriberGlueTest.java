@@ -144,6 +144,7 @@ class OpenCodeEventSubscriberGlueTest {
             if (envelopes == null || envelopes.isEmpty()) return false;
             RuntimeEventEnvelope env = envelopes.get(0);
             return RuntimeEventTypes.RUNTIME_ERROR.equals(env.type())
+                && env.operationId() == null
                 && AGENT_SES.equals(env.agentSessionId())
                 && OPENCODE_SES.equals(env.runtimeSessionId())
                 && "runtime_connection".equals(env.payload().path("kind").asText())

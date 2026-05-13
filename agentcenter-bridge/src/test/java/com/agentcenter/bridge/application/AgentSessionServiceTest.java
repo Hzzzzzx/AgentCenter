@@ -151,6 +151,7 @@ class AgentSessionServiceTest {
                 mock(RuntimeGateway.class),
                 mock(WebSocketSessionRegistry.class),
                 runtimeEventService,
+                new AgentMessageWriteService(mock(AgentMessageMapper.class)),
                 mock(WorkflowCommandService.class),
                 workflowMapper,
                 mock(SkillRegistryService.class),

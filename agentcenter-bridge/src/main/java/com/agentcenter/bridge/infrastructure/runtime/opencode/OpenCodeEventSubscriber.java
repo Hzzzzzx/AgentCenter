@@ -209,7 +209,7 @@ public class OpenCodeEventSubscriber implements RuntimeTranslationContext, Runti
                 eventType,
                 null,
                 null,
-                "opencode-event-stream",
+                null,
                 RuntimeType.OPENCODE,
                 agentSessionId,
                 opencodeSessionId,

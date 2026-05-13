@@ -10,6 +10,7 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.agentcenter.bridge.application.AgentMessageWriteService;
 import com.agentcenter.bridge.application.artifact.ArtifactCaptureService;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeEventEnvelope;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeEventTypes;
@@ -35,7 +36,8 @@ class AssistantMessageProjectorTest {
         artifactCaptureService = mock(ArtifactCaptureService.class);
         when(idGenerator.nextId()).thenReturn("msg_1");
         when(mapper.findBySessionId(SESSION_ID)).thenReturn(List.of());
-        projector = new AssistantMessageProjector(mapper, idGenerator, artifactCaptureService);
+        projector = new AssistantMessageProjector(
+                new AgentMessageWriteService(mapper), idGenerator, artifactCaptureService);
     }
 
     private RuntimeEventEnvelope deltaEnvelope(String text) {

@@ -71,7 +71,6 @@ import com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowDefiniti
 import com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowInstanceEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowNodeDefinitionEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowNodeInstanceEntity;
-import com.agentcenter.bridge.infrastructure.persistence.mapper.AgentMessageMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.ArtifactMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.ConfirmationMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.WorkItemMapper;
@@ -106,9 +105,9 @@ public class WorkflowCommandService {
     private final WorkItemMapper workItemMapper;
     private final ArtifactMapper artifactMapper;
     private final ConfirmationMapper confirmationMapper;
-    private final AgentMessageMapper agentMessageMapper;
     private final AgentSessionService agentSessionService;
     private final RuntimeEventService runtimeEventService;
+    private final AgentMessageWriteService agentMessageWriteService;
     private final RuntimeGateway runtimeGateway;
     private final SkillRegistryService skillRegistryService;
     private final ConfirmationCreatedEventPayloadBuilder confirmationCreatedPayloadBuilder;
@@ -123,9 +122,9 @@ public class WorkflowCommandService {
                                    WorkItemMapper workItemMapper,
                                    ArtifactMapper artifactMapper,
                                    ConfirmationMapper confirmationMapper,
-                                   AgentMessageMapper agentMessageMapper,
                                    AgentSessionService agentSessionService,
                                    RuntimeEventService runtimeEventService,
+                                   AgentMessageWriteService agentMessageWriteService,
                                    RuntimeGateway runtimeGateway,
                                    SkillRegistryService skillRegistryService,
                                    ConfirmationCreatedEventPayloadBuilder confirmationCreatedPayloadBuilder,
@@ -136,9 +135,9 @@ public class WorkflowCommandService {
         this.workItemMapper = workItemMapper;
         this.artifactMapper = artifactMapper;
         this.confirmationMapper = confirmationMapper;
-        this.agentMessageMapper = agentMessageMapper;
         this.agentSessionService = agentSessionService;
         this.runtimeEventService = runtimeEventService;
+        this.agentMessageWriteService = agentMessageWriteService;
         this.runtimeGateway = runtimeGateway;
         this.skillRegistryService = skillRegistryService;
         this.confirmationCreatedPayloadBuilder = confirmationCreatedPayloadBuilder;
@@ -810,7 +809,6 @@ public class WorkflowCommandService {
         }
 
         String sessionId = node.getAgentSessionId();
-        int nextSeqNo = nextMessageSeqNo(sessionId);
         String now = LocalDateTime.now().format(SQLITE_DATETIME);
 
         AgentMessageEntity statusMsg = new AgentMessageEntity();
@@ -821,10 +819,9 @@ public class WorkflowCommandService {
                 result, nodeDef, skillName, artifact, effectiveNodeState));
         statusMsg.setContentFormat(ContentFormat.TEXT.name());
         statusMsg.setStatus(MessageStatus.COMPLETED.name());
-        statusMsg.setSeqNo(nextSeqNo);
         statusMsg.setCreatedBy("workflow-engine");
         statusMsg.setCreatedAt(now);
-        agentMessageMapper.insert(statusMsg);
+        agentMessageWriteService.insertWithNextSeqNo(statusMsg);
 
         List<ConfirmationRequestEntity> pendingConfirmations = new ArrayList<>();
 
@@ -1159,9 +1156,6 @@ public class WorkflowCommandService {
         if (markdownContent == null || markdownContent.isBlank() || sessionId == null) {
             return;
         }
-        if (isDuplicateLatestAssistant(sessionId, markdownContent)) {
-            return;
-        }
         AgentMessageEntity msg = new AgentMessageEntity();
         msg.setId(idGenerator.nextId());
         msg.setSessionId(sessionId);
@@ -1169,15 +1163,16 @@ public class WorkflowCommandService {
         msg.setContent(markdownContent);
         msg.setContentFormat(ContentFormat.MARKDOWN.name());
         msg.setStatus(MessageStatus.COMPLETED.name());
-        msg.setSeqNo(nextMessageSeqNo(sessionId));
         msg.setCreatedBy("workflow-engine");
         msg.setCreatedAt(LocalDateTime.now().format(SQLITE_DATETIME));
         msg.setWorkflowNodeInstanceId(nodeInstanceId);
-        agentMessageMapper.insert(msg);
+        agentMessageWriteService.insertWithNextSeqNoIfAbsent(
+                msg,
+                existing -> isDuplicateLatestAssistant(existing, markdownContent));
     }
 
-    private boolean isDuplicateLatestAssistant(String sessionId, String content) {
-        return agentMessageMapper.findBySessionId(sessionId).stream()
+    private boolean isDuplicateLatestAssistant(List<AgentMessageEntity> existing, String content) {
+        return existing.stream()
                 .filter(m -> MessageRole.ASSISTANT.name().equals(m.getRole()))
                 .reduce((first, second) -> second)
                 .map(m -> content.equals(m.getContent()))
@@ -1398,16 +1393,11 @@ public class WorkflowCommandService {
                 .orElse(null);
     }
 
-    private synchronized void insertWorkflowContextMessageIfAbsent(String sessionId,
-                                                                   WorkflowNodeInstanceEntity node,
-                                                                   WorkflowNodeDefinitionEntity nodeDef,
-                                                                   WorkItemEntity workItem,
-                                                                   String inputContext) {
-        if (agentMessageMapper.findBySessionId(sessionId).stream()
-                .anyMatch(message -> MessageRole.USER.name().equals(message.getRole())
-                        && node.getId().equals(message.getWorkflowNodeInstanceId()))) {
-            return;
-        }
+    private void insertWorkflowContextMessageIfAbsent(String sessionId,
+                                                      WorkflowNodeInstanceEntity node,
+                                                      WorkflowNodeDefinitionEntity nodeDef,
+                                                      WorkItemEntity workItem,
+                                                      String inputContext) {
         AgentMessageEntity contextMsg = new AgentMessageEntity();
         contextMsg.setId(idGenerator.nextId());
         contextMsg.setSessionId(sessionId);
@@ -1448,11 +1438,14 @@ public class WorkflowCommandService {
         ).trim());
         contextMsg.setContentFormat(ContentFormat.MARKDOWN.name());
         contextMsg.setStatus(MessageStatus.COMPLETED.name());
-        contextMsg.setSeqNo(nextMessageSeqNo(sessionId));
         contextMsg.setCreatedBy("workflow-engine");
         contextMsg.setCreatedAt(LocalDateTime.now().format(SQLITE_DATETIME));
         contextMsg.setWorkflowNodeInstanceId(node.getId());
-        agentMessageMapper.insert(contextMsg);
+        agentMessageWriteService.insertWithNextSeqNoIfAbsent(
+                contextMsg,
+                existing -> existing.stream()
+                        .anyMatch(message -> MessageRole.USER.name().equals(message.getRole())
+                                && node.getId().equals(message.getWorkflowNodeInstanceId())));
     }
 
     private void insertWorkflowStartContextMessage(String sessionId,
@@ -1507,17 +1500,9 @@ public class WorkflowCommandService {
         ).trim());
         contextMsg.setContentFormat(ContentFormat.MARKDOWN.name());
         contextMsg.setStatus(MessageStatus.COMPLETED.name());
-        contextMsg.setSeqNo(nextMessageSeqNo(sessionId));
         contextMsg.setCreatedBy("workflow-engine");
         contextMsg.setCreatedAt(LocalDateTime.now().format(SQLITE_DATETIME));
-        agentMessageMapper.insert(contextMsg);
-    }
-
-    private int nextMessageSeqNo(String sessionId) {
-        return agentMessageMapper.findBySessionId(sessionId).stream()
-                .mapToInt(m -> m.getSeqNo() != null ? m.getSeqNo() : 0)
-                .max()
-                .orElse(0) + 1;
+        agentMessageWriteService.insertWithNextSeqNo(contextMsg);
     }
 
     private void scheduleRunNode(String instanceId, String nodeInstanceId) {

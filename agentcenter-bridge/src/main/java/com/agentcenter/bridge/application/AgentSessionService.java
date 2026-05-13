@@ -77,6 +77,7 @@ public class AgentSessionService {
     private final RuntimeGateway runtimeGateway;
     private final WebSocketSessionRegistry webSocketSessionRegistry;
     private final RuntimeEventService runtimeEventService;
+    private final AgentMessageWriteService messageWriteService;
     private final WorkflowCommandService workflowCommandService;
     private final WorkflowMapper workflowMapper;
     private final SkillRegistryService skillRegistryService;
@@ -100,6 +101,7 @@ public class AgentSessionService {
                                RuntimeGateway runtimeGateway,
                                WebSocketSessionRegistry webSocketSessionRegistry,
                                RuntimeEventService runtimeEventService,
+                               AgentMessageWriteService messageWriteService,
                                @Lazy WorkflowCommandService workflowCommandService,
                                WorkflowMapper workflowMapper,
                                SkillRegistryService skillRegistryService,
@@ -117,6 +119,7 @@ public class AgentSessionService {
         this.runtimeGateway = runtimeGateway;
         this.webSocketSessionRegistry = webSocketSessionRegistry;
         this.runtimeEventService = runtimeEventService;
+        this.messageWriteService = messageWriteService;
         this.workflowCommandService = workflowCommandService;
         this.workflowMapper = workflowMapper;
         this.skillRegistryService = skillRegistryService;
@@ -232,12 +235,6 @@ public class AgentSessionService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found: " + sessionId);
         }
 
-        List<AgentMessageEntity> existing = messageMapper.findBySessionId(sessionId);
-        int nextSeqNo = existing.stream()
-                .mapToInt(m -> m.getSeqNo() != null ? m.getSeqNo() : 0)
-                .max()
-                .orElse(0) + 1;
-
         AgentMessageEntity entity = new AgentMessageEntity();
         entity.setId(idGenerator.nextId());
         entity.setSessionId(sessionId);
@@ -245,9 +242,8 @@ public class AgentSessionService {
         entity.setContent(request.content());
         entity.setContentFormat(request.contentFormat().name());
         entity.setStatus(MessageStatus.COMPLETED.name());
-        entity.setSeqNo(nextSeqNo);
         entity.setCreatedBy("system");
-        messageMapper.insert(entity);
+        messageWriteService.insertWithNextSeqNo(entity);
 
         if (session.getWorkflowInstanceId() != null && !session.getWorkflowInstanceId().isBlank()) {
             routeWorkflowMessage(session, request);
@@ -677,17 +673,9 @@ public class AgentSessionService {
         errorMsg.setContent("Runtime 调用失败：" + runtimeError);
         errorMsg.setContentFormat(ContentFormat.TEXT.name());
         errorMsg.setStatus(MessageStatus.COMPLETED.name());
-        errorMsg.setSeqNo(nextMessageSeqNo(sessionId));
         errorMsg.setRuntimeMessageId(runtimeSessionId);
         errorMsg.setCreatedBy("runtime");
-        messageMapper.insert(errorMsg);
-    }
-
-    private int nextMessageSeqNo(String sessionId) {
-        return messageMapper.findBySessionId(sessionId).stream()
-                .mapToInt(m -> m.getSeqNo() != null ? m.getSeqNo() : 0)
-                .max()
-                .orElse(0) + 1;
+        messageWriteService.insertWithNextSeqNo(errorMsg);
     }
 
     private void broadcastMessages(String sessionId) {
