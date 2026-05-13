@@ -28,6 +28,7 @@ export type ProjectedWorkflowNode = {
   label: string
   status: WorkflowNodeStatus
   kind: 'start' | 'skill' | 'end'
+  stageKey?: string | null
   dynamicNodeCount?: number
   recoveryCount?: number
   pendingConfirmationCount?: number
@@ -176,9 +177,15 @@ export const useWorkItemWorkflowProjectionStore = defineStore('workItemWorkflowP
   }
 
   function projectionFor(item: WorkItemDto): WorkItemWorkflowProjection {
-    const workflowInstance = workflowStore.instancesByWorkItemId[item.id] ?? instanceFromSummary(item)
+    const summaryInstance = instanceFromSummary(item)
+    const cachedInstance = workflowStore.instancesByWorkItemId[item.id] ?? null
+    const workflowInstance = cachedInstance && summaryInstance
+      ? mergeSummaryIntoInstance(cachedInstance, summaryInstance)
+      : cachedInstance ?? summaryInstance
+    const useSummarySnapshot = !cachedInstance || !summaryInstance
+      || shouldUseSummaryProgress(cachedInstance, summaryInstance)
     const hasWorkflow = Boolean(workflowInstance || item.currentWorkflowInstanceId || item.workflowSummary)
-    const nodes = buildNodes(item, workflowInstance)
+    const nodes = buildNodes(item, workflowInstance, useSummarySnapshot)
     const currentNode = pickCurrentNode(item, workflowInstance, nodes)
     const commandState = commandStateFor(item, workflowInstance, nodes)
     const actionLabel = actionLabelFor(commandState, workflowInstance)
@@ -214,22 +221,32 @@ export const useWorkItemWorkflowProjectionStore = defineStore('workItemWorkflowP
   ): WorkflowInstanceDto {
     const summaryNodesById = new Map(summary.nodes.map((node) => [node.id, node]))
     const existingNodeIds = new Set(existing.nodes.map((node) => node.id))
+    const useSummaryProgress = shouldUseSummaryProgress(existing, summary)
     const mergedNodes = existing.nodes.map((node) => {
       const summaryNode = summaryNodesById.get(node.id)
       if (!summaryNode) return node
       return {
         ...node,
-        status: summaryNode.status,
+        status: useSummaryProgress || !wouldRegressStatus(node.status, summaryNode.status)
+          ? summaryNode.status
+          : node.status,
         errorMessage: summaryNode.errorMessage ?? node.errorMessage,
         skillName: node.skillName ?? summaryNode.skillName,
+        stageKey: node.stageKey ?? summaryNode.stageKey,
+        summary: node.summary ?? summaryNode.summary,
+        sequenceNo: node.sequenceNo ?? summaryNode.sequenceNo,
       }
     })
     const appendedSummaryNodes = summary.nodes.filter((node) => !existingNodeIds.has(node.id))
 
     return {
       ...existing,
-      status: summary.status,
-      currentNodeInstanceId: summary.currentNodeInstanceId,
+      status: useSummaryProgress || workflowStatusProgress(summary.status) >= workflowStatusProgress(existing.status)
+        ? summary.status
+        : existing.status,
+      currentNodeInstanceId: useSummaryProgress
+        ? summary.currentNodeInstanceId
+        : existing.currentNodeInstanceId,
       nodes: [...mergedNodes, ...appendedSummaryNodes],
     }
   }
@@ -237,30 +254,42 @@ export const useWorkItemWorkflowProjectionStore = defineStore('workItemWorkflowP
   function instanceFromSummary(item: WorkItemDto): WorkflowInstanceDto | null {
     const summary = item.workflowSummary
     if (!summary) return null
+    const stagesById = new Map((summary.stages ?? []).map((stage, index) => [stage.id, { stage, index }]))
     return {
       id: summary.instanceId,
       workItemId: item.id,
       workflowDefinitionId: '',
       status: summary.status,
       currentNodeInstanceId: summary.currentNodeInstanceId,
-      nodes: summary.nodes.map((node) => ({
-        id: node.id,
-        nodeDefinitionId: '',
-        status: node.status,
-        inputArtifactId: null,
-        outputArtifactId: null,
-        agentSessionId: null,
-        startedAt: null,
-        completedAt: null,
-        errorMessage: node.errorMessage ?? null,
-        skillName: node.definitionName ?? node.skillName,
-      })),
+      nodes: summary.nodes.map((node, index) => {
+        const stageEntry = stagesById.get(node.id)
+        return {
+          id: node.id,
+          nodeDefinitionId: '',
+          status: node.status,
+          inputArtifactId: null,
+          outputArtifactId: null,
+          agentSessionId: null,
+          startedAt: null,
+          completedAt: null,
+          errorMessage: node.errorMessage ?? null,
+          nodeKind: stageEntry ? 'STAGE' : null,
+          stageKey: stageEntry?.stage.stageKey ?? null,
+          skillName: node.definitionName ?? node.skillName,
+          summary: stageEntry?.stage.latestSummary ?? node.definitionName ?? node.skillName,
+          sequenceNo: stageEntry ? stageEntry.index + 1 : index + 1,
+        }
+      }),
       startedAt: null,
       completedAt: null,
     }
   }
 
-  function buildNodes(item: WorkItemDto, workflowInstance: WorkflowInstanceDto | null): ProjectedWorkflowNode[] {
+  function buildNodes(
+    item: WorkItemDto,
+    workflowInstance: WorkflowInstanceDto | null,
+    useSummarySnapshot = true,
+  ): ProjectedWorkflowNode[] {
     const summary = item.workflowSummary
     const workflowStatus = workflowInstance?.status ?? summary?.status ?? null
     const hasWorkflow = Boolean(workflowInstance || item.currentWorkflowInstanceId || summary)
@@ -270,13 +299,14 @@ export const useWorkItemWorkflowProjectionStore = defineStore('workItemWorkflowP
         summary.stages.map((stage) => ({
           id: stage.id,
           label: stage.name ?? stage.skillName ?? '阶段',
-          status: nodeStatusFromWorkflow(workflowInstance, stage.id, stage.status),
+          status: useSummarySnapshot ? stage.status : nodeStatusFromWorkflow(workflowInstance, stage.id, stage.status),
           kind: 'skill' as const,
+          stageKey: stage.stageKey,
           dynamicNodeCount: stage.dynamicNodeCount,
           recoveryCount: stage.recoveryCount,
           pendingConfirmationCount: stage.pendingConfirmationCount,
-          latestSummary: stage.latestSummary,
-          errorMessage: nodeErrorFromWorkflow(workflowInstance, stage.id, stage.errorMessage),
+          latestSummary: stage.latestSummary ?? nodeSummaryFromWorkflow(workflowInstance, stage.id),
+          errorMessage: useSummarySnapshot ? stage.errorMessage : nodeErrorFromWorkflow(workflowInstance, stage.id, stage.errorMessage),
         })),
         workflowStatus,
         hasWorkflow,
@@ -288,9 +318,10 @@ export const useWorkItemWorkflowProjectionStore = defineStore('workItemWorkflowP
         summary.nodes.map((node) => ({
           id: node.id,
           label: node.definitionName ?? node.skillName ?? '阶段',
-          status: nodeStatusFromWorkflow(workflowInstance, node.id, node.status),
+          status: useSummarySnapshot ? node.status : nodeStatusFromWorkflow(workflowInstance, node.id, node.status),
           kind: 'skill' as const,
-          errorMessage: nodeErrorFromWorkflow(workflowInstance, node.id, node.errorMessage),
+          stageKey: workflowInstance?.nodes.find((candidate) => candidate.id === node.id)?.stageKey,
+          errorMessage: useSummarySnapshot ? node.errorMessage : nodeErrorFromWorkflow(workflowInstance, node.id, node.errorMessage),
         })),
         workflowStatus,
         hasWorkflow,
@@ -304,6 +335,7 @@ export const useWorkItemWorkflowProjectionStore = defineStore('workItemWorkflowP
           label: node.skillName ?? '阶段',
           status: node.status,
           kind: 'skill' as const,
+          stageKey: node.stageKey,
           latestSummary: node.summary,
           errorMessage: node.errorMessage,
         })),
@@ -338,6 +370,13 @@ export const useWorkItemWorkflowProjectionStore = defineStore('workItemWorkflowP
     fallback?: string | null,
   ): string | null | undefined {
     return workflowInstance?.nodes.find((node) => node.id === nodeId)?.errorMessage ?? fallback
+  }
+
+  function nodeSummaryFromWorkflow(
+    workflowInstance: WorkflowInstanceDto | null,
+    nodeId: string,
+  ): string | null | undefined {
+    return workflowInstance?.nodes.find((node) => node.id === nodeId)?.summary
   }
 
   function withAnchors(
@@ -384,8 +423,7 @@ export const useWorkItemWorkflowProjectionStore = defineStore('workItemWorkflowP
   ): WorkItemWorkflowCommandState {
     const skillNodes = nodes.filter((node) => node.kind === 'skill')
     if (isStarting(item.id)) return 'STARTING'
-    const currentNodeId = workflowInstance?.currentNodeInstanceId ?? item.workflowSummary?.currentNodeInstanceId
-    const currentNode = currentNodeId ? skillNodes.find((node) => node.id === currentNodeId) : null
+    const currentNode = resolveCurrentSkillNode(item, workflowInstance, skillNodes)
     if (currentNode?.status === 'WAITING_CONFIRMATION') return 'WAITING_CONFIRMATION'
     if (currentNode?.status === 'RUNNING') return 'RUNNING'
     if (currentNode?.status === 'READY') return 'READY'
@@ -420,15 +458,100 @@ export const useWorkItemWorkflowProjectionStore = defineStore('workItemWorkflowP
     workflowInstance: WorkflowInstanceDto | null,
     nodes: ProjectedWorkflowNode[],
   ): ProjectedWorkflowNode | null {
-    const currentNodeId = workflowInstance?.currentNodeInstanceId ?? item.workflowSummary?.currentNodeInstanceId
-    if (currentNodeId) {
-      const currentNode = nodes.find((node) => node.id === currentNodeId)
-      if (currentNode) return currentNode
-    }
-    return nodes.find((node) => node.kind === 'skill' && !isNodeComplete(node.status))
+    const skillNodes = nodes.filter((node) => node.kind === 'skill')
+    const currentNode = resolveCurrentSkillNode(item, workflowInstance, skillNodes)
+    if (currentNode) return currentNode
+    return skillNodes.find((node) => !isNodeComplete(node.status))
       ?? nodes.find((node) => node.status === 'READY' && node.kind === 'skill')
       ?? nodes.find((node) => node.status === 'FAILED')
       ?? null
+  }
+
+  function resolveCurrentSkillNode(
+    item: WorkItemDto,
+    workflowInstance: WorkflowInstanceDto | null,
+    skillNodes: ProjectedWorkflowNode[],
+  ): ProjectedWorkflowNode | null {
+    const currentNodeId = workflowInstance?.currentNodeInstanceId ?? item.workflowSummary?.currentNodeInstanceId
+    if (currentNodeId) {
+      const currentNode = skillNodes.find((node) => node.id === currentNodeId)
+      if (currentNode) return currentNode
+    }
+
+    const currentNodeFromInstance = currentNodeId
+      ? workflowInstance?.nodes.find((node) => node.id === currentNodeId)
+      : null
+    const currentStageKey = currentNodeFromInstance?.stageKey
+      ?? (currentNodeId === item.workflowSummary?.currentNodeInstanceId ? item.workflowSummary?.currentStageKey : null)
+    if (currentStageKey) {
+      const currentStage = skillNodes.find((node) => node.stageKey === currentStageKey)
+      if (currentStage) return currentStage
+    }
+
+    return null
+  }
+
+  function shouldUseSummaryProgress(existing: WorkflowInstanceDto, summary: WorkflowInstanceDto): boolean {
+    if (summary.status === 'COMPLETED' || summary.status === 'CANCELLED' || summary.status === 'SUPERSEDED') {
+      return true
+    }
+    if (!existing.currentNodeInstanceId) return true
+    if (!summary.currentNodeInstanceId) return false
+    if (existing.currentNodeInstanceId === summary.currentNodeInstanceId) return true
+
+    const existingIndex = nodeProgressIndex(existing, existing.currentNodeInstanceId)
+    const summaryIndex = nodeProgressIndex(existing, summary.currentNodeInstanceId)
+      ?? nodeProgressIndex(summary, summary.currentNodeInstanceId)
+    if (existingIndex == null || summaryIndex == null) {
+      return true
+    }
+    return summaryIndex >= existingIndex
+  }
+
+  function nodeProgressIndex(instance: WorkflowInstanceDto, nodeId: string | null): number | null {
+    if (!nodeId) return null
+    const sortedNodes = [...instance.nodes].sort((a, b) =>
+      (a.sequenceNo ?? Number.MAX_SAFE_INTEGER) - (b.sequenceNo ?? Number.MAX_SAFE_INTEGER)
+    )
+    const directIndex = sortedNodes.findIndex((node) => node.id === nodeId)
+    if (directIndex >= 0) return directIndex
+
+    const currentNode = instance.nodes.find((node) => node.id === nodeId)
+    if (currentNode?.stageKey) {
+      const stageIndex = sortedNodes.findIndex((node) => node.stageKey === currentNode.stageKey)
+      if (stageIndex >= 0) return stageIndex
+    }
+    return null
+  }
+
+  function wouldRegressStatus(existingStatus: WorkflowNodeStatus, summaryStatus: WorkflowNodeStatus): boolean {
+    return nodeStatusProgress(summaryStatus) < nodeStatusProgress(existingStatus)
+  }
+
+  function nodeStatusProgress(status: WorkflowNodeStatus): number {
+    const progress: Record<WorkflowNodeStatus, number> = {
+      PENDING: 0,
+      RUNNING: 1,
+      READY: 2,
+      WAITING_CONFIRMATION: 2,
+      FAILED: 2,
+      COMPLETED: 3,
+      SKIPPED: 3,
+    }
+    return progress[status]
+  }
+
+  function workflowStatusProgress(status: WorkflowStatus): number {
+    const progress: Record<WorkflowStatus, number> = {
+      PENDING: 0,
+      RUNNING: 1,
+      BLOCKED: 2,
+      FAILED: 2,
+      COMPLETED: 3,
+      CANCELLED: 3,
+      SUPERSEDED: 3,
+    }
+    return progress[status]
   }
 
   function isNodeComplete(status: WorkflowNodeStatus): boolean {
