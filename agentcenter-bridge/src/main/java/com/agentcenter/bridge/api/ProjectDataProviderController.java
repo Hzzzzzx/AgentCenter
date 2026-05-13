@@ -55,6 +55,12 @@ public class ProjectDataProviderController {
         return syncService.sync();
     }
 
+    @PostMapping("/select-and-sync")
+    public ProjectDataProviderSettingsDto selectAndSync(@RequestBody UpdateProjectDataScopeRequest request) {
+        syncService.sync();
+        return settingsService.setActiveScope(request);
+    }
+
     @GetMapping("/sync-history")
     public List<ProjectDataSyncHistoryDto> syncHistory(@RequestParam(required = false) String providerId,
                                                        @RequestParam(defaultValue = "20") int limit) {
