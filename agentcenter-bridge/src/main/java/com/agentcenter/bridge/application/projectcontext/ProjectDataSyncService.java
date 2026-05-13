@@ -144,15 +144,6 @@ public class ProjectDataSyncService {
                 providerActiveScope,
                 firstScope
         );
-        if (activeScope != null) {
-            settingsService.setActiveScope(
-                    activeScope.context().getId(),
-                    activeScope.space().getId(),
-                    activeScope.iteration() != null ? activeScope.iteration().getId() : null
-            );
-        } else {
-            settingsService.setActiveScope(null, null, null);
-        }
         ProjectDataSyncStatsDto stats = new ProjectDataSyncStatsDto(
                 snapshot.workItems().size(),
                 created,
