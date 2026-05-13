@@ -23,6 +23,7 @@ import com.agentcenter.bridge.api.dto.RuntimeEventDto;
 import com.agentcenter.bridge.api.dto.RuntimeSkillDetailDto;
 import com.agentcenter.bridge.api.dto.SendMessageRequest;
 import com.agentcenter.bridge.api.dto.SessionRuntimeResourceDto;
+import com.agentcenter.bridge.application.confirmation.ConfirmationCreatedEventPayloadBuilder;
 import com.agentcenter.bridge.application.runtime.RuntimeGateway;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationRequestType;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationStatus;
@@ -82,6 +83,7 @@ public class AgentSessionService {
     private final RuntimeResourceService runtimeResourceService;
     private final McpRegistryService mcpRegistryService;
     private final WorkItemMapper workItemMapper;
+    private final ConfirmationCreatedEventPayloadBuilder confirmationCreatedPayloadBuilder;
     private final int safeAutoRetryLimit;
     private final long safeAutoRetryBackoffMs;
     private final ExecutorService messageExecutor = Executors.newCachedThreadPool(runnable -> {
@@ -104,6 +106,7 @@ public class AgentSessionService {
                                RuntimeResourceService runtimeResourceService,
                                McpRegistryService mcpRegistryService,
                                WorkItemMapper workItemMapper,
+                               ConfirmationCreatedEventPayloadBuilder confirmationCreatedPayloadBuilder,
                                @Value("${agentcenter.runtime.guard.retry-limit:2}") int safeAutoRetryLimit,
                                @Value("${agentcenter.runtime.guard.retry-backoff-ms:700}") long safeAutoRetryBackoffMs) {
         this.sessionMapper = sessionMapper;
@@ -120,6 +123,7 @@ public class AgentSessionService {
         this.runtimeResourceService = runtimeResourceService;
         this.mcpRegistryService = mcpRegistryService;
         this.workItemMapper = workItemMapper;
+        this.confirmationCreatedPayloadBuilder = confirmationCreatedPayloadBuilder;
         this.safeAutoRetryLimit = normalizeRetryLimit(safeAutoRetryLimit);
         this.safeAutoRetryBackoffMs = normalizeRetryBackoffMs(safeAutoRetryBackoffMs);
     }
@@ -589,8 +593,7 @@ public class AgentSessionService {
                 nodeInstanceId,
                 RuntimeEventType.CONFIRMATION_CREATED,
                 RuntimeEventSource.BRIDGE,
-                "{\"confirmationId\":\"" + confirmation.getId() + "\",\"requestType\":\"EXCEPTION\",\"interactionType\":\""
-                        + RUNTIME_EXCEPTION_INTERACTION + "\",\"deduplicated\":" + deduplicated + "}",
+                confirmationCreatedPayloadBuilder.buildPayload(confirmation, Map.of("deduplicated", deduplicated)),
                 null
         ));
     }

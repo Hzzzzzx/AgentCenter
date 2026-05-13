@@ -1,16 +1,26 @@
 package com.agentcenter.bridge.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
-import org.junit.jupiter.api.Test;
+import java.lang.reflect.Method;
+import java.util.Map;
 
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+
+import com.agentcenter.bridge.api.dto.RuntimeEventDto;
+import com.agentcenter.bridge.application.confirmation.ConfirmationCreatedEventPayloadBuilder;
 import com.agentcenter.bridge.application.runtime.RuntimeGateway;
+import com.agentcenter.bridge.domain.runtime.RuntimeEventType;
 import com.agentcenter.bridge.infrastructure.event.WebSocketSessionRegistry;
 import com.agentcenter.bridge.infrastructure.id.IdGenerator;
+import com.agentcenter.bridge.infrastructure.persistence.entity.AgentSessionEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.ConfirmationRequestEntity;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.AgentMessageMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.AgentSessionMapper;
@@ -78,22 +88,76 @@ class AgentSessionServiceTest {
         verify(confirmationMapper).updateRuntimeIntervention(replacement);
     }
 
+    @Test
+    void runtimeExceptionConfirmationPublishesCompleteCreatedPayload() throws Exception {
+        ConfirmationMapper confirmationMapper = mock(ConfirmationMapper.class);
+        IdGenerator idGenerator = mock(IdGenerator.class);
+        RuntimeEventService runtimeEventService = mock(RuntimeEventService.class);
+        WorkflowMapper workflowMapper = mock(WorkflowMapper.class);
+        ConfirmationCreatedEventPayloadBuilder payloadBuilder = mock(ConfirmationCreatedEventPayloadBuilder.class);
+        when(idGenerator.nextId()).thenReturn("conf-runtime");
+        when(payloadBuilder.buildPayload(any(ConfirmationRequestEntity.class), eq(Map.<String, Object>of("deduplicated", false))))
+                .thenReturn("{\"id\":\"conf-runtime\",\"confirmationId\":\"conf-runtime\",\"requestType\":\"EXCEPTION\",\"status\":\"PENDING\",\"title\":\"Runtime 执行中断，需要你介入\"}");
+        AgentSessionService service = serviceWith(confirmationMapper, idGenerator, runtimeEventService, workflowMapper, payloadBuilder);
+        AgentSessionEntity session = new AgentSessionEntity();
+        session.setId("agent-session-1");
+        session.setWorkItemId("work-1");
+        session.setRuntimeType("OPENCODE");
+
+        Method method = AgentSessionService.class.getDeclaredMethod(
+                "createRuntimeExceptionConfirmation",
+                AgentSessionEntity.class,
+                String.class,
+                String.class,
+                String.class,
+                int.class,
+                String.class);
+        method.setAccessible(true);
+        method.invoke(service, session, "runtime-session-1", "continue", "HTTP 503 Service Unavailable", 2, "SAFE_AUTO_RETRY_EXHAUSTED");
+
+        ArgumentCaptor<ConfirmationRequestEntity> confirmationCaptor = ArgumentCaptor.forClass(ConfirmationRequestEntity.class);
+        verify(payloadBuilder).buildPayload(confirmationCaptor.capture(), eq(Map.<String, Object>of("deduplicated", false)));
+        assertThat(confirmationCaptor.getValue().getId()).isEqualTo("conf-runtime");
+        assertThat(confirmationCaptor.getValue().getTitle()).isEqualTo("Runtime 执行中断，需要你介入");
+        assertThat(confirmationCaptor.getValue().getStatus()).isEqualTo("PENDING");
+
+        ArgumentCaptor<RuntimeEventDto> eventCaptor = ArgumentCaptor.forClass(RuntimeEventDto.class);
+        verify(runtimeEventService).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().eventType()).isEqualTo(RuntimeEventType.CONFIRMATION_CREATED);
+        assertThat(eventCaptor.getValue().payloadJson()).contains("\"status\":\"PENDING\"");
+        assertThat(eventCaptor.getValue().payloadJson()).contains("\"title\":\"Runtime 执行中断，需要你介入\"");
+    }
+
     private AgentSessionService serviceWith(ConfirmationMapper confirmationMapper) {
+        return serviceWith(
+                confirmationMapper,
+                mock(IdGenerator.class),
+                mock(RuntimeEventService.class),
+                mock(WorkflowMapper.class),
+                mock(ConfirmationCreatedEventPayloadBuilder.class));
+    }
+
+    private AgentSessionService serviceWith(ConfirmationMapper confirmationMapper,
+                                            IdGenerator idGenerator,
+                                            RuntimeEventService runtimeEventService,
+                                            WorkflowMapper workflowMapper,
+                                            ConfirmationCreatedEventPayloadBuilder confirmationCreatedEventPayloadBuilder) {
         return new AgentSessionService(
                 mock(AgentSessionMapper.class),
                 mock(AgentMessageMapper.class),
                 confirmationMapper,
                 mock(RuntimeEventMapper.class),
-                mock(IdGenerator.class),
+                idGenerator,
                 mock(RuntimeGateway.class),
                 mock(WebSocketSessionRegistry.class),
-                mock(RuntimeEventService.class),
+                runtimeEventService,
                 mock(WorkflowCommandService.class),
-                mock(WorkflowMapper.class),
+                workflowMapper,
                 mock(SkillRegistryService.class),
                 mock(RuntimeResourceService.class),
                 mock(McpRegistryService.class),
                 mock(WorkItemMapper.class),
+                confirmationCreatedEventPayloadBuilder,
                 2,
                 0);
     }

@@ -776,36 +776,6 @@ public class ConfirmationService {
         }
     }
 
-    private void publishResolutionEvent(ConfirmationRequestEntity entity,
-                                         ConfirmationActionType actionType) {
-        String sessionId = entity.getAgentSessionId();
-        if (sessionId == null) return;
-
-        String payloadJson;
-        try {
-            payloadJson = new com.fasterxml.jackson.databind.ObjectMapper()
-                    .writeValueAsString(Map.of(
-                            "confirmationId", entity.getId(),
-                            "actionType", actionType.name(),
-                            "requestType", entity.getRequestType()
-                    ));
-        } catch (Exception e) {
-            payloadJson = "{\"confirmationId\":\"" + entity.getId() + "\"}";
-        }
-
-        runtimeEventService.publishEvent(new RuntimeEventDto(
-                null,
-                sessionId,
-                entity.getWorkItemId(),
-                entity.getWorkflowInstanceId(),
-                entity.getWorkflowNodeInstanceId(),
-                RuntimeEventType.CONFIRMATION_CREATED,
-                RuntimeEventSource.BRIDGE,
-                payloadJson,
-                null
-        ));
-    }
-
     @Transactional
     public ConfirmationRequestDto reject(String id, String comment) {
         var entity = confirmationMapper.findById(id);

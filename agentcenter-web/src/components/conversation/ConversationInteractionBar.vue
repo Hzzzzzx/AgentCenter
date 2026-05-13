@@ -2,18 +2,13 @@
 import { computed, ref, watch } from 'vue'
 import { useConfirmationStore } from '../../stores/confirmations'
 import { useNotificationStore } from '../../stores/notifications'
-import { parseInteractionSchema, type InteractionSchema, type InteractionOption, type InteractionField } from './interactions/interactionSchema'
+import InteractionResponseForm from './interactions/InteractionResponseForm.vue'
+import { parseInteractionSchema, type InteractionSchema } from './interactions/interactionSchema'
 import {
-  buildInputSubmission,
-  buildMultiChoiceSubmission,
-  buildSingleChoiceSubmission,
   fieldDisplayValue,
-  fieldPlaceholder,
-  fieldQuestion,
   fieldRawValue,
-  isFieldComplete,
+  type InteractionFormSubmission,
   toResolveRequest,
-  usesOptionControl,
 } from './interactions/interactionSubmit'
 import type {
   ConfirmationActionType,
@@ -81,34 +76,14 @@ const activeSchema = computed<InteractionSchema | null>(() =>
   activeInteraction.value ? parseInteractionSchema(activeInteraction.value) : null
 )
 
-const activeOptions = computed<InteractionOption[]>(() =>
-  activeSchema.value?.options ?? []
-)
-
-const activeFields = computed<InteractionField[]>(() =>
-  activeSchema.value?.fields ?? []
-)
-
-const isMultiSelect = computed(() =>
-  activeSchema.value?.selection === 'multi'
-)
-
-const allowCustomChoice = computed(() =>
-  activeSchema.value?.allowCustom === true
-)
-
-const activeUsesOptionControl = computed(() => {
-  const requestType = activeInteraction.value?.requestType
-  return requestType ? usesOptionControl(requestType, activeSchema.value) : false
-})
-
-const activeIsArtifactReview = computed(() =>
-  activeSchema.value?.interactionType === 'ARTIFACT_REVIEW'
-)
-
 const activeFieldValues = computed(() => {
   if (!activeInteraction.value) return {}
   return fieldValues.value[activeInteraction.value.id] ?? {}
+})
+
+const activeSelectedChoiceIds = computed(() => {
+  if (!activeInteraction.value) return []
+  return Array.from(selectedChoices.value[activeInteraction.value.id] ?? [])
 })
 
 const activeInput = computed({
@@ -125,10 +100,10 @@ const activeOption = computed({
     if (!activeInteraction.value) return ''
     const id = activeInteraction.value.id
     // If custom input has content, mark as custom-selected so it takes precedence over preset options
-    if (allowCustomChoice.value && (customInput.value[id]?.trim()?.length ?? 0) > 0) {
+    if (activeSchema.value?.allowCustom && (customInput.value[id]?.trim()?.length ?? 0) > 0) {
       return '__custom__'
     }
-    return selectedOptions.value[id] ?? (activeOptions.value[0]?.id ?? '')
+    return selectedOptions.value[id] ?? (activeSchema.value?.options?.[0]?.id ?? '')
   },
   set: (value: string) => {
     if (activeInteraction.value) {
@@ -146,6 +121,16 @@ function setFieldValue(fieldId: string, value: string) {
   }
 }
 
+function setCustomChoice(value: string) {
+  if (!activeInteraction.value) return
+  customInput.value = { ...customInput.value, [activeInteraction.value.id]: value }
+}
+
+function setReviewComment(value: string) {
+  if (!activeInteraction.value) return
+  reviewComment.value = { ...reviewComment.value, [activeInteraction.value.id]: value }
+}
+
 function toggleChoice(optionId: string) {
   if (!activeInteraction.value) return
   const id = activeInteraction.value.id
@@ -154,30 +139,6 @@ function toggleChoice(optionId: string) {
   else current.add(optionId)
   selectedChoices.value = { ...selectedChoices.value, [id]: current }
 }
-
-const canSubmitInput = computed(() => {
-  if (!activeInteraction.value) return false
-  if (activeFields.value.length > 0) {
-    const vals = fieldValues.value[activeInteraction.value.id] ?? {}
-    return activeFields.value.every(field => isFieldComplete(field, vals))
-  }
-  return activeInput.value.trim().length > 0
-})
-const canSubmitChoice = computed(() => {
-  if (!activeUsesOptionControl.value) return true
-  if (!activeInteraction.value) return false
-  if (activeOptions.value.length === 0) {
-    if (allowCustomChoice.value) {
-      return (customInput.value[activeInteraction.value.id]?.trim()?.length ?? 0) > 0
-    }
-    return activeInput.value.trim().length > 0
-  }
-  if (isMultiSelect.value) {
-    const chosen = selectedChoices.value[activeInteraction.value.id]
-    return (chosen?.size ?? 0) > 0 || (allowCustomChoice.value && (customInput.value[activeInteraction.value.id]?.trim()?.length ?? 0) > 0)
-  }
-  return activeOption.value.length > 0
-})
 
 watch(
   visibleInteractions,
@@ -370,23 +331,6 @@ function activeTabTitle(item: ConfirmationRequestDto): string {
   return schema?.title?.trim() || item.title?.trim() || interactionTabTitle(item)
 }
 
-function primaryActionLabel(item: ConfirmationRequestDto): string {
-  if (item.requestType === 'INPUT_REQUIRED') return '提交补充'
-  if (item.requestType === 'DECISION') return '提交选择'
-  if (schemaFor(item)?.interactionType === 'ARTIFACT_REVIEW') return '提交审阅'
-  if ((item.requestType === 'APPROVAL' || item.requestType === 'CONFIRM') && (schemaFor(item)?.options?.length ?? 0) > 0) return '提交选择'
-  if (item.requestType === 'EXCEPTION') return '重试'
-  if (item.requestType === 'PERMISSION') return '授权'
-  return '确认'
-}
-
-function secondaryActionLabel(item: ConfirmationRequestDto): string {
-  if (item.requestType === 'EXCEPTION') return '跳过'
-  if (item.requestType === 'DECISION') return '稍后'
-  if (item.requestType === 'PERMISSION') return '拒绝'
-  return '退回'
-}
-
 function previewValueFor(item: ConfirmationRequestDto): string {
   const schema = schemaFor(item)
   if (item.requestType === 'PERMISSION') return '待选择：允许一次 / 本次会话允许同类请求 / 拒绝'
@@ -425,12 +369,6 @@ function previewValueFor(item: ConfirmationRequestDto): string {
   return '待确认'
 }
 
-function permissionBusyLabel(reply: 'once' | 'always' | 'reject'): string {
-  if (reply === 'always') return '正在允许本次会话...'
-  if (reply === 'reject') return '正在拒绝...'
-  return '正在允许一次...'
-}
-
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : '操作失败，请稍后重试'
 }
@@ -440,20 +378,27 @@ async function resolveActive(
   payload?: Record<string, unknown>,
   comment?: string,
   outcome: 'resolved' | 'rejected' = actionType === 'REJECT' ? 'rejected' : 'resolved',
+  errorTitle = '提交失败',
+  busyKey?: string,
 ) {
   if (!activeInteraction.value || busyAction.value) return
   const interaction = activeInteraction.value
-  busyAction.value = `${interaction.id}:${actionType}`
+  busyAction.value = `${interaction.id}:${busyKey ?? actionType}`
   emit('submitting', interaction.id)
   confirmationStore.markRecovering(interaction.id)
   recoveringConfirmationId.value = interaction.id
   try {
     await confirmationStore.resolveConfirmation(interaction.id, toResolveRequest({ actionType, payload, comment }), { remove: false })
+    const permissionReply = typeof payload?.reply === 'string' ? payload.reply : null
     notificationStore.push({
       anchor: 'right-panel',
       tone: outcome === 'rejected' ? 'warning' : 'success',
-      title: outcome === 'rejected' ? '交互已拒绝' : '交互已提交',
-      message: `${interaction.title} 已收到处理结果`,
+      title: interaction.requestType === 'PERMISSION'
+        ? (permissionReply === 'reject' ? '权限已拒绝' : '权限已允许')
+        : (outcome === 'rejected' ? '交互已拒绝' : '交互已提交'),
+      message: interaction.requestType === 'PERMISSION' && permissionReply === 'always'
+        ? 'OpenCode 本次会话内的同类请求会自动允许'
+        : `${interaction.title} 已收到处理结果`,
     })
     if (outcome === 'rejected') emit('rejected', interaction.id)
     else emit('resolved', interaction.id)
@@ -463,7 +408,7 @@ async function resolveActive(
     notificationStore.push({
       anchor: 'right-panel',
       tone: 'error',
-      title: '提交失败',
+      title: errorTitle,
       message: errorMessage(error),
       durationMs: 5200,
     })
@@ -472,125 +417,15 @@ async function resolveActive(
   }
 }
 
-async function handlePermissionDecision(reply: 'once' | 'always' | 'reject') {
-  const interaction = activeInteraction.value
-  if (!interaction || busyAction.value) return
-  const actionType: ConfirmationActionType = reply === 'reject' ? 'REJECT' : 'APPROVE'
-  busyAction.value = `${interaction.id}:PERMISSION:${reply}`
-  emit('submitting', interaction.id)
-  confirmationStore.markRecovering(interaction.id)
-  recoveringConfirmationId.value = interaction.id
-  try {
-    await confirmationStore.resolveConfirmation(interaction.id, {
-      actionType,
-      payload: { reply },
-      comment: reply,
-    }, { remove: false })
-    notificationStore.push({
-      anchor: 'right-panel',
-      tone: reply === 'reject' ? 'warning' : 'success',
-      title: reply === 'reject' ? '权限已拒绝' : '权限已允许',
-      message: reply === 'always' ? 'OpenCode 本次会话内的同类请求会自动允许' : `${interaction.title} 已收到处理结果`,
-    })
-    if (reply === 'reject') emit('rejected', interaction.id)
-    else emit('resolved', interaction.id)
-  } catch (error) {
-    confirmationStore.clearRecovering(interaction.id)
-    if (recoveringConfirmationId.value === interaction.id) recoveringConfirmationId.value = null
-    notificationStore.push({
-      anchor: 'right-panel',
-      tone: 'error',
-      title: '提交失败',
-      message: errorMessage(error),
-      durationMs: 5200,
-    })
-  } finally {
-    busyAction.value = null
-  }
-}
-
-function handlePrimary() {
-  const interaction = activeInteraction.value
-  if (!interaction) return
-  if (interaction.requestType === 'PERMISSION') {
-    void handlePermissionDecision('once')
-    return
-  }
-  if (interaction.requestType === 'INPUT_REQUIRED') {
-    const submission = buildInputSubmission(
-      activeFields.value,
-      fieldValues.value[interaction.id] ?? {},
-      activeInput.value,
-    )
-    if (submission) void resolveActive(submission.actionType, submission.payload, submission.comment)
-    return
-  }
-  if (interaction.requestType === 'DECISION') {
-    const customVal = allowCustomChoice.value ? customInput.value[interaction.id]?.trim() ?? '' : ''
-    if (isMultiSelect.value) {
-      const chosen = selectedChoices.value[interaction.id]
-      const selectedIds = Array.from(chosen ?? [])
-      const submission = buildMultiChoiceSubmission({
-        requestType: interaction.requestType,
-        interactionType: interaction.interactionType,
-        options: activeOptions.value,
-        selectedIds,
-        customChoice: customVal,
-        remark: reviewComment.value[interaction.id],
-      })
-      if (submission) void resolveActive(submission.actionType, submission.payload, submission.comment)
-      return
-    }
-    const submission = buildSingleChoiceSubmission({
-      requestType: interaction.requestType,
-      interactionType: interaction.interactionType,
-      options: activeOptions.value,
-      selectedId: activeOption.value === '__custom__' ? null : activeOption.value,
-      customChoice: customVal,
-      fallbackChoice: activeOptions.value.length > 0 ? undefined : activeInput.value,
-      remark: reviewComment.value[interaction.id],
-    })
-    if (submission) void resolveActive(submission.actionType, submission.payload, submission.comment)
-    return
-  }
-  if ((interaction.requestType === 'APPROVAL' || interaction.requestType === 'CONFIRM') && activeOptions.value.length > 0) {
-    const customVal = allowCustomChoice.value ? customInput.value[interaction.id]?.trim() ?? '' : ''
-    const submission = buildSingleChoiceSubmission({
-      requestType: interaction.requestType,
-      interactionType: interaction.interactionType,
-      options: activeOptions.value,
-      selectedId: activeOption.value === '__custom__' ? null : activeOption.value,
-      customChoice: customVal,
-      fallbackChoice: activeOptions.value.length > 0 ? undefined : activeInput.value,
-      remark: reviewComment.value[interaction.id],
-    })
-    if (submission) void resolveActive(submission.actionType, submission.payload, submission.comment)
-    return
-  }
-  if (interaction.requestType === 'EXCEPTION') {
-    const input = activeInput.value.trim()
-    if (input) {
-      void resolveActive('SUPPLEMENT', { input }, input)
-      return
-    }
-    void resolveActive('RETRY')
-    return
-  }
-  void resolveActive('APPROVE')
-}
-
-function handleSecondary() {
-  const interaction = activeInteraction.value
-  if (!interaction || busyAction.value) return
-  if (interaction.requestType === 'EXCEPTION') {
-    void resolveActive('SKIP')
-    return
-  }
-  if (interaction.requestType === 'PERMISSION') {
-    void handlePermissionDecision('reject')
-    return
-  }
-  void resolveActive('REJECT', undefined, undefined, 'rejected')
+function handleFormSubmit(submission: InteractionFormSubmission) {
+  void resolveActive(
+    submission.actionType,
+    submission.payload,
+    submission.comment,
+    submission.outcome ?? (submission.actionType === 'REJECT' ? 'rejected' : 'resolved'),
+    submission.errorTitle,
+    submission.busyKey,
+  )
 }
 </script>
 
@@ -647,198 +482,31 @@ function handleSecondary() {
     </div>
 
     <div v-else-if="activeInteraction" class="interaction-bar__body">
-      <div v-if="recoveringInteractionId === activeInteraction.id" class="interaction-bar__recovering">
-        <span class="interaction-bar__recovering-dot"></span>
-        <strong>已提交，正在恢复并同步状态</strong>
-      </div>
-      <div v-else class="interaction-bar__main">
-        <div class="interaction-bar__copy">
-          <span class="interaction-bar__type">{{ typeLabels[activeInteraction.requestType] }}</span>
-          <strong>{{ interactionQuestion(activeInteraction) }}</strong>
-        </div>
-
-        <div v-if="activeUsesOptionControl" class="interaction-bar__control interaction-bar__control--options">
-          <template v-if="activeOptions.length">
-            <button
-              v-for="(option, optionIndex) in activeOptions"
-              :key="option.id"
-              type="button"
-              class="interaction-bar__option"
-              :class="{
-                'interaction-bar__option--selected': isMultiSelect
-                  ? (selectedChoices[activeInteraction.id]?.has(option.id) ?? false)
-                  : activeOption === option.id
-              }"
-              @click="isMultiSelect ? toggleChoice(option.id) : (activeOption = option.id)"
-            >
-              <span class="interaction-bar__option-index">{{ optionIndex + 1 }}</span>
-              <span class="interaction-bar__option-copy">
-                <strong>{{ option.label }}</strong>
-                <span v-if="option.description" class="interaction-bar__option-desc">{{ option.description }}</span>
-              </span>
-            </button>
-          </template>
-          <label v-if="allowCustomChoice" class="interaction-bar__custom-choice">
-            <span>自定义选择</span>
-            <input
-              :value="customInput[activeInteraction.id] ?? ''"
-              class="interaction-bar__input"
-              type="text"
-              placeholder="自定义输入..."
-              @input="(e: Event) => { if (activeInteraction) { customInput = { ...customInput, [activeInteraction.id]: (e.target as HTMLInputElement).value } } }"
-            >
-          </label>
-          <input
-            v-if="!activeOptions.length && !allowCustomChoice"
-            v-model="activeInput"
-            class="interaction-bar__input"
-            type="text"
-            placeholder="输入你的选择..."
-          >
-          <textarea
-            v-if="activeIsArtifactReview"
-            :value="reviewComment[activeInteraction.id] ?? ''"
-            class="interaction-bar__textarea interaction-bar__review-note"
-            placeholder="补充审阅备注..."
-            rows="2"
-            @input="(e: Event) => { if (activeInteraction) { reviewComment = { ...reviewComment, [activeInteraction.id]: (e.target as HTMLTextAreaElement).value } } }"
-          ></textarea>
-        </div>
-
-        <div v-else-if="activeInteraction.requestType === 'INPUT_REQUIRED'" class="interaction-bar__control">
-          <template v-if="activeFields.length > 0">
-            <div class="interaction-bar__fields">
-              <div v-for="field in activeFields" :key="field.id" class="interaction-bar__field">
-                <label :for="'field-' + field.id" class="interaction-bar__field-label">
-                  {{ field.label }}
-                  <span v-if="field.required" class="interaction-bar__field-required">*</span>
-                </label>
-                <p v-if="fieldQuestion(field)" class="interaction-bar__field-question">
-                  {{ fieldQuestion(field) }}
-                </p>
-                <textarea
-                  v-if="field.type === 'textarea'"
-                  :id="'field-' + field.id"
-                  :value="activeFieldValues[field.id] ?? ''"
-                  class="interaction-bar__textarea interaction-bar__field-input"
-                  :placeholder="fieldPlaceholder(field)"
-                  rows="2"
-                  @input="(e: Event) => setFieldValue(field.id, (e.target as HTMLTextAreaElement).value)"
-                ></textarea>
-                <select
-                  v-else-if="field.type === 'select'"
-                  :id="'field-' + field.id"
-                  :value="activeFieldValues[field.id] ?? ''"
-                  class="interaction-bar__input interaction-bar__field-input"
-                  @change="(e: Event) => setFieldValue(field.id, (e.target as HTMLSelectElement).value)"
-                >
-                  <option value="">请选择...</option>
-                  <option
-                    v-for="option in field.options ?? []"
-                    :key="option.value"
-                    :value="option.value"
-                  >
-                    {{ option.label }}
-                  </option>
-                </select>
-                <label
-                  v-else-if="field.type === 'checkbox'"
-                  :for="'field-' + field.id"
-                  class="interaction-bar__checkbox"
-                >
-                  <input
-                    :id="'field-' + field.id"
-                    type="checkbox"
-                    :checked="activeFieldValues[field.id] === 'true'"
-                    @change="(e: Event) => setFieldValue(field.id, (e.target as HTMLInputElement).checked ? 'true' : 'false')"
-                  >
-                  <span>已确认</span>
-                </label>
-                <input
-                  v-else
-                  :id="'field-' + field.id"
-                  :value="activeFieldValues[field.id] ?? ''"
-                  class="interaction-bar__input interaction-bar__field-input"
-                  :type="field.type === 'number' ? 'number' : 'text'"
-                  :placeholder="fieldPlaceholder(field)"
-                  @input="(e: Event) => setFieldValue(field.id, (e.target as HTMLInputElement).value)"
-                >
-              </div>
-            </div>
-          </template>
-          <textarea
-            v-else
-            v-model="activeInput"
-            class="interaction-bar__textarea"
-            placeholder="输入你的补充要求..."
-            rows="3"
-          ></textarea>
-        </div>
-
-        <div v-else-if="activeInteraction.requestType === 'PERMISSION'" class="interaction-bar__hint interaction-bar__permission-hint">
-          <span>这是 OpenCode 原生工具授权，处理后才会继续执行当前工具。</span>
-          <span v-if="permissionScopeText(activeInteraction)">同类请求范围：{{ permissionScopeText(activeInteraction) }}</span>
-        </div>
-
-        <div v-else-if="activeInteraction.requestType === 'APPROVAL' || activeInteraction.requestType === 'CONFIRM'" class="interaction-bar__hint">
-          审批当前节点产物或结论。
-        </div>
-
-        <div v-else-if="activeInteraction.requestType === 'EXCEPTION'" class="interaction-bar__control">
-          <textarea
-            v-model="activeInput"
-            class="interaction-bar__textarea"
-            placeholder="补充异常处理信息后继续当前节点..."
-            rows="3"
-          ></textarea>
-        </div>
-
-        <div v-else class="interaction-bar__hint">
-          处理后 Agent 会继续推进当前节点。
-        </div>
-
-        <div class="interaction-bar__actions" :class="{ 'interaction-bar__actions--permission': activeInteraction.requestType === 'PERMISSION' }">
-          <template v-if="activeInteraction.requestType === 'PERMISSION'">
-            <button type="button" class="interaction-bar__primary" :disabled="!!busyAction" @click="handlePermissionDecision('once')">
-              {{ busyAction?.includes(':once') ? permissionBusyLabel('once') : '允许一次' }}
-            </button>
-            <button type="button" class="interaction-bar__ghost" :disabled="!!busyAction" @click="handlePermissionDecision('always')">
-              {{ busyAction?.includes(':always') ? permissionBusyLabel('always') : '本次会话允许同类请求' }}
-            </button>
-            <button type="button" class="interaction-bar__ghost" :disabled="!!busyAction" @click="handlePermissionDecision('reject')">
-              {{ busyAction?.includes(':reject') ? permissionBusyLabel('reject') : '拒绝' }}
-            </button>
-            <button type="button" class="interaction-bar__ghost" :disabled="!!busyAction" @click="emit('open', activeInteraction.id)">
-              详情
-            </button>
-          </template>
-          <template v-else>
-            <button type="button" class="interaction-bar__ghost" :disabled="!!busyAction" @click="emit('open', activeInteraction.id)">
-              详情
-            </button>
-            <button
-              v-if="activeInteraction.requestType === 'EXCEPTION'"
-              type="button"
-              class="interaction-bar__ghost"
-              :disabled="!!busyAction"
-              @click="resolveActive('REJECT', undefined, undefined, 'rejected')"
-            >
-              拒绝
-            </button>
-            <button type="button" class="interaction-bar__ghost" :disabled="!!busyAction" @click="handleSecondary">
-              {{ secondaryActionLabel(activeInteraction) }}
-            </button>
-            <button
-              type="button"
-              class="interaction-bar__primary"
-              :disabled="!!busyAction || (activeInteraction.requestType === 'INPUT_REQUIRED' && !canSubmitInput) || (activeUsesOptionControl && !canSubmitChoice)"
-              @click="handlePrimary"
-            >
-              {{ busyAction ? '提交中...' : (activeInteraction.requestType === 'EXCEPTION' && activeInput.trim() ? '提交补充' : primaryActionLabel(activeInteraction)) }}
-            </button>
-          </template>
-        </div>
-      </div>
+      <InteractionResponseForm
+        :confirmation="activeInteraction"
+        :schema="activeSchema"
+        variant="bar"
+        :type-label="typeLabels[activeInteraction.requestType]"
+        :question="interactionQuestion(activeInteraction)"
+        :busy-action="busyAction"
+        :recovering="recoveringInteractionId === activeInteraction.id"
+        :input-text="activeInput"
+        :selected-option-id="activeOption"
+        :selected-choice-ids="activeSelectedChoiceIds"
+        :custom-choice="customInput[activeInteraction.id] ?? ''"
+        :field-values="activeFieldValues"
+        :review-comment="reviewComment[activeInteraction.id] ?? ''"
+        :permission-scope-text="permissionScopeText(activeInteraction)"
+        show-detail-action
+        @update:input-text="activeInput = $event"
+        @update:selected-option-id="activeOption = $event"
+        @toggle-choice="toggleChoice"
+        @update:custom-choice="setCustomChoice"
+        @update:field-value="setFieldValue"
+        @update:review-comment="setReviewComment"
+        @open-detail="emit('open', activeInteraction.id)"
+        @submit="handleFormSubmit"
+      />
     </div>
   </section>
 </template>

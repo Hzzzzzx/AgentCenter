@@ -13,6 +13,12 @@ export interface InteractionSubmission {
   comment?: string
 }
 
+export interface InteractionFormSubmission extends InteractionSubmission {
+  outcome?: 'resolved' | 'rejected'
+  busyKey?: string
+  errorTitle?: string
+}
+
 const VALID_ACTION_TYPES: ConfirmationActionType[] = [
   'ENTER_SESSION',
   'APPROVE',

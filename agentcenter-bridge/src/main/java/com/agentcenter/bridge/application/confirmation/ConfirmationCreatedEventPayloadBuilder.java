@@ -25,6 +25,10 @@ public class ConfirmationCreatedEventPayloadBuilder {
     }
 
     public String buildPayload(ConfirmationRequestEntity entity) {
+        return buildPayload(entity, Map.of());
+    }
+
+    public String buildPayload(ConfirmationRequestEntity entity, Map<String, Object> extraFields) {
         try {
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("id", entity.getId());
@@ -53,6 +57,9 @@ public class ConfirmationCreatedEventPayloadBuilder {
             appendWorkItemDisplayFields(payload, entity.getWorkItemId());
             String nodeName = resolveWorkflowNodeName(entity.getWorkflowNodeInstanceId());
             if (nodeName != null) payload.put("workflowNodeName", nodeName);
+            if (extraFields != null && !extraFields.isEmpty()) {
+                payload.putAll(extraFields);
+            }
             return objectMapper.writeValueAsString(payload);
         } catch (Exception e) {
             return "{\"confirmationId\":\"" + entity.getId() + "\"}";
