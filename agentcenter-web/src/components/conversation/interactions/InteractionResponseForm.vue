@@ -113,6 +113,7 @@ const barQuestion = computed(() => {
   if (isInputRequired.value && fields.value.length > 1) return inputTitle.value
   return props.question
 })
+const showBarCopy = computed(() => !(isInputRequired.value && fields.value.length > 1))
 const dialogQuestion = computed(() => {
   if (isException.value) return props.confirmation.contextSummary ?? ''
   return props.question || props.schema?.question || ''
@@ -162,6 +163,15 @@ function isFieldActive(field: InteractionField): boolean {
 
 function selectField(fieldId: string) {
   activeFieldId.value = fieldId
+}
+
+function selectNextIncompleteField(currentFieldId: string) {
+  const currentIndex = fields.value.findIndex(field => field.id === currentFieldId)
+  if (currentIndex < 0) return
+  const nextField = fields.value
+    .slice(currentIndex + 1)
+    .find(field => !isFieldComplete(field, props.fieldValues))
+  if (nextField) activeFieldId.value = nextField.id
 }
 
 function questionOrdinal(index: number): string {
@@ -219,6 +229,7 @@ function updateFieldValue(fieldId: string, event: Event) {
 
 function updateFieldSelectValue(fieldId: string, value: string) {
   emit('update:fieldValue', fieldId, value)
+  selectNextIncompleteField(fieldId)
 }
 
 function updateFieldCustomValue(fieldId: string, event: Event) {
@@ -321,7 +332,7 @@ function submitReject() {
       <strong>已提交，正在恢复并同步状态</strong>
     </div>
     <div v-else class="interaction-bar__main">
-      <div class="interaction-bar__copy">
+      <div v-if="showBarCopy" class="interaction-bar__copy">
         <span class="interaction-bar__type">{{ typeLabel }}</span>
         <strong>{{ barQuestion }}</strong>
       </div>
@@ -873,9 +884,9 @@ function submitReject() {
 
 .interaction-bar__field-tabs,
 .confirmation-dialog__field-tabs {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
+  gap: 8px;
   padding-bottom: 2px;
 }
 
@@ -883,9 +894,10 @@ function submitReject() {
 .confirmation-dialog__field-tab {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 6px;
+  width: 100%;
   min-height: 38px;
-  max-width: 190px;
   padding: 5px 9px;
   border: 1px solid var(--border-color);
   border-radius: 7px;

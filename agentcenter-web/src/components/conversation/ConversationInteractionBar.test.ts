@@ -639,7 +639,7 @@ describe('ConversationInteractionBar.vue', () => {
     })
 
     expect(wrapper.find('.interaction-bar__fields').exists()).toBe(true)
-    expect(wrapper.find('.interaction-bar__copy strong').text()).toBe('补充设计信息')
+    expect(wrapper.find('.interaction-bar__copy').exists()).toBe(false)
     expect(wrapper.findAll('.interaction-bar__field-tab')).toHaveLength(3)
     expect(wrapper.findAll('.interaction-bar__field-tab')[0].text()).toContain('问题一')
     expect(wrapper.findAll('.interaction-bar__field-tab')[0].text()).toContain('模块名称')
@@ -709,6 +709,7 @@ describe('ConversationInteractionBar.vue', () => {
 
     await wrapper.findAll('.interaction-bar__field-menu-option')[1].trigger('click')
     expect(primary.attributes('disabled')).toBeDefined()
+    expect(wrapper.findAll('.interaction-bar__field-tab')[1].classes()).toContain('interaction-bar__field-tab--active')
 
     await wrapper.findAll('.interaction-bar__field-tab')[1].trigger('click')
     await wrapper.find('#field-accepted').setValue(true)
