@@ -168,6 +168,55 @@ describe('projectConversationTurns', () => {
     expect(toolParts.find(part => part.toolCallId === 'tc-running')?.defaultExpanded).toBe(true)
   })
 
+  it('keeps runtime connection diagnostics out of the conversation turn', () => {
+    const turns = projectConversationTurns(makeInput({
+      runtimeEvents: [
+        makeEvent({
+          id: 'ev-browser-sse',
+          eventType: 'ERROR',
+          seqNo: 1,
+          payloadJson: JSON.stringify({
+            kind: 'runtime_connection',
+            status: 'failed',
+            title: '事件流连接异常',
+            summary: '浏览器与 Bridge 的事件流连接已中断。',
+            rawEventType: 'browser.sse.error',
+          }),
+        }),
+      ],
+    }))
+
+    expect(turns).toHaveLength(0)
+  })
+
+  it('still renders task runtime errors inside the conversation turn', () => {
+    const turns = projectConversationTurns(makeInput({
+      runtimeEvents: [
+        makeEvent({
+          id: 'ev-timeout',
+          eventType: 'ERROR',
+          seqNo: 1,
+          payloadJson: JSON.stringify({
+            kind: 'error',
+            status: 'failed',
+            title: 'Runtime 响应超时',
+            summary: 'Agent Runtime 已接收请求，但没有返回可用输出。',
+            errorMessage: 'timeout',
+            rawEventType: 'session.messages.timeout',
+          }),
+        }),
+      ],
+    }))
+
+    expect(turns).toHaveLength(1)
+    expect(turns[0].status).toBe('failed')
+    expect(turns[0].steps[0].kind).toBe('error')
+    expect(turns[0].steps[0].parts[0]).toMatchObject({
+      type: 'error',
+      message: 'timeout',
+    })
+  })
+
   // ── 3. Same timestamp, different seqNo → ordered by seqNo ──
   it('orders events by seqNo when createdAt is identical', () => {
     const ts = '2026-05-10T10:00:00.000Z'

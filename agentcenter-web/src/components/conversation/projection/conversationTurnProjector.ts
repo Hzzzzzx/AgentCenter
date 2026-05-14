@@ -17,6 +17,7 @@ import type {
   TurnStatus,
   StepKind,
 } from './types'
+import { isRuntimeConnectionDiagnostic } from './runtimeStatusProjector'
 
 interface ParsedPayload {
   id?: string
@@ -1119,6 +1120,10 @@ export function projectConversationTurns(input: ProjectorInput): ConversationTur
         eventType: ee.event.eventType,
         seqNo: ee.event.seqNo,
       })
+      continue
+    }
+
+    if (isRuntimeConnectionDiagnostic(ee.event)) {
       continue
     }
 

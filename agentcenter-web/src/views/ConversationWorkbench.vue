@@ -12,7 +12,9 @@ import { useNotificationStore } from '../stores/notifications'
 import MessageList from '../components/conversation/MessageList.vue'
 import WorkflowNodeControlBar from '../components/conversation/WorkflowNodeControlBar.vue'
 import ConversationInteractionBar from '../components/conversation/ConversationInteractionBar.vue'
+import ConversationRuntimeStatusBar from '../components/conversation/ConversationRuntimeStatusBar.vue'
 import RunSummaryPanel from '../components/conversation/RunSummaryPanel.vue'
+import { projectRuntimeStatus } from '../components/conversation/projection/runtimeStatusProjector'
 import { sessionResourceApi, skillApi } from '../api/runtimeResources'
 import { DEFAULT_PROJECT_ID } from '../constants/projects'
 import { artifactApi } from '../api/artifacts'
@@ -577,6 +579,19 @@ function canSubmitInteractionFromComposer(item: { requestType: ConfirmationReque
 
 const composerRecoveryInteraction = computed(() =>
   currentInteractions.value.find(canSubmitInteractionFromComposer) ?? null
+)
+
+const pendingExceptionCount = computed(() =>
+  currentInteractions.value.filter(item => item.requestType === 'EXCEPTION').length
+)
+
+const runtimeStatusProjection = computed(() =>
+  projectRuntimeStatus({
+    events: currentRuntimeEvents.value,
+    connected: runtimeStore.connected && runtimeStore.activeSessionId === sessionStore.activeSession?.id,
+    running: isConversationRunning.value,
+    pendingExceptionCount: pendingExceptionCount.value,
+  })
 )
 
 const shouldShowInputArea = computed(() =>
@@ -1980,6 +1995,10 @@ function timestamp(value: string | null | undefined): number {
       </div>
 
       <div class="conversation-workbench__composer">
+        <ConversationRuntimeStatusBar
+          v-if="sessionStore.activeSession && !isHistoricalVersion"
+          :status="runtimeStatusProjection"
+        />
         <ConversationInteractionBar
           v-if="currentInteractions.length"
           class="conversation-workbench__interaction-composer"
