@@ -294,6 +294,15 @@ const nodeStateInfo = computed<NodeStateInfo>(() => {
 
   switch (activeNode.status) {
     case 'RUNNING':
+      if (instance.status === 'BLOCKED' || instance.status === 'FAILED') {
+        return {
+          type: 'FAILED',
+          nodeId: activeNode.id,
+          nodeName: label,
+          skillName: activeNode.skillName ?? undefined,
+          errorMessage: activeNode.errorMessage?.trim() || '工作流已阻塞，等待处理异常后继续。',
+        }
+      }
       return {
         type: 'RUNNING',
         nodeId: activeNode.id,
@@ -483,6 +492,8 @@ const currentStreamingText = computed(() =>
 const isConversationRunning = computed(() =>
   !composerRecoveryInteraction.value
   && nodeStateInfo.value.type !== 'FAILED'
+  && currentWorkflowInstance.value?.status !== 'BLOCKED'
+  && currentWorkflowInstance.value?.status !== 'FAILED'
   && (
     hasActiveSessionRuntimeOutput.value
     || (

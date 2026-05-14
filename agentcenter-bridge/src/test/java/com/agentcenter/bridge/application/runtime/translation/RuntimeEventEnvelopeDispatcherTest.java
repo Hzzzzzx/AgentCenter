@@ -13,6 +13,7 @@ import com.agentcenter.bridge.application.RuntimeEventService;
 import com.agentcenter.bridge.application.artifact.ArtifactCaptureService;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeEventEnvelope;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeEventTypes;
+import com.agentcenter.bridge.application.workflow.WorkflowRuntimeFailureService;
 import com.agentcenter.bridge.domain.runtime.RuntimeEventSource;
 import com.agentcenter.bridge.domain.runtime.RuntimeEventType;
 import com.agentcenter.bridge.domain.runtime.RuntimeType;
@@ -27,6 +28,7 @@ class RuntimeEventEnvelopeDispatcherTest {
     private PermissionConfirmationHandler permissionHandler;
     private QuestionConfirmationHandler questionHandler;
     private ArtifactCaptureService artifactCaptureService;
+    private WorkflowRuntimeFailureService workflowRuntimeFailureService;
     private RuntimeEventEnvelopeDispatcher dispatcher;
 
     @BeforeEach
@@ -38,8 +40,9 @@ class RuntimeEventEnvelopeDispatcherTest {
         permissionHandler = mock(PermissionConfirmationHandler.class);
         questionHandler = mock(QuestionConfirmationHandler.class);
         artifactCaptureService = mock(ArtifactCaptureService.class);
+        workflowRuntimeFailureService = mock(WorkflowRuntimeFailureService.class);
         dispatcher = new RuntimeEventEnvelopeDispatcher(legacyBridge, projector, eventService, operationHandler,
-                permissionHandler, questionHandler, artifactCaptureService);
+                permissionHandler, questionHandler, artifactCaptureService, workflowRuntimeFailureService);
     }
 
     private RuntimeEventEnvelope envelope(String type) {
@@ -211,10 +214,51 @@ class RuntimeEventEnvelopeDispatcherTest {
     }
 
     @Test
+    void runtimeErrorWithWorkflowContextBlocksWorkflowNode() {
+        RuntimeEventEnvelope env = envelope(RuntimeEventTypes.RUNTIME_ERROR, """
+            {
+              "kind": "status",
+              "status": "failed",
+              "title": "OpenCode session error",
+              "reason": "tool crashed",
+              "rawEventType": "session.error"
+            }
+            """);
+
+        dispatcher.dispatch(List.of(env));
+
+        verify(workflowRuntimeFailureService).blockNodeForRuntimeFailure(argThat(context ->
+                "wf_1".equals(context.workflowInstanceId())
+                        && "node_1".equals(context.workflowNodeInstanceId())
+                        && "agent_ses_1".equals(context.agentSessionId())
+                        && "OPENCODE".equals(context.runtimeType())
+                        && "opencode_ses_1".equals(context.runtimeSessionId())
+                        && "tool crashed".equals(context.errorMessage())
+                        && "session.error".equals(context.rawEventType())));
+    }
+
+    @Test
+    void runtimeConnectionDiagnosticDoesNotBlockWorkflowNode() {
+        RuntimeEventEnvelope env = envelope(RuntimeEventTypes.RUNTIME_ERROR, """
+            {
+              "kind": "runtime_connection",
+              "status": "failed",
+              "title": "OpenCode event stream error",
+              "rawEventType": "event.stream.error"
+            }
+            """);
+
+        dispatcher.dispatch(List.of(env));
+
+        verifyNoInteractions(workflowRuntimeFailureService);
+    }
+
+    @Test
     void emptyEnvelopeListDoesNothing() {
         dispatcher.dispatch(List.of());
         verifyNoInteractions(projector, legacyBridge, eventService);
         verifyNoInteractions(operationHandler);
         verifyNoInteractions(permissionHandler, questionHandler);
+        verifyNoInteractions(workflowRuntimeFailureService);
     }
 }

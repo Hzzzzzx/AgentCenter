@@ -181,6 +181,9 @@ export const useRuntimeStore = defineStore('runtime', () => {
       confirmationStore.addFromEvent(event)
       flushPendingStreamingText()
       scheduleFinalMessageSync(0)
+      if (event.workflowInstanceId) {
+        void syncWorkflowAndWorkItem(event)
+      }
     }
 
     if (event.eventType === 'CONFIRMATION_RESOLVED') {

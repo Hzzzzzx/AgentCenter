@@ -124,6 +124,7 @@
             agent_session_id = #{agentSessionId},
             runtime_type = #{runtimeType},
             runtime_session_id = #{runtimeSessionId},
+            skill_name = #{skillName},
             title = #{title},
             content = #{content},
             context_summary = #{contextSummary},
@@ -134,7 +135,7 @@
             interaction_required = #{interactionRequired},
             updated_at = datetime('now')
         WHERE id = #{id}
-          AND status = 'PENDING'
+          AND status IN ('PENDING', 'IN_CONVERSATION')
     </update>
 
 </mapper>

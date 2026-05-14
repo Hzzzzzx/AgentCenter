@@ -425,15 +425,19 @@ export const useWorkItemWorkflowProjectionStore = defineStore('workItemWorkflowP
     if (isStarting(item.id)) return 'STARTING'
     const currentNode = resolveCurrentSkillNode(item, workflowInstance, skillNodes)
     if (currentNode?.status === 'WAITING_CONFIRMATION') return 'WAITING_CONFIRMATION'
-    if (currentNode?.status === 'RUNNING') return 'RUNNING'
-    if (currentNode?.status === 'READY') return 'READY'
-    if (currentNode?.status === 'FAILED') return 'FAILED'
     if (skillNodes.some((node) => node.status === 'WAITING_CONFIRMATION')) return 'WAITING_CONFIRMATION'
-    if (skillNodes.some((node) => node.status === 'RUNNING')) return 'RUNNING'
-    if (skillNodes.some((node) => node.status === 'READY')) return 'READY'
-    if (workflowInstance?.status === 'FAILED' || workflowInstance?.status === 'BLOCKED' || skillNodes.some((node) => node.status === 'FAILED')) {
+    if (
+      workflowInstance?.status === 'FAILED'
+      || workflowInstance?.status === 'BLOCKED'
+      || currentNode?.status === 'FAILED'
+      || skillNodes.some((node) => node.status === 'FAILED')
+    ) {
       return 'FAILED'
     }
+    if (currentNode?.status === 'RUNNING') return 'RUNNING'
+    if (currentNode?.status === 'READY') return 'READY'
+    if (skillNodes.some((node) => node.status === 'RUNNING')) return 'RUNNING'
+    if (skillNodes.some((node) => node.status === 'READY')) return 'READY'
     if (workflowInstance?.status === 'COMPLETED' || item.workflowSummary?.status === 'COMPLETED' || item.status === 'DONE') {
       return 'COMPLETED'
     }

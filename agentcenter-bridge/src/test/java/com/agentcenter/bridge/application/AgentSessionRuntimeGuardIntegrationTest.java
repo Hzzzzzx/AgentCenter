@@ -277,6 +277,69 @@ class AgentSessionRuntimeGuardIntegrationTest {
         });
     }
 
+    @Test
+    void runtimeFailureWithWorkflowCurrentNode_marksNodeFailed() {
+        String fe1234Id = findWorkItemIdByCode("FE1234");
+
+        String definitionId = jdbcTemplate.queryForObject(
+                "SELECT id FROM workflow_definition WHERE work_item_type = 'FE' AND is_default = 1 LIMIT 1",
+                String.class);
+        String nodeDefinitionId = jdbcTemplate.queryForObject(
+                "SELECT id FROM workflow_node_definition WHERE workflow_definition_id = ? ORDER BY order_no LIMIT 1",
+                String.class, definitionId);
+
+        String workflowInstanceId = "wf-rt-node-test-" + UUID.randomUUID().toString().substring(0, 8);
+        String nodeInstanceId = "node-rt-node-test-" + UUID.randomUUID().toString().substring(0, 8);
+        jdbcTemplate.update("""
+                INSERT INTO workflow_instance (id, work_item_id, workflow_definition_id, status, execution_mode,
+                                               current_node_instance_id, started_at)
+                VALUES (?, ?, ?, 'RUNNING', 'MANUAL_CONFIRM', ?, datetime('now'))
+                """, workflowInstanceId, fe1234Id, definitionId, nodeInstanceId);
+        jdbcTemplate.update("""
+                INSERT INTO workflow_node_instance (id, workflow_instance_id, node_definition_id, status,
+                                                    started_at, stage_key, skill_name, summary, sequence_no)
+                VALUES (?, ?, ?, 'RUNNING', datetime('now'), 'requirement_refine', 'prd-design', '需求整理 (PRD)', 1)
+                """, nodeInstanceId, workflowInstanceId, nodeDefinitionId);
+        jdbcTemplate.update("UPDATE work_item SET current_workflow_instance_id = ? WHERE id = ?",
+                workflowInstanceId, fe1234Id);
+
+        var session = agentSessionService.createSession(
+                SessionType.WORK_ITEM, "workflow node test", fe1234Id, workflowInstanceId, RuntimeType.OPENCODE);
+        String sessionId = session.id();
+
+        when(runtimeGateway.ensureSession(eq(RuntimeType.OPENCODE), any(), eq(sessionId), any()))
+                .thenAnswer(invocation -> {
+                    String existing = invocation.getArgument(3);
+                    return existing != null ? existing : "rt-ses-1";
+                });
+        doThrow(new IllegalStateException("HTTP 503 Service Unavailable: timeout"))
+                .when(runtimeGateway).sendMessage(eq(RuntimeType.OPENCODE), anyString(), anyString());
+        when(runtimeGateway.createSession(eq(RuntimeType.OPENCODE), any(), eq(sessionId)))
+                .thenReturn("rt-recovered-1");
+
+        agentSessionService.sendMessage(sessionId,
+                new SendMessageRequest("workflow runtime message", ContentFormat.TEXT,
+                        "CONTINUE_CURRENT", nodeInstanceId));
+
+        await().atMost(Duration.ofSeconds(5)).pollInterval(Duration.ofMillis(50)).untilAsserted(() -> {
+            String wfStatus = jdbcTemplate.queryForObject(
+                    "SELECT status FROM workflow_instance WHERE id = ?", String.class, workflowInstanceId);
+            assertThat(wfStatus).isEqualTo("BLOCKED");
+
+            var node = jdbcTemplate.queryForMap(
+                    "SELECT status, error_message, completed_at FROM workflow_node_instance WHERE id = ?",
+                    nodeInstanceId);
+            assertThat(node).containsEntry("status", "FAILED");
+            assertThat((String) node.get("error_message")).contains("HTTP 503");
+            assertThat((String) node.get("completed_at")).isNotBlank();
+
+            var confirmations = jdbcTemplate.queryForList(
+                    "SELECT * FROM confirmation_request WHERE agent_session_id = ?", sessionId);
+            assertThat(confirmations).hasSize(1);
+            assertThat((String) confirmations.get(0).get("workflow_node_instance_id")).isEqualTo(nodeInstanceId);
+        });
+    }
+
     private String findWorkItemIdByCode(String code) {
         return jdbcTemplate.queryForObject(
                 "SELECT id FROM work_item WHERE code = ?", String.class, code);

@@ -35,6 +35,7 @@ import com.agentcenter.bridge.domain.session.MessageRole;
 import com.agentcenter.bridge.domain.session.MessageStatus;
 import com.agentcenter.bridge.domain.session.SessionStatus;
 import com.agentcenter.bridge.domain.session.SessionType;
+import com.agentcenter.bridge.domain.workflow.WorkflowNodeStatus;
 import com.agentcenter.bridge.domain.workflow.WorkflowStatus;
 import com.agentcenter.bridge.domain.workflow.WorkflowUserAction;
 import com.agentcenter.bridge.domain.workitem.Priority;
@@ -46,6 +47,7 @@ import com.agentcenter.bridge.infrastructure.persistence.entity.ConfirmationRequ
 import com.agentcenter.bridge.infrastructure.persistence.entity.RuntimeEventEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.WorkItemEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowInstanceEntity;
+import com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowNodeInstanceEntity;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.AgentMessageMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.AgentSessionMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.ConfirmationMapper;
@@ -557,6 +559,7 @@ public class AgentSessionService {
             instance = workflowMapper.findInstanceById(session.getWorkflowInstanceId());
             if (instance != null) {
                 nodeInstanceId = instance.getCurrentNodeInstanceId();
+                markCurrentWorkflowNodeFailed(nodeInstanceId, runtimeError, now);
                 instance.setStatus(WorkflowStatus.BLOCKED.name());
                 instance.setUpdatedAt(now);
                 workflowMapper.updateInstance(instance);
@@ -601,6 +604,21 @@ public class AgentSessionService {
                 confirmationCreatedPayloadBuilder.buildPayload(confirmation, Map.of("deduplicated", deduplicated)),
                 null
         ));
+    }
+
+    private void markCurrentWorkflowNodeFailed(String nodeInstanceId, String runtimeError, String now) {
+        if (nodeInstanceId == null || nodeInstanceId.isBlank()) {
+            return;
+        }
+        WorkflowNodeInstanceEntity node = workflowMapper.findNodeInstanceById(nodeInstanceId);
+        if (node == null || WorkflowNodeStatus.COMPLETED.name().equals(node.getStatus())
+                || WorkflowNodeStatus.SKIPPED.name().equals(node.getStatus())) {
+            return;
+        }
+        node.setStatus(WorkflowNodeStatus.FAILED.name());
+        node.setErrorMessage(runtimeError);
+        node.setCompletedAt(now);
+        workflowMapper.updateNodeInstance(node);
     }
 
     boolean upsertRuntimeExceptionConfirmation(ConfirmationRequestEntity confirmation) {

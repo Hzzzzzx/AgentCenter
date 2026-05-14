@@ -213,6 +213,27 @@ describe('useWorkItemWorkflowProjectionStore', () => {
     expect(projection.nodes.find((node) => node.id === 'node-hld')?.status).toBe('RUNNING')
   })
 
+  it('shows blocked workflow as failed even when the current node snapshot is still running', () => {
+    const workflowStore = useWorkflowStore()
+    const projectionStore = useWorkItemWorkflowProjectionStore()
+    workflowStore.upsertInstance(makeInstance({
+      status: 'BLOCKED',
+      currentNodeInstanceId: 'node-lld',
+      nodes: [
+        makeNode({
+          id: 'node-lld',
+          status: 'RUNNING',
+          errorMessage: 'Runtime sendMessage failed',
+        }),
+      ],
+    }))
+
+    const projection = projectionStore.projectionFor(makeWorkItem({}))
+
+    expect(projection.commandState).toBe('FAILED')
+    expect(projection.actionLabel).toBe('查看异常')
+  })
+
   it('does not let a stale summary regress a cached workflow instance that already advanced', () => {
     const workflowStore = useWorkflowStore()
     const projectionStore = useWorkItemWorkflowProjectionStore()

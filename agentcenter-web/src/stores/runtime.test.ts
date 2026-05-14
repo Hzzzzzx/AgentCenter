@@ -291,8 +291,9 @@ describe('useRuntimeStore — SSE event handlers', () => {
     expect(confirmationApi.list).toHaveBeenCalledWith('PENDING')
   })
 
-  it('CONFIRMATION_CREATED does not refresh workflow (that is CONFIRMATION_RESOLVED)', async () => {
+  it('CONFIRMATION_CREATED with workflow context refreshes workflow and work item', async () => {
     const { workflowApi } = await import('../api/workflows')
+    const { workItemApi } = await import('../api/workItems')
     const runtimeStore = useRuntimeStore()
 
     runtimeStore.connectSSE('sess-1')
@@ -317,12 +318,14 @@ describe('useRuntimeStore — SSE event handlers', () => {
     capturedOnEvent!(makeEvent({
       eventType: 'CONFIRMATION_CREATED',
       workflowInstanceId: 'inst-99',
+      workItemId: 'work-1',
       payloadJson: JSON.stringify(payload),
     }))
 
     await vi.dynamicImportSettled()
 
-    expect(workflowApi.getInstance).not.toHaveBeenCalled()
+    expect(workflowApi.getInstance).toHaveBeenCalledWith('inst-99')
+    expect(workItemApi.getById).toHaveBeenCalledWith('work-1')
   })
 
   it('CONFIRMATION_RESOLVED removes from pending and refreshes workflow', async () => {

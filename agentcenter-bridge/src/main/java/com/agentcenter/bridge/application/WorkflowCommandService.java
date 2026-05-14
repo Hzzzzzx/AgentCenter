@@ -485,7 +485,7 @@ public class WorkflowCommandService {
         List<WorkflowNodeDefinitionEntity> nodeDefs =
                 workflowMapper.findNodeDefinitionsByWorkflowDefinitionId(instance.getWorkflowDefinitionId());
 
-        runNode(instance, nextPending, nodeDefs, workItem);
+        runNodeWithFailureGuard(instance, nextPending, nodeDefs, workItem, null);
 
         instance = workflowMapper.findInstanceById(instanceId);
         return buildResponse(instance);
@@ -661,6 +661,24 @@ public class WorkflowCommandService {
 
         if (WorkflowNodeStatus.COMPLETED.name().equals(node.getStatus())) {
             advanceToNextNode(instance);
+        }
+    }
+
+    private void runNodeWithFailureGuard(WorkflowInstanceEntity instance,
+                                         WorkflowNodeInstanceEntity node,
+                                         List<WorkflowNodeDefinitionEntity> nodeDefs,
+                                         WorkItemEntity workItem,
+                                         String supplementalInput) {
+        try {
+            runNode(instance, node, nodeDefs, workItem, supplementalInput);
+        } catch (Exception e) {
+            log.error("Workflow node execution failed: instance={}, node={}",
+                    instance != null ? instance.getId() : null,
+                    node != null ? node.getId() : null,
+                    e);
+            if (node != null) {
+                markNodeFailed(node.getId(), e);
+            }
         }
     }
 
@@ -1993,7 +2011,7 @@ public class WorkflowCommandService {
         List<WorkflowNodeDefinitionEntity> nodeDefs =
                 workflowMapper.findNodeDefinitionsByWorkflowDefinitionId(instance.getWorkflowDefinitionId());
 
-        runNode(instance, nextPending, nodeDefs, workItem);
+        runNodeWithFailureGuard(instance, nextPending, nodeDefs, workItem, null);
     }
 
     private void completeWorkflow(WorkflowInstanceEntity instance,
