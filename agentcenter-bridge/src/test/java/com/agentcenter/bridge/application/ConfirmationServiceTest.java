@@ -35,8 +35,10 @@ import com.agentcenter.bridge.domain.confirmation.ConfirmationRequestType;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationStatus;
 import com.agentcenter.bridge.domain.runtime.RuntimeEventType;
 import com.agentcenter.bridge.domain.runtime.RuntimeType;
+import com.agentcenter.bridge.domain.workflow.WorkflowNodeStatus;
 import com.agentcenter.bridge.infrastructure.persistence.entity.AgentSessionEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.ConfirmationRequestEntity;
+import com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowNodeInstanceEntity;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.AgentSessionMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.AgentMessageMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.ConfirmationMapper;
@@ -51,6 +53,7 @@ class ConfirmationServiceTest {
     private AgentMessageMapper agentMessageMapper;
     private RuntimeEventService runtimeEventService;
     private RuntimeGateway runtimeGateway;
+    private WorkflowMapper workflowMapper;
     private PermissionConfirmationHandler permissionConfirmationHandler;
     private QuestionConfirmationHandler questionConfirmationHandler;
     private ConfirmationService service;
@@ -60,7 +63,7 @@ class ConfirmationServiceTest {
         confirmationMapper = mock(ConfirmationMapper.class);
         workflowCommandService = mock(WorkflowCommandService.class);
         WorkItemMapper workItemMapper = mock(WorkItemMapper.class);
-        WorkflowMapper workflowMapper = mock(WorkflowMapper.class);
+        workflowMapper = mock(WorkflowMapper.class);
         agentSessionMapper = mock(AgentSessionMapper.class);
         agentMessageMapper = mock(AgentMessageMapper.class);
         runtimeEventService = mock(RuntimeEventService.class);
@@ -268,6 +271,56 @@ class ConfirmationServiceTest {
                         && event.payloadJson().contains("Runtime 地址配置异常")));
     }
 
+    @Test
+    void resolvePermissionOnRunningNodeWaitsForRuntimeContinuation() {
+        ConfirmationRequestEntity entity = permissionConfirmation();
+        WorkflowNodeInstanceEntity node = workflowNode("node-1", WorkflowNodeStatus.RUNNING.name());
+        when(confirmationMapper.findById(entity.getId())).thenReturn(entity);
+        when(agentMessageMapper.findBySessionId(entity.getAgentSessionId())).thenReturn(List.of());
+        when(confirmationMapper.findByWorkItemId(entity.getWorkItemId())).thenReturn(List.of(entity));
+        when(workflowMapper.findNodeInstanceById("node-1")).thenReturn(node);
+
+        ResolveConfirmationRequest request = new ResolveConfirmationRequest(
+                ConfirmationActionType.APPROVE,
+                "允许一次",
+                Map.of("reply", "once"));
+
+        var result = service.resolve(entity.getId(), request);
+        TransactionSynchronizationManager.getSynchronizations()
+                .forEach(TransactionSynchronization::afterCommit);
+
+        assertThat(result.status()).isEqualTo(ConfirmationStatus.RESOLVED);
+        verify(permissionConfirmationHandler).respondPermission("rt-session", "perm-1", "once");
+        verify(workflowCommandService, never()).resumeNodeAfterInteraction("node-1");
+        verify(runtimeEventService).publishEvent(argThat(event ->
+                RuntimeEventType.STATUS.equals(event.eventType())
+                        && "workflow-1".equals(event.workflowInstanceId())
+                        && "node-1".equals(event.workflowNodeInstanceId())
+                        && event.payloadJson().contains("permission_resolution")));
+    }
+
+    @Test
+    void resolvePermissionOnStoppedNodeResumesWorkflowNode() {
+        ConfirmationRequestEntity entity = permissionConfirmation();
+        WorkflowNodeInstanceEntity node = workflowNode("node-1", WorkflowNodeStatus.FAILED.name());
+        when(confirmationMapper.findById(entity.getId())).thenReturn(entity);
+        when(agentMessageMapper.findBySessionId(entity.getAgentSessionId())).thenReturn(List.of());
+        when(confirmationMapper.findByWorkItemId(entity.getWorkItemId())).thenReturn(List.of(entity));
+        when(workflowMapper.findNodeInstanceById("node-1")).thenReturn(node);
+
+        ResolveConfirmationRequest request = new ResolveConfirmationRequest(
+                ConfirmationActionType.APPROVE,
+                "允许一次",
+                Map.of("reply", "once"));
+
+        service.resolve(entity.getId(), request);
+        TransactionSynchronizationManager.getSynchronizations()
+                .forEach(TransactionSynchronization::afterCommit);
+
+        verify(permissionConfirmationHandler).respondPermission("rt-session", "perm-1", "once");
+        verify(workflowCommandService).resumeNodeAfterInteraction("node-1");
+    }
+
     private ConfirmationRequestEntity questionConfirmation() {
         ConfirmationRequestEntity entity = new ConfirmationRequestEntity();
         entity.setId("question_rt_session_q_1");
@@ -323,6 +376,33 @@ class ConfirmationServiceTest {
         entity.setCreatedAt("2026-05-11 12:00:00");
         entity.setUpdatedAt("2026-05-11 12:00:00");
         return entity;
+    }
+
+    private ConfirmationRequestEntity permissionConfirmation() {
+        ConfirmationRequestEntity entity = new ConfirmationRequestEntity();
+        entity.setId("perm_rt_session_perm_1");
+        entity.setRequestType(ConfirmationRequestType.PERMISSION.name());
+        entity.setStatus(ConfirmationStatus.PENDING.name());
+        entity.setWorkItemId("work-1");
+        entity.setWorkflowInstanceId("workflow-1");
+        entity.setWorkflowNodeInstanceId("node-1");
+        entity.setAgentSessionId("agent-session-1");
+        entity.setRuntimeType("OPENCODE");
+        entity.setRuntimeSessionId("rt-session");
+        entity.setInteractionId("perm-1");
+        entity.setTitle("允许写入?");
+        entity.setContent("OpenCode permission request");
+        entity.setPriority("HIGH");
+        entity.setCreatedAt("2026-05-11 12:00:00");
+        entity.setUpdatedAt("2026-05-11 12:00:00");
+        return entity;
+    }
+
+    private WorkflowNodeInstanceEntity workflowNode(String id, String status) {
+        WorkflowNodeInstanceEntity node = new WorkflowNodeInstanceEntity();
+        node.setId(id);
+        node.setStatus(status);
+        return node;
     }
 
     private AgentSessionEntity agentSession(String id, String runtimeSessionId) {

@@ -80,7 +80,10 @@ class PermissionConfirmationHandlerTest {
                   "patterns": "/workspace/protected/UploadSplitter.ts",
                   "always": "/workspace/protected/*"
                 }
-                """);
+                """,
+                "work-1",
+                "workflow-1",
+                "node-1");
 
         verify(adapter).respondPermission("ses_new", "per_new", "always");
 
@@ -89,6 +92,9 @@ class PermissionConfirmationHandlerTest {
         verify(confirmationMapper).insert(entityCaptor.capture());
         ConfirmationRequestEntity inserted = entityCaptor.getValue();
         assertEquals(ConfirmationStatus.RESOLVED.name(), inserted.getStatus());
+        assertEquals("work-1", inserted.getWorkItemId());
+        assertEquals("workflow-1", inserted.getWorkflowInstanceId());
+        assertEquals("node-1", inserted.getWorkflowNodeInstanceId());
         assertEquals("system", inserted.getResolvedBy());
         assertTrue(inserted.getResolutionPayloadJson().contains("\"autoApproved\":true"));
         assertTrue(inserted.getResolutionPayloadJson().contains("perm_ses_old_per_old"));

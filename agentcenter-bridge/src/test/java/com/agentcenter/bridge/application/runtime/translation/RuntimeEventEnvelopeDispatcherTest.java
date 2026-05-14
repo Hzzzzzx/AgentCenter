@@ -60,7 +60,7 @@ class RuntimeEventEnvelopeDispatcherTest {
             ObjectMapper mapper = new ObjectMapper();
             return new RuntimeEventEnvelope(
                 "runtime-event", type, null, null, null,
-                RuntimeType.OPENCODE, "agent_ses_1", "opencode_ses_1", null, null, null,
+                RuntimeType.OPENCODE, "agent_ses_1", "opencode_ses_1", "work_1", "wf_1", "node_1",
                 mapper.readTree(payloadJson),
                 OffsetDateTime.now());
         } catch (Exception e) {
@@ -178,7 +178,10 @@ class RuntimeEventEnvelopeDispatcherTest {
                 eq("perm_1"),
                 eq("Allow file write?"),
                 eq("Bash"),
-                contains("C:\\\\Users\\\\alice\\\\workspace\\\\demo\\\\SKILL.md"));
+                contains("C:\\\\Users\\\\alice\\\\workspace\\\\demo\\\\SKILL.md"),
+                eq("work_1"),
+                eq("wf_1"),
+                eq("node_1"));
     }
 
     @Test

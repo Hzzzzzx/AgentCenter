@@ -60,7 +60,10 @@ public class RuntimeEventEnvelopeDispatcher {
                         extractPermissionId(envelope),
                         extractTitle(envelope),
                         extractSkillName(envelope),
-                        extractPermissionContextJson(envelope)
+                        extractPermissionContextJson(envelope),
+                        envelope.workItemId(),
+                        envelope.workflowInstanceId(),
+                        envelope.workflowNodeInstanceId()
                     );
                 } catch (Exception e) {
                     log.warn("Failed to create permission confirmation: {}", e.getMessage());

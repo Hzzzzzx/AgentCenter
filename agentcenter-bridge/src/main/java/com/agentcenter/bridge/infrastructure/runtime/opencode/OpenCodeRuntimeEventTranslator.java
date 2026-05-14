@@ -427,9 +427,9 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
         if (!patterns.isBlank()) permissionMeta.put("patterns", patterns);
         if (!always.isBlank()) permissionMeta.put("always", always);
 
-        result.add(buildEnvelope(RuntimeEventTypes.PERMISSION_REQUESTED, agentSessionId,
+        result.add(buildContextEnvelope(RuntimeEventTypes.PERMISSION_REQUESTED, agentSessionId,
             opencodeSessionId, payloadNode("permission_required", skillName,
-            projectionMeta("permission.asked", null, permissionMeta))));
+            projectionMeta("permission.asked", null, permissionMeta)), context));
         result.add(buildProcessTraceEnvelope(
             RuntimeEventTypes.PROCESS_TRACE, agentSessionId, opencodeSessionId,
             processTracePayload("confirmation", "waiting", "权限确认", title, skillName, permissionId,

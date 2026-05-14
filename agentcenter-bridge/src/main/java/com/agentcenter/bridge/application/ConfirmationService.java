@@ -37,11 +37,13 @@ import com.agentcenter.bridge.domain.session.MessageRole;
 import com.agentcenter.bridge.domain.session.MessageStatus;
 import com.agentcenter.bridge.domain.workitem.Priority;
 import com.agentcenter.bridge.domain.workitem.WorkItemType;
+import com.agentcenter.bridge.domain.workflow.WorkflowNodeStatus;
 import com.agentcenter.bridge.infrastructure.persistence.entity.AgentMessageEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.AgentSessionEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.ConfirmationRequestEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.WorkItemEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowNodeDefinitionEntity;
+import com.agentcenter.bridge.infrastructure.persistence.entity.WorkflowNodeInstanceEntity;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.AgentMessageMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.AgentSessionMapper;
 import com.agentcenter.bridge.infrastructure.persistence.mapper.ConfirmationMapper;
@@ -221,6 +223,7 @@ public class ConfirmationService {
                 && !hasOtherBlockingForNode(entity);
         boolean isDecision = ConfirmationRequestType.DECISION.name().equals(entity.getRequestType());
         boolean isException = ConfirmationRequestType.EXCEPTION.name().equals(entity.getRequestType());
+        boolean isPermission = ConfirmationRequestType.PERMISSION.name().equals(entity.getRequestType());
         boolean isSkip = ConfirmationActionType.SKIP.equals(actionType);
         boolean isRuntimeSessionIntervention = isException
                 && nodeInstanceId == null
@@ -251,6 +254,8 @@ public class ConfirmationService {
                             } else {
                                 workflowCommandService.retryNode(nodeInstanceId);
                             }
+                        } else if (isPermission) {
+                            dispatchPermissionResolution(entity, nodeInstanceId);
                         } else {
                             workflowCommandService.resumeNodeAfterInteraction(nodeInstanceId);
                         }
@@ -299,6 +304,54 @@ public class ConfirmationService {
             return reply;
         }
         return "once";
+    }
+
+    private void dispatchPermissionResolution(ConfirmationRequestEntity confirmation, String nodeInstanceId) {
+        WorkflowNodeInstanceEntity node = workflowMapper.findNodeInstanceById(nodeInstanceId);
+        if (node == null) {
+            publishPermissionResolutionStatus(confirmation,
+                    "权限已发送给 Runtime，但工作流节点不存在，无法自动恢复。", true);
+            return;
+        }
+
+        if (WorkflowNodeStatus.RUNNING.name().equals(node.getStatus())) {
+            publishPermissionResolutionStatus(confirmation,
+                    "权限已发送给 Runtime，正在等待当前节点继续输出。", false);
+            return;
+        }
+
+        workflowCommandService.resumeNodeAfterInteraction(nodeInstanceId);
+    }
+
+    private void publishPermissionResolutionStatus(ConfirmationRequestEntity confirmation,
+                                                   String message,
+                                                   boolean error) {
+        if (confirmation.getAgentSessionId() == null || confirmation.getAgentSessionId().isBlank()) {
+            return;
+        }
+        String payloadJson;
+        try {
+            payloadJson = objectMapper.writeValueAsString(Map.of(
+                    "kind", "permission_resolution",
+                    "status", error ? "failed" : "waiting",
+                    "message", message,
+                    "confirmationId", confirmation.getId()
+            ));
+        } catch (Exception e) {
+            payloadJson = "{\"kind\":\"permission_resolution\",\"confirmationId\":\""
+                    + confirmation.getId() + "\"}";
+        }
+        runtimeEventService.publishEvent(new RuntimeEventDto(
+                null,
+                confirmation.getAgentSessionId(),
+                confirmation.getWorkItemId(),
+                confirmation.getWorkflowInstanceId(),
+                confirmation.getWorkflowNodeInstanceId(),
+                error ? RuntimeEventType.ERROR : RuntimeEventType.STATUS,
+                RuntimeEventSource.BRIDGE,
+                payloadJson,
+                null
+        ));
     }
 
     private void respondQuestionAfterCommit(ConfirmationRequestEntity entity,

@@ -55,7 +55,10 @@ public class PermissionConfirmationHandler {
     @Transactional
     public void createPermissionConfirmation(String agentSessionId, String opencodeSessionId,
                                               String permissionId, String title, String skillName,
-                                              String interactionContextJson) {
+                                              String interactionContextJson,
+                                              String workItemId,
+                                              String workflowInstanceId,
+                                              String workflowNodeInstanceId) {
         String confirmationId = confirmationIdFor(opencodeSessionId, permissionId);
         var existing = confirmationMapper.findById(confirmationId);
         if (existing != null) {
@@ -66,7 +69,8 @@ public class PermissionConfirmationHandler {
         String now = LocalDateTime.now().format(SQLITE_DT);
         ConfirmationRequestEntity entity = buildPermissionEntity(
                 confirmationId, agentSessionId, opencodeSessionId, permissionId,
-                title, skillName, interactionContextJson, now);
+                title, skillName, interactionContextJson, workItemId,
+                workflowInstanceId, workflowNodeInstanceId, now);
 
         PermissionContext context = parsePermissionContext(interactionContextJson);
         SessionPermissionApproval reusableApproval = findReusableApproval(agentSessionId, context);
@@ -158,11 +162,17 @@ public class PermissionConfirmationHandler {
                                                             String opencodeSessionId, String permissionId,
                                                             String title, String skillName,
                                                             String interactionContextJson,
+                                                            String workItemId,
+                                                            String workflowInstanceId,
+                                                            String workflowNodeInstanceId,
                                                             String now) {
         ConfirmationRequestEntity entity = new ConfirmationRequestEntity();
         entity.setId(confirmationId);
         entity.setRequestType(ConfirmationRequestType.PERMISSION.name());
         entity.setStatus(ConfirmationStatus.PENDING.name());
+        entity.setWorkItemId(workItemId);
+        entity.setWorkflowInstanceId(workflowInstanceId);
+        entity.setWorkflowNodeInstanceId(workflowNodeInstanceId);
         entity.setAgentSessionId(agentSessionId);
         entity.setRuntimeType(RuntimeType.OPENCODE.name());
         entity.setRuntimeSessionId(opencodeSessionId);

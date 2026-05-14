@@ -59,6 +59,34 @@ class OpenCodeRuntimeEventTranslatorTest {
         };
     }
 
+    private RuntimeTranslationContext workflowContext() {
+        return new RuntimeTranslationContext() {
+            @Override
+            public String getAgentSessionId(String runtimeSessionId) {
+                return AGENT_SESSION_ID;
+            }
+
+            @Override
+            public boolean isUserMessage(String runtimeSessionId, String messageId) {
+                return state.isUserMessage(runtimeSessionId, messageId);
+            }
+
+            @Override
+            public void recordUserMessageId(String runtimeSessionId, String messageId) {
+                state.recordUserMessageId(runtimeSessionId, messageId);
+            }
+
+            @Override
+            public String getWorkflowNodeInstanceId(String agentSessionId) { return "node_123"; }
+
+            @Override
+            public String getWorkflowInstanceId(String agentSessionId) { return "wf_456"; }
+
+            @Override
+            public String getWorkItemId(String agentSessionId) { return "wi_789"; }
+        };
+    }
+
     private RuntimeTranslationContext nullAgentContext() {
         return new RuntimeTranslationContext() {
             @Override
@@ -504,6 +532,29 @@ class OpenCodeRuntimeEventTranslatorTest {
                 result.get(0).payload().path("filePath").asText());
         assertEquals(RuntimeEventTypes.PROCESS_TRACE, result.get(1).type());
         assertEquals("confirmation", result.get(1).payload().path("kind").asText());
+    }
+
+    @Test
+    void permissionAskedCarriesWorkflowContext() throws Exception {
+        String json = """
+        {
+          "type": "permission.asked",
+          "properties": {
+            "id": "perm_1",
+            "permission": "file_write",
+            "tool": {"tool": "Bash", "name": "Write file"},
+            "title": "Allow file write?"
+          }
+        }
+        """;
+        RuntimeRawEvent raw = rawEvent("permission.asked", json);
+        List<RuntimeEventEnvelope> result = translator.translate(raw, workflowContext());
+
+        RuntimeEventEnvelope permission = result.get(0);
+        assertEquals(RuntimeEventTypes.PERMISSION_REQUESTED, permission.type());
+        assertEquals("node_123", permission.workflowNodeInstanceId());
+        assertEquals("wf_456", permission.workflowInstanceId());
+        assertEquals("wi_789", permission.workItemId());
     }
 
     @Test
