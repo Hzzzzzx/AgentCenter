@@ -582,6 +582,96 @@ class OpenCodeRuntimeEventTranslatorTest {
     }
 
     @Test
+    void questionToolPartCreatesQuestionRequestedEnvelope() throws Exception {
+        String json = """
+        {
+          "type": "message.part.updated",
+          "properties": {
+            "part": {
+              "type": "tool",
+              "id": "prt_question",
+              "messageID": "msg_1",
+              "callID": "call_question",
+              "tool": "question",
+              "state": {
+                "status": "running",
+                "input": {
+                  "id": "q_tool_1",
+                  "questions": [
+                    {
+                      "header": "范围",
+                      "question": "本次修复覆盖哪些范围？",
+                      "options": ["后端映射", "前端展示"]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+        """;
+        RuntimeRawEvent raw = rawEvent("message.part.updated", json);
+        List<RuntimeEventEnvelope> result = translator.translate(raw, fixedContext());
+
+        assertEquals(4, result.size());
+        RuntimeEventEnvelope question = result.get(0);
+        assertEquals(RuntimeEventTypes.QUESTION_REQUESTED, question.type());
+        assertEquals("q_tool_1", question.payload().path("requestId").asText());
+        assertEquals("question_opencode_ses_1_q_tool_1", question.payload().path("confirmationId").asText());
+        assertEquals("call_question", question.payload().path("toolCallId").asText());
+        assertEquals("message.part.updated", question.payload().path("rawEventType").asText());
+        assertEquals("tool", question.payload().path("rawPartType").asText());
+        assertEquals("本次修复覆盖哪些范围？",
+                question.payload().path("questions").get(0).path("question").asText());
+
+        assertEquals(RuntimeEventTypes.PROCESS_TRACE, result.get(1).type());
+        assertEquals("confirmation", result.get(1).payload().path("kind").asText());
+        assertEquals(RuntimeEventTypes.TOOL_STARTED, result.get(2).type());
+        assertEquals(RuntimeEventTypes.PROCESS_TRACE, result.get(3).type());
+    }
+
+    @Test
+    void questionToolPartAndQuestionAskedDeduplicateByQuestionId() throws Exception {
+        String toolPartJson = """
+        {
+          "type": "message.part.updated",
+          "properties": {
+            "part": {
+              "type": "tool",
+              "callID": "call_question",
+              "tool": "question",
+              "state": {
+                "status": "running",
+                "input": {
+                  "id": "q_1",
+                  "questions": [{"question": "请选择推进方案"}]
+                }
+              }
+            }
+          }
+        }
+        """;
+        String questionAskedJson = """
+        {
+          "type": "question.asked",
+          "properties": {
+            "id": "q_1",
+            "tool": {"callID": "call_question"},
+            "questions": [{"question": "请选择推进方案"}]
+          }
+        }
+        """;
+
+        List<RuntimeEventEnvelope> first = translator.translate(rawEvent("message.part.updated", toolPartJson),
+                fixedContext());
+        List<RuntimeEventEnvelope> second = translator.translate(rawEvent("question.asked", questionAskedJson),
+                fixedContext());
+
+        assertTrue(first.stream().anyMatch(env -> RuntimeEventTypes.QUESTION_REQUESTED.equals(env.type())));
+        assertTrue(second.isEmpty());
+    }
+
+    @Test
     void sessionError() throws Exception {
         String json = """
         {

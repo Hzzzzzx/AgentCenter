@@ -433,19 +433,34 @@ describe('MessageList.vue', () => {
     expect(statusSteps.length).toBe(0)
   })
 
-  it('keeps pending confirmation prompts out of the chat timeline', () => {
+  it('renders pending confirmation prompts in the chat timeline', () => {
     const wrapper = mount(MessageList, {
       props: {
-        messages: [makeMessage({ id: 'msg-a', role: 'ASSISTANT', content: '# PRD', seqNo: 2, createdAt: '2026-05-09T00:00:02Z' })],
+        activeSessionId: 'session-1',
+        messages: [],
         runtimeEvents: [
-          makeRuntimeEvent({ id: 'evt-c1', eventType: 'CONFIRMATION_CREATED', payloadJson: '{"confirmationId":"confirm-1"}', createdAt: '2026-05-09T00:00:03Z' }),
-          makeRuntimeEvent({ id: 'evt-c2', eventType: 'CONFIRMATION_CREATED', payloadJson: '{"confirmationId":"confirm-2"}', createdAt: '2026-05-09T00:00:03Z' }),
+          makeRuntimeEvent({
+            id: 'evt-c1',
+            eventType: 'CONFIRMATION_CREATED',
+            payloadJson: '{"confirmationId":"conf-1","requestType":"INPUT_REQUIRED","interactionType":"OPENCODE_QUESTION","title":"修复范围","question":"本次修复覆盖哪些范围？"}',
+            createdAt: '2026-05-09T00:00:03Z',
+          }),
         ],
+        confirmations: [makeConfirmation({
+          id: 'conf-1',
+          requestType: 'INPUT_REQUIRED',
+          interactionType: 'OPENCODE_QUESTION',
+          title: '修复范围',
+          content: '本次修复覆盖哪些范围？',
+        })],
       },
     })
-    expect(wrapper.find('.confirmation-gate').exists()).toBe(false)
-    expect(wrapper.find('.turn-note--interaction').exists()).toBe(false)
+
     expect(wrapper.findAll('.mocked-assistant-turn')).toHaveLength(1)
+    const turn = parseTurnFromMock(wrapper)
+    expect(turn?.pendingInteraction?.confirmationId).toBe('conf-1')
+    expect(turn?.pendingInteraction?.question).toBe('本次修复覆盖哪些范围？')
+    expect(wrapper.find('.message-list__empty').exists()).toBe(false)
   })
 
   it('renders confirmation resolution as decision step', () => {

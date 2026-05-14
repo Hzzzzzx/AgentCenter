@@ -94,17 +94,32 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
 
     private List<RuntimeEventEnvelope> translateQuestionAsked(String opencodeSessionId, String agentSessionId,
                                                                JsonNode properties, RuntimeTranslationContext context) {
-        List<RuntimeEventEnvelope> result = new ArrayList<>();
         String requestId = properties.path("id").asText("");
         JsonNode questions = properties.path("questions");
+        JsonNode tool = properties.path("tool");
+        String toolCallId = firstNonBlank(tool.path("callID").asText(""), tool.path("call_id").asText(""));
+        String messageId = firstNonBlank(tool.path("messageID").asText(""), tool.path("message_id").asText(""));
+        return buildQuestionRequestedEnvelopes(opencodeSessionId, agentSessionId, requestId, questions,
+                toolCallId, messageId, "question.asked", null, context);
+    }
+
+    private List<RuntimeEventEnvelope> buildQuestionRequestedEnvelopes(String opencodeSessionId, String agentSessionId,
+                                                                       String requestId, JsonNode questions,
+                                                                       String toolCallId, String messageId,
+                                                                       String rawEventType, String rawPartType,
+                                                                       RuntimeTranslationContext context) {
+        List<RuntimeEventEnvelope> result = new ArrayList<>();
+        if (requestId == null || requestId.isBlank()) {
+            return result;
+        }
+        if (!state.addQuestionRequest(opencodeSessionId, requestId, toolCallId)) {
+            return result;
+        }
         JsonNode firstQuestion = questions.isArray() && !questions.isEmpty()
                 ? questions.get(0)
                 : JsonNodeFactory.instance.objectNode();
         String title = firstNonBlank(firstQuestion.path("header").asText(""),
                 firstQuestion.path("question").asText(""), "OpenCode question");
-        JsonNode tool = properties.path("tool");
-        String toolCallId = firstNonBlank(tool.path("callID").asText(""), tool.path("call_id").asText(""));
-        String messageId = firstNonBlank(tool.path("messageID").asText(""), tool.path("message_id").asText(""));
         String confirmationId = QuestionConfirmationHandler.confirmationIdFor(opencodeSessionId, requestId);
 
         ObjectNode payload = JsonNodeFactory.instance.objectNode();
@@ -112,7 +127,9 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
         payload.put("label", title);
         payload.put("requestId", requestId);
         payload.put("confirmationId", confirmationId);
-        payload.put("rawEventType", "question.asked");
+        payload.put("rawEventType", rawEventType);
+        if (rawPartType != null && !rawPartType.isBlank()) payload.put("rawPartType", rawPartType);
+        payload.put("skillName", "question");
         if (!toolCallId.isBlank()) payload.put("toolCallId", toolCallId);
         if (!messageId.isBlank()) payload.put("messageId", messageId);
         payload.set("questions", questions.isArray() ? questions.deepCopy() : JsonNodeFactory.instance.arrayNode());
@@ -122,7 +139,7 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
         result.add(buildProcessTraceEnvelope(
             RuntimeEventTypes.PROCESS_TRACE, agentSessionId, opencodeSessionId,
             processTracePayload("confirmation", "waiting", "用户问题", title, "question", requestId,
-                "question.asked", null, Map.of("confirmationId", confirmationId)),
+                rawEventType, rawPartType, Map.of("confirmationId", confirmationId)),
             context));
         return result;
     }
@@ -239,6 +256,9 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
         JsonNode stateNode = part.path("state");
         String status = stateNode.path("status").asText("running");
 
+        result.addAll(translateQuestionToolPart(opencodeSessionId, agentSessionId, part, eventType,
+                callId, skillName, displayName, stateNode, context));
+
         if (("running".equals(status) || "completed".equals(status) || "error".equals(status))
                 && state.addRunningTool(opencodeSessionId, callId)) {
             ObjectNode startedPayload = payloadObject("skill_started", skillName,
@@ -283,6 +303,61 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
         }
 
         return result;
+    }
+
+    private List<RuntimeEventEnvelope> translateQuestionToolPart(String opencodeSessionId, String agentSessionId,
+                                                                  JsonNode part, String eventType,
+                                                                  String callId, String skillName, String displayName,
+                                                                  JsonNode stateNode,
+                                                                  RuntimeTranslationContext context) {
+        if (!isQuestionTool(skillName, displayName)) {
+            return List.of();
+        }
+
+        JsonNode questionInput = findQuestionInput(part, stateNode);
+        JsonNode questions = questionInput.path("questions");
+        if (!questions.isArray() || questions.isEmpty()) {
+            return List.of();
+        }
+
+        String requestId = firstNonBlank(
+                questionInput.path("id").asText(""),
+                questionInput.path("requestId").asText(""),
+                questionInput.path("requestID").asText(""),
+                part.path("requestId").asText(""),
+                part.path("requestID").asText(""),
+                callId,
+                part.path("id").asText(""));
+        String messageId = firstNonBlank(part.path("messageID").asText(""), part.path("message_id").asText(""));
+
+        return buildQuestionRequestedEnvelopes(opencodeSessionId, agentSessionId, requestId, questions,
+                callId, messageId, eventType, "tool", context);
+    }
+
+    private boolean isQuestionTool(String skillName, String displayName) {
+        String raw = firstNonBlank(skillName, displayName).toLowerCase();
+        return raw.equals("question")
+                || raw.endsWith(".question")
+                || raw.endsWith("/question")
+                || raw.endsWith("-question")
+                || raw.endsWith("_question")
+                || raw.equals("ask_question");
+    }
+
+    private JsonNode findQuestionInput(JsonNode part, JsonNode stateNode) {
+        for (JsonNode candidate : List.of(
+                stateNode.path("input"),
+                stateNode.path("args"),
+                stateNode.path("params"),
+                part.path("input"),
+                part.path("args"),
+                part.path("params"),
+                part)) {
+            if (candidate.path("questions").isArray()) {
+                return candidate;
+            }
+        }
+        return JsonNodeFactory.instance.objectNode();
     }
 
     private List<RuntimeEventEnvelope> translatePermissionClosed(String opencodeSessionId, String agentSessionId,

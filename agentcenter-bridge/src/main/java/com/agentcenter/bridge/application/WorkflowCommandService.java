@@ -803,9 +803,9 @@ public class WorkflowCommandService {
 
         ArtifactEntity artifact = null;
         if (result.success() && transitionDecision.acceptsReady()) {
-            artifact = resolveNodeOutputFileArtifact(instance, node, workItem, artifactFilesBeforeRun);
+            artifact = resolveNodeOutputFileArtifact(instance, node, workItem, effectiveNodeState, artifactFilesBeforeRun);
             if (artifact == null) {
-                artifact = createInlineNodeOutputArtifact(instance, node, nodeDef, workItem, effectiveNodeState, result);
+                artifact = materializeNodeOutputFileArtifact(instance, node, workItem, effectiveNodeState, result);
             }
             if (artifact != null) {
                 node.setOutputArtifactId(artifact.getId());
@@ -1163,13 +1163,14 @@ public class WorkflowCommandService {
     private ArtifactEntity resolveNodeOutputFileArtifact(WorkflowInstanceEntity instance,
                                                          WorkflowNodeInstanceEntity node,
                                                          WorkItemEntity workItem,
+                                                         WorkflowNodeState nodeState,
                                                          Map<Path, FileArtifactSnapshot> beforeRun) {
         ArtifactEntity existing = latestFileBackedArtifactForNode(node.getId(), workItem);
         if (existing != null) {
             return existing;
         }
 
-        List<ArtifactEntity> captured = captureChangedFileArtifacts(instance, node, workItem, beforeRun);
+        List<ArtifactEntity> captured = captureChangedFileArtifacts(instance, node, workItem, nodeState, beforeRun);
         return captured.stream()
                 .filter(artifact -> isReadableFileBackedArtifact(artifact, workItem))
                 .findFirst()
@@ -1189,6 +1190,7 @@ public class WorkflowCommandService {
     private List<ArtifactEntity> captureChangedFileArtifacts(WorkflowInstanceEntity instance,
                                                              WorkflowNodeInstanceEntity node,
                                                              WorkItemEntity workItem,
+                                                             WorkflowNodeState nodeState,
                                                              Map<Path, FileArtifactSnapshot> beforeRun) {
         Map<Path, FileArtifactSnapshot> afterRun = snapshotArtifactFiles(workItem);
         if (afterRun.isEmpty()) {
@@ -1210,7 +1212,7 @@ public class WorkflowCommandService {
                         captured.add(existing);
                         return;
                     }
-                    ArtifactEntity artifact = createFileSnapshotArtifact(instance, node, workItem, snapshot);
+                    ArtifactEntity artifact = createFileSnapshotArtifact(instance, node, workItem, snapshot, nodeState);
                     artifactMapper.insert(artifact);
                     captured.add(artifact);
                 });
@@ -1221,6 +1223,14 @@ public class WorkflowCommandService {
                                                       WorkflowNodeInstanceEntity node,
                                                       WorkItemEntity workItem,
                                                       FileArtifactSnapshot snapshot) {
+        return createFileSnapshotArtifact(instance, node, workItem, snapshot, null);
+    }
+
+    private ArtifactEntity createFileSnapshotArtifact(WorkflowInstanceEntity instance,
+                                                      WorkflowNodeInstanceEntity node,
+                                                      WorkItemEntity workItem,
+                                                      FileArtifactSnapshot snapshot,
+                                                      WorkflowNodeState nodeState) {
         ArtifactEntity artifact = new ArtifactEntity();
         artifact.setId(idGenerator.nextId());
         artifact.setWorkItemId(workItem.getId());
@@ -1228,9 +1238,7 @@ public class WorkflowCommandService {
         artifact.setWorkflowNodeInstanceId(node.getId());
         artifact.setSessionId(node.getAgentSessionId());
         artifact.setArtifactType(artifactTypeFromPath(snapshot.path()).name());
-        artifact.setTitle(snapshot.path().getFileName() != null
-                ? snapshot.path().getFileName().toString()
-                : snapshot.path().toString());
+        artifact.setTitle(fileArtifactTitle(snapshot.path(), nodeState));
         artifact.setContent(null);
         artifact.setStorageUri(snapshot.path().toString());
         artifact.setFilePath(snapshot.path().toString());
@@ -1241,13 +1249,55 @@ public class WorkflowCommandService {
         return artifact;
     }
 
-    private ArtifactEntity createInlineNodeOutputArtifact(WorkflowInstanceEntity instance,
-                                                          WorkflowNodeInstanceEntity node,
-                                                          WorkflowNodeDefinitionEntity nodeDef,
-                                                          WorkItemEntity workItem,
-                                                          WorkflowNodeState nodeState,
-                                                          SkillRunResult result) {
+    private String fileArtifactTitle(Path path, WorkflowNodeState nodeState) {
+        if (nodeState != null && nodeState.getArtifactTitle() != null && !nodeState.getArtifactTitle().isBlank()) {
+            return nodeState.getArtifactTitle().trim();
+        }
+        String documentTitle = markdownDocumentTitle(path);
+        if (documentTitle != null && !documentTitle.isBlank()) {
+            return documentTitle.trim() + extensionFromPath(path);
+        }
+        return path.getFileName() != null ? path.getFileName().toString() : path.toString();
+    }
+
+    private String markdownDocumentTitle(Path path) {
+        if (path == null || !Files.isRegularFile(path)) {
+            return null;
+        }
+        if (!artifactTypeFromPath(path).equals(ArtifactType.MARKDOWN)) {
+            return null;
+        }
+        try {
+            return Files.readAllLines(path, StandardCharsets.UTF_8).stream()
+                    .map(String::trim)
+                    .filter(line -> line.startsWith("# ") && line.length() > 2)
+                    .map(line -> line.substring(2).trim())
+                    .findFirst()
+                    .orElse(null);
+        } catch (IOException e) {
+            log.debug("Failed to read artifact title from {}: {}", path, e.getMessage());
+            return null;
+        }
+    }
+
+    private String extensionFromPath(Path path) {
+        if (path == null || path.getFileName() == null) {
+            return "";
+        }
+        String name = path.getFileName().toString();
+        int dot = name.lastIndexOf('.');
+        return dot >= 0 ? name.substring(dot) : "";
+    }
+
+    private ArtifactEntity materializeNodeOutputFileArtifact(WorkflowInstanceEntity instance,
+                                                             WorkflowNodeInstanceEntity node,
+                                                             WorkItemEntity workItem,
+                                                             WorkflowNodeState nodeState,
+                                                             SkillRunResult result) {
         if (result == null || result.outputContent() == null || result.outputContent().isBlank()) {
+            return null;
+        }
+        if (nodeState == null || nodeState.getArtifactTitle() == null || nodeState.getArtifactTitle().isBlank()) {
             return null;
         }
         String content = WorkflowNodeStateParser.stripStateBlock(result.outputContent());
@@ -1255,39 +1305,47 @@ public class WorkflowCommandService {
             return null;
         }
 
-        String title = inlineArtifactTitle(nodeState, nodeDef, workItem);
-        ArtifactEntity artifact = new ArtifactEntity();
-        artifact.setId(idGenerator.nextId());
-        artifact.setWorkItemId(workItem.getId());
-        artifact.setWorkflowInstanceId(instance.getId());
-        artifact.setWorkflowNodeInstanceId(node.getId());
-        artifact.setSessionId(node.getAgentSessionId());
-        artifact.setArtifactType(ArtifactType.MARKDOWN.name());
-        artifact.setTitle(title);
-        artifact.setContent(content);
-        artifact.setStorageUri(null);
-        artifact.setFilePath(null);
-        artifact.setVersionNo(1);
-        artifact.setSourceType("WORKFLOW_NODE_OUTPUT");
-        artifact.setCreatedBy("workflow-engine");
-        artifact.setCreatedAt(LocalDateTime.now().format(SQLITE_DATETIME));
-        artifactMapper.insert(artifact);
-        return artifact;
+        String title = nodeState.getArtifactTitle().trim();
+        Path workspace = runtimeWorkspaceForWorkItem(workItem).toAbsolutePath().normalize();
+        Path artifactFile = workspace.resolve("artifacts").resolve(safeArtifactFileName(title))
+                .toAbsolutePath().normalize();
+        if (!artifactFile.startsWith(workspace)) {
+            return null;
+        }
+
+        try {
+            Files.createDirectories(artifactFile.getParent());
+            Files.writeString(artifactFile, content, StandardCharsets.UTF_8);
+            ArtifactEntity artifact = createFileSnapshotArtifact(
+                    instance,
+                    node,
+                    workItem,
+                    new FileArtifactSnapshot(
+                            artifactFile,
+                            Files.getLastModifiedTime(artifactFile).toMillis(),
+                            Files.size(artifactFile)));
+            artifact.setTitle(title);
+            artifactMapper.insert(artifact);
+            return artifact;
+        } catch (IOException e) {
+            log.warn("Failed to materialize workflow node artifact file for node {}: {}", node.getId(), e.getMessage());
+            return null;
+        }
     }
 
-    private String inlineArtifactTitle(WorkflowNodeState nodeState,
-                                       WorkflowNodeDefinitionEntity nodeDef,
-                                       WorkItemEntity workItem) {
-        if (nodeState != null && nodeState.getArtifactTitle() != null && !nodeState.getArtifactTitle().isBlank()) {
-            return nodeState.getArtifactTitle().trim();
+    private String safeArtifactFileName(String title) {
+        String name = title == null ? "" : title.trim();
+        name = name.replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]+", "-")
+                .replaceAll("\\s+", " ")
+                .trim();
+        if (name.isBlank()) {
+            name = "workflow-artifact.md";
         }
-        String workItemId = workItem != null && workItem.getId() != null && !workItem.getId().isBlank()
-                ? workItem.getId().trim()
-                : "workflow";
-        String nodeName = nodeDef != null && nodeDef.getName() != null && !nodeDef.getName().isBlank()
-                ? nodeDef.getName().trim()
-                : "节点产物";
-        return workItemId + " " + nodeName + ".md";
+        String lower = name.toLowerCase();
+        if (ARTIFACT_FILE_EXTENSIONS.stream().noneMatch(lower::endsWith)) {
+            name = name + ".md";
+        }
+        return name;
     }
 
     private Map<Path, FileArtifactSnapshot> snapshotArtifactFiles(WorkItemEntity workItem) {

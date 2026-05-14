@@ -9,12 +9,14 @@ public class OpenCodeTranslationState {
     private final Map<String, Map<String, PartMetadata>> partMetadata = new ConcurrentHashMap<>();
     private final Map<String, Set<String>> runningTools = new ConcurrentHashMap<>();
     private final Map<String, Set<String>> userMessageIds = new ConcurrentHashMap<>();
+    private final Map<String, Set<String>> questionRequests = new ConcurrentHashMap<>();
 
     public void initSession(String opencodeSessionId) {
         textPartSnapshots.computeIfAbsent(opencodeSessionId, k -> new ConcurrentHashMap<>());
         partMetadata.computeIfAbsent(opencodeSessionId, k -> new ConcurrentHashMap<>());
         runningTools.computeIfAbsent(opencodeSessionId, k -> ConcurrentHashMap.newKeySet());
         userMessageIds.computeIfAbsent(opencodeSessionId, k -> ConcurrentHashMap.newKeySet());
+        questionRequests.computeIfAbsent(opencodeSessionId, k -> ConcurrentHashMap.newKeySet());
     }
 
     public void cleanupSession(String opencodeSessionId) {
@@ -22,6 +24,7 @@ public class OpenCodeTranslationState {
         partMetadata.remove(opencodeSessionId);
         runningTools.remove(opencodeSessionId);
         userMessageIds.remove(opencodeSessionId);
+        questionRequests.remove(opencodeSessionId);
     }
 
     public void recordPartMetadata(String opencodeSessionId, String partId, String partType, String messageId) {
@@ -84,6 +87,25 @@ public class OpenCodeTranslationState {
     public void removeRunningTool(String opencodeSessionId, String callId) {
         Set<String> tools = runningTools.get(opencodeSessionId);
         if (tools != null) tools.remove(callId);
+    }
+
+    public boolean addQuestionRequest(String opencodeSessionId, String... keys) {
+        Set<String> requests = questionRequests.computeIfAbsent(opencodeSessionId, k -> ConcurrentHashMap.newKeySet());
+        boolean hasNewKey = false;
+        for (String key : keys) {
+            if (key != null && !key.isBlank() && !requests.contains(key)) {
+                hasNewKey = true;
+            }
+        }
+        if (!hasNewKey) {
+            return false;
+        }
+        for (String key : keys) {
+            if (key != null && !key.isBlank()) {
+                requests.add(key);
+            }
+        }
+        return true;
     }
 
     public record PartMetadata(String partType, String messageId) {}

@@ -53,6 +53,14 @@ const visibleResults = computed(() => props.results.slice(0, 6))
 const hiddenResultCount = computed(() => Math.max(0, props.results.length - visibleResults.value.length))
 const visibleSources = computed(() => props.sources.slice(0, 6))
 
+function resultMeta(result: ResultItem): string {
+  if (result.nodeName) return result.nodeName
+  if (!result.filePath) return '真实文件产物'
+  const segments = result.filePath.split(/[\\/]/).filter(Boolean)
+  const fileName = segments.at(-1)
+  return fileName || '真实文件产物'
+}
+
 function statusLabel(status: WorkflowNodeStatus): string {
   const labels: Record<WorkflowNodeStatus, string> = {
     PENDING: '等待中',
@@ -224,7 +232,7 @@ onBeforeUnmount(() => {
             <span class="run-summary__doc-icon">□</span>
             <span>
               <strong>{{ result.title }}</strong>
-              <small>{{ result.filePath || result.nodeName || '真实文件产物' }}</small>
+              <small>{{ resultMeta(result) }}</small>
             </span>
           </button>
           <span v-if="hiddenResultCount" class="run-summary__more">再显示 {{ hiddenResultCount }} 个</span>

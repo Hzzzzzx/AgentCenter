@@ -157,7 +157,7 @@ const displayItems = computed<DisplayItem[]>(() => {
   const sorted = persistedMessages.value
 
   const contentTurns = projectedTurns.value.filter(t =>
-    t.answer.text || t.steps.length > 0 || t.status === 'running'
+    t.answer.text || t.steps.length > 0 || t.status === 'running' || t.pendingInteraction
   )
   const insertedTurnIds = new Set<string>()
   const turnsByAnchor = new Map<string, ConversationTurnProjection[]>()
@@ -197,6 +197,7 @@ const displayItems = computed<DisplayItem[]>(() => {
   for (const turn of [...unanchoredTurns, ...contentTurns]) {
     if (insertedTurnIds.has(turn.turnId)) continue
     items.push({ type: 'assistant-turn', id: turn.turnId, turn })
+    insertedTurnIds.add(turn.turnId)
   }
 
   return items

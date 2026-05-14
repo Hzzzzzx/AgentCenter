@@ -43,6 +43,8 @@ describe('RunSummaryPanel.vue', () => {
     expect(wrapper.text()).not.toContain('To do')
     expect(wrapper.text()).toContain('方案设计 (HLD)')
     expect(wrapper.text()).toContain('FE2001 需求整理 (PRD).md')
+    expect(wrapper.text()).toContain('需求整理 (PRD)')
+    expect(wrapper.text()).not.toContain('/runtime/FE2001 需求整理 (PRD).md')
     expect(wrapper.text()).toContain('hld-design')
     expect(wrapper.text()).toContain('figma')
 
