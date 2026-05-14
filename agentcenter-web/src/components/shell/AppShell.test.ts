@@ -176,6 +176,51 @@ describe('AppShell.vue', () => {
     expect(wrapper.find('.right-panel--collapsed').exists()).toBe(true)
     expect(wrapper.find('.app-shell').classes()).not.toContain('app-shell--right-expanded')
     expect(wrapper.find('.app-shell__center').attributes('style')).toBeUndefined()
+    expect(wrapper.emitted('close-artifact')).toEqual([[]])
+  })
+
+  it('closes the artifact preview when users collapse the right panel', async () => {
+    const wrapper = mountShell({ selectedArtifact })
+
+    await wrapper.find('.right-panel__toggle').trigger('click')
+
+    expect(wrapper.find('.right-panel--collapsed').exists()).toBe(true)
+    expect(wrapper.emitted('close-artifact')).toEqual([[]])
+  })
+
+  it('suppresses the right panel while the run summary overlay is active', async () => {
+    const wrapper = mountShell({ rightPanelSuppressed: true })
+
+    expect(wrapper.find('.app-shell').classes()).toContain('app-shell--right-collapsed')
+    expect(wrapper.find('.right-panel--collapsed').exists()).toBe(true)
+    expect(wrapper.find('[aria-label="调整右侧栏宽度"]').exists()).toBe(false)
+
+    await wrapper.setProps({ rightPanelSuppressed: false })
+
+    expect(wrapper.find('.right-panel--collapsed').exists()).toBe(false)
+    expect(wrapper.find('[aria-label="调整右侧栏宽度"]').exists()).toBe(true)
+  })
+
+  it('requests the run summary overlay to yield when users expand a suppressed right panel', async () => {
+    const wrapper = mountShell({ rightPanelSuppressed: true })
+
+    await wrapper.find('.right-panel__toggle').trigger('click')
+
+    expect(wrapper.emitted('right-panel-open-requested')).toEqual([[]])
+    expect(wrapper.find('.right-panel--collapsed').exists()).toBe(true)
+
+    await wrapper.setProps({ rightPanelSuppressed: false })
+
+    expect(wrapper.find('.right-panel--collapsed').exists()).toBe(false)
+  })
+
+  it('notifies the parent when users collapse the right panel again', async () => {
+    const wrapper = mountShell()
+
+    await wrapper.find('.right-panel__toggle').trigger('click')
+
+    expect(wrapper.emitted('right-panel-collapse-requested')).toEqual([[]])
+    expect(wrapper.find('.right-panel--collapsed').exists()).toBe(true)
   })
 
   it('opens confirmations from collapsed rail shortcut', async () => {

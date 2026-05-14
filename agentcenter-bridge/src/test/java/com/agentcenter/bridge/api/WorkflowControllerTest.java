@@ -1,11 +1,18 @@
 package com.agentcenter.bridge.api;
 
+import com.agentcenter.bridge.application.ProjectDefaults;
+import com.agentcenter.bridge.application.TestWorkflowExecutorConfig;
+import com.agentcenter.bridge.infrastructure.id.IdGenerator;
+import com.agentcenter.bridge.infrastructure.persistence.entity.RuntimeSkillEntity;
+import com.agentcenter.bridge.infrastructure.persistence.mapper.RuntimeSkillMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.servlet.MockMvc;
@@ -18,6 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
+@Import(TestWorkflowExecutorConfig.class)
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 class WorkflowControllerTest {
 
@@ -26,6 +34,19 @@ class WorkflowControllerTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private RuntimeSkillMapper runtimeSkillMapper;
+
+    @Autowired
+    private IdGenerator idGenerator;
+
+    @BeforeEach
+    void setUpRuntimeSkills() {
+        registerRunnableSkill("prd-design");
+        registerRunnableSkill("hld-design");
+        registerRunnableSkill("lld-design");
+    }
 
     @Test
     void updateDefinitionCreatesEditableNextVersion() throws Exception {
@@ -91,5 +112,31 @@ class WorkflowControllerTest {
             }
         }
         throw new AssertionError("No enabled workflow definition for " + workItemType);
+    }
+
+    private void registerRunnableSkill(String name) {
+        RuntimeSkillEntity skill = runtimeSkillMapper.findByProjectIdAndName(ProjectDefaults.DEFAULT_PROJECT_ID, name);
+        boolean existing = skill != null;
+        if (!existing) {
+            skill = new RuntimeSkillEntity();
+            skill.setId(idGenerator.nextId());
+            skill.setProjectId(ProjectDefaults.DEFAULT_PROJECT_ID);
+            skill.setName(name);
+            skill.setCreatedBy("test");
+            skill.setCreatedAt("2026-05-14 00:00:00");
+        }
+        skill.setProjectId(ProjectDefaults.DEFAULT_PROJECT_ID);
+        skill.setName(name);
+        skill.setDisplayName(name);
+        skill.setStatus("ENABLED");
+        skill.setSource("TEST");
+        skill.setValidationStatus("VALID");
+        skill.setValidationMessage(null);
+        skill.setUpdatedAt("2026-05-14 00:00:00");
+        if (existing) {
+            runtimeSkillMapper.update(skill);
+        } else {
+            runtimeSkillMapper.insert(skill);
+        }
     }
 }

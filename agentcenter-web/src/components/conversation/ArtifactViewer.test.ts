@@ -38,7 +38,24 @@ describe('ArtifactViewer.vue', () => {
     expect(wrapper.text()).toContain('FE2002 仪表盘数据可视化')
     expect(wrapper.text()).toContain('来源节点')
     expect(wrapper.text()).toContain('node-1')
+    expect(wrapper.text()).toContain('内容来源')
+    expect(wrapper.text()).toContain('数据库快照')
     expect(wrapper.text()).toContain('产物 ID')
     expect(wrapper.find('.mocked-markdown').text()).toContain('# FE2002 仪表盘数据可视化')
+  })
+
+  it('marks artifacts with file paths as actual files', () => {
+    const wrapper = mount(ArtifactViewer, {
+      props: {
+        artifact: makeArtifact({
+          filePath: '/runtime-workspace/output/FE2002.md',
+        }),
+      },
+    })
+
+    expect(wrapper.text()).toContain('内容来源')
+    expect(wrapper.text()).toContain('实际文件')
+    expect(wrapper.text()).toContain('文件路径')
+    expect(wrapper.text()).toContain('/runtime-workspace/output/FE2002.md')
   })
 })

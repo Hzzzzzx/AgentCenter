@@ -5,6 +5,7 @@ import { nextTick } from 'vue'
 import ConversationWorkbench from './ConversationWorkbench.vue'
 import ConversationInteractionBar from '../components/conversation/ConversationInteractionBar.vue'
 import MessageList from '../components/conversation/MessageList.vue'
+import RunSummaryPanel from '../components/conversation/RunSummaryPanel.vue'
 import { sessionApi } from '../api/sessions'
 import { workflowApi } from '../api/workflows'
 import { artifactApi } from '../api/artifacts'
@@ -1119,5 +1120,99 @@ describe('ConversationWorkbench.vue', () => {
     expect(document.body.textContent).toContain('正在流式回复')
     expect(document.body.textContent).toContain('界面展示')
     expect(document.body.textContent).toContain('复制此段')
+  })
+
+  it('passes only Skill and MCP calls to the run summary sources', async () => {
+    vi.mocked(sessionApi.getMessages).mockResolvedValueOnce([])
+
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(ConversationWorkbench, {
+      props: {
+        workItemId: 'work-1',
+        targetSessionId: 'session-1',
+      },
+      global: {
+        plugins: [pinia],
+      },
+    })
+
+    await flushPromises()
+
+    const runtimeStore = useRuntimeStore()
+    runtimeStore.events = [
+      {
+        id: 'event-completed',
+        sessionId: 'session-1',
+        workItemId: 'work-1',
+        workflowInstanceId: 'wf-1',
+        workflowNodeInstanceId: 'node-1',
+        eventType: 'ASSISTANT_COMPLETED',
+        eventSource: 'opencode',
+        payloadJson: JSON.stringify({ summary: 'done' }),
+        createdAt: '2026-05-08T10:01:00Z',
+      },
+      {
+        id: 'event-confirmation',
+        sessionId: 'session-1',
+        workItemId: 'work-1',
+        workflowInstanceId: 'wf-1',
+        workflowNodeInstanceId: 'node-1',
+        eventType: 'CONFIRMATION_RESOLVED',
+        eventSource: 'bridge',
+        payloadJson: JSON.stringify({ label: 'handled' }),
+        createdAt: '2026-05-08T10:01:10Z',
+      },
+      {
+        id: 'event-skill',
+        sessionId: 'session-1',
+        workItemId: 'work-1',
+        workflowInstanceId: 'wf-1',
+        workflowNodeInstanceId: 'node-1',
+        eventType: 'SKILL_COMPLETED',
+        eventSource: 'runtime',
+        payloadJson: JSON.stringify({ skillName: 'prd-design' }),
+        createdAt: '2026-05-08T10:01:20Z',
+      },
+      {
+        id: 'event-mcp',
+        sessionId: 'session-1',
+        workItemId: 'work-1',
+        workflowInstanceId: 'wf-1',
+        workflowNodeInstanceId: 'node-1',
+        eventType: 'MCP_CALL',
+        eventSource: 'runtime',
+        payloadJson: JSON.stringify({ toolName: 'figma' }),
+        createdAt: '2026-05-08T10:01:30Z',
+      },
+      {
+        id: 'event-generic-skill',
+        sessionId: 'session-1',
+        workItemId: 'work-1',
+        workflowInstanceId: 'wf-1',
+        workflowNodeInstanceId: 'node-1',
+        eventType: 'SKILL_STARTED',
+        eventSource: 'runtime',
+        payloadJson: JSON.stringify({ name: 'skill' }),
+        createdAt: '2026-05-08T10:01:40Z',
+      },
+      {
+        id: 'event-generic-mcp',
+        sessionId: 'session-1',
+        workItemId: 'work-1',
+        workflowInstanceId: 'wf-1',
+        workflowNodeInstanceId: 'node-1',
+        eventType: 'MCP_CALL',
+        eventSource: 'runtime',
+        payloadJson: JSON.stringify({ toolName: 'skill' }),
+        createdAt: '2026-05-08T10:01:50Z',
+      },
+    ]
+    await nextTick()
+
+    expect(wrapper.findComponent(RunSummaryPanel).props('sources')).toEqual([
+      { id: 'skill:prd-design', label: 'prd-design', meta: 'Skill' },
+      { id: 'mcp:figma', label: 'figma', meta: 'MCP' },
+    ])
   })
 })

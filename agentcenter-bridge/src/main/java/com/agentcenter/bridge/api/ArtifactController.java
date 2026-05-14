@@ -72,34 +72,37 @@ public class ArtifactController {
                 ArtifactType.valueOf(artifact.getArtifactType()),
                 artifact.getTitle(),
                 resolveContent(artifact),
+                artifact.getSourceType(),
+                firstNonBlank(artifact.getFilePath(), artifact.getStorageUri()),
                 parseDateTime(artifact.getCreatedAt())
         );
     }
 
     private String resolveContent(ArtifactEntity artifact) {
-        if (artifact.getContent() != null && !artifact.getContent().isBlank()) {
-            return artifact.getContent();
+        String fileContent = readInlineArtifactFile(artifact);
+        if (fileContent != null) {
+            return fileContent;
         }
-        return readInlineArtifactFile(artifact);
+        return artifact.getContent();
     }
 
     private String readInlineArtifactFile(ArtifactEntity artifact) {
         String value = firstNonBlank(artifact.getStorageUri(), artifact.getFilePath());
         if (value.isBlank()) {
-            return artifact.getContent();
+            return null;
         }
         try {
             Path file = Path.of(value).toAbsolutePath().normalize();
             Path workspace = workspaceRoot(artifact).toAbsolutePath().normalize();
             if (!file.startsWith(workspace) || !Files.isRegularFile(file)) {
-                return artifact.getContent();
+                return null;
             }
             if (Files.size(file) > MAX_INLINE_FILE_BYTES || !isInlineTextArtifact(file)) {
-                return artifact.getContent();
+                return null;
             }
             return Files.readString(file, StandardCharsets.UTF_8);
         } catch (Exception ignored) {
-            return artifact.getContent();
+            return null;
         }
     }
 

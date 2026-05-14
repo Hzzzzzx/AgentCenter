@@ -70,11 +70,11 @@ class WorkflowConversationInteractionTest {
     }
 
     // ========================================================================
-    // B1: Node skill output as ASSISTANT message (deduplicated)
+    // B1: Node skill output is captured as file-backed artifact, not duplicated as ASSISTANT text
     // ========================================================================
 
     @Test
-    void skillOutput_isPersistedAsAssistantMessage() throws Exception {
+    void skillOutput_isCapturedAsFileBackedArtifact() throws Exception {
         String fe1234Id = findWorkItemIdByCode("FE1234");
 
         MvcResult result = mockMvc.perform(
@@ -92,23 +92,24 @@ class WorkflowConversationInteractionTest {
         String sessionId = firstNode.get("agentSessionId").asText();
         assertThat(sessionId).isNotEmpty();
 
-        // Verify ASSISTANT messages exist for this session
+        // Skill output should not be re-inserted as another ASSISTANT block.
         List<Map<String, Object>> assistantMessages = jdbcTemplate.queryForList(
                 "SELECT id, role, content, content_format, status FROM agent_message " +
                         "WHERE session_id = ? AND role = 'ASSISTANT'", sessionId);
 
-        assertThat(assistantMessages).isNotEmpty();
+        assertThat(assistantMessages).isEmpty();
 
-        Map<String, Object> assistantMsg = assistantMessages.get(0);
-        assertThat(assistantMsg.get("role")).isEqualTo("ASSISTANT");
-        assertThat(assistantMsg.get("content_format")).isEqualTo("MARKDOWN");
-        assertThat(assistantMsg.get("status")).isEqualTo("COMPLETED");
-        String content = (String) assistantMsg.get("content");
-        assertThat(content).contains("PRD");
+        List<Map<String, Object>> artifacts = jdbcTemplate.queryForList(
+                "SELECT id, content, source_type, file_path FROM artifact WHERE workflow_node_instance_id = ?",
+                firstNode.get("id").asText());
+        assertThat(artifacts).hasSize(1);
+        assertThat(artifacts.get(0).get("content")).isNull();
+        assertThat(artifacts.get(0).get("source_type")).isEqualTo("FILE_SNAPSHOT");
+        assertThat(artifacts.get(0).get("file_path").toString()).endsWith(".md");
     }
 
     @Test
-    void skillOutput_assistantMessage_isDeduplicated() throws Exception {
+    void skillOutput_assistantMessage_isNotDuplicated() throws Exception {
         String fe1234Id = findWorkItemIdByCode("FE1234");
 
         MvcResult result = mockMvc.perform(

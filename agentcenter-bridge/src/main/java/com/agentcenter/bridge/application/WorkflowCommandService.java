@@ -1,16 +1,23 @@
 package com.agentcenter.bridge.application;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -33,7 +40,6 @@ import com.agentcenter.bridge.api.dto.StartWorkflowResponse;
 import com.agentcenter.bridge.api.dto.WorkflowInstanceDto;
 import com.agentcenter.bridge.api.dto.WorkflowNodeInstanceDto;
 import com.agentcenter.bridge.api.dto.WorkflowVersionDto;
-import com.agentcenter.bridge.application.artifact.ArtifactBlockParser;
 import com.agentcenter.bridge.application.confirmation.ConfirmationCreatedEventPayloadBuilder;
 import com.agentcenter.bridge.application.runtime.RuntimeGateway;
 import com.agentcenter.bridge.application.runtime.SkillInvocationRequest;
@@ -89,6 +95,12 @@ public class WorkflowCommandService {
     private static final String WORKFLOW_MODE_START_OR_CONTINUE = "START_OR_CONTINUE";
     private static final int DEFAULT_BATCH_START_LIMIT = 5;
     private static final int MAX_BATCH_START_LIMIT = 20;
+    private static final int ARTIFACT_SCAN_MAX_DEPTH = 8;
+    private static final long MAX_INLINE_ARTIFACT_BYTES = 2_000_000L;
+    private static final Set<String> ARTIFACT_FILE_EXTENSIONS = Set.of(
+            ".md", ".markdown", ".json", ".yaml", ".yml", ".patch", ".diff", ".txt");
+    private static final Set<String> ARTIFACT_SCAN_EXCLUDED_DIRECTORIES = Set.of(
+            ".git", ".opencode", ".idea", ".vscode", "node_modules", "target", "dist", "build");
     private static final String BATCH_STATUS_STARTED = "STARTED";
     private static final String BATCH_STATUS_SKIPPED = "SKIPPED";
     private static final String BATCH_STATUS_FAILED = "FAILED";
@@ -96,11 +108,6 @@ public class WorkflowCommandService {
             + "{\"id\":\"REQUEST_OPTIONS\",\"label\":\"请 Agent 给出 2-3 个选项\"},"
             + "{\"id\":\"CUSTOM_ANSWER\",\"label\":\"我直接补充答案\"}"
             + "]";
-    private static final Pattern MARKDOWN_DOCUMENT_HEADING =
-            Pattern.compile("(?m)^#{1,6}\\s+\\S.*$");
-    private static final Pattern MARKDOWN_FENCE =
-            Pattern.compile("(?s)```(?:markdown|md)?\\s*\\R([\\s\\S]*?)\\R```");
-
     private final WorkflowMapper workflowMapper;
     private final WorkItemMapper workItemMapper;
     private final ArtifactMapper artifactMapper;
@@ -112,6 +119,7 @@ public class WorkflowCommandService {
     private final SkillRegistryService skillRegistryService;
     private final ConfirmationCreatedEventPayloadBuilder confirmationCreatedPayloadBuilder;
     private final WorkflowContextAnchorService workflowContextAnchorService;
+    private final ProjectRuntimeWorkspaceResolver workspaceResolver;
     private final IdGenerator idGenerator;
     private final RuntimeType workflowRuntimeType;
     private final ExecutorService workflowExecutor;
@@ -128,8 +136,9 @@ public class WorkflowCommandService {
                                    AgentMessageWriteService agentMessageWriteService,
                                    RuntimeGateway runtimeGateway,
                                    SkillRegistryService skillRegistryService,
-                                   ConfirmationCreatedEventPayloadBuilder confirmationCreatedPayloadBuilder,
+                                   ConfirmationCreatedEventPayloadBuilder confirmationCreatedEventPayloadBuilder,
                                    WorkflowContextAnchorService workflowContextAnchorService,
+                                   ProjectRuntimeWorkspaceResolver workspaceResolver,
                                    IdGenerator idGenerator,
                                    @Value("${agentcenter.runtime.default-type:OPENCODE}") String defaultRuntimeType,
                                    @Qualifier("workflowExecutor") ExecutorService workflowExecutor) {
@@ -142,8 +151,9 @@ public class WorkflowCommandService {
         this.agentMessageWriteService = agentMessageWriteService;
         this.runtimeGateway = runtimeGateway;
         this.skillRegistryService = skillRegistryService;
-        this.confirmationCreatedPayloadBuilder = confirmationCreatedPayloadBuilder;
+        this.confirmationCreatedPayloadBuilder = confirmationCreatedEventPayloadBuilder;
         this.workflowContextAnchorService = workflowContextAnchorService;
+        this.workspaceResolver = workspaceResolver;
         this.idGenerator = idGenerator;
         this.workflowRuntimeType = RuntimeType.valueOf(defaultRuntimeType.toUpperCase());
         this.workflowExecutor = workflowExecutor;
@@ -757,6 +767,7 @@ public class WorkflowCommandService {
                 buildSkillStartedPayload(skillName, toolCallId), null
         ));
 
+        Map<Path, FileArtifactSnapshot> artifactFilesBeforeRun = snapshotArtifactFiles(workItem);
         SkillRunResult result = validateSkillRunnable(workItem, skillName);
         if (result == null) {
             if (node.getRuntimeSessionId() == null || node.getRuntimeSessionId().isBlank()) {
@@ -790,34 +801,21 @@ public class WorkflowCommandService {
                     instance.getId(), node.getId(), nodeState.getStatus(), transitionDecision.type(), transitionDecision.reason());
         }
 
-        boolean shouldPersistFinalArtifact = result.success()
-                && transitionDecision.acceptsReady()
-                && result.outputContent() != null;
-
         ArtifactEntity artifact = null;
-        if (shouldPersistFinalArtifact) {
-            String artifactTitle = resolveArtifactTitle(nodeState, workItem, nodeDef);
-            String artifactContent = normalizeGeneratedArtifactContent(result.outputContent(), workItem);
+        if (result.success() && transitionDecision.acceptsReady()) {
+            artifact = resolveNodeOutputFileArtifact(instance, node, workItem, artifactFilesBeforeRun);
+            if (artifact == null) {
+                artifact = createInlineNodeOutputArtifact(instance, node, nodeDef, workItem, effectiveNodeState, result);
+            }
+            if (artifact != null) {
+                node.setOutputArtifactId(artifact.getId());
+            }
+        }
 
-            artifact = new ArtifactEntity();
-            artifact.setId(idGenerator.nextId());
-            artifact.setWorkItemId(workItem.getId());
-            artifact.setWorkflowInstanceId(instance.getId());
-            artifact.setWorkflowNodeInstanceId(node.getId());
-            artifact.setSessionId(node.getAgentSessionId());
-            artifact.setArtifactType(ArtifactType.MARKDOWN.name());
-            artifact.setTitle(artifactTitle);
-            artifact.setContent(artifactContent);
-            artifact.setVersionNo(1);
-            artifact.setCreatedBy(workflowRuntimeType.name());
-            artifact.setCreatedAt(LocalDateTime.now().format(SQLITE_DATETIME));
-            artifactMapper.insert(artifact);
-
+        if (artifact == null && node.getOutputArtifactId() != null && !node.getOutputArtifactId().isBlank()) {
+            artifact = artifactMapper.findById(node.getOutputArtifactId());
+        } else if (artifact != null) {
             node.setOutputArtifactId(artifact.getId());
-
-            insertNodeOutputMessageIfAbsent(
-                    node.getAgentSessionId(), nodeDef.getName(), skillName,
-                    artifactContent, artifact.getTitle(), node.getId());
         }
 
         String sessionId = node.getAgentSessionId();
@@ -1162,33 +1160,263 @@ public class WorkflowCommandService {
         workflowMapper.updateInstance(instance);
     }
 
-    private void insertNodeOutputMessageIfAbsent(String sessionId, String nodeName,
-                                                  String skillName, String markdownContent,
-                                                  String artifactTitle, String nodeInstanceId) {
-        if (markdownContent == null || markdownContent.isBlank() || sessionId == null) {
-            return;
+    private ArtifactEntity resolveNodeOutputFileArtifact(WorkflowInstanceEntity instance,
+                                                         WorkflowNodeInstanceEntity node,
+                                                         WorkItemEntity workItem,
+                                                         Map<Path, FileArtifactSnapshot> beforeRun) {
+        ArtifactEntity existing = latestFileBackedArtifactForNode(node.getId(), workItem);
+        if (existing != null) {
+            return existing;
         }
-        AgentMessageEntity msg = new AgentMessageEntity();
-        msg.setId(idGenerator.nextId());
-        msg.setSessionId(sessionId);
-        msg.setRole(MessageRole.ASSISTANT.name());
-        msg.setContent(markdownContent);
-        msg.setContentFormat(ContentFormat.MARKDOWN.name());
-        msg.setStatus(MessageStatus.COMPLETED.name());
-        msg.setCreatedBy("workflow-engine");
-        msg.setCreatedAt(LocalDateTime.now().format(SQLITE_DATETIME));
-        msg.setWorkflowNodeInstanceId(nodeInstanceId);
-        agentMessageWriteService.insertWithNextSeqNoIfAbsent(
-                msg,
-                existing -> isDuplicateLatestAssistant(existing, markdownContent));
+
+        List<ArtifactEntity> captured = captureChangedFileArtifacts(instance, node, workItem, beforeRun);
+        return captured.stream()
+                .filter(artifact -> isReadableFileBackedArtifact(artifact, workItem))
+                .findFirst()
+                .orElse(null);
     }
 
-    private boolean isDuplicateLatestAssistant(List<AgentMessageEntity> existing, String content) {
-        return existing.stream()
-                .filter(m -> MessageRole.ASSISTANT.name().equals(m.getRole()))
-                .reduce((first, second) -> second)
-                .map(m -> content.equals(m.getContent()))
-                .orElse(false);
+    private ArtifactEntity latestFileBackedArtifactForNode(String nodeInstanceId, WorkItemEntity workItem) {
+        if (nodeInstanceId == null || nodeInstanceId.isBlank()) {
+            return null;
+        }
+        return artifactMapper.findByWorkflowNodeInstanceId(nodeInstanceId).stream()
+                .filter(artifact -> isReadableFileBackedArtifact(artifact, workItem))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private List<ArtifactEntity> captureChangedFileArtifacts(WorkflowInstanceEntity instance,
+                                                             WorkflowNodeInstanceEntity node,
+                                                             WorkItemEntity workItem,
+                                                             Map<Path, FileArtifactSnapshot> beforeRun) {
+        Map<Path, FileArtifactSnapshot> afterRun = snapshotArtifactFiles(workItem);
+        if (afterRun.isEmpty()) {
+            return List.of();
+        }
+
+        Map<Path, ArtifactEntity> existingByPath = new HashMap<>();
+        artifactMapper.findByWorkflowNodeInstanceId(node.getId()).stream()
+                .filter(artifact -> firstNonBlank(artifact.getFilePath(), artifact.getStorageUri()) != null)
+                .forEach(artifact -> existingByPath.put(normalizedArtifactPath(artifact), artifact));
+
+        List<ArtifactEntity> captured = new ArrayList<>();
+        afterRun.values().stream()
+                .filter(snapshot -> isNewOrChanged(snapshot, beforeRun.get(snapshot.path())))
+                .sorted(Comparator.comparingLong(FileArtifactSnapshot::modifiedMillis).reversed())
+                .forEach(snapshot -> {
+                    ArtifactEntity existing = existingByPath.get(snapshot.path());
+                    if (existing != null) {
+                        captured.add(existing);
+                        return;
+                    }
+                    ArtifactEntity artifact = createFileSnapshotArtifact(instance, node, workItem, snapshot);
+                    artifactMapper.insert(artifact);
+                    captured.add(artifact);
+                });
+        return captured;
+    }
+
+    private ArtifactEntity createFileSnapshotArtifact(WorkflowInstanceEntity instance,
+                                                      WorkflowNodeInstanceEntity node,
+                                                      WorkItemEntity workItem,
+                                                      FileArtifactSnapshot snapshot) {
+        ArtifactEntity artifact = new ArtifactEntity();
+        artifact.setId(idGenerator.nextId());
+        artifact.setWorkItemId(workItem.getId());
+        artifact.setWorkflowInstanceId(instance.getId());
+        artifact.setWorkflowNodeInstanceId(node.getId());
+        artifact.setSessionId(node.getAgentSessionId());
+        artifact.setArtifactType(artifactTypeFromPath(snapshot.path()).name());
+        artifact.setTitle(snapshot.path().getFileName() != null
+                ? snapshot.path().getFileName().toString()
+                : snapshot.path().toString());
+        artifact.setContent(null);
+        artifact.setStorageUri(snapshot.path().toString());
+        artifact.setFilePath(snapshot.path().toString());
+        artifact.setVersionNo(1);
+        artifact.setSourceType("FILE_SNAPSHOT");
+        artifact.setCreatedBy("workflow-engine");
+        artifact.setCreatedAt(LocalDateTime.now().format(SQLITE_DATETIME));
+        return artifact;
+    }
+
+    private ArtifactEntity createInlineNodeOutputArtifact(WorkflowInstanceEntity instance,
+                                                          WorkflowNodeInstanceEntity node,
+                                                          WorkflowNodeDefinitionEntity nodeDef,
+                                                          WorkItemEntity workItem,
+                                                          WorkflowNodeState nodeState,
+                                                          SkillRunResult result) {
+        if (result == null || result.outputContent() == null || result.outputContent().isBlank()) {
+            return null;
+        }
+        String content = WorkflowNodeStateParser.stripStateBlock(result.outputContent());
+        if (content == null || content.isBlank()) {
+            return null;
+        }
+
+        String title = inlineArtifactTitle(nodeState, nodeDef, workItem);
+        ArtifactEntity artifact = new ArtifactEntity();
+        artifact.setId(idGenerator.nextId());
+        artifact.setWorkItemId(workItem.getId());
+        artifact.setWorkflowInstanceId(instance.getId());
+        artifact.setWorkflowNodeInstanceId(node.getId());
+        artifact.setSessionId(node.getAgentSessionId());
+        artifact.setArtifactType(ArtifactType.MARKDOWN.name());
+        artifact.setTitle(title);
+        artifact.setContent(content);
+        artifact.setStorageUri(null);
+        artifact.setFilePath(null);
+        artifact.setVersionNo(1);
+        artifact.setSourceType("WORKFLOW_NODE_OUTPUT");
+        artifact.setCreatedBy("workflow-engine");
+        artifact.setCreatedAt(LocalDateTime.now().format(SQLITE_DATETIME));
+        artifactMapper.insert(artifact);
+        return artifact;
+    }
+
+    private String inlineArtifactTitle(WorkflowNodeState nodeState,
+                                       WorkflowNodeDefinitionEntity nodeDef,
+                                       WorkItemEntity workItem) {
+        if (nodeState != null && nodeState.getArtifactTitle() != null && !nodeState.getArtifactTitle().isBlank()) {
+            return nodeState.getArtifactTitle().trim();
+        }
+        String workItemId = workItem != null && workItem.getId() != null && !workItem.getId().isBlank()
+                ? workItem.getId().trim()
+                : "workflow";
+        String nodeName = nodeDef != null && nodeDef.getName() != null && !nodeDef.getName().isBlank()
+                ? nodeDef.getName().trim()
+                : "节点产物";
+        return workItemId + " " + nodeName + ".md";
+    }
+
+    private Map<Path, FileArtifactSnapshot> snapshotArtifactFiles(WorkItemEntity workItem) {
+        Path root = runtimeWorkspaceForWorkItem(workItem);
+        if (!Files.isDirectory(root)) {
+            return Map.of();
+        }
+        Map<Path, FileArtifactSnapshot> snapshots = new HashMap<>();
+        try {
+            Files.walkFileTree(root, java.util.EnumSet.noneOf(java.nio.file.FileVisitOption.class),
+                    ARTIFACT_SCAN_MAX_DEPTH, new SimpleFileVisitor<>() {
+                        @Override
+                        public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                            if (!root.equals(dir) && shouldSkipArtifactScanDirectory(dir)) {
+                                return FileVisitResult.SKIP_SUBTREE;
+                            }
+                            return FileVisitResult.CONTINUE;
+                        }
+
+                        @Override
+                        public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                            Path normalized = file.toAbsolutePath().normalize();
+                            if (isArtifactCandidateFile(normalized, attrs)) {
+                                snapshots.put(normalized, new FileArtifactSnapshot(
+                                        normalized,
+                                        attrs.lastModifiedTime().toMillis(),
+                                        attrs.size()));
+                            }
+                            return FileVisitResult.CONTINUE;
+                        }
+                    });
+        } catch (IOException e) {
+            log.debug("Failed to scan runtime workspace artifacts: {}", e.getMessage());
+        }
+        return snapshots;
+    }
+
+    private boolean shouldSkipArtifactScanDirectory(Path dir) {
+        Path fileName = dir.getFileName();
+        String name = fileName != null ? fileName.toString().toLowerCase() : "";
+        return ARTIFACT_SCAN_EXCLUDED_DIRECTORIES.contains(name);
+    }
+
+    private boolean isArtifactCandidateFile(Path file, BasicFileAttributes attrs) {
+        if (attrs == null || !attrs.isRegularFile() || attrs.size() > MAX_INLINE_ARTIFACT_BYTES) {
+            return false;
+        }
+        String name = file.getFileName() != null ? file.getFileName().toString().toLowerCase() : "";
+        return ARTIFACT_FILE_EXTENSIONS.stream().anyMatch(name::endsWith);
+    }
+
+    private boolean isNewOrChanged(FileArtifactSnapshot after, FileArtifactSnapshot before) {
+        return before == null
+                || after.modifiedMillis() != before.modifiedMillis()
+                || after.size() != before.size();
+    }
+
+    private ArtifactType artifactTypeFromPath(Path file) {
+        String name = file.getFileName() != null ? file.getFileName().toString().toLowerCase() : "";
+        if (name.endsWith(".json")) {
+            return ArtifactType.JSON;
+        }
+        if (name.endsWith(".patch") || name.endsWith(".diff")) {
+            return ArtifactType.PATCH;
+        }
+        if (name.endsWith(".txt")) {
+            return ArtifactType.REPORT;
+        }
+        return ArtifactType.MARKDOWN;
+    }
+
+    private boolean isReadableFileBackedArtifact(ArtifactEntity artifact, WorkItemEntity workItem) {
+        Path path = normalizedArtifactPath(artifact);
+        if (path == null) {
+            return false;
+        }
+        Path workspace = runtimeWorkspaceForWorkItem(workItem).toAbsolutePath().normalize();
+        return path.startsWith(workspace)
+                && Files.isRegularFile(path)
+                && isInlineArtifactPath(path)
+                && safeFileSize(path) <= MAX_INLINE_ARTIFACT_BYTES;
+    }
+
+    private String artifactContentForPrompt(ArtifactEntity artifact) {
+        if (artifact == null) {
+            return null;
+        }
+        if (artifact.getContent() != null && !artifact.getContent().isBlank()) {
+            return artifact.getContent();
+        }
+        Path path = normalizedArtifactPath(artifact);
+        if (path == null) {
+            return null;
+        }
+        WorkItemEntity workItem = artifact.getWorkItemId() != null
+                ? workItemMapper.findById(artifact.getWorkItemId())
+                : null;
+        if (!isReadableFileBackedArtifact(artifact, workItem)) {
+            return null;
+        }
+        try {
+            return Files.readString(path, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            log.debug("Failed to read artifact file {} for prompt context: {}", path, e.getMessage());
+            return null;
+        }
+    }
+
+    private Path normalizedArtifactPath(ArtifactEntity artifact) {
+        String value = firstNonBlank(artifact.getFilePath(), artifact.getStorageUri());
+        return value == null ? null : Path.of(value).toAbsolutePath().normalize();
+    }
+
+    private Path runtimeWorkspaceForWorkItem(WorkItemEntity workItem) {
+        String projectId = workItem != null ? workItem.getProjectId() : null;
+        return workspaceResolver.resolve(projectId).toAbsolutePath().normalize();
+    }
+
+    private boolean isInlineArtifactPath(Path file) {
+        String name = file.getFileName() != null ? file.getFileName().toString().toLowerCase() : "";
+        return ARTIFACT_FILE_EXTENSIONS.stream().anyMatch(name::endsWith);
+    }
+
+    private long safeFileSize(Path file) {
+        try {
+            return Files.size(file);
+        } catch (IOException e) {
+            return Long.MAX_VALUE;
+        }
     }
 
     private ConfirmationRequestEntity buildFallbackApprovalConfirmation(
@@ -1965,7 +2193,7 @@ public class WorkflowCommandService {
             appendField(sb, "sourceNodeInstanceId", input.getWorkflowNodeInstanceId());
             sb.append("\n### 上游产物内容\n\n");
             sb.append("```markdown\n");
-            sb.append(input.getContent());
+            sb.append(artifactContentForPrompt(input));
             sb.append("\n```\n\n");
         }
     }
@@ -1991,7 +2219,7 @@ public class WorkflowCommandService {
 
         return artifactIds.stream()
                 .map(artifactMapper::findById)
-                .filter(artifact -> artifact != null && artifact.getContent() != null)
+                .filter(artifact -> artifact != null && artifactContentForPrompt(artifact) != null)
                 .toList();
     }
 
@@ -2030,69 +2258,20 @@ public class WorkflowCommandService {
         sb.append("- ").append(label).append("：").append(nonBlank(value, "未提供")).append("\n");
     }
 
-    private String resolveArtifactTitle(WorkflowNodeState nodeState,
-                                        WorkItemEntity workItem,
-                                        WorkflowNodeDefinitionEntity nodeDef) {
-        String fallbackCode = workItem != null ? nonBlank(workItem.getCode(), workItem.getId()) : "artifact";
-        String title = nonBlank(nodeState.getArtifactTitle(), "%s-%s.md".formatted(fallbackCode, nodeDef.getName()));
-        return normalizeWorkItemReference(title.trim(), workItem);
-    }
-
-    private String normalizeGeneratedArtifactContent(String outputContent, WorkItemEntity workItem) {
-        String content = WorkflowNodeStateParser.stripStateBlock(outputContent);
-        List<ArtifactBlockParser.ArtifactBlock> artifactBlocks = ArtifactBlockParser.parse(content);
-        if (!artifactBlocks.isEmpty()) {
-            content = artifactBlocks.get(0).content();
-        } else {
-            content = extractFirstMarkdownFence(content);
-            content = stripConversationalPrelude(content);
-        }
-        return normalizeWorkItemReference(content, workItem);
-    }
-
-    private String extractFirstMarkdownFence(String content) {
-        if (content == null || content.isBlank()) {
-            return content;
-        }
-        Matcher matcher = MARKDOWN_FENCE.matcher(content.trim());
-        return matcher.find() ? matcher.group(1).trim() : content;
-    }
-
-    private String stripConversationalPrelude(String content) {
-        if (content == null || content.isBlank()) {
-            return content;
-        }
-        String trimmed = content.trim();
-        Matcher matcher = MARKDOWN_DOCUMENT_HEADING.matcher(trimmed);
-        if (!matcher.find() || matcher.start() == 0) {
-            return trimmed;
-        }
-        String prelude = trimmed.substring(0, matcher.start()).trim();
-        if (prelude.isBlank()) {
-            return trimmed.substring(matcher.start()).trim();
-        }
-        return trimmed.substring(matcher.start()).trim();
-    }
-
-    private String normalizeWorkItemReference(String value, WorkItemEntity workItem) {
-        if (value == null || value.isBlank() || workItem == null) {
-            return value;
-        }
-        String workItemId = workItem.getId();
-        String workItemCode = workItem.getCode();
-        if (workItemId == null || workItemId.isBlank()
-                || workItemCode == null || workItemCode.isBlank()
-                || workItemId.equals(workItemCode)) {
-            return value;
-        }
-        return value.replace(workItemId, workItemCode);
-    }
-
     private String artifactReferenceMarker(ArtifactEntity artifact) {
         if (artifact == null || artifact.getId() == null || artifact.getId().isBlank()) {
             return "";
         }
         return "\n<!-- AGENTCENTER_ARTIFACT artifactId: " + artifact.getId().trim() + " -->";
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value.trim();
+            }
+        }
+        return null;
     }
 
     private String nonBlank(String value, String fallback) {
@@ -2245,6 +2424,8 @@ public class WorkflowCommandService {
                 ArtifactType.valueOf(e.getArtifactType()),
                 e.getTitle(),
                 e.getContent(),
+                e.getSourceType(),
+                firstNonBlank(e.getFilePath(), e.getStorageUri()),
                 parseDateTime(e.getCreatedAt())
         );
     }
@@ -2309,4 +2490,6 @@ public class WorkflowCommandService {
             return OffsetDateTime.parse(value);
         }
     }
+
+    private record FileArtifactSnapshot(Path path, long modifiedMillis, long size) {}
 }

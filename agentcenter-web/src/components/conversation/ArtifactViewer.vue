@@ -25,6 +25,9 @@ const isJson = computed(() => props.artifact?.artifactType === 'JSON')
 const isMarkdownLike = computed(() =>
   props.artifact?.artifactType === 'MARKDOWN' || props.artifact?.artifactType === 'REPORT'
 )
+const contentSourceLabel = computed(() =>
+  props.artifact?.filePath ? '实际文件' : '数据库快照'
+)
 
 const documentTitle = computed(() => {
   const content = props.artifact?.content ?? ''
@@ -64,6 +67,25 @@ const createdAtText = computed(() => {
           <div v-if="artifact.workflowNodeInstanceId">
             <dt>来源节点</dt>
             <dd :title="artifact.workflowNodeInstanceId">{{ artifact.workflowNodeInstanceId }}</dd>
+          </div>
+          <div v-if="artifact.sourceType">
+            <dt>来源</dt>
+            <dd>{{ artifact.sourceType }}</dd>
+          </div>
+          <div>
+            <dt>内容来源</dt>
+            <dd
+              :class="{
+                'artifact-viewer__source-file': Boolean(artifact.filePath),
+                'artifact-viewer__source-snapshot': !artifact.filePath,
+              }"
+            >
+              {{ contentSourceLabel }}
+            </dd>
+          </div>
+          <div v-if="artifact.filePath">
+            <dt>文件路径</dt>
+            <dd :title="artifact.filePath">{{ artifact.filePath }}</dd>
           </div>
           <div v-if="shortArtifactId">
             <dt>产物 ID</dt>
@@ -166,6 +188,16 @@ const createdAtText = computed(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.artifact-viewer__source-file {
+  color: var(--success);
+  font-weight: 700;
+}
+
+.artifact-viewer__source-snapshot {
+  color: var(--warning);
+  font-weight: 700;
 }
 
 .artifact-viewer__body {

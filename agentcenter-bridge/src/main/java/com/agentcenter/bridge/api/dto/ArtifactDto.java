@@ -12,5 +12,7 @@ public record ArtifactDto(
         ArtifactType artifactType,
         String title,
         String content,
+        String sourceType,
+        String filePath,
         OffsetDateTime createdAt
 ) {}

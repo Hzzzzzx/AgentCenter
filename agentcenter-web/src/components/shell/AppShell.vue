@@ -12,12 +12,14 @@ interface Props {
   activeView?: string
   selectedWorkItem?: WorkItemDto | null
   selectedArtifact?: ArtifactDto | null
+  rightPanelSuppressed?: boolean
   projectContext?: ProjectContextSelection
   projectContextOptions?: ProjectContextOptions
 }
 
 const props = withDefaults(defineProps<Props>(), {
   activeView: 'home',
+  rightPanelSuppressed: false,
   projectContext: () => ({
     id: '',
     project: '',
@@ -42,6 +44,8 @@ const emit = defineEmits<{
   'enter-work-item-conversation': [id: string]
   'confirmations-changed': [workItemId?: string | null]
   'close-artifact': []
+  'right-panel-open-requested': []
+  'right-panel-collapse-requested': []
   'update-project-context': [value: ProjectContextSelection]
 }>()
 
@@ -64,6 +68,8 @@ const shellStyle = computed(() => ({
   '--left-w': `${leftWidth.value}px`,
   '--right-w': `${rightWidth.value}px`,
 }))
+const effectiveRightCollapsed = computed(() => props.rightPanelSuppressed || rightCollapsed.value)
+const effectiveRightExpanded = computed(() => rightExpanded.value && !effectiveRightCollapsed.value)
 
 function handleNavigate(viewId: string) {
   emit('update:activeView', viewId)
@@ -77,7 +83,15 @@ function handleCloseArtifact() {
 function handleRightCollapsedChange(value: boolean) {
   rightCollapsed.value = value
   if (value) {
+    emit('right-panel-collapse-requested')
+  } else {
+    emit('right-panel-open-requested')
+  }
+  if (value) {
     rightExpanded.value = false
+    if (props.selectedArtifact) {
+      emit('close-artifact')
+    }
   }
 }
 
@@ -141,6 +155,12 @@ watch(() => props.selectedArtifact, (artifact) => {
     rightExpanded.value = false
   }
 })
+
+watch(() => props.rightPanelSuppressed, (suppressed) => {
+  if (suppressed) {
+    rightExpanded.value = false
+  }
+})
 </script>
 
 <template>
@@ -149,8 +169,8 @@ watch(() => props.selectedArtifact, (artifact) => {
     :style="shellStyle"
     :class="{
       'app-shell--left-collapsed': leftCollapsed,
-      'app-shell--right-collapsed': rightCollapsed,
-      'app-shell--right-expanded': rightExpanded && !rightCollapsed,
+      'app-shell--right-collapsed': effectiveRightCollapsed,
+      'app-shell--right-expanded': effectiveRightExpanded,
     }"
   >
     <div class="app-shell__titlebar">
@@ -180,7 +200,7 @@ watch(() => props.selectedArtifact, (artifact) => {
     </div>
 
     <div
-      v-if="!leftCollapsed && !(rightExpanded && !rightCollapsed)"
+      v-if="!leftCollapsed && !effectiveRightExpanded"
       class="app-shell__resizer app-shell__resizer--left"
       role="separator"
       aria-orientation="vertical"
@@ -190,7 +210,7 @@ watch(() => props.selectedArtifact, (artifact) => {
 
     <div class="app-shell__right-panel">
       <RightPanel
-        :collapsed="rightCollapsed"
+        :collapsed="effectiveRightCollapsed"
         :expanded="rightExpanded"
         :active-view="activeView"
         :selected-work-item="selectedWorkItem"
@@ -206,7 +226,7 @@ watch(() => props.selectedArtifact, (artifact) => {
     </div>
 
     <div
-      v-if="!rightCollapsed && !(rightExpanded && !rightCollapsed)"
+      v-if="!effectiveRightCollapsed && !effectiveRightExpanded"
       class="app-shell__resizer app-shell__resizer--right"
       role="separator"
       aria-orientation="vertical"

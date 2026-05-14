@@ -11,6 +11,7 @@ import { useNotificationStore } from '../stores/notifications'
 import MessageList from '../components/conversation/MessageList.vue'
 import WorkflowNodeControlBar from '../components/conversation/WorkflowNodeControlBar.vue'
 import ConversationInteractionBar from '../components/conversation/ConversationInteractionBar.vue'
+import RunSummaryPanel from '../components/conversation/RunSummaryPanel.vue'
 import { sessionResourceApi, skillApi } from '../api/runtimeResources'
 import { DEFAULT_PROJECT_ID } from '../constants/projects'
 import { artifactApi } from '../api/artifacts'
@@ -76,7 +77,28 @@ interface ArtifactOpenRef {
   title?: string
 }
 
-type ArtifactIdSource = 'message' | 'runtime-event' | 'workflow-node'
+interface RunSummaryTodoItem {
+  id: string
+  label: string
+  status: WorkflowNodeStatus
+  meta?: string
+}
+
+interface RunSummaryResultItem {
+  id: string
+  title: string
+  source: 'workflow-node' | 'runtime-event'
+  filePath?: string | null
+  nodeName?: string
+}
+
+interface RunSummarySourceItem {
+  id: string
+  label: string
+  meta?: string
+}
+
+type ArtifactIdSource = 'runtime-event' | 'workflow-node'
 
 const PROMPT_DEBUG_ENABLED = true
 const PROMPT_DEBUG_EDGE_GAP = 16
@@ -85,19 +107,20 @@ const CONTINUE_CURRENT_MESSAGE = '请继续当前节点未完成的回答，不�
 const AUTO_SCROLL_BOTTOM_THRESHOLD = 180
 const INTERACTION_FALLBACK_ATTEMPTS = 5
 const INTERACTION_FALLBACK_INTERVAL_MS = 900
-const ARTIFACT_REFERENCE_PATTERN = /<!--\s*AGENTCENTER_ARTIFACT\s+artifactId:\s*([A-Za-z0-9_-]+)\s*-->/g
 
 const props = defineProps<{
   workItemId?: string
   targetSessionId?: string | null
   projectId?: string
   selectedArtifactId?: string | null
+  runSummaryBlocked?: boolean
 }>()
 
 const emit = defineEmits<{
   back: []
   'open-artifact': [artifact: ArtifactDto]
   'show-confirmation': [confirmationId: string]
+  'run-summary-visible-change': [visible: boolean]
 }>()
 
 const sessionStore = useSessionStore()
@@ -135,6 +158,7 @@ const artifactAutoPreviewBaselineId = ref<string | null>(null)
 const lastAutoOpenedArtifactId = ref<string | null>(null)
 const dismissedAutoArtifactId = ref<string | null>(null)
 const autoOpeningArtifactId = ref<string | null>(null)
+const workItemArtifacts = ref<ArtifactDto[]>([])
 let ensureActiveSessionSeq = 0
 let pendingScrollFrame: number | null = null
 let pendingScrollBehavior: ScrollBehavior = 'smooth'
@@ -343,10 +367,107 @@ const currentRuntimeEvents = computed(() => {
   return runtimeStore.events.filter((event) => event.sessionId === sessionId)
 })
 
+const runSummaryTodoItems = computed<RunSummaryTodoItem[]>(() => {
+  return [...(currentWorkflowInstance.value?.nodes ?? [])]
+    .sort((a, b) => (a.sequenceNo ?? 0) - (b.sequenceNo ?? 0))
+    .map((node) => ({
+      id: node.id,
+      label: workflowNodeLabel(node),
+      status: node.status,
+      meta: node.skillName ?? undefined,
+    }))
+})
+
+const artifactById = computed(() =>
+  new Map(workItemArtifacts.value.map((artifact) => [artifact.id, artifact]))
+)
+
+const runSummaryResults = computed<RunSummaryResultItem[]>(() => {
+  const results: RunSummaryResultItem[] = []
+  const seen = new Set<string>()
+  for (const node of [...(currentWorkflowInstance.value?.nodes ?? [])].sort((a, b) => (a.sequenceNo ?? 0) - (b.sequenceNo ?? 0))) {
+    if (!node.outputArtifactId || seen.has(node.outputArtifactId)) continue
+    const artifact = artifactById.value.get(node.outputArtifactId)
+    if (!artifact?.filePath) continue
+    seen.add(node.outputArtifactId)
+    results.push({
+      id: node.outputArtifactId,
+      title: artifact.title,
+      source: 'workflow-node',
+      filePath: artifact.filePath,
+      nodeName: workflowNodeLabel(node),
+    })
+  }
+  for (const event of currentRuntimeEvents.value) {
+    const payload = parseRuntimePayload(event.payloadJson)
+    const artifactId = typeof payload.artifactId === 'string' ? payload.artifactId.trim() : ''
+    if (!artifactId || seen.has(artifactId)) continue
+    const title = textPayload(payload, ['title', 'summary']) ?? artifactFileName(payload) ?? '生成文件'
+    const artifact = artifactById.value.get(artifactId)
+    const filePath = artifact?.filePath ?? textPayload(payload, ['filePath', 'path'])
+    if (!filePath) continue
+    seen.add(artifactId)
+    results.push({
+      id: artifactId,
+      title: artifact?.title ?? title,
+      source: 'runtime-event',
+      filePath,
+    })
+  }
+  return results
+})
+
+const runSummarySources = computed<RunSummarySourceItem[]>(() => {
+  const sources = new Map<string, RunSummarySourceItem>()
+  for (const event of currentRuntimeEvents.value) {
+    const payload = parseRuntimePayload(event.payloadJson)
+    if (event.eventType === 'SKILL_STARTED' || event.eventType === 'SKILL_COMPLETED') {
+      const skillName = concreteSourceName(textPayload(payload, ['skillName']))
+      if (!skillName) continue
+      sources.set(`skill:${skillName}`, {
+        id: `skill:${skillName}`,
+        label: skillName,
+        meta: 'Skill',
+      })
+      continue
+    }
+    if (event.eventType === 'MCP_CALL') {
+      const toolName = concreteSourceName(textPayload(payload, ['toolName', 'command']))
+      if (!toolName) continue
+      sources.set(`mcp:${toolName}`, {
+        id: `mcp:${toolName}`,
+        label: toolName,
+        meta: 'MCP',
+      })
+    }
+  }
+  return Array.from(sources.values()).slice(0, 8)
+})
+
+const showRunSummaryPanel = computed(() =>
+  Boolean(sessionStore.activeSession)
+  && !isHistoricalVersion.value
+  && (
+    runSummaryTodoItems.value.length > 0
+    || runSummaryResults.value.length > 0
+    || runSummarySources.value.length > 0
+  )
+)
+
+const runSummaryOverlayVisible = computed(() =>
+  showRunSummaryPanel.value && !props.selectedArtifactId
+  && !props.runSummaryBlocked
+)
+
+watch(
+  runSummaryOverlayVisible,
+  (visible) => emit('run-summary-visible-change', visible),
+  { immediate: true }
+)
+
 const latestArtifactCandidate = computed(() => {
-  return latestArtifactFromMessages()
+  return latestArtifactFromWorkflow()
     ?? latestArtifactFromRuntimeEvents()
-    ?? latestArtifactFromWorkflow()
 })
 
 const currentStreamingText = computed(() =>
@@ -617,12 +738,15 @@ onMounted(async () => {
   await ensureActiveSession()
   await loadWorkflowVersions()
   await confirmationStore.loadPending()
+  await refreshWorkItemArtifacts()
+  emit('run-summary-visible-change', runSummaryOverlayVisible.value)
 })
 
 watch([() => props.workItemId, () => props.targetSessionId], async () => {
   await ensureActiveSession()
   await loadWorkflowVersions()
   await confirmationStore.loadPending()
+  await refreshWorkItemArtifacts()
 })
 
 watch(
@@ -654,9 +778,23 @@ watch(
     if (!artifactAutoPreviewArmed.value) {
       artifactAutoPreviewBaselineId.value = artifactId
     }
+    void refreshWorkItemArtifacts()
     void maybeAutoOpenLatestArtifact()
   }
 )
+
+async function refreshWorkItemArtifacts() {
+  const workItemId = selectedWorkItem.value?.id ?? props.workItemId ?? sessionStore.activeSession?.workItemId
+  if (!workItemId) {
+    workItemArtifacts.value = []
+    return
+  }
+  try {
+    workItemArtifacts.value = await artifactApi.listByWorkItem(workItemId)
+  } catch (error) {
+    console.debug('Failed to load work item artifacts', error)
+  }
+}
 
 async function ensureActiveSession(): Promise<AgentSessionDto | null> {
   const seq = ++ensureActiveSessionSeq
@@ -862,6 +1000,7 @@ async function handleRestartWorkflow() {
 }
 
 onUnmounted(() => {
+  emit('run-summary-visible-change', false)
   stopPromptDebugDrag()
   cancelPendingScroll()
   clearInteractionFallbackTimers()
@@ -1088,18 +1227,6 @@ async function maybeAutoOpenLatestArtifact() {
   }
 }
 
-function latestArtifactFromMessages(): { id: string; source: ArtifactIdSource } | null {
-  for (let index = sessionStore.messages.length - 1; index >= 0; index -= 1) {
-    const content = sessionStore.messages[index].content ?? ''
-    const ids = artifactIdsFromText(content)
-    const artifactId = ids.at(-1)
-    if (artifactId) {
-      return { id: artifactId, source: 'message' }
-    }
-  }
-  return null
-}
-
 function latestArtifactFromRuntimeEvents(): { id: string; source: ArtifactIdSource } | null {
   for (let index = currentRuntimeEvents.value.length - 1; index >= 0; index -= 1) {
     const event = currentRuntimeEvents.value[index]
@@ -1121,11 +1248,6 @@ function latestArtifactFromWorkflow(): { id: string; source: ArtifactIdSource } 
     : null
 }
 
-function artifactIdsFromText(content: string): string[] {
-  return Array.from(content.matchAll(ARTIFACT_REFERENCE_PATTERN), match => match[1].trim())
-    .filter(Boolean)
-}
-
 async function handleInteractionChanged(_confirmationId?: string) {
   if (_confirmationId) {
     armArtifactAutoPreview()
@@ -1142,6 +1264,7 @@ async function handleInteractionChanged(_confirmationId?: string) {
   if (workItemId) {
     await workflowProjectionStore.syncWorkItem(workItemId)
   }
+  await refreshWorkItemArtifacts()
   await maybeAutoOpenLatestArtifact()
 }
 
@@ -1333,6 +1456,27 @@ function parseRuntimePayload(payloadJson: string | null): Record<string, unknown
   } catch {
     return { raw: payloadJson }
   }
+}
+
+function textPayload(payload: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = payload[key]
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return null
+}
+
+function artifactFileName(payload: Record<string, unknown>): string | null {
+  const filePath = textPayload(payload, ['filePath', 'path'])
+  if (!filePath) return null
+  return filePath.split(/[\\/]/).filter(Boolean).at(-1) ?? filePath
+}
+
+function concreteSourceName(value: string | null): string | null {
+  if (!value) return null
+  const normalized = value.trim().toLowerCase()
+  if (['skill', 'tool', 'mcp', 'runtime', 'bridge', 'workflow'].includes(normalized)) return null
+  return value
 }
 
 function promptPayloadText(payload: Record<string, unknown>, keys: string[]): string {
@@ -1823,6 +1967,14 @@ function timestamp(value: string | null | undefined): number {
           </div>
         </aside>
       </Teleport>
+
+      <RunSummaryPanel
+        :visible="runSummaryOverlayVisible"
+        :todo-items="runSummaryTodoItems"
+        :results="runSummaryResults"
+        :sources="runSummarySources"
+        @open-artifact="handleOpenArtifact({ artifactId: $event })"
+      />
 
       <div ref="messagesRef" class="conversation-workbench__messages">
         <div v-if="loadingSession && sessionStore.messages.length === 0" class="conversation-workbench__loading">

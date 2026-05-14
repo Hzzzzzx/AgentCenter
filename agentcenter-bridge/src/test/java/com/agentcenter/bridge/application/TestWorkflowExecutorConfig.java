@@ -1,10 +1,14 @@
 package com.agentcenter.bridge.application;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.AbstractExecutorService;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -14,6 +18,7 @@ import org.springframework.context.annotation.Primary;
 
 import com.agentcenter.bridge.application.runtime.*;
 import com.agentcenter.bridge.domain.runtime.RuntimeType;
+import com.agentcenter.bridge.domain.workflow.protocol.WorkflowNodeStateParser;
 
 @TestConfiguration
 public class TestWorkflowExecutorConfig {
@@ -28,6 +33,8 @@ public class TestWorkflowExecutorConfig {
     private static final AtomicReference<SkillRunResult> CUSTOM_SKILL_RESULT = new AtomicReference<>();
     private static final AtomicReference<RuntimeException> ENSURE_SESSION_ERROR = new AtomicReference<>();
     private static final ConcurrentHashMap<String, String> SKILL_OUTPUT_OVERRIDES = new ConcurrentHashMap<>();
+    private static final AtomicBoolean SUPPRESS_NEXT_ARTIFACT_FILE = new AtomicBoolean(false);
+    private static final AtomicInteger ARTIFACT_SEQUENCE = new AtomicInteger();
 
     public static void clearCapturedRuntimeInputs() {
         CAPTURED_SKILL_NAMES.clear();
@@ -36,10 +43,16 @@ public class TestWorkflowExecutorConfig {
         CUSTOM_SKILL_RESULT.set(null);
         ENSURE_SESSION_ERROR.set(null);
         SKILL_OUTPUT_OVERRIDES.clear();
+        SUPPRESS_NEXT_ARTIFACT_FILE.set(false);
+        ARTIFACT_SEQUENCE.set(0);
     }
 
     public static void setNextSkillOutput(String output) {
         CUSTOM_SKILL_OUTPUT.set(output);
+    }
+
+    public static void suppressNextArtifactFile() {
+        SUPPRESS_NEXT_ARTIFACT_FILE.set(true);
     }
 
     public static void clearCustomSkillOutput() {
@@ -126,17 +139,21 @@ public class TestWorkflowExecutorConfig {
 
                 SkillRunResult customResult = CUSTOM_SKILL_RESULT.getAndSet(null);
                 if (customResult != null) {
+                    if (customResult.success() && customResult.outputContent() != null
+                            && !SUPPRESS_NEXT_ARTIFACT_FILE.getAndSet(false)) {
+                        writeRuntimeArtifactFile(skillName, customResult.outputContent());
+                    }
                     return customResult;
                 }
 
                 String customOutput = CUSTOM_SKILL_OUTPUT.getAndSet(null);
                 if (customOutput != null) {
-                    return new SkillRunResult(true, customOutput, "MARKDOWN", null, true);
+                    return successfulResult(skillName, customOutput);
                 }
 
                 String namedOverride = SKILL_OUTPUT_OVERRIDES.get(skillName);
                 if (namedOverride != null) {
-                    return new SkillRunResult(true, namedOverride, "MARKDOWN", null, true);
+                    return successfulResult(skillName, namedOverride);
                 }
 
                 String output = switch (skillName) {
@@ -194,7 +211,7 @@ public class TestWorkflowExecutorConfig {
                             -->
                             """.formatted(skillName).trim();
                 };
-                return new SkillRunResult(true, output, "MARKDOWN", null, true);
+                return successfulResult(skillName, output);
             }
 
             @Override
@@ -250,5 +267,44 @@ public class TestWorkflowExecutorConfig {
             public void registerWorkflowNodeContext(RuntimeType rt, String agentSessionId, String workItemId,
                                                       String workflowInstanceId, String workflowNodeInstanceId) {}
         };
+    }
+
+    private static SkillRunResult successfulResult(String skillName, String output) {
+        if (!SUPPRESS_NEXT_ARTIFACT_FILE.getAndSet(false)) {
+            writeRuntimeArtifactFile(skillName, output);
+        }
+        return new SkillRunResult(true, output, "MARKDOWN", null, true);
+    }
+
+    private static void writeRuntimeArtifactFile(String skillName, String output) {
+        try {
+            Path root = Path.of(System.getProperty("user.dir"))
+                    .resolve("runtime-workspace")
+                    .resolve("test-artifacts");
+            Files.createDirectories(root);
+            String title = artifactTitle(skillName, output);
+            Path file = root.resolve(title).toAbsolutePath().normalize();
+            Files.writeString(file, WorkflowNodeStateParser.stripStateBlock(output));
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static String artifactTitle(String skillName, String output) {
+        String marker = "artifact_title:";
+        for (String line : output.split("\\R")) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith(marker)) {
+                return safeFileName(trimmed.substring(marker.length()).trim());
+            }
+        }
+        int seq = ARTIFACT_SEQUENCE.incrementAndGet();
+        return safeFileName("test-" + seq + "-" + skillName + ".md");
+    }
+
+    private static String safeFileName(String value) {
+        String fallback = "test-artifact-" + ARTIFACT_SEQUENCE.incrementAndGet() + ".md";
+        String name = value == null || value.isBlank() ? fallback : value;
+        name = name.replaceAll("[\\\\/:*?\"<>|]", "-").trim();
+        return name.endsWith(".md") ? name : name + ".md";
     }
 }

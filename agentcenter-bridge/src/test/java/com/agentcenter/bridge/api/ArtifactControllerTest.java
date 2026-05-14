@@ -58,6 +58,40 @@ class ArtifactControllerTest {
     }
 
     @Test
+    void getArtifactPrefersRuntimeWorkspaceFileOverStoredSnapshot() throws Exception {
+        ArtifactMapper artifactMapper = mock(ArtifactMapper.class);
+        WorkItemMapper workItemMapper = mock(WorkItemMapper.class);
+        ProjectRuntimeWorkspaceResolver workspaceResolver = mock(ProjectRuntimeWorkspaceResolver.class);
+        ArtifactController controller = new ArtifactController(artifactMapper, workItemMapper, workspaceResolver);
+
+        Path artifactFile = tempDir.resolve("artifacts").resolve("actual-output.md");
+        Files.createDirectories(artifactFile.getParent());
+        Files.writeString(artifactFile, "# 文件里的新版内容\n\n来自磁盘文件。");
+
+        WorkItemEntity workItem = new WorkItemEntity();
+        workItem.setId("work-1");
+        workItem.setProjectId("project-1");
+
+        ArtifactEntity artifact = new ArtifactEntity();
+        artifact.setId("artifact-1");
+        artifact.setWorkItemId("work-1");
+        artifact.setArtifactType("MARKDOWN");
+        artifact.setTitle("actual-output.md");
+        artifact.setContent("# 旧的数据库快照");
+        artifact.setStorageUri(artifactFile.toString());
+        artifact.setCreatedAt("2026-05-12 10:00:00");
+
+        when(artifactMapper.findById("artifact-1")).thenReturn(artifact);
+        when(workItemMapper.findById("work-1")).thenReturn(workItem);
+        when(workspaceResolver.resolve("project-1")).thenReturn(tempDir);
+
+        var dto = controller.getArtifact("artifact-1");
+
+        assertThat(dto.content()).contains("# 文件里的新版内容");
+        assertThat(dto.content()).doesNotContain("旧的数据库快照");
+    }
+
+    @Test
     void getArtifactDoesNotReadFilesOutsideRuntimeWorkspace() throws Exception {
         ArtifactMapper artifactMapper = mock(ArtifactMapper.class);
         WorkItemMapper workItemMapper = mock(WorkItemMapper.class);

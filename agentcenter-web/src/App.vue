@@ -32,6 +32,8 @@ const activeView = ref('home')
 const selectedWorkItemId = ref<string | undefined>(undefined)
 const targetSessionId = ref<string | null>(null)
 const selectedArtifact = ref<ArtifactDto | null>(null)
+const runSummaryOverlayVisible = ref(false)
+const rightPanelUserExpanded = ref(false)
 const conversationReturnView = ref('home')
 const settingsTab = ref<string>('skills')
 const appShellRef = ref<InstanceType<typeof AppShell> | null>(null)
@@ -539,6 +541,23 @@ async function handleShowConfirmation(confirmationId: string) {
   }
 }
 
+function handleRunSummaryVisibleChange(visible: boolean) {
+  runSummaryOverlayVisible.value = visible
+}
+
+function handleRightPanelOpenRequested() {
+  rightPanelUserExpanded.value = true
+  runSummaryOverlayVisible.value = false
+}
+
+function handleRightPanelCollapseRequested() {
+  rightPanelUserExpanded.value = false
+}
+
+watch([activeView, selectedWorkItemId, targetSessionId], () => {
+  rightPanelUserExpanded.value = false
+})
+
 watch(
   () => runtimeSettingsStore.activeProjectDataProviderId,
   async (nextProviderId, previousProviderId) => {
@@ -576,6 +595,7 @@ watch(
     v-model:activeView="activeView"
     :selected-work-item="selectedWorkItem"
     :selected-artifact="selectedArtifact"
+    :right-panel-suppressed="runSummaryOverlayVisible && !selectedArtifact && !rightPanelUserExpanded"
     :project-context="projectContext"
     :project-context-options="shellProjectContextOptions"
     @handle-confirmation="handleConfirmation"
@@ -587,6 +607,8 @@ watch(
     @confirmations-changed="handleConfirmationsChanged"
     @update-project-context="handleTitleProjectContextUpdate"
     @close-artifact="selectedArtifact = null"
+    @right-panel-open-requested="handleRightPanelOpenRequested"
+    @right-panel-collapse-requested="handleRightPanelCollapseRequested"
   >
     <template #center>
       <HomeOverview
@@ -623,9 +645,11 @@ watch(
         :target-session-id="targetSessionId"
         :project-id="activeProjectId"
         :selected-artifact-id="selectedArtifact?.id ?? null"
+        :run-summary-blocked="rightPanelUserExpanded"
         @back="handleConversationBack"
         @open-artifact="selectedArtifact = $event"
         @show-confirmation="handleShowConfirmation"
+        @run-summary-visible-change="handleRunSummaryVisibleChange"
       />
     </template>
   </AppShell>

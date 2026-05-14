@@ -372,6 +372,8 @@ export interface ArtifactDto {
   artifactType: ArtifactType
   title: string
   content: string | null
+  sourceType?: string | null
+  filePath?: string | null
   createdAt: string
 }
 

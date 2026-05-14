@@ -64,6 +64,12 @@ public class ArtifactCaptureService {
         if (blocks.isEmpty()) {
             return List.of();
         }
+        blocks = blocks.stream()
+                .filter(block -> block.filePath() != null && !block.filePath().isBlank())
+                .toList();
+        if (blocks.isEmpty()) {
+            return List.of();
+        }
         List<ArtifactEntity> existing = artifactMapper.findBySourceMessageId(message.getId());
         if (existing != null && !existing.isEmpty()) {
             return existing;
@@ -80,16 +86,17 @@ public class ArtifactCaptureService {
             artifact.setWorkflowNodeInstanceId(message.getWorkflowNodeInstanceId());
             artifact.setArtifactType(block.artifactType().name());
             artifact.setTitle(block.title());
-            artifact.setContent(block.content());
+            artifact.setContent(null);
+            artifact.setStorageUri(block.filePath());
             artifact.setFilePath(block.filePath());
             artifact.setVersionNo(1);
-            artifact.setSourceType("MESSAGE");
+            artifact.setSourceType("MESSAGE_FILE_REFERENCE");
             artifact.setSourceMessageId(message.getId());
             artifact.setCreatedBy("artifact-capture");
             artifact.setCreatedAt(LocalDateTime.now().format(SQLITE_DATETIME));
             artifactMapper.insert(artifact);
             captured.add(artifact);
-            publishCapturedArtifactEvent(artifact, "已保存对话产物");
+            publishCapturedArtifactEvent(artifact, "已识别文件产物");
         }
         return captured;
     }
@@ -106,6 +113,10 @@ public class ArtifactCaptureService {
         if (artifactId.isBlank()) {
             return null;
         }
+        String filePath = text(payload, "filePath");
+        if (filePath.isBlank()) {
+            return null;
+        }
         ArtifactEntity existing = artifactMapper.findById(artifactId);
         if (existing != null) {
             return existing;
@@ -119,7 +130,6 @@ public class ArtifactCaptureService {
             return existingBySource.get(0);
         }
 
-        String filePath = text(payload, "filePath");
         ArtifactEntity artifact = new ArtifactEntity();
         artifact.setId(artifactId);
         artifact.setSessionId(envelope.agentSessionId());

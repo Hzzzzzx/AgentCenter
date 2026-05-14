@@ -159,7 +159,7 @@ class M1WorkflowStartIntegrationTest {
     }
 
     @Test
-    void startWorkflow_normalizesArtifactDisplayReferencesAndKeepsSystemLinkById() throws Exception {
+    void startWorkflow_linksOnlyFileBackedArtifactsAndKeepsSystemLinkById() throws Exception {
         String fe1234Id = findWorkItemIdByCode("FE1234");
         assertThat(fe1234Id).isNotEqualTo("FE1234");
         TestWorkflowExecutorConfig.setNextSkillOutput("""
@@ -188,24 +188,112 @@ class M1WorkflowStartIntegrationTest {
         String sessionId = json.at("/workflowInstance/nodes/0/agentSessionId").asText();
 
         var artifacts = jdbcTemplate.queryForList(
-                "SELECT id, title, content FROM artifact WHERE workflow_instance_id = ?",
+                "SELECT id, title, content, source_type, file_path FROM artifact WHERE workflow_instance_id = ?",
                 instanceId);
         assertThat(artifacts).hasSize(1);
         var artifact = artifacts.get(0);
         String artifactId = artifact.get("id").toString();
-        assertThat(artifact.get("title").toString()).isEqualTo("FE1234 需求整理 (PRD).md");
-        assertThat(artifact.get("content").toString())
-                .contains("# PRD: FE1234 用户登录优化")
-                .doesNotContain("下面是本轮根据工作项生成的 PRD 摘要")
-                .doesNotContain(fe1234Id)
+        assertThat(artifact.get("title").toString()).isEqualTo(fe1234Id + " 需求整理 (PRD).md");
+        assertThat(artifact.get("content")).isNull();
+        assertThat(artifact.get("source_type")).isEqualTo("FILE_SNAPSHOT");
+        assertThat(artifact.get("file_path").toString()).endsWith(fe1234Id + " 需求整理 (PRD).md");
+
+        MvcResult artifactResult = mockMvc.perform(get("/api/artifacts/" + artifactId))
+                .andExpect(status().isOk())
+                .andReturn();
+        var artifactJson = objectMapper.readTree(artifactResult.getResponse().getContentAsString());
+        assertThat(artifactJson.get("content").asText())
+                .contains("下面是本轮根据工作项生成的 PRD 摘要")
+                .contains("# PRD: " + fe1234Id + " 用户登录优化")
                 .doesNotContain("AGENTCENTER_NODE_STATE");
 
         var systemMessages = jdbcTemplate.queryForList(
                 "SELECT content FROM agent_message WHERE session_id = ? AND role = 'SYSTEM' ORDER BY seq_no",
                 sessionId);
         assertThat(systemMessages).anySatisfy(message -> assertThat(message.get("content").toString())
-                .contains("产物：FE1234 需求整理 (PRD).md")
+                .contains("产物：" + fe1234Id + " 需求整理 (PRD).md")
                 .contains("AGENTCENTER_ARTIFACT artifactId: " + artifactId));
+    }
+
+    @Test
+    void startWorkflow_capturesInlineMarkdownArtifactWhenRuntimeDoesNotWriteFile() throws Exception {
+        String fe1234Id = findWorkItemIdByCode("FE1234");
+        TestWorkflowExecutorConfig.suppressNextArtifactFile();
+        TestWorkflowExecutorConfig.setNextSkillOutput("""
+                # PRD: inline preview
+
+                Runtime 只返回 Markdown 正文，没有写入文件。
+
+                <!-- AGENTCENTER_NODE_STATE
+                status: READY_TO_ADVANCE
+                reason: PRD complete
+                artifact_title: %s 需求整理 (PRD).md
+                -->
+                """.formatted(fe1234Id).trim());
+
+        MvcResult result = mockMvc.perform(
+                        post("/api/work-items/" + fe1234Id + "/start-workflow")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"mode\":\"START_OR_CONTINUE\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        var json = objectMapper.readTree(result.getResponse().getContentAsString());
+        String instanceId = json.at("/workflowInstance/id").asText();
+        String artifactId = json.at("/workflowInstance/nodes/0/outputArtifactId").asText();
+
+        var artifacts = jdbcTemplate.queryForList(
+                "SELECT id, title, content, source_type, file_path FROM artifact WHERE workflow_instance_id = ?",
+                instanceId);
+        assertThat(artifacts).hasSize(1);
+        var artifact = artifacts.get(0);
+        assertThat(artifact.get("id").toString()).isEqualTo(artifactId);
+        assertThat(artifact.get("title").toString()).isEqualTo(fe1234Id + " 需求整理 (PRD).md");
+        assertThat(artifact.get("source_type")).isEqualTo("WORKFLOW_NODE_OUTPUT");
+        assertThat(artifact.get("file_path")).isNull();
+        assertThat(artifact.get("content").toString())
+                .contains("# PRD: inline preview")
+                .contains("Runtime 只返回 Markdown 正文")
+                .doesNotContain("AGENTCENTER_NODE_STATE");
+    }
+
+    @Test
+    void startWorkflow_capturesInlineMarkdownArtifactWithFallbackTitle() throws Exception {
+        String fe1234Id = findWorkItemIdByCode("FE1234");
+        TestWorkflowExecutorConfig.suppressNextArtifactFile();
+        TestWorkflowExecutorConfig.setNextSkillOutput("""
+                # FE/US Permission Smoke Report
+
+                Runtime 只返回完成正文，没有 artifact_title。
+
+                <!-- AGENTCENTER_NODE_STATE
+                status: READY_TO_ADVANCE
+                reason: smoke complete
+                interactions: []
+                -->
+                """.trim());
+
+        MvcResult result = mockMvc.perform(
+                        post("/api/work-items/" + fe1234Id + "/start-workflow")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"mode\":\"START_OR_CONTINUE\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        var json = objectMapper.readTree(result.getResponse().getContentAsString());
+        String instanceId = json.at("/workflowInstance/id").asText();
+
+        var artifacts = jdbcTemplate.queryForList(
+                "SELECT title, content, source_type, file_path FROM artifact WHERE workflow_instance_id = ?",
+                instanceId);
+        assertThat(artifacts).hasSize(1);
+        var artifact = artifacts.get(0);
+        assertThat(artifact.get("title").toString()).isEqualTo(fe1234Id + " 需求整理 (PRD).md");
+        assertThat(artifact.get("source_type")).isEqualTo("WORKFLOW_NODE_OUTPUT");
+        assertThat(artifact.get("file_path")).isNull();
+        assertThat(artifact.get("content").toString())
+                .contains("# FE/US Permission Smoke Report")
+                .doesNotContain("AGENTCENTER_NODE_STATE");
     }
 
     @Test

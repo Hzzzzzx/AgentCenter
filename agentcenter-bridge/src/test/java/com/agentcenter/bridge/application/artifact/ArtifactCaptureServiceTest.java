@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.OffsetDateTime;
@@ -46,15 +47,7 @@ class ArtifactCaptureServiceTest {
     }
 
     @Test
-    void capturesArtifactBlockFromAssistantMessage() {
-        AgentSessionEntity session = new AgentSessionEntity();
-        session.setId("session-1");
-        session.setWorkItemId("work-1");
-        session.setWorkflowInstanceId("workflow-1");
-        when(sessionMapper.findById("session-1")).thenReturn(session);
-        when(artifactMapper.findBySourceMessageId("msg-1")).thenReturn(List.of());
-        when(idGenerator.nextId()).thenReturn("art-1");
-
+    void ignoresContentOnlyArtifactBlocksFromAssistantMessage() {
         AgentMessageEntity message = new AgentMessageEntity();
         message.setId("msg-1");
         message.setSessionId("session-1");
@@ -73,15 +66,49 @@ class ArtifactCaptureServiceTest {
 
         var captured = service.captureFromAssistantMessage(message);
 
+        assertThat(captured).isEmpty();
+    }
+
+    @Test
+    void capturesFileBackedArtifactReferenceFromAssistantMessage() {
+        AgentSessionEntity session = new AgentSessionEntity();
+        session.setId("session-1");
+        session.setWorkItemId("work-1");
+        session.setWorkflowInstanceId("workflow-1");
+        when(sessionMapper.findById("session-1")).thenReturn(session);
+        when(artifactMapper.findBySourceMessageId("msg-1")).thenReturn(List.of());
+        when(idGenerator.nextId()).thenReturn("art-1");
+
+        AgentMessageEntity message = new AgentMessageEntity();
+        message.setId("msg-1");
+        message.setSessionId("session-1");
+        message.setRole("ASSISTANT");
+        message.setWorkflowNodeInstanceId("node-1");
+        message.setContent("""
+                <!-- AGENTCENTER_ARTIFACT_BEGIN
+                title: FE2001 PRD.md
+                type: MARKDOWN
+                file_path: /tmp/report.md
+                -->
+                # FE2001 PRD
+
+                正文。
+                <!-- AGENTCENTER_ARTIFACT_END -->
+                """);
+
+        var captured = service.captureFromAssistantMessage(message);
+
         assertThat(captured).hasSize(1);
         verify(artifactMapper).insert(argThat(artifact ->
                 "art-1".equals(artifact.getId())
-                        && "MESSAGE".equals(artifact.getSourceType())
+                        && "MESSAGE_FILE_REFERENCE".equals(artifact.getSourceType())
                         && "msg-1".equals(artifact.getSourceMessageId())
                         && "work-1".equals(artifact.getWorkItemId())
                         && "workflow-1".equals(artifact.getWorkflowInstanceId())
                         && "node-1".equals(artifact.getWorkflowNodeInstanceId())
-                        && artifact.getContent().contains("# FE2001 PRD")
+                        && artifact.getContent() == null
+                        && "/tmp/report.md".equals(artifact.getFilePath())
+                        && "/tmp/report.md".equals(artifact.getStorageUri())
         ));
         verify(runtimeEventService).publishEvent(argThat(event ->
                 event.eventType() == RuntimeEventType.PROCESS_TRACE
@@ -117,7 +144,29 @@ class ArtifactCaptureServiceTest {
                 "runtime-art-1".equals(artifact.getId())
                         && "RUNTIME_EVENT".equals(artifact.getSourceType())
                         && "report.md".equals(artifact.getTitle())
-                        && "/tmp/report.md".equals(artifact.getFilePath())
+                && "/tmp/report.md".equals(artifact.getFilePath())
         ));
+    }
+
+    @Test
+    void ignoresRuntimeArtifactWithoutFilePath() throws Exception {
+        var payload = objectMapper.readTree("""
+                {
+                  "kind": "artifact",
+                  "title": "产物变更",
+                  "summary": "只是一段对话摘要",
+                  "artifactId": "runtime-art-2",
+                  "rawPartType": "text"
+                }
+                """);
+        RuntimeEventEnvelope envelope = new RuntimeEventEnvelope(
+                "runtime-event", RuntimeEventTypes.PROCESS_TRACE, null, null, null,
+                RuntimeType.OPENCODE, "session-1", "runtime-1", "work-1", null, null,
+                payload, OffsetDateTime.now());
+
+        ArtifactEntity captured = service.captureFromRuntimeArtifact(envelope);
+
+        assertThat(captured).isNull();
+        verifyNoInteractions(artifactMapper);
     }
 }
