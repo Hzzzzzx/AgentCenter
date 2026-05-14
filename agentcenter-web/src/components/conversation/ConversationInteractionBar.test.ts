@@ -639,7 +639,10 @@ describe('ConversationInteractionBar.vue', () => {
     })
 
     expect(wrapper.find('.interaction-bar__fields').exists()).toBe(true)
+    expect(wrapper.find('.interaction-bar__copy strong').text()).toBe('补充设计信息')
     expect(wrapper.findAll('.interaction-bar__field-tab')).toHaveLength(3)
+    expect(wrapper.findAll('.interaction-bar__field-tab')[0].text()).toContain('问题一')
+    expect(wrapper.findAll('.interaction-bar__field-tab')[0].text()).toContain('模块名称')
     expect(wrapper.findAll('.interaction-bar__field')).toHaveLength(1)
     expect(wrapper.find('label[for="field-name"]').text()).toContain('模块名称')
     expect(wrapper.find('label[for="field-name"] .interaction-bar__field-required').exists()).toBe(true)
@@ -701,8 +704,10 @@ describe('ConversationInteractionBar.vue', () => {
 
     const primary = wrapper.find('.interaction-bar__primary')
     expect(primary.attributes('disabled')).toBeDefined()
+    expect(wrapper.find('select#field-priority').exists()).toBe(false)
+    expect(wrapper.find('.interaction-bar__field-menu').exists()).toBe(true)
 
-    await wrapper.find('input[placeholder="输入自己的选择..."]').setValue('紧急')
+    await wrapper.findAll('.interaction-bar__field-menu-option')[1].trigger('click')
     expect(primary.attributes('disabled')).toBeDefined()
 
     await wrapper.findAll('.interaction-bar__field-tab')[1].trigger('click')
@@ -714,10 +719,10 @@ describe('ConversationInteractionBar.vue', () => {
     expect(confirmationApi.resolve).toHaveBeenCalledWith('confirm-field-controls', {
       actionType: 'SUPPLEMENT',
       payload: {
-        input: '紧急\n是',
-        fields: { priority: '紧急', accepted: 'true' },
+        input: '高\n是',
+        fields: { priority: 'high', accepted: 'true' },
       },
-      comment: '紧急\n是',
+      comment: '高\n是',
     })
   })
 

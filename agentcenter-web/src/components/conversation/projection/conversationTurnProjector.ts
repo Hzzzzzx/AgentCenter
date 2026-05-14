@@ -602,10 +602,7 @@ function buildStepFromReasoningLifecycle(lifecycle: ReasoningLifecycle, order: n
   const events = [...lifecycle.events].sort(sortEvents)
   const first = events[0]
   const last = events.at(-1) ?? first
-  const summaries = events
-    .map(ee => payloadText(ee.payload, ['summary', 'label', 'output', 'result', 'detail']) || rawPartText(ee.payload, ['text', 'summary']))
-    .filter((value): value is string => Boolean(value))
-  const summary = mergeAnswerText('', summaries) || 'Reasoning'
+  const summary = reasoningSummaryFromEvents(events) || 'Reasoning'
   const completed = events.some(ee => ee.payload.status === 'completed') || last.payload.status === 'completed'
 
   return {
@@ -635,6 +632,49 @@ function buildStepFromReasoningLifecycle(lifecycle: ReasoningLifecycle, order: n
       seqNo: ee.event.seqNo,
     })),
   }
+}
+
+function reasoningSummaryFromEvents(events: EnrichedEvent[]): string | undefined {
+  const updatedSummaries = events
+    .filter(ee => ee.payload.rawEventType === 'message.part.updated')
+    .map(reasoningSummaryFromEvent)
+    .filter((value): value is string => Boolean(value))
+
+  if (updatedSummaries.length > 0) {
+    return mergeAnswerText('', updatedSummaries)
+  }
+
+  const deltaSummary = reasoningDeltaSummaryFromEvents(events)
+  if (deltaSummary) return deltaSummary
+
+  const summaries = events
+    .map(reasoningSummaryFromEvent)
+    .filter((value): value is string => Boolean(value))
+
+  return mergeAnswerText('', summaries)
+}
+
+function reasoningDeltaSummaryFromEvents(events: EnrichedEvent[]): string | undefined {
+  const deltas = events
+    .filter(ee => ee.payload.rawEventType === 'message.part.delta')
+    .map(ee => rawPartString(ee.payload, 'delta'))
+    .filter((value): value is string => value !== undefined)
+  if (deltas.length === 0) return undefined
+  const summary = deltas.join('').trim()
+  return summary || undefined
+}
+
+function reasoningSummaryFromEvent(ee: EnrichedEvent): string | undefined {
+  return payloadText(ee.payload, ['summary', 'label', 'output', 'result', 'detail'])
+    || rawPartText(ee.payload, ['text', 'summary'])
+}
+
+function rawPartString(payload: ParsedPayload, key: string): string | undefined {
+  const raw = isRecord(payload.rawPart) ? payload.rawPart : undefined
+  if (!raw) return undefined
+  const value = raw[key]
+  if (typeof value === 'string') return value
+  return stringifyPayloadValue(value)
 }
 
 function orderedRuntimeSortKey(item: OrderedRuntimeEvent): EnrichedEvent {

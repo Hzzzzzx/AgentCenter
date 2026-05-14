@@ -381,10 +381,11 @@ describe('ConfirmationCard.vue', () => {
     await openDialog(wrapper)
     const submitButton = document.body.querySelector<HTMLButtonElement>('.confirmation-card__action--approve')!
     expect(submitButton.disabled).toBe(true)
+    expect(document.body.querySelector('#confirmation-field-priority')?.tagName).toBe('DIV')
+    expect(document.body.querySelector('select#confirmation-field-priority')).toBeNull()
 
-    const customPriority = document.body.querySelector<HTMLInputElement>('input[placeholder="输入自己的选择..."]')!
-    customPriority.value = '紧急'
-    customPriority.dispatchEvent(new Event('input'))
+    const priorityOptions = [...document.body.querySelectorAll<HTMLButtonElement>('.confirmation-dialog__field-menu-option')]
+    await priorityOptions[1].click()
 
     const tabs = [...document.body.querySelectorAll<HTMLButtonElement>('.confirmation-dialog__field-tab')]
     await tabs[1].click()
@@ -401,10 +402,10 @@ describe('ConfirmationCard.vue', () => {
     expect(confirmationApi.resolve).toHaveBeenCalledWith('conf-1', {
       actionType: 'SUPPLEMENT',
       payload: {
-        input: '紧急\n是',
-        fields: { priority: '紧急', accepted: 'true' },
+        input: '高\n是',
+        fields: { priority: 'high', accepted: 'true' },
       },
-      comment: '紧急\n是',
+      comment: '高\n是',
     })
     expect(wrapper.emitted('resolved')![0]).toEqual(['conf-1'])
   })

@@ -1238,6 +1238,150 @@ describe('projectConversationTurns', () => {
     expect(turns[0].steps[0].title).toBe('调用 prd-design')
   })
 
+  it('prefers complete reasoning updates over token deltas for inline code formatting', () => {
+    const partId = 'part-reasoning'
+    const messageId = 'msg-reasoning'
+    const rawBase = {
+      sessionID: 'sess-1',
+      messageID: messageId,
+      partID: partId,
+      field: 'text',
+    }
+
+    const turns = projectConversationTurns(makeInput({
+      runtimeEvents: [
+        makeEvent({
+          id: 'ev-reasoning-1',
+          seqNo: 1,
+          payloadJson: JSON.stringify({
+            kind: 'reasoning',
+            status: 'running',
+            title: '思考',
+            summary: 'Let',
+            rawEventType: 'message.part.delta',
+            rawPartType: 'reasoning',
+            messageId,
+            partId,
+            rawPart: { ...rawBase, delta: 'Let' },
+          }),
+        }),
+        makeEvent({
+          id: 'ev-reasoning-2',
+          seqNo: 2,
+          payloadJson: JSON.stringify({
+            kind: 'reasoning',
+            status: 'running',
+            title: '思考',
+            summary: ' `',
+            rawEventType: 'message.part.delta',
+            rawPartType: 'reasoning',
+            messageId,
+            partId,
+            rawPart: { ...rawBase, delta: ' `' },
+          }),
+        }),
+        makeEvent({
+          id: 'ev-reasoning-3',
+          seqNo: 3,
+          payloadJson: JSON.stringify({
+            kind: 'reasoning',
+            status: 'running',
+            title: '思考',
+            summary: 'prd',
+            rawEventType: 'message.part.delta',
+            rawPartType: 'reasoning',
+            messageId,
+            partId,
+            rawPart: { ...rawBase, delta: 'prd' },
+          }),
+        }),
+        makeEvent({
+          id: 'ev-reasoning-4',
+          seqNo: 4,
+          payloadJson: JSON.stringify({
+            kind: 'reasoning',
+            status: 'running',
+            title: '思考',
+            summary: '-design',
+            rawEventType: 'message.part.delta',
+            rawPartType: 'reasoning',
+            messageId,
+            partId,
+            rawPart: { ...rawBase, delta: '-design' },
+          }),
+        }),
+        makeEvent({
+          id: 'ev-reasoning-updated',
+          seqNo: 5,
+          payloadJson: JSON.stringify({
+            kind: 'reasoning',
+            status: 'running',
+            title: '思考',
+            summary: 'Let me load the `prd-design` skill first to understand what it requires.',
+            rawEventType: 'message.part.updated',
+            rawPartType: 'reasoning',
+            messageId,
+            partId,
+            rawPart: {
+              id: partId,
+              messageID: messageId,
+              sessionID: 'sess-1',
+              type: 'reasoning',
+              text: 'Let me load the `prd-design` skill first to understand what it requires.',
+            },
+          }),
+        }),
+      ],
+    }))
+
+    expect(turns[0].steps).toHaveLength(1)
+    const part = turns[0].steps[0].parts[0]
+    expect(part.type).toBe('reasoning')
+    if (part.type === 'reasoning') {
+      expect(part.summary).toBe('Let me load the `prd-design` skill first to understand what it requires.')
+      expect(part.summary).not.toContain('` prd')
+      expect(part.summary).not.toContain('prd -design')
+    }
+  })
+
+  it('joins reasoning deltas without inserting extra spaces while streaming', () => {
+    const partId = 'part-reasoning'
+    const messageId = 'msg-reasoning'
+    const rawBase = {
+      sessionID: 'sess-1',
+      messageID: messageId,
+      partID: partId,
+      field: 'text',
+    }
+
+    const deltas = ['Let me load the `', 'prd', '-design', '` skill first']
+    const turns = projectConversationTurns(makeInput({
+      runtimeEvents: deltas.map((delta, index) => makeEvent({
+        id: `ev-reasoning-${index}`,
+        seqNo: index + 1,
+        payloadJson: JSON.stringify({
+          kind: 'reasoning',
+          status: 'running',
+          title: '思考',
+          summary: delta,
+          rawEventType: 'message.part.delta',
+          rawPartType: 'reasoning',
+          messageId,
+          partId,
+          rawPart: { ...rawBase, delta },
+        }),
+      })),
+    }))
+
+    const part = turns[0].steps[0].parts[0]
+    expect(part.type).toBe('reasoning')
+    if (part.type === 'reasoning') {
+      expect(part.summary).toBe('Let me load the `prd-design` skill first')
+      expect(part.summary).not.toContain('` prd')
+      expect(part.summary).not.toContain('prd -design')
+    }
+  })
+
   it('projects markdown-like context output into the assistant answer instead of execution steps', () => {
     const input = makeInput({
       runtimeEvents: [
