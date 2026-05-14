@@ -192,6 +192,7 @@ public class WorkItemService {
                     "WAITING_CONFIRMATION".equals(stage.status()) || stage.pendingConfirmationCount() > 0);
             boolean hasFailed = stages.stream().anyMatch(stage -> "FAILED".equals(stage.status()))
                     || hasWorkflowStatus(item, "FAILED")
+                    || hasWorkflowStatus(item, "PAUSED")
                     || hasWorkflowStatus(item, "BLOCKED");
             boolean isCompleted = hasWorkflowStatus(item, "COMPLETED") || item.status() == WorkItemStatus.DONE;
             boolean isUnstarted = item.workflowSummary() == null && item.currentWorkflowInstanceId() == null;
@@ -326,6 +327,10 @@ public class WorkItemService {
                 .findFirst();
         if (nextStage.isPresent()) {
             return new OverviewNodeBucket(nextStage.get().label(), 3);
+        }
+
+        if (hasWorkflowStatus(item, "PAUSED")) {
+            return new OverviewNodeBucket("已暂停", 2);
         }
 
         if (hasWorkflowStatus(item, "FAILED") || hasWorkflowStatus(item, "BLOCKED")) {

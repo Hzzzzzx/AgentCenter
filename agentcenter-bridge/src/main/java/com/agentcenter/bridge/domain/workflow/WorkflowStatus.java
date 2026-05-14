@@ -1,5 +1,5 @@
 package com.agentcenter.bridge.domain.workflow;
 
 public enum WorkflowStatus {
-    PENDING, RUNNING, BLOCKED, FAILED, COMPLETED, CANCELLED, SUPERSEDED
+    PENDING, RUNNING, PAUSED, BLOCKED, FAILED, COMPLETED, CANCELLED, SUPERSEDED
 }

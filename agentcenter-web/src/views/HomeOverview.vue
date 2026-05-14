@@ -79,6 +79,7 @@ const nodeStatusClass: Record<WorkflowNodeStatus, string> = {
 const workflowStatusLabels: Record<WorkflowStatus, string> = {
   PENDING: '待处理',
   RUNNING: '处理中',
+  PAUSED: '已暂停',
   BLOCKED: '已阻塞',
   FAILED: '异常',
   COMPLETED: '已完成',
@@ -212,6 +213,7 @@ function buildTypeStatCard(type: WorkItemType, items: WorkItemDto[]): TypeStatCa
     )
     const hasFailed = stages.some((stage) => stage.status === 'FAILED')
       || wf?.status === 'FAILED'
+      || wf?.status === 'PAUSED'
       || wf?.status === 'BLOCKED'
     const isCompleted = wf?.status === 'COMPLETED' || item.status === 'DONE'
     const isUnstarted = !wf && !item.currentWorkflowInstanceId
@@ -314,6 +316,10 @@ function currentNodeBucketFor(
 
   const nextStage = stages.find((stage) => !isNodeComplete(stage.status))
   if (nextStage) return { label: nextStage.label, priority: 3 }
+
+  if (wf?.status === 'PAUSED') {
+    return { label: '已暂停', priority: 2 }
+  }
 
   if (wf?.status === 'FAILED' || wf?.status === 'BLOCKED') {
     return { label: '异常', priority: 2 }

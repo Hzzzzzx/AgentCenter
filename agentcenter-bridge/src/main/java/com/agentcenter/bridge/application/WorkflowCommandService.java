@@ -659,7 +659,8 @@ public class WorkflowCommandService {
 
         executeSkillOnNode(instance, node, nodeDefs, workItem, supplementalInput);
 
-        if (WorkflowNodeStatus.COMPLETED.name().equals(node.getStatus())) {
+        if (WorkflowNodeStatus.COMPLETED.name().equals(node.getStatus())
+                && !isWorkflowPaused(instance.getId())) {
             advanceToNextNode(instance);
         }
     }
@@ -873,9 +874,11 @@ public class WorkflowCommandService {
                     if (isAutoRun(instance)) {
                         node.setStatus(WorkflowNodeStatus.COMPLETED.name());
                         node.setCompletedAt(now);
-                        instance.setStatus(WorkflowStatus.RUNNING.name());
-                        instance.setUpdatedAt(now);
-                        workflowMapper.updateInstance(instance);
+                        if (!isWorkflowPaused(instance.getId())) {
+                            instance.setStatus(WorkflowStatus.RUNNING.name());
+                            instance.setUpdatedAt(now);
+                            workflowMapper.updateInstance(instance);
+                        }
                     } else {
                         ConfirmationRequestEntity advanceConfirm = buildAdvanceConfirmation(
                                 instance, node, nodeDef, workItem, now);
@@ -1173,6 +1176,9 @@ public class WorkflowCommandService {
     }
 
     private void markInstanceBlocked(WorkflowInstanceEntity instance, String now) {
+        if (isWorkflowPaused(instance.getId())) {
+            return;
+        }
         instance.setStatus(WorkflowStatus.BLOCKED.name());
         instance.setUpdatedAt(now);
         workflowMapper.updateInstance(instance);
@@ -1988,6 +1994,9 @@ public class WorkflowCommandService {
     }
 
     private void advanceToNextNode(WorkflowInstanceEntity instance) {
+        if (isWorkflowPaused(instance.getId())) {
+            return;
+        }
         List<WorkflowNodeInstanceEntity> nodes = getOrderedNodeInstances(instance.getId());
 
         WorkflowNodeInstanceEntity nextPending = nodes.stream()
@@ -2068,6 +2077,7 @@ public class WorkflowCommandService {
         List<WorkflowInstanceEntity> instances = workflowMapper.findInstancesByWorkItemId(workItemId);
         return instances.stream()
                 .filter(i -> WorkflowStatus.RUNNING.name().equals(i.getStatus())
+                        || WorkflowStatus.PAUSED.name().equals(i.getStatus())
                         || WorkflowStatus.BLOCKED.name().equals(i.getStatus()))
                 .findFirst()
                 .orElse(null);
@@ -2436,6 +2446,11 @@ public class WorkflowCommandService {
     private boolean isWorkflowSuperseded(String workflowInstanceId) {
         WorkflowInstanceEntity latest = workflowMapper.findInstanceById(workflowInstanceId);
         return latest != null && WorkflowStatus.SUPERSEDED.name().equals(latest.getStatus());
+    }
+
+    private boolean isWorkflowPaused(String workflowInstanceId) {
+        WorkflowInstanceEntity latest = workflowMapper.findInstanceById(workflowInstanceId);
+        return latest != null && WorkflowStatus.PAUSED.name().equals(latest.getStatus());
     }
 
     private WorkflowInstanceDto toInstanceDto(WorkflowInstanceEntity e) {

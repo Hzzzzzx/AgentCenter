@@ -348,7 +348,10 @@ const nodeStateInfo = computed<NodeStateInfo>(() => {
 const isPausedCurrentNode = computed(() =>
   nodeStateInfo.value.type === 'RUNNING'
   && Boolean(nodeStateInfo.value.nodeId)
-  && nodeStateInfo.value.nodeId === pausedRunningNodeId.value
+  && (
+    nodeStateInfo.value.nodeId === pausedRunningNodeId.value
+    || currentWorkflowInstance.value?.status === 'PAUSED'
+  )
 )
 
 const isCancellingCurrentReply = computed(() =>

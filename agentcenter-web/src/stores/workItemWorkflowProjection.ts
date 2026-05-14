@@ -51,6 +51,7 @@ export type WorkItemWorkflowProjection = {
 const workflowStatusLabels: Record<WorkflowStatus, string> = {
   PENDING: '待处理',
   RUNNING: '处理中',
+  PAUSED: '已暂停',
   BLOCKED: '已阻塞',
   FAILED: '异常',
   COMPLETED: '已完成',
@@ -428,6 +429,7 @@ export const useWorkItemWorkflowProjectionStore = defineStore('workItemWorkflowP
     if (skillNodes.some((node) => node.status === 'WAITING_CONFIRMATION')) return 'WAITING_CONFIRMATION'
     if (
       workflowInstance?.status === 'FAILED'
+      || workflowInstance?.status === 'PAUSED'
       || workflowInstance?.status === 'BLOCKED'
       || currentNode?.status === 'FAILED'
       || skillNodes.some((node) => node.status === 'FAILED')
@@ -549,6 +551,7 @@ export const useWorkItemWorkflowProjectionStore = defineStore('workItemWorkflowP
     const progress: Record<WorkflowStatus, number> = {
       PENDING: 0,
       RUNNING: 1,
+      PAUSED: 2,
       BLOCKED: 2,
       FAILED: 2,
       COMPLETED: 3,

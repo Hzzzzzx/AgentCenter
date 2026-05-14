@@ -279,18 +279,47 @@ public class AgentSessionService {
                 case SKIP_NODE -> workflowCommandService.skipNode(nodeInstanceId);
                 case PAUSE_WORKFLOW -> {
                     String now = java.time.LocalDateTime.now().format(SQLITE_DATETIME);
-                    instance.setStatus(WorkflowStatus.BLOCKED.name());
+                    instance.setStatus(WorkflowStatus.PAUSED.name());
                     instance.setUpdatedAt(now);
                     workflowMapper.updateInstance(instance);
+                    cancelRuntime(session.getId());
                 }
             }
         } else {
             if (nodeInstanceId != null) {
-                workflowCommandService.resumeNodeAfterInteraction(nodeInstanceId, request.content());
+                routeWorkflowInput(instance, nodeInstanceId, request.content());
             } else {
                 messageExecutor.submit(() -> dispatchToRuntime(session.getId(), request.content()));
             }
         }
+    }
+
+    private void routeWorkflowInput(WorkflowInstanceEntity instance,
+                                    String nodeInstanceId,
+                                    String content) {
+        if (WorkflowStatus.PAUSED.name().equals(instance.getStatus())) {
+            WorkflowNodeInstanceEntity node = workflowMapper.findNodeInstanceById(nodeInstanceId);
+            if (node != null
+                    && WorkflowNodeStatus.COMPLETED.name().equals(node.getStatus())
+                    && isContinueIntent(content)) {
+                workflowCommandService.completeNodeAndScheduleAdvance(nodeInstanceId);
+                return;
+            }
+        }
+        workflowCommandService.resumeNodeAfterInteraction(nodeInstanceId, content);
+    }
+
+    private boolean isContinueIntent(String content) {
+        if (content == null) {
+            return false;
+        }
+        String normalized = content.trim().toLowerCase();
+        return "继续".equals(normalized)
+                || "继续工作流".equals(normalized)
+                || "下一步".equals(normalized)
+                || "进入下一步".equals(normalized)
+                || "continue".equals(normalized)
+                || "next".equals(normalized);
     }
 
     private String resolveNodeInstanceId(WorkflowInstanceEntity instance, SendMessageRequest request) {

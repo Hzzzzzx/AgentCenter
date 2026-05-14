@@ -303,7 +303,7 @@ class WorkflowMidSessionInputRoutingIntegrationTest {
     }
 
     @Test
-    void pauseWorkflow_setsInstanceBlocked() throws Exception {
+    void pauseWorkflow_setsInstancePaused() throws Exception {
         StartedWorkflow wf = startWorkflowAndWait("FE1234");
 
         String instanceStatusBefore = jdbcTemplate.queryForObject(
@@ -322,7 +322,40 @@ class WorkflowMidSessionInputRoutingIntegrationTest {
 
         String instanceStatusAfter = jdbcTemplate.queryForObject(
                 "SELECT status FROM workflow_instance WHERE id = ?", String.class, wf.instanceId());
-        assertThat(instanceStatusAfter).isEqualTo("BLOCKED");
+        assertThat(instanceStatusAfter).isEqualTo("PAUSED");
+    }
+
+    @Test
+    void typedInputAfterPause_resumesCurrentNodeWithSupplementalInput() throws Exception {
+        StartedWorkflow wf = startWorkflowAndWait("FE1234");
+        jdbcTemplate.update("DELETE FROM confirmation_request WHERE id = ?", wf.confirmationId());
+        jdbcTemplate.update("""
+                UPDATE workflow_node_instance
+                SET status = 'RUNNING', agent_state = 'IN_PROGRESS'
+                WHERE id = ?
+                """, wf.nodeInstanceId());
+        jdbcTemplate.update("""
+                UPDATE workflow_instance
+                SET status = 'PAUSED', current_node_instance_id = ?
+                WHERE id = ?
+                """, wf.nodeInstanceId(), wf.instanceId());
+
+        int skillCountBefore = TestWorkflowExecutorConfig.CAPTURED_SKILL_NAMES.size();
+
+        mockMvc.perform(post("/api/agent-sessions/" + wf.sessionId() + "/messages")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"继续完善剩余内容\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.role").value("USER"));
+
+        assertThat(TestWorkflowExecutorConfig.CAPTURED_SKILL_NAMES.size())
+                .isGreaterThan(skillCountBefore);
+        assertThat(TestWorkflowExecutorConfig.CAPTURED_INPUT_CONTEXTS)
+                .anySatisfy(input -> assertThat(input).contains("继续完善剩余内容"));
+
+        String instanceStatusAfter = jdbcTemplate.queryForObject(
+                "SELECT status FROM workflow_instance WHERE id = ?", String.class, wf.instanceId());
+        assertThat(instanceStatusAfter).isNotEqualTo("PAUSED");
     }
 
     @Test
