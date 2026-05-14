@@ -24,14 +24,24 @@ const draftContextId = ref(props.modelValue.id)
 const draftContext = ref<ProjectContextSelection>({ ...props.modelValue })
 const projectOptions = computed(() => unique(props.contexts.map((context) => context.project)))
 const cloudeReqProjectOptions = computed(() =>
-  unique(contextsForProject().map((context) => context.externalProjectId ?? context.cloudeReqProject))
+  unique([
+    ...contextsForProject().map((context) => context.cloudeReqProject),
+    ...props.options.cloudeReqProjects,
+  ])
 )
 const spaceOptions = computed(() =>
-  unique(contextsForProject().map((context) => context.externalSpaceId ?? context.space))
+  unique([
+    ...contextsForProject().map((context) => context.space),
+    ...props.options.spaces,
+  ])
 )
 const iterationOptions = computed(() =>
-  unique(contextsForProjectAndSpace().map((context) => context.externalIterationId ?? context.iteration))
+  unique([
+    ...contextsForProjectAndSpace().map((context) => context.iteration),
+    ...props.options.iterations,
+  ])
 )
+const isCreatingContext = computed(() => draftContext.value.id.length === 0)
 const canSaveSelection = computed(() =>
   Boolean(
     clean(draftContext.value.project)
@@ -54,6 +64,17 @@ function updateSelection(field: ProjectContextField, event: Event) {
 function selectContext(context: ProjectContextSelection) {
   draftContextId.value = context.id
   draftContext.value = { ...context }
+}
+
+function startNewContext() {
+  draftContextId.value = ''
+  draftContext.value = {
+    id: '',
+    project: '',
+    cloudeReqProject: '',
+    space: '',
+    iteration: '',
+  }
 }
 
 function saveSelection() {
@@ -104,9 +125,9 @@ function updateDraftField(field: ProjectContextField, value: string) {
   draftContext.value = normalizedDraft({
     ...draftContext.value,
     [field]: value,
-    ...(field === 'cloudeReqProject' ? { externalProjectId: value } : {}),
-    ...(field === 'space' ? { externalSpaceId: value } : {}),
-    ...(field === 'iteration' ? { externalIterationId: value } : {}),
+    ...(field === 'cloudeReqProject' ? { externalProjectId: null } : {}),
+    ...(field === 'space' ? { externalSpaceId: null } : {}),
+    ...(field === 'iteration' ? { externalIterationId: null } : {}),
   })
   draftContextId.value = draftContext.value.id
   emit('update:modelValue', draftContext.value)
@@ -179,7 +200,10 @@ watch(
             <strong>项目配置</strong>
             <span>{{ props.contexts.length }} 个配置</span>
           </div>
-          <em>来自同步源</em>
+          <div class="project-context__list-actions">
+            <em>来自同步源</em>
+            <button class="project-context__add" type="button" @click="startNewContext">新增项目</button>
+          </div>
         </div>
         <p v-if="props.contexts.length === 0" class="project-context__empty">暂无后端同步配置</p>
         <article
@@ -202,6 +226,14 @@ watch(
           </button>
           <span class="project-context__item-actions">
             <button type="button" @click="selectContext(context)">编辑</button>
+            <button
+              class="project-context__item-delete"
+              type="button"
+              disabled
+              title="同步源配置暂不支持在工作台直接删除"
+            >
+              删除
+            </button>
           </span>
         </article>
       </aside>
@@ -209,9 +241,17 @@ watch(
       <div class="project-context__panel">
         <div class="project-context__panel-head">
           <div>
-            <strong>当前生效上下文</strong>
-            <span>从企业同步源选择，保存后影响工作台筛选</span>
+            <strong>{{ isCreatingContext ? '新增项目配置' : '当前生效上下文' }}</strong>
+            <span>{{ isCreatingContext ? '先选择企业同步源中的项目、空间和迭代，再保存为当前上下文' : '从企业同步源选择，保存后影响工作台筛选' }}</span>
           </div>
+          <button
+            v-if="isCreatingContext"
+            class="project-context__panel-reset"
+            type="button"
+            @click="startNewContext"
+          >
+            清空
+          </button>
         </div>
 
         <div class="project-context__fields">
@@ -230,45 +270,45 @@ watch(
           </label>
 
           <label class="project-context__field">
-            <span>CloudReq 项目 ID</span>
-            <input
+            <span>CloudReq 项目</span>
+            <select
               aria-label="选择 CloudeReq 项目"
-              :value="draftContext.externalProjectId || draftContext.cloudeReqProject"
-              list="project-context-cloudereq-options"
-              placeholder="填写 projectId"
-              @input="updateSelection('cloudeReqProject', $event)"
-            />
-            <datalist id="project-context-cloudereq-options">
-              <option v-for="project in cloudeReqProjectOptions" :key="project" :value="project" />
-            </datalist>
+              :value="draftContext.cloudeReqProject"
+              @change="updateSelection('cloudeReqProject', $event)"
+            >
+              <option value="" disabled>请选择项目</option>
+              <option v-for="project in cloudeReqProjectOptions" :key="project" :value="project">
+                {{ project }}
+              </option>
+            </select>
           </label>
 
           <label class="project-context__field">
-            <span>空间 Space ID</span>
-            <input
+            <span>空间</span>
+            <select
               aria-label="选择空间"
-              :value="draftContext.externalSpaceId || draftContext.space"
-              list="project-context-space-options"
-              placeholder="填写 spaceId"
-              @input="updateSelection('space', $event)"
-            />
-            <datalist id="project-context-space-options">
-              <option v-for="space in spaceOptions" :key="space" :value="space" />
-            </datalist>
+              :value="draftContext.space"
+              @change="updateSelection('space', $event)"
+            >
+              <option value="" disabled>请选择空间</option>
+              <option v-for="space in spaceOptions" :key="space" :value="space">
+                {{ space }}
+              </option>
+            </select>
           </label>
 
           <label class="project-context__field">
-            <span>迭代 ID</span>
-            <input
+            <span>迭代</span>
+            <select
               aria-label="选择迭代"
-              :value="draftContext.externalIterationId || draftContext.iteration"
-              list="project-context-iteration-options"
-              placeholder="填写 iterationId"
-              @input="updateSelection('iteration', $event)"
-            />
-            <datalist id="project-context-iteration-options">
-              <option v-for="iteration in iterationOptions" :key="iteration" :value="iteration" />
-            </datalist>
+              :value="draftContext.iteration"
+              @change="updateSelection('iteration', $event)"
+            >
+              <option value="" disabled>请选择迭代</option>
+              <option v-for="iteration in iterationOptions" :key="iteration" :value="iteration">
+                {{ iteration }}
+              </option>
+            </select>
           </label>
         </div>
       </div>
@@ -315,7 +355,8 @@ watch(
 
 .project-context__sync,
 .project-context__save,
-.project-context__add {
+.project-context__add,
+.project-context__panel-reset {
   appearance: none;
   display: inline-flex;
   align-items: center;
@@ -335,7 +376,8 @@ watch(
 
 .project-context__sync:hover,
 .project-context__save:hover,
-.project-context__add:hover {
+.project-context__add:hover,
+.project-context__panel-reset:hover {
   filter: brightness(0.96);
 }
 
@@ -351,12 +393,19 @@ watch(
   background: var(--bg-card);
 }
 
+.project-context__panel-reset {
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+  box-shadow: none;
+}
+
 .project-context__layout {
   display: grid;
-  grid-template-columns: minmax(220px, 240px) minmax(0, 1fr);
+  grid-template-columns: minmax(280px, 0.85fr) minmax(420px, 1.15fr);
+  align-items: start;
   gap: 16px;
   width: 100%;
-  max-width: 720px;
 }
 
 .project-context__list,
@@ -396,6 +445,19 @@ watch(
   font-size: 11px;
   font-style: normal;
   font-weight: 800;
+}
+
+.project-context__list-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.project-context__list-actions .project-context__add {
+  height: 28px;
+  padding: 0 10px;
+  box-shadow: none;
 }
 
 .project-context__empty {

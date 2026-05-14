@@ -61,7 +61,7 @@ Scope 参数不使用展示名：
 
 | 表 | 说明 |
 |----|------|
-| `project_provider_setting` | 全局 provider、当前生效 context/space/iteration，以及未同步前保存的企业侧 projectId/spaceId/iterationId |
+| `project_provider_setting` | 全局 provider、当前生效 context/space/iteration，以及保存后的稳定 scope |
 | `project_context` | Provider 下的项目和 CloudeReq 项目 |
 | `project_space` | Provider 下的空间 |
 | `project_iteration` | Provider 下的迭代 |
@@ -94,15 +94,14 @@ FE 工作流的隔离规则是：每个项目使用自己的 `workflow_definitio
 4. `workItemStore.setScope({ providerId, projectId, spaceId, iterationId })`，其中 `projectId = providerId + ':' + externalProjectId`
 5. 加载 work item list、overview、pending confirmations
 
-项目管理页支持先填写自定义项目名称、企业侧 `projectId`、`spaceId`、`iterationId` 并保存到 Bridge。后续点击“同步数据”时，Bridge 会把已保存 scope 传给 `ProjectDataProvider.snapshot(selection)`；企业 Provider 可据此只拉取该项目/空间/迭代下的 FE、US、TASK、WORK、BUG、VULN。fixture Provider 会忽略 selection，继续返回测试快照。
+项目管理页展示业务名称，不直接暴露内部 ID。用户保存选择后，Bridge 保存对应的稳定 scope；后续点击“同步数据”时，Bridge 会把已保存 scope 传给 `ProjectDataProvider.snapshot(selection)`。企业 Provider 可按自己的内部接口策略使用该 scope，也可以自行做降级或补全。
 
 运行设置切换 provider 时，会清空保存的 scope，重新 sync 并刷新项目上下文和工作项 scope。
 
 ## Provider Contract
 
-企业内部实现必须返回：
+Provider 最小契约：
 
-- `ProjectDataScopeSelectionDto`：当前保存的企业侧项目名、`externalProjectId`、`externalSpaceId`、`externalIterationId`，同步前也可能存在。
 - `ProjectContextDto[]`：项目、CloudeReq 项目、空间、迭代组合。
 - `ProjectContextOptionsDto`：下拉框可选项。
 - `ProjectProviderWorkItemDto[]`：FE/US/TASK/WORK/BUG/VULN。
@@ -112,7 +111,7 @@ FE 工作流的隔离规则是：每个项目使用自己的 `workflow_definitio
 ## 验收要点
 
 - 项目管理页和标题栏迭代选项不再出现前端硬编码 mock。
-- 未同步出上下文前，项目管理页也能保存自定义项目名和企业侧 projectId/spaceId/iterationId。
+- 项目管理页展示业务名称，不把内部 ID 暴露给用户。
 - 切换 provider 后，`providerId` 会进入 work item 和 overview 查询。
 - 切换迭代后，首页 FE/US/TASK/WORK/BUG/VULN 统计和列表同步变化。
 - `project_data_sync_history` 能看到成功/失败记录。
