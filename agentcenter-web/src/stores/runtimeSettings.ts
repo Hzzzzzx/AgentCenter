@@ -25,6 +25,7 @@ export const useRuntimeSettingsStore = defineStore('runtimeSettings', () => {
   const batchStartWorkflowLimit = ref(DEFAULT_BATCH_START_WORKFLOW_LIMIT)
   const projectDataProviders = ref<ProjectDataProviderDto[]>([])
   const activeProjectDataProviderId = ref('')
+  const activeProjectName = ref<string | null>(null)
   const activeExternalProjectId = ref<string | null>(null)
   const activeExternalSpaceId = ref<string | null>(null)
   const activeExternalIterationId = ref<string | null>(null)
@@ -83,6 +84,7 @@ export const useRuntimeSettingsStore = defineStore('runtimeSettings', () => {
   function applyProjectDataProviderSettings(settings: ProjectDataProviderSettingsDto) {
     projectDataProviders.value = settings.providers
     activeProjectDataProviderId.value = settings.activeProviderId
+    activeProjectName.value = settings.activeProjectName ?? null
     activeExternalProjectId.value = settings.activeExternalProjectId ?? null
     activeExternalSpaceId.value = settings.activeExternalSpaceId ?? null
     activeExternalIterationId.value = settings.activeExternalIterationId ?? null
@@ -128,6 +130,7 @@ export const useRuntimeSettingsStore = defineStore('runtimeSettings', () => {
     batchStartWorkflowLimit,
     projectDataProviders,
     activeProjectDataProviderId,
+    activeProjectName,
     activeExternalProjectId,
     activeExternalSpaceId,
     activeExternalIterationId,

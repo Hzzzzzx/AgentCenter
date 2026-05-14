@@ -17,6 +17,7 @@ const providerSettings = {
     { id: 'fixture-beta', name: '测试源 B', description: 'B', active: false },
   ],
   activeProviderId: 'fixture-alpha',
+  activeProjectName: 'AgentCenter',
   activeExternalProjectId: 'alpha-project-agentcenter',
   activeExternalSpaceId: 'alpha-space-rd',
   activeExternalIterationId: 'alpha-sprint-14',
@@ -46,6 +47,7 @@ describe('useRuntimeSettingsStore', () => {
         { id: 'fixture-beta', name: '测试源 B', description: 'B', active: true },
       ],
       activeProviderId: 'fixture-beta',
+      activeProjectName: null,
       activeExternalProjectId: null,
       activeExternalSpaceId: null,
       activeExternalIterationId: null,
@@ -64,6 +66,7 @@ describe('useRuntimeSettingsStore', () => {
     vi.mocked(projectDataProviderApi.setActiveScope).mockResolvedValueOnce({
       providers: providerSettings.providers,
       activeProviderId: 'fixture-alpha',
+      activeProjectName: '平台接入',
       activeExternalProjectId: 'alpha-project-platform',
       activeExternalSpaceId: 'alpha-space-platform',
       activeExternalIterationId: 'alpha-sprint-15',
@@ -72,6 +75,7 @@ describe('useRuntimeSettingsStore', () => {
     const store = useRuntimeSettingsStore()
     await store.setProjectDataScope({
       providerId: 'fixture-alpha',
+      projectName: '平台接入',
       externalProjectId: 'alpha-project-platform',
       externalSpaceId: 'alpha-space-platform',
       externalIterationId: 'alpha-sprint-15',
@@ -79,11 +83,13 @@ describe('useRuntimeSettingsStore', () => {
 
     expect(projectDataProviderApi.setActiveScope).toHaveBeenCalledWith({
       providerId: 'fixture-alpha',
+      projectName: '平台接入',
       externalProjectId: 'alpha-project-platform',
       externalSpaceId: 'alpha-space-platform',
       externalIterationId: 'alpha-sprint-15',
     })
     expect(store.activeExternalProjectId).toBe('alpha-project-platform')
+    expect(store.activeProjectName).toBe('平台接入')
     expect(store.activeExternalSpaceId).toBe('alpha-space-platform')
     expect(store.activeExternalIterationId).toBe('alpha-sprint-15')
   })

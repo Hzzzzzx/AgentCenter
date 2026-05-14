@@ -21,19 +21,24 @@ const emit = defineEmits<{
 type ProjectContextField = keyof Omit<ProjectContextSelection, 'id'>
 
 const draftContextId = ref(props.modelValue.id)
-const draftContext = computed(() =>
-  props.contexts.find((context) => context.id === draftContextId.value)
-  ?? props.modelValue
-)
+const draftContext = ref<ProjectContextSelection>({ ...props.modelValue })
 const projectOptions = computed(() => unique(props.contexts.map((context) => context.project)))
 const cloudeReqProjectOptions = computed(() =>
-  unique(contextsForProject().map((context) => context.cloudeReqProject))
+  unique(contextsForProject().map((context) => context.externalProjectId ?? context.cloudeReqProject))
 )
 const spaceOptions = computed(() =>
-  unique(contextsForProject().map((context) => context.space))
+  unique(contextsForProject().map((context) => context.externalSpaceId ?? context.space))
 )
 const iterationOptions = computed(() =>
-  unique(contextsForProjectAndSpace().map((context) => context.iteration))
+  unique(contextsForProjectAndSpace().map((context) => context.externalIterationId ?? context.iteration))
+)
+const canSaveSelection = computed(() =>
+  Boolean(
+    clean(draftContext.value.project)
+    && clean(firstNonBlank(draftContext.value.externalProjectId, draftContext.value.cloudeReqProject))
+    && clean(firstNonBlank(draftContext.value.externalSpaceId, draftContext.value.space))
+    && clean(firstNonBlank(draftContext.value.externalIterationId, draftContext.value.iteration))
+  )
 )
 
 function updateSelection(field: ProjectContextField, event: Event) {
@@ -41,17 +46,20 @@ function updateSelection(field: ProjectContextField, event: Event) {
   const matched = findContextFor(field, value)
   if (matched) {
     selectContext(matched)
+    return
   }
+  updateDraftField(field, value)
 }
 
 function selectContext(context: ProjectContextSelection) {
   draftContextId.value = context.id
+  draftContext.value = { ...context }
 }
 
 function saveSelection() {
   const context = draftContext.value
-  if (!context.id) return
-  emit('save-selection', context)
+  if (!canSaveSelection.value) return
+  emit('save-selection', normalizedDraft(context))
 }
 
 function findContextFor(field: ProjectContextField, value: string) {
@@ -59,16 +67,16 @@ function findContextFor(field: ProjectContextField, value: string) {
     return props.contexts.find((context) => context.project === value)
   }
   if (field === 'cloudeReqProject') {
-    return contextsForProject().find((context) => context.cloudeReqProject === value)
-      ?? props.contexts.find((context) => context.cloudeReqProject === value)
+    return contextsForProject().find((context) => context.externalProjectId === value || context.cloudeReqProject === value)
+      ?? props.contexts.find((context) => context.externalProjectId === value || context.cloudeReqProject === value)
   }
   if (field === 'space') {
-    return contextsForProject().find((context) => context.space === value)
-      ?? props.contexts.find((context) => context.space === value)
+    return contextsForProject().find((context) => context.externalSpaceId === value || context.space === value)
+      ?? props.contexts.find((context) => context.externalSpaceId === value || context.space === value)
   }
   if (field === 'iteration') {
-    return contextsForProjectAndSpace().find((context) => context.iteration === value)
-      ?? props.contexts.find((context) => context.iteration === value)
+    return contextsForProjectAndSpace().find((context) => context.externalIterationId === value || context.iteration === value)
+      ?? props.contexts.find((context) => context.externalIterationId === value || context.iteration === value)
   }
   return props.contexts.find((context) => context[field] === value)
 }
@@ -92,10 +100,44 @@ function unique(values: Array<string | null | undefined>) {
   return Array.from(new Set(values.filter((value): value is string => Boolean(value))))
 }
 
+function updateDraftField(field: ProjectContextField, value: string) {
+  draftContext.value = normalizedDraft({
+    ...draftContext.value,
+    [field]: value,
+    ...(field === 'cloudeReqProject' ? { externalProjectId: value } : {}),
+    ...(field === 'space' ? { externalSpaceId: value } : {}),
+    ...(field === 'iteration' ? { externalIterationId: value } : {}),
+  })
+  draftContextId.value = draftContext.value.id
+  emit('update:modelValue', draftContext.value)
+}
+
+function normalizedDraft(context: ProjectContextSelection): ProjectContextSelection {
+  return {
+    ...context,
+    project: clean(context.project) ?? '',
+    cloudeReqProject: clean(context.cloudeReqProject) ?? clean(context.externalProjectId) ?? '',
+    space: clean(context.space) ?? clean(context.externalSpaceId) ?? '',
+    iteration: clean(context.iteration) ?? clean(context.externalIterationId) ?? '',
+    externalProjectId: clean(context.externalProjectId) ?? clean(context.cloudeReqProject),
+    externalSpaceId: clean(context.externalSpaceId) ?? clean(context.space),
+    externalIterationId: clean(context.externalIterationId) ?? clean(context.iteration),
+  }
+}
+
+function firstNonBlank(...values: Array<string | null | undefined>) {
+  return values.find((value) => clean(value) !== null) ?? null
+}
+
+function clean(value: string | null | undefined) {
+  return value == null || value.trim().length === 0 ? null : value.trim()
+}
+
 watch(
-  () => props.modelValue.id,
-  (id) => {
-    draftContextId.value = id
+  () => props.modelValue,
+  (value) => {
+    draftContextId.value = value.id
+    draftContext.value = { ...value }
   }
 )
 
@@ -107,7 +149,7 @@ watch(
       return
     }
     if (!contexts.some((context) => context.id === draftContextId.value)) {
-      draftContextId.value = props.modelValue.id || contexts[0].id
+      selectContext(contexts.find((context) => context.id === props.modelValue.id) ?? contexts[0])
     }
   }
 )
@@ -121,7 +163,7 @@ watch(
         <p class="project-context__subtitle">维护当前工作台的项目、企业数据源和生效上下文。</p>
       </div>
       <div class="project-context__actions">
-        <button class="project-context__save" type="button" :disabled="props.saving || !draftContext.id" @click="saveSelection">
+        <button class="project-context__save" type="button" :disabled="props.saving || !canSaveSelection" @click="saveSelection">
           {{ props.saving ? '保存中' : '保存选择' }}
         </button>
         <button class="project-context__sync" type="button" :disabled="props.syncing" @click="emit('sync-data')">
@@ -174,63 +216,59 @@ watch(
 
         <div class="project-context__fields">
           <label class="project-context__field project-context__field--wide">
-            <span>项目</span>
-            <select
-              aria-label="选择项目"
+            <span>自定义项目名称</span>
+            <input
+              aria-label="自定义项目名称"
               :value="draftContext.project"
-              :disabled="projectOptions.length === 0"
-              @change="updateSelection('project', $event)"
-            >
-              <option v-if="projectOptions.length === 0" value="">暂无项目</option>
-              <option v-for="project in projectOptions" :key="project" :value="project">
-                {{ project }}
-              </option>
-            </select>
+              list="project-context-project-options"
+              placeholder="例如 AgentCenter 企业车"
+              @input="updateSelection('project', $event)"
+            />
+            <datalist id="project-context-project-options">
+              <option v-for="project in projectOptions" :key="project" :value="project" />
+            </datalist>
           </label>
 
           <label class="project-context__field">
-            <span>CloudeReq 项目</span>
-            <select
+            <span>CloudReq 项目 ID</span>
+            <input
               aria-label="选择 CloudeReq 项目"
-              :value="draftContext.cloudeReqProject"
-              :disabled="cloudeReqProjectOptions.length === 0"
-              @change="updateSelection('cloudeReqProject', $event)"
-            >
-              <option v-if="cloudeReqProjectOptions.length === 0" value="">暂无项目</option>
-              <option v-for="project in cloudeReqProjectOptions" :key="project" :value="project">
-                {{ project }}
-              </option>
-            </select>
+              :value="draftContext.externalProjectId || draftContext.cloudeReqProject"
+              list="project-context-cloudereq-options"
+              placeholder="填写 projectId"
+              @input="updateSelection('cloudeReqProject', $event)"
+            />
+            <datalist id="project-context-cloudereq-options">
+              <option v-for="project in cloudeReqProjectOptions" :key="project" :value="project" />
+            </datalist>
           </label>
 
           <label class="project-context__field">
-            <span>空间</span>
-            <select
+            <span>空间 Space ID</span>
+            <input
               aria-label="选择空间"
-              :value="draftContext.space"
-              :disabled="spaceOptions.length === 0"
-              @change="updateSelection('space', $event)"
-            >
-              <option v-if="spaceOptions.length === 0" value="">暂无空间</option>
-              <option v-for="space in spaceOptions" :key="space" :value="space">
-                {{ space }}
-              </option>
-            </select>
+              :value="draftContext.externalSpaceId || draftContext.space"
+              list="project-context-space-options"
+              placeholder="填写 spaceId"
+              @input="updateSelection('space', $event)"
+            />
+            <datalist id="project-context-space-options">
+              <option v-for="space in spaceOptions" :key="space" :value="space" />
+            </datalist>
           </label>
 
           <label class="project-context__field">
-            <span>迭代</span>
-            <select
+            <span>迭代 ID</span>
+            <input
               aria-label="选择迭代"
-              :value="draftContext.iteration"
-              :disabled="iterationOptions.length === 0"
-              @change="updateSelection('iteration', $event)"
-            >
-              <option v-if="iterationOptions.length === 0" value="">暂无迭代</option>
-              <option v-for="iteration in iterationOptions" :key="iteration" :value="iteration">
-                {{ iteration }}
-              </option>
-            </select>
+              :value="draftContext.externalIterationId || draftContext.iteration"
+              list="project-context-iteration-options"
+              placeholder="填写 iterationId"
+              @input="updateSelection('iteration', $event)"
+            />
+            <datalist id="project-context-iteration-options">
+              <option v-for="iteration in iterationOptions" :key="iteration" :value="iteration" />
+            </datalist>
           </label>
         </div>
       </div>

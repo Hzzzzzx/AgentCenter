@@ -2,6 +2,7 @@ package com.agentcenter.bridge.application.projectcontext;
 
 import com.agentcenter.bridge.api.dto.ProjectDataProviderDto;
 import com.agentcenter.bridge.api.dto.ProjectDataProviderSettingsDto;
+import com.agentcenter.bridge.api.dto.ProjectDataScopeSelectionDto;
 import com.agentcenter.bridge.api.dto.UpdateProjectDataScopeRequest;
 import com.agentcenter.bridge.infrastructure.persistence.entity.ProjectContextEntity;
 import com.agentcenter.bridge.infrastructure.persistence.entity.ProjectIterationEntity;
@@ -56,6 +57,7 @@ public class ProjectDataProviderSettingsService {
                 setting.getActiveProjectContextId(),
                 setting.getActiveProjectSpaceId(),
                 setting.getActiveProjectIterationId(),
+                activeExternalScope.projectName(),
                 activeExternalScope.externalProjectId(),
                 activeExternalScope.externalSpaceId(),
                 activeExternalScope.externalIterationId()
@@ -78,6 +80,7 @@ public class ProjectDataProviderSettingsService {
         setting.setActiveProjectContextId(null);
         setting.setActiveProjectSpaceId(null);
         setting.setActiveProjectIterationId(null);
+        clearExternalScope(setting);
         setting.setUpdatedAt(now());
         projectContextMapper.updateSetting(setting);
         return getSettings();
@@ -101,54 +104,51 @@ public class ProjectDataProviderSettingsService {
         );
         String externalSpaceId = firstNonBlank(request.externalSpaceId(), request.spaceId());
         String externalIterationId = firstNonBlank(request.externalIterationId(), request.iterationId());
+        String projectName = firstNonBlank(request.projectName(), externalProjectId);
         if (externalProjectId == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "externalProjectId is required");
         }
         if (externalSpaceId == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "externalSpaceId is required");
         }
+        if (externalIterationId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "externalIterationId is required");
+        }
 
         ProjectContextEntity context = projectContextMapper.findContextByProviderAndExternalProjectId(
                 providerId,
                 externalProjectId
         );
-        if (context == null) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "SCOPE_INVALID: project scope is not synced"
-            );
-        }
-        ProjectSpaceEntity space = projectContextMapper.findSpaceByProviderAndExternalSpaceId(
-                providerId,
-                context.getId(),
-                externalSpaceId
-        );
-        if (space == null) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "SCOPE_INVALID: space scope is not synced"
-            );
-        }
-        ProjectIterationEntity iteration = null;
-        if (externalIterationId != null) {
-            iteration = projectContextMapper.findIterationByProviderAndExternalIterationId(
-                    providerId,
-                    space.getId(),
-                    externalIterationId
-            );
-            if (iteration == null) {
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST,
-                        "SCOPE_INVALID: iteration scope is not synced"
+        ProjectSpaceEntity space = context == null
+                ? null
+                : projectContextMapper.findSpaceByProviderAndExternalSpaceId(
+                        providerId,
+                        context.getId(),
+                        externalSpaceId
                 );
-            }
+        ProjectIterationEntity iteration = space == null
+                ? null
+                : projectContextMapper.findIterationByProviderAndExternalIterationId(
+                        providerId,
+                        space.getId(),
+                        externalIterationId
+                );
+        if ((context != null && space == null) || (space != null && iteration == null)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "SCOPE_INVALID: saved IDs do not match synced project hierarchy"
+            );
         }
 
         var setting = ensureSetting();
         setting.setActiveProviderId(providerId);
-        setting.setActiveProjectContextId(context.getId());
-        setting.setActiveProjectSpaceId(space.getId());
+        setting.setActiveProjectContextId(context != null ? context.getId() : null);
+        setting.setActiveProjectSpaceId(space != null ? space.getId() : null);
         setting.setActiveProjectIterationId(iteration != null ? iteration.getId() : null);
+        setting.setActiveProjectName(projectName);
+        setting.setActiveExternalProjectId(externalProjectId);
+        setting.setActiveExternalSpaceId(externalSpaceId);
+        setting.setActiveExternalIterationId(externalIterationId);
         setting.setUpdatedAt(now());
         projectContextMapper.updateSetting(setting);
         return getSettings();
@@ -164,6 +164,7 @@ public class ProjectDataProviderSettingsService {
         setting.setActiveProjectContextId(projectContextId);
         setting.setActiveProjectSpaceId(projectSpaceId);
         setting.setActiveProjectIterationId(projectIterationId);
+        applyExternalScopeFromInternalIds(setting, projectContextId, projectSpaceId, projectIterationId);
         setting.setUpdatedAt(now());
         projectContextMapper.updateSetting(setting);
     }
@@ -177,6 +178,21 @@ public class ProjectDataProviderSettingsService {
                 setting.getActiveProjectContextId(),
                 setting.getActiveProjectSpaceId(),
                 setting.getActiveProjectIterationId()
+        );
+    }
+
+    public ProjectDataScopeSelectionDto activeScopeSelection(String providerId) {
+        var setting = ensureSetting();
+        if (!setting.getActiveProviderId().equals(providerId)) {
+            return new ProjectDataScopeSelectionDto(providerId, null, null, null, null);
+        }
+        ActiveExternalScope externalScope = activeExternalScopeFor(setting, providerId);
+        return new ProjectDataScopeSelectionDto(
+                providerId,
+                externalScope.projectName(),
+                externalScope.externalProjectId(),
+                externalScope.externalSpaceId(),
+                externalScope.externalIterationId()
         );
     }
 
@@ -199,6 +215,7 @@ public class ProjectDataProviderSettingsService {
             setting.setActiveProjectContextId(null);
             setting.setActiveProjectSpaceId(null);
             setting.setActiveProjectIterationId(null);
+            clearExternalScope(setting);
             setting.setUpdatedAt(now());
             projectContextMapper.updateSetting(setting);
             return setting;
@@ -218,9 +235,17 @@ public class ProjectDataProviderSettingsService {
     }
 
     private ActiveExternalScope activeExternalScopeFor(ProjectProviderSettingEntity setting, String activeProviderId) {
+        if (setting.getActiveExternalProjectId() != null || setting.getActiveExternalSpaceId() != null) {
+            return new ActiveExternalScope(
+                    setting.getActiveProjectName(),
+                    setting.getActiveExternalProjectId(),
+                    setting.getActiveExternalSpaceId(),
+                    setting.getActiveExternalIterationId()
+            );
+        }
         ProjectContextEntity context = projectContextMapper.findContextById(setting.getActiveProjectContextId());
         if (context == null || !activeProviderId.equals(context.getProviderId())) {
-            return new ActiveExternalScope(null, null, null);
+            return new ActiveExternalScope(setting.getActiveProjectName(), null, null, null);
         }
         ProjectSpaceEntity space = projectContextMapper.findSpaceById(setting.getActiveProjectSpaceId());
         String externalSpaceId = space != null && activeProviderId.equals(space.getProviderId())
@@ -231,10 +256,40 @@ public class ProjectDataProviderSettingsService {
                 ? iteration.getExternalIterationId()
                 : null;
         return new ActiveExternalScope(
+                setting.getActiveProjectName() != null ? setting.getActiveProjectName() : context.getProjectName(),
                 context.getExternalProjectId(),
                 externalSpaceId,
                 externalIterationId
         );
+    }
+
+    private void clearExternalScope(ProjectProviderSettingEntity setting) {
+        setting.setActiveProjectName(null);
+        setting.setActiveExternalProjectId(null);
+        setting.setActiveExternalSpaceId(null);
+        setting.setActiveExternalIterationId(null);
+    }
+
+    private void applyExternalScopeFromInternalIds(ProjectProviderSettingEntity setting,
+                                                   String projectContextId,
+                                                   String projectSpaceId,
+                                                   String projectIterationId) {
+        ProjectContextEntity context = projectContextMapper.findContextById(projectContextId);
+        ProjectSpaceEntity space = projectContextMapper.findSpaceById(projectSpaceId);
+        ProjectIterationEntity iteration = projectIterationId == null
+                ? null
+                : projectContextMapper.findIterationById(projectIterationId);
+        if (context == null || space == null) {
+            clearExternalScope(setting);
+            return;
+        }
+        String projectName = context.getExternalProjectId().equals(setting.getActiveExternalProjectId())
+                ? firstNonBlank(setting.getActiveProjectName(), context.getProjectName())
+                : context.getProjectName();
+        setting.setActiveProjectName(projectName);
+        setting.setActiveExternalProjectId(context.getExternalProjectId());
+        setting.setActiveExternalSpaceId(space.getExternalSpaceId());
+        setting.setActiveExternalIterationId(iteration != null ? iteration.getExternalIterationId() : null);
     }
 
     private String firstNonBlank(String primary, String fallback) {
@@ -260,6 +315,7 @@ public class ProjectDataProviderSettingsService {
     ) {}
 
     private record ActiveExternalScope(
+            String projectName,
             String externalProjectId,
             String externalSpaceId,
             String externalIterationId

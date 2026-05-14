@@ -5,7 +5,10 @@
 
     <select id="findSetting" resultType="com.agentcenter.bridge.infrastructure.persistence.entity.ProjectProviderSettingEntity">
         SELECT id, active_provider_id, active_project_context_id,
-               active_project_space_id, active_project_iteration_id, updated_at
+               active_project_space_id, active_project_iteration_id,
+               active_project_name, active_external_project_id,
+               active_external_space_id, active_external_iteration_id,
+               updated_at
         FROM project_provider_setting
         WHERE id = #{id}
     </select>
@@ -13,11 +16,17 @@
     <insert id="insertSetting">
         INSERT INTO project_provider_setting (
             id, active_provider_id, active_project_context_id,
-            active_project_space_id, active_project_iteration_id, updated_at
+            active_project_space_id, active_project_iteration_id,
+            active_project_name, active_external_project_id,
+            active_external_space_id, active_external_iteration_id,
+            updated_at
         )
         VALUES (
             #{id}, #{activeProviderId}, #{activeProjectContextId},
-            #{activeProjectSpaceId}, #{activeProjectIterationId}, #{updatedAt}
+            #{activeProjectSpaceId}, #{activeProjectIterationId},
+            #{activeProjectName}, #{activeExternalProjectId},
+            #{activeExternalSpaceId}, #{activeExternalIterationId},
+            #{updatedAt}
         )
     </insert>
 
@@ -27,6 +36,10 @@
             active_project_context_id = #{activeProjectContextId},
             active_project_space_id = #{activeProjectSpaceId},
             active_project_iteration_id = #{activeProjectIterationId},
+            active_project_name = #{activeProjectName},
+            active_external_project_id = #{activeExternalProjectId},
+            active_external_space_id = #{activeExternalSpaceId},
+            active_external_iteration_id = #{activeExternalIterationId},
             updated_at = #{updatedAt}
         WHERE id = #{id}
     </update>

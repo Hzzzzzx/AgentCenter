@@ -1,6 +1,6 @@
 # CloudReq 项目管理交互改造实施方案
 
-> 状态：Draft
+> 状态：Implemented in AgentCenter Provider path
 > 日期：2026-05-13
 > 目标：在不重构主干的前提下，完成 CloudReq 项目/空间/迭代交互闭环，让内部团队仅做增量实现且避免合并冲突。
 
@@ -19,10 +19,10 @@
 
 ## 2. 目标交互（最终用户感知）
 
-1. 用户按“项目 -> 空间 -> 迭代”逐级选择。
+1. 用户填写自定义项目名称，并按“CloudReq 项目 ID -> 空间 ID -> 迭代 ID”逐级选择或输入。
 2. 项目变化时清空空间/迭代；空间变化时清空迭代。
 3. 点击“保存选择”仅保存上下文，不自动同步。
-4. 点击“同步数据”才触发工作项同步。
+4. 点击“同步数据”才触发工作项同步；Bridge 使用已保存 selection 调用 Provider。
 5. 页面重进自动回显上次选择。
 6. 若历史迭代已失效，自动降级为“项目+空间保留，迭代置空并提示重选”。
 7. 任何接口调用都能明确区分：loading / empty / error / success。
@@ -33,10 +33,7 @@
 
 ## 3.1 保持接口范围不变
 
-- `GET /api/cloudreq-selection/projects`
-- `GET /api/cloudreq-selection/spaces`
-- `GET /api/cloudreq-selection/iterations`
-- `POST /api/cloudreq-selection/select`
+- `PUT /api/project-data-providers/active-scope`
 - `POST /api/project-data-providers/sync`
 - `GET /api/project-data-providers`
 - `GET /api/work-items`
@@ -46,10 +43,10 @@
 1. `projects`：无业务入参。
 2. `spaces`：继续使用 `groupId`（不改成 projectId）。
 3. `iterations`：将当前歧义参数名 `projectId` 改为 `spaceId`。
-4. `select`：
-   - 必填：`projectId`, `groupId`, `spaceId`
-   - 建议必填：`projectName`, `spaceName`
-   - 可空：`iterationId`, `iterationName`
+4. `active-scope`：
+   - 必填：`externalProjectId`, `externalSpaceId`, `externalIterationId`
+   - 建议必填：`projectName`
+   - 兼容旧字段：`projectId`, `spaceId`, `iterationId`
 5. `sync`：短期保持无入参（使用已保存选择）。
 6. `work-items`：继续支持可选过滤 `projectId/spaceId/iterationId`。
 
@@ -138,4 +135,3 @@
    - 处理：新增字段优先，不立即删除旧字段。
 3. 错误码切换风险：旧错误处理逻辑失效。
    - 处理：前端先支持新旧两套错误结构。
-

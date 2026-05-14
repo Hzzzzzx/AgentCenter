@@ -1,11 +1,8 @@
 package com.agentcenter.bridge.api.dto;
 
-public record UpdateProjectDataScopeRequest(
+public record ProjectDataScopeSelectionDto(
         String providerId,
         String projectName,
-        String projectId,
-        String spaceId,
-        String iterationId,
         String externalProjectId,
         String externalSpaceId,
         String externalIterationId

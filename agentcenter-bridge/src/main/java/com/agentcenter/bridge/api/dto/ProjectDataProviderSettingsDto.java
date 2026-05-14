@@ -8,6 +8,7 @@ public record ProjectDataProviderSettingsDto(
         String activeProjectContextId,
         String activeProjectSpaceId,
         String activeProjectIterationId,
+        String activeProjectName,
         String activeExternalProjectId,
         String activeExternalSpaceId,
         String activeExternalIterationId

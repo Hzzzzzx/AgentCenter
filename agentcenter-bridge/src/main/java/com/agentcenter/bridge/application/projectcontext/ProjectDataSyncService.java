@@ -1,6 +1,7 @@
 package com.agentcenter.bridge.application.projectcontext;
 
 import com.agentcenter.bridge.api.dto.ProjectDataSnapshotDto;
+import com.agentcenter.bridge.api.dto.ProjectDataScopeSelectionDto;
 import com.agentcenter.bridge.api.dto.ProjectDataSyncHistoryDto;
 import com.agentcenter.bridge.api.dto.ProjectDataSyncStatsDto;
 import com.agentcenter.bridge.api.dto.ProjectProviderWorkItemDto;
@@ -55,14 +56,16 @@ public class ProjectDataSyncService {
     }
 
     public ProjectDataSnapshotDto snapshot() {
-        return settingsService.activeProvider().snapshot();
+        ProjectDataProvider provider = settingsService.activeProvider();
+        return provider.snapshot(settingsService.activeScopeSelection(provider.id()));
     }
 
     public ProjectDataSnapshotDto sync() {
         ProjectDataProvider provider = settingsService.activeProvider();
         ProjectDataSyncHistoryEntity history = historyService.start(provider.id());
         try {
-            ProjectDataSnapshotDto snapshot = provider.snapshot();
+            ProjectDataScopeSelectionDto selection = settingsService.activeScopeSelection(provider.id());
+            ProjectDataSnapshotDto snapshot = provider.snapshot(selection);
             if (!provider.id().equals(snapshot.providerId())) {
                 throw new IllegalStateException("Project data provider returned mismatched providerId: "
                         + snapshot.providerId());
@@ -144,6 +147,13 @@ public class ProjectDataSyncService {
                 providerActiveScope,
                 firstScope
         );
+        if (activeScope != null) {
+            settingsService.setActiveScope(
+                    activeScope.context().getId(),
+                    activeScope.space().getId(),
+                    activeScope.iteration() != null ? activeScope.iteration().getId() : null
+            );
+        }
         ProjectDataSyncStatsDto stats = new ProjectDataSyncStatsDto(
                 snapshot.workItems().size(),
                 created,
@@ -454,6 +464,10 @@ public class ProjectDataSyncService {
     }
 
     private SyncedScope resolveSavedScope(String providerId, Set<String> syncedScopeKeys) {
+        SyncedScope externalScope = resolveSavedExternalScope(providerId, syncedScopeKeys);
+        if (externalScope != null) {
+            return externalScope;
+        }
         ProjectDataProviderSettingsService.ActiveScopeIds ids = settingsService.activeScopeIds(providerId);
         if (ids.projectContextId() == null || ids.projectSpaceId() == null) {
             return null;
@@ -475,6 +489,42 @@ public class ProjectDataSyncService {
         if (iteration != null
                 && (!providerId.equals(iteration.getProviderId())
                 || !space.getId().equals(iteration.getProjectSpaceId()))) {
+            return null;
+        }
+        if (!syncedScopeStillExists(providerId, syncedScopeKeys, context, space, iteration)) {
+            return null;
+        }
+        return new SyncedScope(context, space, iteration);
+    }
+
+    private SyncedScope resolveSavedExternalScope(String providerId, Set<String> syncedScopeKeys) {
+        ProjectDataScopeSelectionDto selection = settingsService.activeScopeSelection(providerId);
+        if (isBlank(selection.externalProjectId()) || isBlank(selection.externalSpaceId())) {
+            return null;
+        }
+        ProjectContextEntity context = projectContextMapper.findContextByProviderAndExternalProjectId(
+                providerId,
+                selection.externalProjectId()
+        );
+        if (context == null) {
+            return null;
+        }
+        ProjectSpaceEntity space = projectContextMapper.findSpaceByProviderAndExternalSpaceId(
+                providerId,
+                context.getId(),
+                selection.externalSpaceId()
+        );
+        if (space == null) {
+            return null;
+        }
+        ProjectIterationEntity iteration = isBlank(selection.externalIterationId())
+                ? null
+                : projectContextMapper.findIterationByProviderAndExternalIterationId(
+                        providerId,
+                        space.getId(),
+                        selection.externalIterationId()
+                );
+        if (!isBlank(selection.externalIterationId()) && iteration == null) {
             return null;
         }
         if (!syncedScopeStillExists(providerId, syncedScopeKeys, context, space, iteration)) {

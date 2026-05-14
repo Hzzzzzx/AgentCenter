@@ -41,13 +41,16 @@ public class EnterpriseCloudeReqProjectDataProvider implements ProjectDataProvid
     }
 
     @Override
-    public ProjectDataSnapshotDto snapshot() {
+    public ProjectDataSnapshotDto snapshot(ProjectDataScopeSelectionDto selection) {
+        // 优先使用 selection.externalProjectId()/externalSpaceId()/externalIterationId()
         // 调企业内部接口，并映射成 ProjectDataSnapshotDto。
     }
 }
 ```
 
 Provider 会被 `ProjectDataProviderRegistry` 自动注册。运行设置页切换到 `enterprise-cloudereq` 后，前端会触发后端 sync，并刷新项目管理页、标题栏迭代下拉、首页统计、工作项列表和任务编排配置。
+
+`ProjectDataProvider` 仍保留无参 `snapshot()`；Bridge 同步时会优先调用带 selection 的默认方法。企业 Provider 应覆盖 `snapshot(ProjectDataScopeSelectionDto selection)`，fixture/mock Provider 可以继续只实现无参 `snapshot()`。
 
 ## Provider 必须返回的数据
 
@@ -174,13 +177,14 @@ new ProjectDataSnapshotDto(
 ```json
 {
   "providerId": "enterprise-cloudereq",
+  "projectName": "企业车",
   "externalProjectId": "PROJ-1001",
   "externalSpaceId": "SPACE-20",
   "externalIterationId": "ITER-2026-05"
 }
 ```
 
-保存成功后，`GET /api/project-data-providers` 会返回 `activeExternalProjectId`、`activeExternalSpaceId`、`activeExternalIterationId`。前端据此回显当前生效上下文；再次 `POST /api/project-data-providers/sync` 时，如果该 scope 仍存在，Bridge 会保留它，不会被 Provider 默认 active context 覆盖。
+保存成功后，`GET /api/project-data-providers` 会返回 `activeProjectName`、`activeExternalProjectId`、`activeExternalSpaceId`、`activeExternalIterationId`。前端据此回显当前生效上下文；再次 `POST /api/project-data-providers/sync` 时，Bridge 会把这组 scope 传入 Provider。如果同步结果中仍包含该 scope，Bridge 会保留它，不会被 Provider 默认 active context 覆盖。
 
 ## 扩展字段策略
 

@@ -35,6 +35,7 @@ const selectedArtifact = ref<ArtifactDto | null>(null)
 const conversationReturnView = ref('home')
 const settingsTab = ref<string>('skills')
 const appShellRef = ref<InstanceType<typeof AppShell> | null>(null)
+const runtimeSettingsStore = useRuntimeSettingsStore()
 const emptyProjectContext: ProjectContextSelection = {
   id: '',
   project: '',
@@ -55,6 +56,7 @@ const projectContext = computed<ProjectContextSelection>({
   get: () => (
     projectContexts.value.find((item) => item.id === activeProjectContextId.value)
     ?? projectContexts.value[0]
+    ?? pendingProjectContext.value
     ?? emptyProjectContext
   ),
   set: (value) => {
@@ -67,6 +69,23 @@ const projectContext = computed<ProjectContextSelection>({
     }
     activeProjectContextId.value = value.id
   },
+})
+const pendingProjectContext = computed<ProjectContextSelection | null>(() => {
+  const externalProjectId = runtimeSettingsStore.activeExternalProjectId
+  const externalSpaceId = runtimeSettingsStore.activeExternalSpaceId
+  const externalIterationId = runtimeSettingsStore.activeExternalIterationId
+  if (!externalProjectId && !externalSpaceId && !externalIterationId) return null
+  return {
+    id: '',
+    externalProjectId,
+    project: runtimeSettingsStore.activeProjectName || externalProjectId || '',
+    externalCloudeReqProjectId: externalProjectId,
+    cloudeReqProject: externalProjectId || '',
+    externalSpaceId,
+    space: externalSpaceId || '',
+    externalIterationId,
+    iteration: externalIterationId || '',
+  }
 })
 const activeProjectId = computed(() => scopeProjectIdFor(projectContext.value) || DEFAULT_PROJECT_ID)
 const activeIterationOptions = computed(() => {
@@ -86,7 +105,6 @@ const workflowStore = useWorkflowStore()
 const confirmationStore = useConfirmationStore()
 const notificationStore = useNotificationStore()
 const workItemStore = useWorkItemStore()
-const runtimeSettingsStore = useRuntimeSettingsStore()
 const workflowProjectionStore = useWorkItemWorkflowProjectionStore()
 const refreshTimerIds = new Set<number>()
 const workflowWatchTimerByWorkItemId = new Map<string, number>()
@@ -421,7 +439,9 @@ function applyProjectDataSnapshot(snapshot: ProjectDataSnapshotDto) {
   projectContexts.value = snapshot.contexts.map((context) => ({
     id: context.id,
     externalProjectId: context.externalProjectId,
-    project: context.project,
+    project: context.externalProjectId === runtimeSettingsStore.activeExternalProjectId
+      ? runtimeSettingsStore.activeProjectName || context.project
+      : context.project,
     externalCloudeReqProjectId: context.externalCloudeReqProjectId,
     cloudeReqProject: context.cloudeReqProject,
     externalSpaceId: context.externalSpaceId,
@@ -452,11 +472,12 @@ function matchesSavedProjectScope(context: ProjectContextSelection) {
 }
 
 async function handleSaveProjectContext(context: ProjectContextSelection) {
-  if (!context.id || projectContextSaving.value) return
+  if (projectContextSaving.value) return
   projectContextSaving.value = true
   try {
     await runtimeSettingsStore.setProjectDataScope({
       providerId: runtimeSettingsStore.activeProjectDataProviderId || null,
+      projectName: firstNonBlank(context.project),
       projectId: scopeProjectIdFor(context),
       spaceId: firstNonBlank(context.externalSpaceId, context.space),
       iterationId: firstNonBlank(context.externalIterationId, context.iteration),
@@ -464,7 +485,9 @@ async function handleSaveProjectContext(context: ProjectContextSelection) {
       externalSpaceId: firstNonBlank(context.externalSpaceId, context.space),
       externalIterationId: firstNonBlank(context.externalIterationId, context.iteration),
     })
-    projectContext.value = context
+    if (context.id) {
+      projectContext.value = context
+    }
     await refreshWorkItemState()
     notificationStore.push({
       anchor: 'right-panel',

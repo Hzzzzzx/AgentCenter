@@ -40,6 +40,23 @@ class ProjectDataProviderControllerTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.activeProviderId").value("fixture-beta"));
 
+            mockMvc.perform(put("/api/project-data-providers/active-scope")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {
+                                      "providerId":"fixture-beta",
+                                      "projectName":"企业车",
+                                      "externalProjectId":"beta-project-enterprise",
+                                      "externalSpaceId":"beta-space-enterprise",
+                                      "externalIterationId":"beta-sprint-21"
+                                    }
+                                    """))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.activeProjectName").value("企业车"))
+                    .andExpect(jsonPath("$.activeExternalProjectId").value("beta-project-enterprise"))
+                    .andExpect(jsonPath("$.activeExternalSpaceId").value("beta-space-enterprise"))
+                    .andExpect(jsonPath("$.activeExternalIterationId").value("beta-sprint-21"));
+
             mockMvc.perform(post("/api/project-data-providers/sync"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.providerId").value("fixture-beta"))
@@ -94,6 +111,7 @@ class ProjectDataProviderControllerTest {
                             .content("""
                                     {
                                       "providerId":"fixture-beta",
+                                      "projectName":"安全治理",
                                       "externalProjectId":"beta-project-security",
                                       "externalSpaceId":"beta-space-security",
                                       "externalIterationId":"beta-long-governance"
@@ -101,6 +119,7 @@ class ProjectDataProviderControllerTest {
                                     """))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.activeProviderId").value("fixture-beta"))
+                    .andExpect(jsonPath("$.activeProjectName").value("安全治理"))
                     .andExpect(jsonPath("$.activeExternalProjectId").value("beta-project-security"))
                     .andExpect(jsonPath("$.activeExternalSpaceId").value("beta-space-security"))
                     .andExpect(jsonPath("$.activeExternalIterationId").value("beta-long-governance"));

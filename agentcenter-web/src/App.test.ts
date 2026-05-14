@@ -51,6 +51,7 @@ const mocks = vi.hoisted(() => {
   }
   const runtimeSettingsStore = {
     activeProjectDataProviderId: 'fixture-alpha',
+    activeProjectName: null,
     activeExternalProjectId: null,
     activeExternalSpaceId: null,
     activeExternalIterationId: null,
@@ -72,6 +73,7 @@ vi.mock('./api/projectDataProviders', () => ({
       activeProjectContextId: null,
       activeProjectSpaceId: null,
       activeProjectIterationId: null,
+      activeProjectName: null,
     }),
     sync: vi.fn().mockResolvedValue({
       providerId: 'fixture-alpha',
@@ -181,8 +183,8 @@ describe('App.vue', () => {
     await flushPromises()
 
     expect(wrapper.find('.project-context').exists()).toBe(true)
-    const projectSelect = wrapper.find('.project-context select[aria-label="选择项目"]')
-    await projectSelect.setValue('平台接入')
+    const projectInput = wrapper.find('.project-context input[aria-label="自定义项目名称"]')
+    await projectInput.setValue('平台接入')
     await flushPromises()
 
     expect(wrapper.find('.title-bar__context-project').text()).toBe('AgentCenter')
@@ -192,6 +194,7 @@ describe('App.vue', () => {
     expect(wrapper.find('.title-bar__context-project').text()).toBe('平台接入')
     expect(mocks.runtimeSettingsStore.setProjectDataScope).toHaveBeenCalledWith({
       providerId: 'fixture-alpha',
+      projectName: '平台接入',
       projectId: 'fixture-alpha:alpha-project-platform',
       spaceId: 'alpha-space-platform',
       iterationId: 'alpha-sprint-15',

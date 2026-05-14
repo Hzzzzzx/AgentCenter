@@ -121,6 +121,7 @@ export interface ProjectDataProviderSettingsDto {
   activeProjectContextId?: string | null
   activeProjectSpaceId?: string | null
   activeProjectIterationId?: string | null
+  activeProjectName?: string | null
   activeExternalProjectId?: string | null
   activeExternalSpaceId?: string | null
   activeExternalIterationId?: string | null
@@ -132,6 +133,7 @@ export interface UpdateProjectDataProviderRequest {
 
 export interface UpdateProjectDataScopeRequest {
   providerId?: string | null
+  projectName?: string | null
   projectId?: string | null
   spaceId?: string | null
   iterationId?: string | null
