@@ -560,29 +560,25 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
     @Override
     public void refreshMcps() {
-        agentToOpencodeSession.clear();
-        sessionWorkingDirectories.clear();
-        cancelGenerations.clear();
-        processManager.restartIfRunning();
+        recordRuntimeResourceRefresh("MCP", null);
     }
 
     @Override
     public void refreshSkills(RuntimeSkillSnapshot snapshot) {
-        agentToOpencodeSession.clear();
-        sessionWorkingDirectories.clear();
-        cancelGenerations.clear();
-        if (snapshot != null && snapshot.projectRoot() != null && !snapshot.projectRoot().isBlank()) {
-            processManager.restartIfRunning(Path.of(snapshot.projectRoot()));
-        } else {
-            processManager.restartIfRunning();
-        }
+        Path projectRoot = snapshot != null && snapshot.projectRoot() != null && !snapshot.projectRoot().isBlank()
+                ? Path.of(snapshot.projectRoot())
+                : null;
+        recordRuntimeResourceRefresh("Skill", projectRoot);
     }
 
     public void refreshMcps(Path projectWorkdir) {
-        agentToOpencodeSession.clear();
-        sessionWorkingDirectories.clear();
-        cancelGenerations.clear();
-        processManager.restartIfRunning(projectWorkdir);
+        recordRuntimeResourceRefresh("MCP", projectWorkdir);
+    }
+
+    private void recordRuntimeResourceRefresh(String resourceType, Path projectWorkdir) {
+        String projectRoot = projectWorkdir == null ? "<default-runtime-workspace>" : projectWorkdir.toString();
+        log.info("{} resources refreshed for {}; keeping opencode serve running so active conversations are not interrupted",
+                resourceType, projectRoot);
     }
 
     @Override

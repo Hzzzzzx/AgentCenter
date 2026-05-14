@@ -5,6 +5,8 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import java.nio.file.Path;
+import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -17,8 +19,10 @@ import org.mockito.ArgumentCaptor;
 import com.agentcenter.bridge.api.dto.RuntimeEventDto;
 import com.agentcenter.bridge.application.ProjectRuntimeWorkspaceResolver;
 import com.agentcenter.bridge.application.RuntimeEventService;
+import com.agentcenter.bridge.application.runtime.RuntimeSkillSnapshot;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeAckEnvelope;
 import com.agentcenter.bridge.application.runtime.protocol.RuntimeCommandEnvelope;
+import com.agentcenter.bridge.application.runtime.protocol.RuntimeCommandTypes;
 import com.agentcenter.bridge.application.runtime.SkillRunResult;
 import com.agentcenter.bridge.domain.runtime.RuntimeEventType;
 import com.agentcenter.bridge.domain.runtime.RuntimeType;
@@ -522,6 +526,49 @@ class OpenCodeRuntimeAdapterCreateSessionTest {
         assertTrue(event.payloadJson().contains("请检查当前 prompt 组装"));
         assertTrue(event.payloadJson().contains("本轮用户消息内包含 Runtime 工作目录边界约束"));
         assertTrue(event.payloadJson().contains("\"opencodePromptAsyncBody\""));
+    }
+
+    @Test
+    void refreshSkillsDoesNotRestartServeOrDropExistingSessionMapping() {
+        ObjectNode createAckPayload = objectMapper.createObjectNode();
+        createAckPayload.put("sessionId", "ses_refresh");
+        RuntimeAckEnvelope createAck = new RuntimeAckEnvelope(
+                null, "agentcenter.runtime.v1", null,
+                "ack-create-id", "corr-id", null,
+                RuntimeType.OPENCODE, null, "ses_refresh",
+                true, null, createAckPayload, null);
+
+        RuntimeAckEnvelope sendAck = new RuntimeAckEnvelope(
+                null, "agentcenter.runtime.v1", null,
+                "ack-send-id", "corr-id", null,
+                RuntimeType.OPENCODE, null, "ses_refresh",
+                true, null, objectMapper.createObjectNode(), null);
+
+        ArgumentCaptor<RuntimeCommandEnvelope> envelopeCaptor =
+                ArgumentCaptor.forClass(RuntimeCommandEnvelope.class);
+        when(commandTransport.send(envelopeCaptor.capture())).thenReturn(createAck, sendAck);
+        when(eventSubscriber.getAgentSessionId("ses_refresh")).thenReturn("agent-ses-refresh");
+        when(commandTransport.fetchMessages(anyString(), anyString(), eq("ses_refresh")))
+                .thenReturn(objectMapper.createArrayNode());
+
+        adapter.createSession("work-refresh", "agent-ses-refresh");
+        adapter.refreshSkills(new RuntimeSkillSnapshot(
+                OffsetDateTime.now(), "/tmp/project", List.of()));
+        adapter.sendMessage("agent-ses-refresh", "继续当前会话");
+
+        verify(processManager, never()).restartIfRunning();
+        verify(processManager, never()).restartIfRunning(any(Path.class));
+        assertEquals(RuntimeCommandTypes.SESSION_ENSURE, envelopeCaptor.getAllValues().get(0).type());
+        assertEquals(RuntimeCommandTypes.CONVERSATION_MESSAGE_SEND, envelopeCaptor.getAllValues().get(1).type());
+        assertEquals("ses_refresh", envelopeCaptor.getAllValues().get(1).runtimeSessionId());
+    }
+
+    @Test
+    void refreshMcpsDoesNotRestartServe() {
+        adapter.refreshMcps(Path.of("/tmp/project"));
+
+        verify(processManager, never()).restartIfRunning();
+        verify(processManager, never()).restartIfRunning(any(Path.class));
     }
 
     @Test

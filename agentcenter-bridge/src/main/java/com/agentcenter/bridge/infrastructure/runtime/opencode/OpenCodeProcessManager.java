@@ -2,6 +2,8 @@ package com.agentcenter.bridge.infrastructure.runtime.opencode;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.http.HttpClient;
@@ -10,8 +12,10 @@ import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Deque;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
@@ -77,12 +81,12 @@ public class OpenCodeProcessManager {
             throw new IllegalStateException("OpenCode serve adapter is disabled in configuration");
         }
         Path cwd = normalizeWorkingDirectory(requiredWorkingDirectory);
-        if (started && isAlive()) {
+        if (started && isServing(cwd)) {
             return baseUrl;
         }
         startLock.lock();
         try {
-            if (started && isAlive()) {
+            if (started && isServing(cwd)) {
                 return baseUrl;
             }
             startProcess(cwd);
@@ -100,7 +104,7 @@ public class OpenCodeProcessManager {
     }
 
     public boolean isHealthy(Path requiredWorkingDirectory) {
-        if (!started || !isAlive()) {
+        if (!started) {
             return false;
         }
         Path cwd = normalizeWorkingDirectory(requiredWorkingDirectory);
@@ -189,8 +193,7 @@ public class OpenCodeProcessManager {
         // First, check if opencode serve is already running on the target port.
         // This avoids spawning a conflicting process when one is already active.
         if (probeReady(cwd)) {
-            log.info("opencode serve already running at {}, reusing existing instance", baseUrl);
-            started = true;
+            attachExistingInstance();
             return;
         }
         if (isPortOpen()) {
@@ -229,19 +232,10 @@ public class OpenCodeProcessManager {
         } catch (IOException e) {
             throw new IllegalStateException("Failed to start opencode serve: " + e.getMessage(), e);
         }
+        Process startedProcess = process;
+        ProcessOutputTail outputTail = new ProcessOutputTail(20);
 
-        // Drain stdout/stderr in background to prevent buffer deadlock
-        Thread drainThread = new Thread(() -> {
-            try (var is = process.getInputStream()) {
-                byte[] buf = new byte[4096];
-                while (is.read(buf) != -1) {
-                    // discard — logged by opencode itself via --print-logs
-                }
-            } catch (IOException ignored) {
-            }
-        }, "opencode-serve-drain");
-        drainThread.setDaemon(true);
-        drainThread.start();
+        startOutputDrain(startedProcess, outputTail);
 
         // Handle unexpected exit
         process.onExit().thenAccept(p -> {
@@ -251,9 +245,13 @@ public class OpenCodeProcessManager {
             }
         });
 
-        waitForReady(cwd);
+        boolean attachedExisting = waitForReady(cwd, startedProcess, outputTail);
         started = true;
-        log.info("opencode serve is ready at {}", baseUrl);
+        if (attachedExisting) {
+            log.info("opencode serve is ready at {} via an existing instance", baseUrl);
+        } else {
+            log.info("opencode serve is ready at {}", baseUrl);
+        }
     }
 
     /**
@@ -279,7 +277,7 @@ public class OpenCodeProcessManager {
         }
     }
 
-    private void waitForReady(Path requiredWorkingDirectory) {
+    private boolean waitForReady(Path requiredWorkingDirectory, Process startedProcess, ProcessOutputTail outputTail) {
         Path cwd = normalizeWorkingDirectory(requiredWorkingDirectory);
         long deadline = System.currentTimeMillis() + READY_TIMEOUT_MS;
         String lastError = "";
@@ -293,15 +291,21 @@ public class OpenCodeProcessManager {
                         .build();
                 HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
                 if (response.statusCode() == 200) {
-                    return;
+                    return false;
                 }
                 lastError = "HTTP " + response.statusCode();
             } catch (Exception e) {
                 lastError = e.getMessage();
             }
-            if (!process.isAlive()) {
-                throw new IllegalStateException(
-                        "opencode serve process exited before becoming ready. Check if port " + port + " is available.");
+            if (!startedProcess.isAlive()) {
+                if (probeReady(cwd)) {
+                    log.warn("opencode serve process exited with code {} while another instance became ready at {}; reusing target port",
+                            startedProcess.exitValue(), baseUrl);
+                    process = null;
+                    return true;
+                }
+                throw new IllegalStateException("opencode serve process exited before becoming ready. "
+                        + startupDiagnostics(startedProcess, outputTail, lastError));
             }
             try {
                 Thread.sleep(HEALTH_CHECK_INTERVAL_MS);
@@ -311,7 +315,53 @@ public class OpenCodeProcessManager {
             }
         }
         shutdown();
-        throw new IllegalStateException("opencode serve did not become ready within timeout: " + lastError);
+        throw new IllegalStateException("opencode serve did not become ready within timeout. "
+                + startupDiagnostics(startedProcess, outputTail, lastError));
+    }
+
+    private void attachExistingInstance() {
+        process = null;
+        started = true;
+        log.info("opencode serve already running at {}, reusing existing instance", baseUrl);
+    }
+
+    private void startOutputDrain(Process startedProcess, ProcessOutputTail outputTail) {
+        Thread drainThread = new Thread(() -> {
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                    startedProcess.getInputStream(), OpenCodeTextEncoding.WIRE_CHARSET))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    outputTail.add(line);
+                }
+            } catch (IOException e) {
+                log.debug("Failed to drain opencode serve output for PID {}: {}",
+                        startedProcess.pid(), e.getMessage());
+            }
+        }, "opencode-serve-drain");
+        drainThread.setDaemon(true);
+        drainThread.start();
+    }
+
+    private String startupDiagnostics(Process startedProcess, ProcessOutputTail outputTail, String lastError) {
+        String exitCode = startedProcess.isAlive() ? "running" : String.valueOf(startedProcess.exitValue());
+        String diagnostic = "exitCode=" + exitCode
+                + ", port=" + port
+                + ", portOpen=" + isPortOpen()
+                + ", lastProbeError=" + summarize(lastError)
+                + ". Check if port " + port + " is available.";
+        String processOutput = outputTail.snapshot();
+        if (!processOutput.isBlank()) {
+            diagnostic += " Last process output:\n" + processOutput;
+        }
+        return diagnostic;
+    }
+
+    private String summarize(String value) {
+        if (value == null || value.isBlank()) {
+            return "<none>";
+        }
+        String normalized = value.replace('\n', ' ').replace('\r', ' ').trim();
+        return normalized.length() <= 160 ? normalized : normalized.substring(0, 157) + "...";
     }
 
     private Path normalizeWorkingDirectory(Path requiredWorkingDirectory) {
@@ -451,5 +501,39 @@ public class OpenCodeProcessManager {
 
     private boolean isAlive() {
         return process != null && process.isAlive();
+    }
+
+    private boolean isServing(Path requiredWorkingDirectory) {
+        if (isAlive()) {
+            return true;
+        }
+        return process == null && probeReady(requiredWorkingDirectory);
+    }
+
+    private static final class ProcessOutputTail {
+        private final int limit;
+        private final Deque<String> lines = new ArrayDeque<>();
+
+        private ProcessOutputTail(int limit) {
+            this.limit = Math.max(1, limit);
+        }
+
+        synchronized void add(String line) {
+            if (line == null) {
+                return;
+            }
+            String normalized = line.strip();
+            if (normalized.length() > 500) {
+                normalized = normalized.substring(0, 500) + "...";
+            }
+            lines.addLast(normalized);
+            while (lines.size() > limit) {
+                lines.removeFirst();
+            }
+        }
+
+        synchronized String snapshot() {
+            return String.join("\n", lines);
+        }
     }
 }

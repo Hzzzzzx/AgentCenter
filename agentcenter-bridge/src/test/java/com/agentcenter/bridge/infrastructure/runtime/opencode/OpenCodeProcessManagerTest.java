@@ -3,7 +3,10 @@ package com.agentcenter.bridge.infrastructure.runtime.opencode;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertIterableEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.net.ServerSocket;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -83,5 +86,37 @@ class OpenCodeProcessManagerTest {
                 true);
 
         assertIterableEquals(List.of("C:\\tools\\opencode.exe", "serve"), commandLine);
+    }
+
+    @Test
+    void ensureRunning_processExitsBeforeReadyReportsExitCodeAndOutputTail() throws Exception {
+        Path command = tempDir.resolve("fake-opencode");
+        Files.writeString(command, """
+                #!/usr/bin/env sh
+                echo fake-opencode-starting
+                echo fake-opencode-failed >&2
+                exit 42
+                """);
+        command.toFile().setExecutable(true);
+
+        OpenCodeProcessManager manager = new OpenCodeProcessManager(
+                command.toString(),
+                "127.0.0.1",
+                freePort(),
+                tempDir.toString(),
+                true);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> manager.ensureRunning(tempDir));
+
+        assertTrue(error.getMessage().contains("exitCode=42"));
+        assertTrue(error.getMessage().contains("fake-opencode-starting"));
+        assertTrue(error.getMessage().contains("fake-opencode-failed"));
+    }
+
+    private int freePort() throws Exception {
+        try (ServerSocket socket = new ServerSocket(0)) {
+            return socket.getLocalPort();
+        }
     }
 }
