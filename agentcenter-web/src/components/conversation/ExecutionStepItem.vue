@@ -74,6 +74,10 @@ function shouldShowStepTitle(step: ExecutionStep): boolean {
   return true
 }
 
+function shouldShowStepSummary(step: ExecutionStep): boolean {
+  return Boolean(step.summary) && step.kind !== 'reasoning'
+}
+
 function shouldShowToolPart(part: {
   type: string
   status?: string
@@ -100,7 +104,7 @@ function shouldShowToolPart(part: {
         </span>
       </div>
 
-      <p v-if="step.summary" class="step-item__summary">{{ step.summary }}</p>
+      <p v-if="shouldShowStepSummary(step)" class="step-item__summary">{{ step.summary }}</p>
 
       <template v-for="(part, index) in step.parts" :key="`${step.id}-part-${index}`">
         <!-- text part -->
@@ -109,7 +113,10 @@ function shouldShowToolPart(part: {
         </div>
 
         <!-- reasoning summary (collapsible) -->
-        <details v-else-if="part.type === 'reasoning'" class="step-item__reasoning">
+        <details
+          v-else-if="part.type === 'reasoning'"
+          class="step-item__reasoning"
+        >
           <summary>推理摘要</summary>
           <div class="step-item__reasoning-body">
             <MarkdownContent :content="part.summary" />
@@ -274,9 +281,13 @@ function shouldShowToolPart(part: {
 
 .step-item__summary {
   margin: 4px 0 0;
+  display: -webkit-box;
+  overflow: hidden;
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .step-item__text {

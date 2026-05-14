@@ -10,6 +10,13 @@ import type {
 } from '../api/types'
 
 export const useRuntimeResourceStore = defineStore('runtimeResources', () => {
+  type SessionAgentStateStatus = {
+    sessionId: string
+    dot: string
+    text: string
+    reason: string
+  }
+
   // ===== State =====
   const skills = ref<RuntimeSkillDetailDto[]>([])
   const mcps = ref<ProjectMcpServerDto[]>([])
@@ -19,6 +26,7 @@ export const useRuntimeResourceStore = defineStore('runtimeResources', () => {
   const skillAudits = ref<RuntimeResourceAuditDto[]>([])
   const mcpAudits = ref<RuntimeResourceAuditDto[]>([])
   const sessionResourceStatus = ref<SessionRuntimeResourceDto | null>(null)
+  const sessionAgentStateStatus = ref<SessionAgentStateStatus | null>(null)
 
   const loading = ref(false)
   const error = ref<string | null>(null)
@@ -241,6 +249,10 @@ export const useRuntimeResourceStore = defineStore('runtimeResources', () => {
     }
   }
 
+  function setSessionAgentStateStatus(status: SessionAgentStateStatus | null) {
+    sessionAgentStateStatus.value = status
+  }
+
   // ===== Selection =====
   function selectResource(type: 'SKILL' | 'MCP' | null, id: string | null) {
     selectedResourceType.value = type
@@ -261,6 +273,7 @@ export const useRuntimeResourceStore = defineStore('runtimeResources', () => {
     skillAudits,
     mcpAudits,
     sessionResourceStatus,
+    sessionAgentStateStatus,
     loading,
     error,
 
@@ -296,6 +309,7 @@ export const useRuntimeResourceStore = defineStore('runtimeResources', () => {
 
     // Session
     loadSessionResourceStatus,
+    setSessionAgentStateStatus,
 
     // Selection
     selectResource,

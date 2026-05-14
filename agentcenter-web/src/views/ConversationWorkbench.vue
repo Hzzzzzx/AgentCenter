@@ -6,6 +6,7 @@ import { useRuntimeStore } from '../stores/runtime'
 import { useWorkItemStore } from '../stores/workItems'
 import { useConfirmationStore } from '../stores/confirmations'
 import { useRuntimeSettingsStore } from '../stores/runtimeSettings'
+import { useRuntimeResourceStore } from '../stores/runtimeResources'
 import { useWorkItemWorkflowProjectionStore } from '../stores/workItemWorkflowProjection'
 import { useNotificationStore } from '../stores/notifications'
 import MessageList from '../components/conversation/MessageList.vue'
@@ -127,6 +128,7 @@ const sessionStore = useSessionStore()
 const workflowStore = useWorkflowStore()
 const runtimeStore = useRuntimeStore()
 const runtimeSettingsStore = useRuntimeSettingsStore()
+const runtimeResourceStore = useRuntimeResourceStore()
 const workItemStore = useWorkItemStore()
 const confirmationStore = useConfirmationStore()
 const notificationStore = useNotificationStore()
@@ -489,31 +491,6 @@ const isConversationRunning = computed(() =>
   )
 )
 
-const sessionResourceLabel = computed(() => {
-  const status = sessionResourceStatus.value
-  if (!status) return ''
-  const parts = [`${status.skillCount} Skill`]
-  if (status.enabledMcpCount > 0) {
-    parts.push(`${status.enabledMcpCount} MCP`)
-  }
-  return parts.join(' · ')
-})
-
-const sessionResourceSyncLabel = computed(() => {
-  const status = sessionResourceStatus.value
-  if (!status) return ''
-  return status.reloadRequired ? '下次消息重载' : '已同步'
-})
-
-const sessionResourceTooltip = computed(() => {
-  const status = sessionResourceStatus.value
-  if (!status) return ''
-  const refreshText = status.lastRefreshedAt
-    ? new Date(status.lastRefreshedAt).toLocaleString()
-    : '未刷新'
-  return `项目 ${status.projectId} · Skill 刷新时间 ${refreshText}`
-})
-
 function userFacingAgentReason(reason: string | null): string {
   if (!reason) return ''
   if (reason.includes('multiple interactions')) return '已完成多轮交互并生成详细设计'
@@ -554,6 +531,27 @@ const agentStateLabel = computed<{ dot: string; text: string; reason: string } |
   if (!entry) return null
   return { ...entry, reason: userFacingAgentReason(workflowNodeStateReason.value) }
 })
+
+function syncSessionAgentStateStatus() {
+  const sessionId = sessionStore.activeSession?.id ?? null
+  const label = agentStateLabel.value
+  if (!sessionId || !label) {
+    runtimeResourceStore.setSessionAgentStateStatus(null)
+    return
+  }
+  runtimeResourceStore.setSessionAgentStateStatus({
+    sessionId,
+    dot: label.dot,
+    text: label.text,
+    reason: label.reason,
+  })
+}
+
+watch(
+  [() => sessionStore.activeSession?.id ?? null, agentStateLabel],
+  syncSessionAgentStateStatus,
+  { immediate: true }
+)
 
 const currentInteractions = computed(() => {
   if (isHistoricalVersion.value) return []
@@ -875,6 +873,8 @@ async function ensureActiveSession(): Promise<AgentSessionDto | null> {
 
     if (!session) {
       sessionResourceStatus.value = null
+      runtimeResourceStore.sessionResourceStatus = null
+      runtimeResourceStore.setSessionAgentStateStatus(null)
       return null
     }
 
@@ -1005,6 +1005,8 @@ onUnmounted(() => {
   cancelPendingScroll()
   clearInteractionFallbackTimers()
   runtimeStore.disconnectSSE()
+  runtimeResourceStore.sessionResourceStatus = null
+  runtimeResourceStore.setSessionAgentStateStatus(null)
 })
 
 function isNearMessagesBottom(el: HTMLElement): boolean {
@@ -1383,16 +1385,19 @@ async function refreshSkills() {
 async function refreshSessionResourceStatus(sessionId = sessionStore.activeSession?.id ?? null) {
   if (!sessionId) {
     sessionResourceStatus.value = null
+    runtimeResourceStore.sessionResourceStatus = null
     return
   }
   try {
     const status = await sessionResourceApi.getStatus(sessionId)
     if (sessionStore.activeSession?.id === sessionId) {
       sessionResourceStatus.value = status
+      runtimeResourceStore.sessionResourceStatus = status
     }
   } catch (error) {
     if (sessionStore.activeSession?.id === sessionId) {
       sessionResourceStatus.value = null
+      runtimeResourceStore.sessionResourceStatus = null
     }
     console.debug('Failed to load session runtime resources', error)
   }
@@ -1788,28 +1793,6 @@ function timestamp(value: string | null | undefined): number {
           </div>
         </div>
         <div class="conversation-workbench__header-actions">
-          <span
-            v-if="agentStateLabel"
-            class="conversation-workbench__agent-state"
-          >
-            {{ agentStateLabel.dot }} {{ agentStateLabel.text }}
-            <small v-if="agentStateLabel.reason">{{ agentStateLabel.reason }}</small>
-          </span>
-          <span
-            class="conversation-workbench__socket"
-            :class="{ 'conversation-workbench__socket--online': runtimeStore.connected }"
-          >
-            {{ runtimeStore.connected ? '已连接' : '连接中' }}
-          </span>
-          <span
-            v-if="sessionResourceStatus"
-            class="conversation-workbench__resource"
-            :class="{ 'conversation-workbench__resource--reload': sessionResourceStatus.reloadRequired }"
-            :title="sessionResourceTooltip"
-          >
-            {{ sessionResourceLabel }}
-            <small>{{ sessionResourceSyncLabel }}</small>
-          </span>
           <button
             class="conversation-workbench__refresh"
             :disabled="refreshingSkills"
@@ -2183,97 +2166,6 @@ function timestamp(value: string | null | undefined): number {
   align-items: center;
   gap: 10px;
   min-width: 0;
-}
-
-.conversation-workbench__agent-state {
-  display: inline-flex;
-  flex: 1 1 auto;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  max-width: 520px;
-  min-height: 32px;
-  padding: 0 10px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 800;
-  white-space: nowrap;
-}
-
-.conversation-workbench__agent-state small {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 700;
-  margin-left: 4px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.conversation-workbench__socket {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 32px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: var(--bg-tertiary);
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.conversation-workbench__socket::before {
-  content: '';
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--text-muted);
-}
-
-.conversation-workbench__socket--online {
-  background: var(--success-soft);
-  color: var(--success);
-}
-
-.conversation-workbench__socket--online::before {
-  background: var(--success);
-}
-
-.conversation-workbench__resource {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 32px;
-  max-width: 180px;
-  padding: 0 10px;
-  overflow: hidden;
-  border: 1px solid var(--border-color);
-  border-radius: 999px;
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 850;
-  white-space: nowrap;
-}
-
-.conversation-workbench__resource small {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 800;
-  text-overflow: ellipsis;
-}
-
-.conversation-workbench__resource--reload {
-  border-color: var(--warning-border, var(--border-color));
-  background: var(--warning-soft, var(--bg-tertiary));
-  color: var(--warning, var(--text-secondary));
 }
 
 .conversation-workbench__refresh {

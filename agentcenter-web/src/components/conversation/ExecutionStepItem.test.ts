@@ -89,6 +89,7 @@ describe('ExecutionStepItem.vue', () => {
           order: 1,
           kind: 'reasoning',
           title: '思考',
+          summary: '这是一段很长的推理摘要，不应该直接铺在步骤列表中。',
           status: 'completed',
           parts: [{
             type: 'reasoning',
@@ -114,6 +115,8 @@ describe('ExecutionStepItem.vue', () => {
 
     expect(wrapper.find('.step-item__title-wrap').text()).toBe('深度思考')
     expect(wrapper.text()).not.toContain('思考 思考')
+    expect(wrapper.find('.step-item__summary').exists()).toBe(false)
     expect(wrapper.find('.step-item__reasoning summary').text()).toBe('推理摘要')
+    expect(wrapper.find('.step-item__reasoning').attributes('open')).toBeUndefined()
   })
 })

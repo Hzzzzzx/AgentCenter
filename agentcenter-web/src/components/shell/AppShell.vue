@@ -6,6 +6,9 @@ import CenterWorkbench from './CenterWorkbench.vue'
 import RightPanel from './RightPanel.vue'
 import StatusBar from './StatusBar.vue'
 import type { AgentSessionDto, ArtifactDto, WorkItemDto } from '../../api/types'
+import { useRuntimeStore } from '../../stores/runtime'
+import { useRuntimeResourceStore } from '../../stores/runtimeResources'
+import { useSessionStore } from '../../stores/sessions'
 import type { ProjectContextOptions, ProjectContextSelection } from '../../types/projectContext'
 
 interface Props {
@@ -54,6 +57,9 @@ const rightCollapsed = ref(false)
 const rightExpanded = ref(false)
 const leftWidth = ref(280)
 const rightWidth = ref(360)
+const runtimeStore = useRuntimeStore()
+const runtimeResourceStore = useRuntimeResourceStore()
+const sessionStore = useSessionStore()
 
 type ResizeTarget = 'left' | 'right'
 
@@ -70,6 +76,35 @@ const shellStyle = computed(() => ({
 }))
 const effectiveRightCollapsed = computed(() => props.rightPanelSuppressed || rightCollapsed.value)
 const effectiveRightExpanded = computed(() => rightExpanded.value && !effectiveRightCollapsed.value)
+const runtimeConnectionLabel = computed(() => runtimeStore.connected ? '已连接' : '连接中')
+const sessionResourceLabel = computed(() => {
+  const status = runtimeResourceStore.sessionResourceStatus
+  if (!status) return ''
+  const parts = [`${status.skillCount} Skill`]
+  if (status.enabledMcpCount > 0) {
+    parts.push(`${status.enabledMcpCount} MCP`)
+  }
+  return parts.join(' · ')
+})
+const sessionResourceSyncLabel = computed(() => {
+  const status = runtimeResourceStore.sessionResourceStatus
+  if (!status) return ''
+  return status.reloadRequired ? '下次消息重载' : '已同步'
+})
+const sessionResourceTooltip = computed(() => {
+  const status = runtimeResourceStore.sessionResourceStatus
+  if (!status) return ''
+  const refreshText = status.lastRefreshedAt
+    ? new Date(status.lastRefreshedAt).toLocaleString()
+    : '未刷新'
+  return `项目 ${status.projectId} · Skill 刷新时间 ${refreshText}`
+})
+const sessionAgentStateStatus = computed(() => {
+  const status = runtimeResourceStore.sessionAgentStateStatus
+  const sessionId = sessionStore.activeSession?.id ?? null
+  if (!status || !sessionId || status.sessionId !== sessionId) return null
+  return status
+})
 
 function handleNavigate(viewId: string) {
   emit('update:activeView', viewId)
@@ -239,6 +274,15 @@ watch(() => props.rightPanelSuppressed, (suppressed) => {
         system-status="normal"
         :tool-connections="12"
         :agents-online="3"
+        :runtime-connected="runtimeStore.connected"
+        :runtime-connection-label="runtimeConnectionLabel"
+        :resource-label="sessionResourceLabel"
+        :resource-sync-label="sessionResourceSyncLabel"
+        :resource-reload-required="Boolean(runtimeResourceStore.sessionResourceStatus?.reloadRequired)"
+        :resource-tooltip="sessionResourceTooltip"
+        :agent-state-dot="sessionAgentStateStatus?.dot ?? ''"
+        :agent-state-text="sessionAgentStateStatus?.text ?? ''"
+        :agent-state-reason="sessionAgentStateStatus?.reason ?? ''"
       />
     </div>
   </div>
