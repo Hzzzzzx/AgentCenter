@@ -596,7 +596,7 @@ class OpenCodeRuntimeEventTranslatorTest {
         {
           "type": "question.asked",
           "properties": {
-            "id": "q_1",
+            "id": "que_1",
             "sessionID": "opencode_ses_1",
             "tool": {"messageID": "msg_1", "callID": "call_question"},
             "questions": [
@@ -621,8 +621,8 @@ class OpenCodeRuntimeEventTranslatorTest {
         RuntimeEventEnvelope question = result.get(0);
         assertEquals(RuntimeEventTypes.QUESTION_REQUESTED, question.type());
         assertRuntimeSessionId(question);
-        assertEquals("q_1", question.payload().path("requestId").asText());
-        assertEquals("question_opencode_ses_1_q_1", question.payload().path("confirmationId").asText());
+        assertEquals("que_1", question.payload().path("requestId").asText());
+        assertEquals("question_opencode_ses_1_que_1", question.payload().path("confirmationId").asText());
         assertEquals("call_question", question.payload().path("toolCallId").asText());
         assertEquals("请选择推进方案", question.payload().path("questions").get(0).path("question").asText());
 
@@ -647,7 +647,8 @@ class OpenCodeRuntimeEventTranslatorTest {
               "state": {
                 "status": "running",
                 "input": {
-                  "id": "q_tool_1",
+                  "id": "tool-abc",
+                  "requestID": "que_tool_1",
                   "questions": [
                     {
                       "header": "范围",
@@ -667,8 +668,8 @@ class OpenCodeRuntimeEventTranslatorTest {
         assertEquals(4, result.size());
         RuntimeEventEnvelope question = result.get(0);
         assertEquals(RuntimeEventTypes.QUESTION_REQUESTED, question.type());
-        assertEquals("q_tool_1", question.payload().path("requestId").asText());
-        assertEquals("question_opencode_ses_1_q_tool_1", question.payload().path("confirmationId").asText());
+        assertEquals("que_tool_1", question.payload().path("requestId").asText());
+        assertEquals("question_opencode_ses_1_que_tool_1", question.payload().path("confirmationId").asText());
         assertEquals("call_question", question.payload().path("toolCallId").asText());
         assertEquals("message.part.updated", question.payload().path("rawEventType").asText());
         assertEquals("tool", question.payload().path("rawPartType").asText());
@@ -694,7 +695,7 @@ class OpenCodeRuntimeEventTranslatorTest {
               "state": {
                 "status": "running",
                 "input": {
-                  "id": "q_1",
+                  "id": "que_1",
                   "questions": [{"question": "请选择推进方案"}]
                 }
               }
@@ -706,7 +707,7 @@ class OpenCodeRuntimeEventTranslatorTest {
         {
           "type": "question.asked",
           "properties": {
-            "id": "q_1",
+            "id": "que_1",
             "tool": {"callID": "call_question"},
             "questions": [{"question": "请选择推进方案"}]
           }

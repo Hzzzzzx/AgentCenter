@@ -273,8 +273,12 @@ public class ConfirmationService {
                         isDecision,
                         isException,
                         isSkip));
-        publishResolutionEventAfterCommit(entity, actionType, actionDescription,
-                combineAfterCommitActions(questionResponseAfterCommit, workflowDispatchAfterCommit));
+        Runnable afterCommitAction = combineAfterCommitActions(questionResponseAfterCommit, workflowDispatchAfterCommit);
+        if (isQuestionConfirmation) {
+            publishQuestionResolutionEventAfterCommit(entity, actionType, actionDescription, afterCommitAction);
+        } else {
+            publishResolutionEventAfterCommit(entity, actionType, actionDescription, afterCommitAction);
+        }
 
         return toDto(entity);
     }
@@ -357,13 +361,7 @@ public class ConfirmationService {
     private void respondQuestionAfterCommit(ConfirmationRequestEntity entity,
                                             ResolveConfirmationRequest request,
                                             ConfirmationActionType actionType) {
-        try {
-            questionConfirmationHandler.respondQuestion(entity, request, actionType);
-        } catch (Exception e) {
-            publishCommittedConfirmationResponseFailure(entity, actionType, "question.reply.failed", e);
-            log.warn("conversation.question_reply_after_commit status=failed confirmation={} requestId={} error={}",
-                    entity.getId(), entity.getInteractionId(), errorMessage(e));
-        }
+        questionConfirmationHandler.respondQuestion(entity, request, actionType);
     }
 
     private ConfirmationRequestDto handleReject(ConfirmationRequestEntity entity,
@@ -381,8 +379,13 @@ public class ConfirmationService {
                 ConfirmationRequestType.valueOf(entity.getRequestType()),
                 ConfirmationActionType.REJECT,
                 "rejected");
-        publishResolutionEventAfterCommit(entity, ConfirmationActionType.REJECT,
-                buildActionDescription(ConfirmationActionType.REJECT, request), afterCommitAction);
+        if (QuestionConfirmationHandler.isQuestionConfirmation(entity)) {
+            publishQuestionResolutionEventAfterCommit(entity, ConfirmationActionType.REJECT,
+                    buildActionDescription(ConfirmationActionType.REJECT, request), afterCommitAction);
+        } else {
+            publishResolutionEventAfterCommit(entity, ConfirmationActionType.REJECT,
+                    buildActionDescription(ConfirmationActionType.REJECT, request), afterCommitAction);
+        }
 
         return toDto(entity);
     }
@@ -699,6 +702,107 @@ public class ConfirmationService {
                         ? confirmation.getWorkflowNodeInstanceId()
                         : "未关联节点"
         ).trim();
+    }
+
+    private void publishQuestionResolutionEventAfterCommit(ConfirmationRequestEntity entity,
+                                                           ConfirmationActionType actionType,
+                                                           String actionDescription,
+                                                           Runnable afterCommitAction) {
+        String capturedId = entity.getId();
+        String sessionId = entity.getAgentSessionId();
+        String capturedRequestType = entity.getRequestType();
+        String capturedWorkItemId = entity.getWorkItemId();
+        String capturedWorkflowInstanceId = entity.getWorkflowInstanceId();
+        String capturedNodeInstanceId = entity.getWorkflowNodeInstanceId();
+        String capturedActionName = actionType.name();
+        String capturedTitle = entity.getTitle();
+        String capturedContent = entity.getContent();
+        String capturedContextSummary = entity.getContextSummary();
+        String capturedOptionsJson = entity.getOptionsJson();
+        String capturedComment = entity.getResolutionComment();
+        String capturedResolutionPayloadJson = entity.getResolutionPayloadJson();
+
+        String payloadJson;
+        try {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("confirmationId", capturedId);
+            payload.put("actionType", capturedActionName);
+            payload.put("requestType", capturedRequestType);
+            payload.put("title", capturedTitle);
+            if (capturedContent != null && !capturedContent.isBlank()) {
+                payload.put("question", capturedContent);
+            }
+            if (capturedContextSummary != null && !capturedContextSummary.isBlank()) {
+                payload.put("contextSummary", capturedContextSummary);
+            }
+            if (capturedOptionsJson != null && !capturedOptionsJson.isBlank()) {
+                payload.put("options", capturedOptionsJson);
+            }
+            payload.put("actionDescription", actionDescription);
+            if (capturedComment != null && !capturedComment.isBlank()) {
+                payload.put("comment", capturedComment);
+            }
+            if (capturedResolutionPayloadJson != null && !capturedResolutionPayloadJson.isBlank()) {
+                payload.put("resolutionPayload", capturedResolutionPayloadJson);
+            }
+            payloadJson = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .writeValueAsString(payload);
+        } catch (Exception e) {
+            payloadJson = "{\"confirmationId\":\"" + capturedId + "\"}";
+        }
+
+        String finalPayloadJson = payloadJson;
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    if (afterCommitAction != null) {
+                        afterCommitAction.run();
+                    }
+                } catch (Exception e) {
+                    try {
+                        restoreQuestionConfirmationForRetry(entity);
+                    } catch (Exception restoreError) {
+                        log.warn("conversation.question_response_restore status=failed confirmation={} error={}",
+                                entity.getId(), errorMessage(restoreError), restoreError);
+                    }
+                    publishCommittedConfirmationResponseFailure(entity, actionType,
+                            questionResponseFailureType(actionType), e);
+                    log.warn("conversation.question_response_after_commit status=failed confirmation={} requestId={} error={}",
+                            entity.getId(), entity.getInteractionId(), errorMessage(e), e);
+                    return;
+                }
+                if (sessionId == null || sessionId.isBlank()) {
+                    return;
+                }
+                runtimeEventService.publishCommittedEvent(new RuntimeEventDto(
+                        null,
+                        sessionId,
+                        capturedWorkItemId,
+                        capturedWorkflowInstanceId,
+                        capturedNodeInstanceId,
+                        RuntimeEventType.CONFIRMATION_RESOLVED,
+                        RuntimeEventSource.BRIDGE,
+                        finalPayloadJson,
+                        null
+                ));
+            }
+        });
+    }
+
+    private String questionResponseFailureType(ConfirmationActionType actionType) {
+        return ConfirmationActionType.REJECT.equals(actionType)
+                ? "question.reject.failed"
+                : "question.reply.failed";
+    }
+
+    private void restoreQuestionConfirmationForRetry(ConfirmationRequestEntity entity) {
+        entity.setStatus(ConfirmationStatus.PENDING.name());
+        entity.setResolvedBy(null);
+        entity.setResolvedAt(null);
+        entity.setResolutionComment(null);
+        entity.setResolutionPayloadJson(null);
+        updateConfirmationWithRetry(entity);
     }
 
     private void publishResolutionEventAfterCommit(ConfirmationRequestEntity entity,

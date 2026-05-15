@@ -150,6 +150,11 @@ export const useRuntimeStore = defineStore('runtime', () => {
 
     if (event.eventType === 'ERROR') {
       markIdle()
+      const payload = parsePayload(event.payloadJson)
+      if (isRecoverableConfirmationResponse(payload)) {
+        const confirmationStore = useConfirmationStore()
+        void confirmationStore.loadPending()
+      }
       if (event.workflowInstanceId) {
         void syncWorkflowAndWorkItem(event)
       }
@@ -437,6 +442,12 @@ export const useRuntimeStore = defineStore('runtime', () => {
       }
     }
     return ''
+  }
+
+  function isRecoverableConfirmationResponse(payload: RuntimePayload): boolean {
+    return payload.kind === 'confirmation_response'
+      && payload.status === 'failed'
+      && payload.recoverable === true
   }
 
   function shouldSyncWorkflowStatus(payload: RuntimePayload): boolean {

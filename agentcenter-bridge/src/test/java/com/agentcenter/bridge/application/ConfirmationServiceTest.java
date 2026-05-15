@@ -121,7 +121,7 @@ class ConfirmationServiceTest {
     }
 
     @Test
-    void resolveQuestionRuntimeFailureAfterCommitKeepsResolvedAndPublishesFailure() {
+    void resolveQuestionRuntimeFailureAfterCommitRestoresPendingAndPublishesFailure() {
         ConfirmationRequestEntity entity = questionConfirmation();
         when(confirmationMapper.findById(entity.getId())).thenReturn(entity);
         when(agentMessageMapper.findBySessionId(entity.getAgentSessionId())).thenReturn(List.of());
@@ -142,10 +142,16 @@ class ConfirmationServiceTest {
         TransactionSynchronizationManager.getSynchronizations()
                 .forEach(TransactionSynchronization::afterCommit);
 
+        assertThat(entity.getStatus()).isEqualTo(ConfirmationStatus.PENDING.name());
+        assertThat(entity.getResolvedBy()).isNull();
+        assertThat(entity.getResolvedAt()).isNull();
+        assertThat(entity.getResolutionComment()).isNull();
+        assertThat(entity.getResolutionPayloadJson()).isNull();
+        verify(confirmationMapper, times(2)).update(entity);
         verify(runtimeEventService).publishCommittedEvent(argThat(event ->
                 RuntimeEventType.ERROR.equals(event.eventType())
                         && event.payloadJson().contains("question.reply.failed")));
-        verify(runtimeEventService).publishCommittedEvent(argThat(event ->
+        verify(runtimeEventService, never()).publishCommittedEvent(argThat(event ->
                 RuntimeEventType.CONFIRMATION_RESOLVED.equals(event.eventType())));
     }
 
@@ -323,14 +329,14 @@ class ConfirmationServiceTest {
 
     private ConfirmationRequestEntity questionConfirmation() {
         ConfirmationRequestEntity entity = new ConfirmationRequestEntity();
-        entity.setId("question_rt_session_q_1");
+        entity.setId("question_rt_session_que_1");
         entity.setRequestType(ConfirmationRequestType.DECISION.name());
         entity.setStatus(ConfirmationStatus.PENDING.name());
         entity.setWorkflowNodeInstanceId("node-1");
         entity.setAgentSessionId("agent-session-1");
         entity.setRuntimeType("OPENCODE");
         entity.setRuntimeSessionId("rt-session");
-        entity.setInteractionId("q-1");
+        entity.setInteractionId("que-1");
         entity.setInteractionType(QuestionConfirmationHandler.INTERACTION_TYPE);
         entity.setTitle("选择方案");
         entity.setContent("请选择推进方案");

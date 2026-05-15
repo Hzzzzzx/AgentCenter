@@ -94,7 +94,10 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
 
     private List<RuntimeEventEnvelope> translateQuestionAsked(String opencodeSessionId, String agentSessionId,
                                                                JsonNode properties, RuntimeTranslationContext context) {
-        String requestId = properties.path("id").asText("");
+        String requestId = selectQuestionRequestId(
+                properties.path("requestID").asText(""),
+                properties.path("requestId").asText(""),
+                properties.path("id").asText(""));
         JsonNode questions = properties.path("questions");
         JsonNode tool = properties.path("tool");
         String toolCallId = firstNonBlank(tool.path("callID").asText(""), tool.path("call_id").asText(""));
@@ -320,18 +323,35 @@ public class OpenCodeRuntimeEventTranslator implements RuntimeEventTranslator {
             return List.of();
         }
 
-        String requestId = firstNonBlank(
-                questionInput.path("id").asText(""),
-                questionInput.path("requestId").asText(""),
+        String requestId = selectQuestionRequestId(
                 questionInput.path("requestID").asText(""),
-                part.path("requestId").asText(""),
+                questionInput.path("requestId").asText(""),
+                questionInput.path("id").asText(""),
                 part.path("requestID").asText(""),
+                part.path("requestId").asText(""),
                 callId,
                 part.path("id").asText(""));
         String messageId = firstNonBlank(part.path("messageID").asText(""), part.path("message_id").asText(""));
 
         return buildQuestionRequestedEnvelopes(opencodeSessionId, agentSessionId, requestId, questions,
                 callId, messageId, eventType, "tool", context);
+    }
+
+    private String selectQuestionRequestId(String... candidates) {
+        for (String candidate : candidates) {
+            if (isOpenCodeQuestionRequestId(candidate)) {
+                return candidate.trim();
+            }
+        }
+        String fallback = firstNonBlank(candidates);
+        if (!fallback.isBlank()) {
+            log.warn("OpenCode question request id does not match expected prefix 'que': {}", fallback);
+        }
+        return "";
+    }
+
+    private boolean isOpenCodeQuestionRequestId(String value) {
+        return value != null && value.trim().startsWith("que");
     }
 
     private boolean isQuestionTool(String skillName, String displayName) {

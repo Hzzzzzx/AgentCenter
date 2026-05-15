@@ -351,6 +351,38 @@ describe('useRuntimeStore — SSE event handlers', () => {
     expect(confirmationStore.pendingConfirmations).toHaveLength(0)
   })
 
+  it('recoverable confirmation response errors reload pending confirmations', async () => {
+    const { confirmationApi } = await import('../api/confirmations')
+    vi.mocked(confirmationApi.list)
+      .mockResolvedValueOnce([
+        { id: 'conf-retry', requestType: 'DECISION', status: 'PENDING', title: 'Retry question' } as any,
+      ])
+      .mockResolvedValueOnce([])
+    const runtimeStore = useRuntimeStore()
+
+    runtimeStore.connectSSE('sess-1')
+    runtimeStore.markBusy()
+
+    capturedOnEvent!(makeEvent({
+      eventType: 'ERROR',
+      payloadJson: JSON.stringify({
+        kind: 'confirmation_response',
+        status: 'failed',
+        recoverable: true,
+        confirmationId: 'conf-retry',
+        rawEventType: 'question.reply.failed',
+      }),
+    }))
+
+    await vi.dynamicImportSettled()
+
+    const confirmationStore = useConfirmationStore()
+    expect(runtimeStore.busy).toBe(false)
+    expect(confirmationApi.list).toHaveBeenCalledWith('PENDING')
+    expect(confirmationApi.list).toHaveBeenCalledWith('IN_CONVERSATION')
+    expect(confirmationStore.pendingConfirmations[0]?.id).toBe('conf-retry')
+  })
+
   it('deduplicates ASSISTANT_DELTA events by runtime event id', () => {
     vi.useFakeTimers()
     const runtimeStore = useRuntimeStore()

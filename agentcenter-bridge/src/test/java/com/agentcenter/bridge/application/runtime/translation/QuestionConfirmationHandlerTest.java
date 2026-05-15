@@ -61,8 +61,8 @@ class QuestionConfirmationHandlerTest {
     void createQuestionConfirmationStoresDecisionInteraction() throws Exception {
         ObjectNode payload = (ObjectNode) objectMapper.readTree("""
                 {
-                  "requestId": "q_1",
-                  "confirmationId": "question_ses_1_q_1",
+                  "requestId": "que_1",
+                  "confirmationId": "question_ses_1_que_1",
                   "toolCallId": "call_q",
                   "questions": [
                     {
@@ -88,7 +88,7 @@ class QuestionConfirmationHandlerTest {
                 ArgumentCaptor.forClass(ConfirmationRequestEntity.class);
         verify(confirmationMapper).insert(entityCaptor.capture());
         ConfirmationRequestEntity entity = entityCaptor.getValue();
-        assertEquals("question_ses_1_q_1", entity.getId());
+        assertEquals("question_ses_1_que_1", entity.getId());
         assertEquals(ConfirmationRequestType.DECISION.name(), entity.getRequestType());
         assertEquals(QuestionConfirmationHandler.INTERACTION_TYPE, entity.getInteractionType());
         assertEquals("请选择推进方案", entity.getContent());
@@ -99,7 +99,7 @@ class QuestionConfirmationHandlerTest {
         RuntimeEventDto event = eventCaptor.getValue();
         assertEquals(RuntimeEventType.CONFIRMATION_CREATED, event.eventType());
         assertEquals("agent-1", event.sessionId());
-        assertTrue(event.payloadJson().contains("question_ses_1_q_1"));
+        assertTrue(event.payloadJson().contains("question_ses_1_que_1"));
     }
 
     @Test
@@ -198,7 +198,7 @@ class QuestionConfirmationHandlerTest {
 
         handler.respondQuestion(entity, request, ConfirmationActionType.CHOOSE);
 
-        verify(adapter).replyQuestion("ses_1", "q_1", List.of(List.of("快速验证")));
+        verify(adapter).replyQuestion("ses_1", "que_1", List.of(List.of("快速验证")));
     }
 
     @Test
@@ -221,7 +221,7 @@ class QuestionConfirmationHandlerTest {
 
         handler.respondQuestion(entity, request, ConfirmationActionType.SUPPLEMENT);
 
-        verify(adapter).replyQuestion("ses_1", "q_1",
+        verify(adapter).replyQuestion("ses_1", "que_1",
                 List.of(List.of("企业项目经理"), List.of("验收标准覆盖登录失败")));
     }
 
@@ -243,7 +243,7 @@ class QuestionConfirmationHandlerTest {
 
         handler.respondQuestion(entity, request, ConfirmationActionType.SUPPLEMENT);
 
-        verify(adapter).replyQuestion("ses_1", "q_1",
+        verify(adapter).replyQuestion("ses_1", "que_1",
                 List.of(List.of("UI 可见", "端到端通过")));
     }
 
@@ -255,16 +255,16 @@ class QuestionConfirmationHandlerTest {
 
         handler.respondQuestion(entity, request, ConfirmationActionType.REJECT);
 
-        verify(adapter).rejectQuestion("ses_1", "q_1");
+        verify(adapter).rejectQuestion("ses_1", "que_1");
         verify(adapter, never()).replyQuestion(any(), any(), any());
     }
 
     private ConfirmationRequestEntity questionEntity(String requestType) {
         ConfirmationRequestEntity entity = new ConfirmationRequestEntity();
-        entity.setId("question_ses_1_q_1");
+        entity.setId("question_ses_1_que_1");
         entity.setRequestType(requestType);
         entity.setRuntimeSessionId("ses_1");
-        entity.setInteractionId("q_1");
+        entity.setInteractionId("que_1");
         entity.setInteractionType(QuestionConfirmationHandler.INTERACTION_TYPE);
         return entity;
     }
