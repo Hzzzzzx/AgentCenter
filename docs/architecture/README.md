@@ -35,6 +35,7 @@ AgentCenter 当前首页已经收敛为白色网页端工作台：
 | 6.1 | **[AGENT-RUNTIME-PROTOCOL-LAYER-DESIGN.md](./AGENT-RUNTIME-PROTOCOL-LAYER-DESIGN.md)** | **下一阶段目标状态：统一 Runtime 协议层、Provider/Transport 分离、同时支持 HTTP(S)+SSE 与 WebSocket** |
 | 6.11 | **[AGENT-RUNTIME-ADAPTER-FINAL-DESIGN.md](./AGENT-RUNTIME-ADAPTER-FINAL-DESIGN.md)** | **Agent Runtime Adapter 最终设计：前端稳定、Provider 可替换、协议与传输分离、operation/context 贯通** |
 | 6.12 | **[AGENT-RUNTIME-ADAPTER-INTEGRATION-GUIDE.md](./AGENT-RUNTIME-ADAPTER-INTEGRATION-GUIDE.md)** | **目标态 Runtime 对接指导：Provider、Transport、Translator、WebSocket/HTTP+SSE、验证清单** |
+| 6.13 | **[A-RUNTIME-ADAPTER-VALIDATION-PLAN.md](./A-RUNTIME-ADAPTER-VALIDATION-PLAN.md)** | **A Runtime 企业内部验证方案：前端合同不变、Provider 可替换、命令/事件/传输适配要求和验证清单** |
 | 6.15 | **[CONVERSATION-UI-EVENT-MAPPING-DESIGN.md](./CONVERSATION-UI-EVENT-MAPPING-DESIGN.md)** | **对话 UI 事件映射目标态：文本主回答、流式阶段段落、当前段落自动展开/完成后自动收起、OpenCode part 保真、权限三态和异常可见化** |
 | 6.16 | **[OPENCODE-CONVERSATION-LIVE-PROGRESS-IMPLEMENTATION-PLAN.md](./OPENCODE-CONVERSATION-LIVE-PROGRESS-IMPLEMENTATION-PLAN.md)** | **OpenCode 对话动态过程展示实施计划：Projector、RunStrip、PhaseStream、ToolCluster、输入区权限卡和异常防呆** |
 | 6.2 | [ENTERPRISE-WEBSOCKET-RUNTIME-ADAPTER-GUIDE.md](./ENTERPRISE-WEBSOCKET-RUNTIME-ADAPTER-GUIDE.md) | 企业内部全 WebSocket Agent Runtime 的 Provider/Transport/Translator 接入指南 |
