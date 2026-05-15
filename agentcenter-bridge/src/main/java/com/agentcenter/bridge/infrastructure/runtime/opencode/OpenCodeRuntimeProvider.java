@@ -54,12 +54,22 @@ public class OpenCodeRuntimeProvider implements RuntimeProvider {
 
     @Override
     public String createSession(String workItemId, String agentSessionId) {
-        return adapter.createSession(workItemId, agentSessionId);
+        return createSessionWithContext(RuntimeOperationContext.forSession(workItemId, agentSessionId, null));
+    }
+
+    @Override
+    public String createSessionWithContext(RuntimeOperationContext context) {
+        return adapter.createSessionWithContext(context);
     }
 
     @Override
     public String ensureSession(String workItemId, String agentSessionId, String runtimeSessionId) {
-        return adapter.ensureSession(workItemId, agentSessionId, runtimeSessionId);
+        return ensureSessionWithContext(RuntimeOperationContext.forSession(workItemId, agentSessionId, runtimeSessionId));
+    }
+
+    @Override
+    public String ensureSessionWithContext(RuntimeOperationContext context) {
+        return adapter.ensureSessionWithContext(context);
     }
 
     @Override
@@ -69,17 +79,32 @@ public class OpenCodeRuntimeProvider implements RuntimeProvider {
 
     @Override
     public SkillRunResult runSkill(String sessionId, SkillInvocationRequest request) {
-        return adapter.runSkill(sessionId, request);
+        return runSkillWithContext(RuntimeOperationContext.empty().withRuntimeSessionId(sessionId), request);
+    }
+
+    @Override
+    public SkillRunResult runSkillWithContext(RuntimeOperationContext context, SkillInvocationRequest request) {
+        return adapter.runSkillWithContext(context, request);
     }
 
     @Override
     public void sendMessage(String sessionId, String userMessage) {
-        adapter.sendMessage(sessionId, userMessage);
+        sendMessageWithContext(RuntimeOperationContext.empty().withRuntimeSessionId(sessionId), userMessage);
+    }
+
+    @Override
+    public void sendMessageWithContext(RuntimeOperationContext context, String userMessage) {
+        adapter.sendMessageWithContext(context, userMessage);
     }
 
     @Override
     public void cancel(String sessionId) {
-        adapter.cancel(sessionId);
+        cancelWithContext(RuntimeOperationContext.empty().withRuntimeSessionId(sessionId));
+    }
+
+    @Override
+    public void cancelWithContext(RuntimeOperationContext context) {
+        adapter.cancelWithContext(context);
     }
 
     @Override

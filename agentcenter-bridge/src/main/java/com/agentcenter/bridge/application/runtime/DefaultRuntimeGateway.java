@@ -32,12 +32,22 @@ public class DefaultRuntimeGateway implements RuntimeGateway {
 
     @Override
     public String createSession(RuntimeType runtimeType, String workItemId, String agentSessionId) {
-        return registry.getProvider(runtimeType).createSession(workItemId, agentSessionId);
+        return createSessionWithContext(runtimeType, RuntimeOperationContext.forSession(workItemId, agentSessionId, null));
+    }
+
+    @Override
+    public String createSessionWithContext(RuntimeType runtimeType, RuntimeOperationContext context) {
+        return registry.getProvider(runtimeType).createSessionWithContext(context);
     }
 
     @Override
     public String ensureSession(RuntimeType runtimeType, String workItemId, String agentSessionId, String runtimeSessionId) {
-        return registry.getProvider(runtimeType).ensureSession(workItemId, agentSessionId, runtimeSessionId);
+        return ensureSessionWithContext(runtimeType, RuntimeOperationContext.forSession(workItemId, agentSessionId, runtimeSessionId));
+    }
+
+    @Override
+    public String ensureSessionWithContext(RuntimeType runtimeType, RuntimeOperationContext context) {
+        return registry.getProvider(runtimeType).ensureSessionWithContext(context);
     }
 
     @Override
@@ -48,17 +58,32 @@ public class DefaultRuntimeGateway implements RuntimeGateway {
 
     @Override
     public SkillRunResult runSkill(RuntimeType runtimeType, String sessionId, SkillInvocationRequest request) {
-        return registry.getProvider(runtimeType).runSkill(sessionId, request);
+        return runSkillWithContext(runtimeType, RuntimeOperationContext.empty().withRuntimeSessionId(sessionId), request);
+    }
+
+    @Override
+    public SkillRunResult runSkillWithContext(RuntimeType runtimeType, RuntimeOperationContext context, SkillInvocationRequest request) {
+        return registry.getProvider(runtimeType).runSkillWithContext(context, request);
     }
 
     @Override
     public void sendMessage(RuntimeType runtimeType, String sessionId, String userMessage) {
-        registry.getProvider(runtimeType).sendMessage(sessionId, userMessage);
+        sendMessageWithContext(runtimeType, RuntimeOperationContext.empty().withRuntimeSessionId(sessionId), userMessage);
+    }
+
+    @Override
+    public void sendMessageWithContext(RuntimeType runtimeType, RuntimeOperationContext context, String userMessage) {
+        registry.getProvider(runtimeType).sendMessageWithContext(context, userMessage);
     }
 
     @Override
     public void cancel(RuntimeType runtimeType, String sessionId) {
-        registry.getProvider(runtimeType).cancel(sessionId);
+        cancelWithContext(runtimeType, RuntimeOperationContext.empty().withRuntimeSessionId(sessionId));
+    }
+
+    @Override
+    public void cancelWithContext(RuntimeType runtimeType, RuntimeOperationContext context) {
+        registry.getProvider(runtimeType).cancelWithContext(context);
     }
 
     @Override
@@ -92,7 +117,8 @@ public class DefaultRuntimeGateway implements RuntimeGateway {
     public String installSkill(RuntimeType runtimeType, Path projectWorkdir, String skillName, Path sourceDir) {
         return trackOperation(
                 RuntimeOperationType.SKILL_INSTALL.value(), "skill", skillName,
-                runtimeType, () -> registry.getProvider(runtimeType).installSkill(projectWorkdir, skillName, sourceDir));
+                runtimeType, RuntimeOperationContext.empty(),
+                () -> registry.getProvider(runtimeType).installSkill(projectWorkdir, skillName, sourceDir));
     }
 
     @Override
@@ -104,14 +130,16 @@ public class DefaultRuntimeGateway implements RuntimeGateway {
     public void deleteSkillFiles(RuntimeType runtimeType, Path projectWorkdir, String relativePath, String skillName) {
         trackVoidOperation(
                 RuntimeOperationType.SKILL_DELETE.value(), "skill", skillName,
-                runtimeType, () -> registry.getProvider(runtimeType).deleteSkillFiles(projectWorkdir, relativePath, skillName));
+                runtimeType, RuntimeOperationContext.empty(),
+                () -> registry.getProvider(runtimeType).deleteSkillFiles(projectWorkdir, relativePath, skillName));
     }
 
     @Override
     public void refreshSkills(RuntimeType runtimeType, RuntimeSkillSnapshot snapshot) {
         trackVoidOperation(
                 RuntimeOperationType.SKILL_SCAN.value(), "skill", null,
-                runtimeType, () -> registry.getProvider(runtimeType).refreshSkills(snapshot));
+                runtimeType, RuntimeOperationContext.empty(),
+                () -> registry.getProvider(runtimeType).refreshSkills(snapshot));
     }
 
     @Override
@@ -123,7 +151,8 @@ public class DefaultRuntimeGateway implements RuntimeGateway {
     public void refreshMcps(RuntimeType runtimeType, Path projectWorkdir) {
         trackVoidOperation(
                 RuntimeOperationType.MCP_REFRESH.value(), "mcp", "mcp_config",
-                runtimeType, () -> registry.getProvider(runtimeType).refreshMcps(projectWorkdir));
+                runtimeType, RuntimeOperationContext.empty(),
+                () -> registry.getProvider(runtimeType).refreshMcps(projectWorkdir));
     }
 
     @Override
@@ -135,7 +164,8 @@ public class DefaultRuntimeGateway implements RuntimeGateway {
     public void writeMcpConfig(RuntimeType runtimeType, Path projectWorkdir, Map<String, Object> config) {
         trackVoidOperation(
                 RuntimeOperationType.MCP_WRITE_CONFIG.value(), "mcp", "mcp_config",
-                runtimeType, () -> registry.getProvider(runtimeType).writeMcpConfig(projectWorkdir, config));
+                runtimeType, RuntimeOperationContext.empty(),
+                () -> registry.getProvider(runtimeType).writeMcpConfig(projectWorkdir, config));
     }
 
     @Override
@@ -147,7 +177,8 @@ public class DefaultRuntimeGateway implements RuntimeGateway {
     public Map<String, Object> readMcpConfig(RuntimeType runtimeType, Path projectWorkdir) {
         return trackOperation(
                 RuntimeOperationType.MCP_READ_CONFIG.value(), "mcp", "mcp_config",
-                runtimeType, () -> registry.getProvider(runtimeType).readMcpConfig(projectWorkdir));
+                runtimeType, RuntimeOperationContext.empty(),
+                () -> registry.getProvider(runtimeType).readMcpConfig(projectWorkdir));
     }
 
     @Override
@@ -166,7 +197,8 @@ public class DefaultRuntimeGateway implements RuntimeGateway {
     public List<RuntimeSkillDto> scanSkills(RuntimeType runtimeType, Path projectWorkdir) {
         return trackOperation(
                 RuntimeOperationType.SKILL_SCAN.value(), "skill", null,
-                runtimeType, () -> registry.getProvider(runtimeType).scanSkills(projectWorkdir));
+                runtimeType, RuntimeOperationContext.empty(),
+                () -> registry.getProvider(runtimeType).scanSkills(projectWorkdir));
     }
 
     // --- Operation tracking helpers ---
@@ -175,10 +207,13 @@ public class DefaultRuntimeGateway implements RuntimeGateway {
     private static final String DEFAULT_PROJECT = "default";
 
     private <T> T trackOperation(String operationType, String resourceType, String resourceId,
-                                  RuntimeType runtimeType, Supplier<T> action) {
+                                  RuntimeType runtimeType, RuntimeOperationContext context, Supplier<T> action) {
+        RuntimeOperationContext ctx = context == null ? RuntimeOperationContext.empty() : context;
+        String projectId = isBlank(ctx.projectId()) ? DEFAULT_PROJECT : ctx.projectId();
         RuntimeOperationEntity op = operationService.createOperation(
-                DEFAULT_PROJECT, runtimeType.name(), operationType, null, null, null, null, null,
-                null, null, null, resourceType, resourceId, null, null, "system");
+                projectId, runtimeType.name(), operationType, ctx.idempotencyKey(), ctx.messageId(), ctx.correlationId(),
+                ctx.agentSessionId(), ctx.runtimeSessionId(), ctx.workItemId(), ctx.workflowInstanceId(),
+                ctx.workflowNodeInstanceId(), resourceType, resourceId, null, null, ctx.createdByOrSystem());
         operationService.transition(op.getId(), RuntimeOperationStatus.DISPATCHING);
         try {
             T result = action.get();
@@ -191,17 +226,14 @@ public class DefaultRuntimeGateway implements RuntimeGateway {
     }
 
     private void trackVoidOperation(String operationType, String resourceType, String resourceId,
-                                     RuntimeType runtimeType, Runnable action) {
-        RuntimeOperationEntity op = operationService.createOperation(
-                DEFAULT_PROJECT, runtimeType.name(), operationType, null, null, null, null, null,
-                null, null, null, resourceType, resourceId, null, null, "system");
-        operationService.transition(op.getId(), RuntimeOperationStatus.DISPATCHING);
-        try {
+                                     RuntimeType runtimeType, RuntimeOperationContext context, Runnable action) {
+        trackOperation(operationType, resourceType, resourceId, runtimeType, context, () -> {
             action.run();
-            operationService.transition(op.getId(), RuntimeOperationStatus.SUCCEEDED);
-        } catch (Exception e) {
-            operationService.transitionToFailed(op.getId(), "PROVIDER_ERROR", e.getMessage());
-            throw e;
-        }
+            return null;
+        });
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 }

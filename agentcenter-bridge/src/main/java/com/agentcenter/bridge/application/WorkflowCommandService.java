@@ -36,6 +36,7 @@ import com.agentcenter.bridge.api.dto.WorkflowVersionDto;
 import com.agentcenter.bridge.application.artifact.ArtifactBlockParser;
 import com.agentcenter.bridge.application.confirmation.ConfirmationCreatedEventPayloadBuilder;
 import com.agentcenter.bridge.application.runtime.RuntimeGateway;
+import com.agentcenter.bridge.application.runtime.RuntimeOperationContext;
 import com.agentcenter.bridge.application.runtime.SkillInvocationRequest;
 import com.agentcenter.bridge.application.runtime.SkillRunResult;
 import com.agentcenter.bridge.domain.artifact.ArtifactType;
@@ -688,8 +689,12 @@ public class WorkflowCommandService {
 
         String runtimeSetupError = null;
         try {
-            String ensuredRuntimeSessionId = runtimeGateway.ensureSession(
-                    workflowRuntimeType, workItem.getId(), session.id(), runtimeSessionId);
+            String ensuredRuntimeSessionId = runtimeGateway.ensureSessionWithContext(
+                    workflowRuntimeType,
+                    RuntimeOperationContext
+                            .forSession(workItem.getId(), session.id(), runtimeSessionId)
+                            .withProjectId(workItem.getProjectId())
+                            .withWorkflowContext(instance.getId(), node.getId()));
             if (!ensuredRuntimeSessionId.equals(runtimeSessionId)) {
                 runtimeSessionId = ensuredRuntimeSessionId;
                 agentSessionService.bindRuntimeSession(session.id(), runtimeSessionId, workflowRuntimeType);
@@ -768,8 +773,13 @@ public class WorkflowCommandService {
                         false);
             } else {
                 SkillInvocationRequest request = workflowPromptComposer.composeInvocationRequest(skillName, inputContext, resumeState);
-                result = runtimeGateway.runSkill(
-                        workflowRuntimeType, node.getRuntimeSessionId(), request);
+                result = runtimeGateway.runSkillWithContext(
+                        workflowRuntimeType,
+                        RuntimeOperationContext
+                                .forSession(workItem.getId(), node.getAgentSessionId(), node.getRuntimeSessionId())
+                                .withProjectId(workItem.getProjectId())
+                                .withWorkflowContext(instance.getId(), node.getId()),
+                        request);
             }
         }
         if (isWorkflowSuperseded(instance.getId())) {

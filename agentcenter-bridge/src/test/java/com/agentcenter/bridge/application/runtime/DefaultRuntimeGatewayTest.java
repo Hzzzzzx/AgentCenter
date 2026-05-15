@@ -50,24 +50,31 @@ class DefaultRuntimeGatewayTest {
 
     @Test
     void ensureSessionDelegates() {
-        when(provider.ensureSession("w1", "a1", "r1")).thenReturn("r1");
+        when(provider.ensureSessionWithContext(any(RuntimeOperationContext.class))).thenReturn("r1");
         String result = gateway.ensureSession(RuntimeType.OPENCODE, "w1", "a1", "r1");
         assertEquals("r1", result);
-        verify(provider).ensureSession("w1", "a1", "r1");
+        ArgumentCaptor<RuntimeOperationContext> captor = ArgumentCaptor.forClass(RuntimeOperationContext.class);
+        verify(provider).ensureSessionWithContext(captor.capture());
+        assertEquals("w1", captor.getValue().workItemId());
+        assertEquals("a1", captor.getValue().agentSessionId());
+        assertEquals("r1", captor.getValue().runtimeSessionId());
         verifyNoInteractions(operationService);
     }
 
     @Test
     void sendMessageDelegates() {
         gateway.sendMessage(RuntimeType.OPENCODE, "ses_1", "hello");
-        verify(provider).sendMessage("ses_1", "hello");
+        ArgumentCaptor<RuntimeOperationContext> captor = ArgumentCaptor.forClass(RuntimeOperationContext.class);
+        verify(provider).sendMessageWithContext(captor.capture(), eq("hello"));
+        assertEquals("ses_1", captor.getValue().runtimeSessionId());
         verifyNoInteractions(operationService);
     }
 
     @Test
     void runSkillDelegates() {
         SkillRunResult expected = new SkillRunResult(true, "output", "MARKDOWN", null, false);
-        when(provider.runSkill(eq("ses_1"), any(SkillInvocationRequest.class))).thenReturn(expected);
+        when(provider.runSkillWithContext(any(RuntimeOperationContext.class), any(SkillInvocationRequest.class)))
+                .thenReturn(expected);
         SkillRunResult result = gateway.runSkill(RuntimeType.OPENCODE, "ses_1", "skill1", "ctx");
         assertEquals(expected, result);
         verifyNoInteractions(operationService);
@@ -77,25 +84,28 @@ class DefaultRuntimeGatewayTest {
     void runSkillWithRequestDelegatesToProvider() {
         SkillRunResult expected = new SkillRunResult(true, "output", "MARKDOWN", null, false);
         SkillInvocationRequest request = SkillInvocationRequest.userPromptInjection("skill1", "user prompt", "instruction");
-        when(provider.runSkill(eq("ses_1"), eq(request))).thenReturn(expected);
+        when(provider.runSkillWithContext(any(RuntimeOperationContext.class), eq(request))).thenReturn(expected);
 
         SkillRunResult result = gateway.runSkill(RuntimeType.OPENCODE, "ses_1", request);
 
         assertEquals(expected, result);
-        verify(provider).runSkill("ses_1", request);
+        ArgumentCaptor<RuntimeOperationContext> contextCaptor = ArgumentCaptor.forClass(RuntimeOperationContext.class);
+        verify(provider).runSkillWithContext(contextCaptor.capture(), eq(request));
+        assertEquals("ses_1", contextCaptor.getValue().runtimeSessionId());
         verifyNoInteractions(operationService);
     }
 
     @Test
     void runSkillWithLegacySignatureDelegatesViaRequest() {
         SkillRunResult expected = new SkillRunResult(true, "output", "MARKDOWN", null, false);
-        when(provider.runSkill(eq("ses_1"), any(SkillInvocationRequest.class))).thenReturn(expected);
+        when(provider.runSkillWithContext(any(RuntimeOperationContext.class), any(SkillInvocationRequest.class)))
+                .thenReturn(expected);
 
         SkillRunResult result = gateway.runSkill(RuntimeType.OPENCODE, "ses_1", "skill1", "ctx");
 
         assertEquals(expected, result);
         ArgumentCaptor<SkillInvocationRequest> captor = ArgumentCaptor.forClass(SkillInvocationRequest.class);
-        verify(provider).runSkill(eq("ses_1"), captor.capture());
+        verify(provider).runSkillWithContext(any(RuntimeOperationContext.class), captor.capture());
         assertEquals("skill1", captor.getValue().skillName());
         assertEquals("ctx", captor.getValue().userPrompt());
         assertNull(captor.getValue().instructionPrompt());
@@ -125,7 +135,9 @@ class DefaultRuntimeGatewayTest {
     @Test
     void cancelDelegates() {
         gateway.cancel(RuntimeType.OPENCODE, "ses_1");
-        verify(provider).cancel("ses_1");
+        ArgumentCaptor<RuntimeOperationContext> captor = ArgumentCaptor.forClass(RuntimeOperationContext.class);
+        verify(provider).cancelWithContext(captor.capture());
+        assertEquals("ses_1", captor.getValue().runtimeSessionId());
         verifyNoInteractions(operationService);
     }
 

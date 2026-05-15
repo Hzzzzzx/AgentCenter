@@ -13,13 +13,33 @@ import com.agentcenter.bridge.domain.runtime.RuntimeType;
  */
 public interface RuntimeGateway {
     String createSession(RuntimeType runtimeType, String workItemId, String agentSessionId);
+    default String createSessionWithContext(RuntimeType runtimeType, RuntimeOperationContext context) {
+        return createSession(runtimeType, context.workItemId(), context.agentSessionId());
+    }
+
     String ensureSession(RuntimeType runtimeType, String workItemId, String agentSessionId, String runtimeSessionId);
+    default String ensureSessionWithContext(RuntimeType runtimeType, RuntimeOperationContext context) {
+        return ensureSession(runtimeType, context.workItemId(), context.agentSessionId(), context.runtimeSessionId());
+    }
+
     SkillRunResult runSkill(RuntimeType runtimeType, String sessionId, String skillName, String inputContext);
     default SkillRunResult runSkill(RuntimeType runtimeType, String sessionId, SkillInvocationRequest request) {
         return runSkill(runtimeType, sessionId, request.skillName(), request.userPrompt());
     }
+    default SkillRunResult runSkillWithContext(RuntimeType runtimeType, RuntimeOperationContext context, SkillInvocationRequest request) {
+        return runSkill(runtimeType, context.runtimeSessionId(), request);
+    }
+
     void sendMessage(RuntimeType runtimeType, String sessionId, String userMessage);
+    default void sendMessageWithContext(RuntimeType runtimeType, RuntimeOperationContext context, String userMessage) {
+        sendMessage(runtimeType, context.runtimeSessionId(), userMessage);
+    }
+
     void cancel(RuntimeType runtimeType, String sessionId);
+    default void cancelWithContext(RuntimeType runtimeType, RuntimeOperationContext context) {
+        cancel(runtimeType, context.runtimeSessionId());
+    }
+
     void refreshSkills(RuntimeType runtimeType, RuntimeSkillSnapshot snapshot);
     void refreshMcps(RuntimeType runtimeType);
     RuntimeDescriptor describe(RuntimeType runtimeType);

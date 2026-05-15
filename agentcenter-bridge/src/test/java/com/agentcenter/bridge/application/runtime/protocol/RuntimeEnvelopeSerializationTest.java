@@ -10,6 +10,7 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.agentcenter.bridge.application.runtime.RuntimeOperationContext;
 import com.agentcenter.bridge.domain.runtime.RuntimeType;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -87,6 +88,35 @@ class RuntimeEnvelopeSerializationTest {
         assertNotNull(envelope.createdAt());
     }
 
+    @Test
+    void commandEnvelope_factoryMethod_carriesRuntimeContext() throws Exception {
+        JsonNode payload = objectMapper.readTree("{}");
+        RuntimeOperationContext context = RuntimeOperationContext.empty()
+                .withProjectId("project-1")
+                .withOperationId("op-1")
+                .withIdempotencyKey("idem-1")
+                .withMessageId("msg-1")
+                .withCorrelationId("corr-1")
+                .withAgentSessionId("agent-1")
+                .withRuntimeSessionId("runtime-from-context")
+                .withWorkItemId("work-1")
+                .withWorkflowContext("workflow-1", "node-1");
+
+        RuntimeCommandEnvelope envelope = RuntimeCommandEnvelope.of(
+                "conversation.message.send", RuntimeType.OPENCODE, "runtime-override", payload, context);
+
+        assertEquals("msg-1", envelope.messageId());
+        assertEquals("corr-1", envelope.correlationId());
+        assertEquals("op-1", envelope.operationId());
+        assertEquals("idem-1", envelope.idempotencyKey());
+        assertEquals("agent-1", envelope.agentSessionId());
+        assertEquals("runtime-override", envelope.runtimeSessionId());
+        assertEquals("project-1", envelope.projectId());
+        assertEquals("work-1", envelope.workItemId());
+        assertEquals("workflow-1", envelope.workflowInstanceId());
+        assertEquals("node-1", envelope.workflowNodeInstanceId());
+    }
+
     // ---- Ack Envelope ----
 
     @Test
@@ -135,6 +165,20 @@ class RuntimeEnvelopeSerializationTest {
         assertEquals(RuntimeType.OPENCODE, ack.runtimeType());
         assertNotNull(ack.messageId());
         assertNotNull(ack.createdAt());
+    }
+
+    @Test
+    void ackEnvelope_factoryMethod_carriesRuntimeContext() {
+        RuntimeOperationContext context = RuntimeOperationContext.empty()
+                .withOperationId("op-1")
+                .withAgentSessionId("agent-1")
+                .withRuntimeSessionId("runtime-1");
+
+        RuntimeAckEnvelope ack = RuntimeAckEnvelope.ack("corr-123", RuntimeType.OPENCODE, context);
+
+        assertEquals("op-1", ack.operationId());
+        assertEquals("agent-1", ack.agentSessionId());
+        assertEquals("runtime-1", ack.runtimeSessionId());
     }
 
     @Test

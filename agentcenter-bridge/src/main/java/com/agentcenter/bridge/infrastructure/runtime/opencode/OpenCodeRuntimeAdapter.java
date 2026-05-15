@@ -19,6 +19,7 @@ import com.agentcenter.bridge.application.ProjectRuntimeWorkspaceResolver;
 import com.agentcenter.bridge.application.RuntimeEventService;
 import com.agentcenter.bridge.api.dto.RuntimeSkillDto;
 import com.agentcenter.bridge.application.runtime.AgentRuntimeAdapter;
+import com.agentcenter.bridge.application.runtime.RuntimeOperationContext;
 import com.agentcenter.bridge.application.runtime.SkillInvocationRequest;
 import com.agentcenter.bridge.application.runtime.SkillRunResult;
 import com.agentcenter.bridge.application.runtime.RuntimeSkillSnapshot;
@@ -208,10 +209,18 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
     @Override
     public String createSession(String workItemId, String agentSessionId) {
+        return createSessionWithContext(RuntimeOperationContext.forSession(workItemId, agentSessionId, null));
+    }
+
+    @Override
+    public String createSessionWithContext(RuntimeOperationContext context) {
         if (!processManager.isEnabled()) {
             throw new IllegalStateException("OpenCode serve adapter is disabled");
         }
 
+        RuntimeOperationContext ctx = context == null ? RuntimeOperationContext.empty() : context;
+        String workItemId = ctx.workItemId();
+        String agentSessionId = ctx.agentSessionId();
         Path cwd = resolveRuntimeWorkdir(workItemId);
         String baseUrl = processManager.ensureRunning(cwd);
 
@@ -229,7 +238,7 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         addPermissionRule(permissions, "external_directory", "*", "ask");
 
         RuntimeCommandEnvelope command = RuntimeCommandEnvelope.of(
-                RuntimeCommandTypes.SESSION_ENSURE, RuntimeType.OPENCODE, null, sessionPayload);
+                RuntimeCommandTypes.SESSION_ENSURE, RuntimeType.OPENCODE, null, sessionPayload, ctx);
 
         RuntimeAckEnvelope ack = commandTransport.send(command);
         if (!ack.success()) {
@@ -263,8 +272,17 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
     @Override
     public String ensureSession(String workItemId, String agentSessionId, String runtimeSessionId) {
+        return ensureSessionWithContext(RuntimeOperationContext.forSession(workItemId, agentSessionId, runtimeSessionId));
+    }
+
+    @Override
+    public String ensureSessionWithContext(RuntimeOperationContext context) {
+        RuntimeOperationContext ctx = context == null ? RuntimeOperationContext.empty() : context;
+        String workItemId = ctx.workItemId();
+        String agentSessionId = ctx.agentSessionId();
+        String runtimeSessionId = ctx.runtimeSessionId();
         if (runtimeSessionId == null || runtimeSessionId.isBlank() || !runtimeSessionId.startsWith("ses_")) {
-            return createSession(workItemId, agentSessionId);
+            return createSessionWithContext(ctx.withRuntimeSessionId(null));
         }
 
         Path cwd = resolveRuntimeWorkdir(workItemId);
@@ -272,7 +290,7 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         if (commandTransport.fetchMessages(baseUrl, cwd.toString(), runtimeSessionId) == null) {
             log.info("Persisted opencode session {} is not available; creating a replacement for agent session {}",
                     runtimeSessionId, agentSessionId);
-            return createSession(workItemId, agentSessionId);
+            return createSessionWithContext(ctx.withRuntimeSessionId(null));
         }
 
         String agentSid = (agentSessionId != null && !agentSessionId.isBlank())
@@ -287,8 +305,9 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
     @Override
     public SkillRunResult runSkill(String sessionId, String skillName, String inputContext) {
+        RuntimeOperationContext context = RuntimeOperationContext.empty().withRuntimeSessionId(sessionId);
         WaitResult waitResult = dispatchPromptAndWait(
-                sessionId,
+                context,
                 buildSkillPrompt(skillName, inputContext),
                 false);
         String output = waitResult.output();
@@ -303,8 +322,13 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
      * This avoids wrapping the instructionPrompt (node state protocol) inside a code block.
      */
     public SkillRunResult runSkill(String sessionId, SkillInvocationRequest request) {
+        return runSkillWithContext(RuntimeOperationContext.empty().withRuntimeSessionId(sessionId), request);
+    }
+
+    @Override
+    public SkillRunResult runSkillWithContext(RuntimeOperationContext context, SkillInvocationRequest request) {
         ArrayNode parts = buildSkillParts(request);
-        WaitResult waitResult = dispatchMultiPartPromptAndWait(sessionId, parts, request.skillName());
+        WaitResult waitResult = dispatchMultiPartPromptAndWait(context, parts, request.skillName());
         String output = waitResult.output();
         if (output == null || output.isBlank()) {
             return failedSkillResult(request.skillName(), waitResult);
@@ -314,7 +338,12 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
     @Override
     public void sendMessage(String sessionId, String userMessage) {
-        dispatchPrompt(sessionId, userMessage, true);
+        sendMessageWithContext(RuntimeOperationContext.empty().withRuntimeSessionId(sessionId), userMessage);
+    }
+
+    @Override
+    public void sendMessageWithContext(RuntimeOperationContext context, String userMessage) {
+        dispatchPrompt(context, userMessage, true);
     }
 
     private String buildSkillPrompt(String skillName, String inputContext) {
@@ -418,10 +447,10 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
                 + responseTimeoutSeconds + " 秒内没有返回可用输出。";
     }
 
-    private WaitResult dispatchPromptAndWait(String sessionId, String userMessage, boolean allowToolOutputFallback) {
+    private WaitResult dispatchPromptAndWait(RuntimeOperationContext operationContext, String userMessage, boolean allowToolOutputFallback) {
         DispatchContext context;
         try {
-            context = dispatchPrompt(sessionId, userMessage, false);
+            context = dispatchPrompt(operationContext, userMessage, false);
         } catch (RuntimePollingException e) {
             return WaitResult.transportError(e.retryCount(), e.getMessage());
         }
@@ -434,10 +463,10 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
                 context.cancelGeneration());
     }
 
-    private WaitResult dispatchMultiPartPromptAndWait(String sessionId, ArrayNode parts, String skillName) {
+    private WaitResult dispatchMultiPartPromptAndWait(RuntimeOperationContext operationContext, ArrayNode parts, String skillName) {
         DispatchContext context;
         try {
-            context = dispatchMultiPartPrompt(sessionId, parts, skillName);
+            context = dispatchMultiPartPrompt(operationContext, parts, skillName);
         } catch (RuntimePollingException e) {
             return WaitResult.transportError(e.retryCount(), e.getMessage());
         }
@@ -450,7 +479,9 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
                 context.cancelGeneration());
     }
 
-    private DispatchContext dispatchPrompt(String sessionId, String userMessage, boolean includeArtifactInstruction) {
+    private DispatchContext dispatchPrompt(RuntimeOperationContext context, String userMessage, boolean includeArtifactInstruction) {
+        RuntimeOperationContext ctx = context == null ? RuntimeOperationContext.empty() : context;
+        String sessionId = ctx.runtimeSessionId();
         if (sessionId == null || sessionId.isBlank()) {
             throw new IllegalArgumentException("Agent session id is required before dispatching to opencode");
         }
@@ -475,7 +506,7 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
         RuntimeCommandEnvelope command = RuntimeCommandEnvelope.of(
                 RuntimeCommandTypes.CONVERSATION_MESSAGE_SEND, RuntimeType.OPENCODE,
-                opencodeSessionId, sendPayload);
+                opencodeSessionId, sendPayload, ctx.withRuntimeSessionId(opencodeSessionId));
 
         publishPromptDebugEvent(sessionId, opencodeSessionId, baseUrl, cwd.toString(), sendPayload, userMessage);
 
@@ -495,7 +526,9 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
         return userMessage + "\n\n" + CONVERSATION_ARTIFACT_CAPTURE_INSTRUCTION.trim();
     }
 
-    private DispatchContext dispatchMultiPartPrompt(String sessionId, ArrayNode parts, String skillName) {
+    private DispatchContext dispatchMultiPartPrompt(RuntimeOperationContext context, ArrayNode parts, String skillName) {
+        RuntimeOperationContext ctx = context == null ? RuntimeOperationContext.empty() : context;
+        String sessionId = ctx.runtimeSessionId();
         if (sessionId == null || sessionId.isBlank()) {
             throw new IllegalArgumentException("Agent session id is required before dispatching skill " + skillName);
         }
@@ -517,7 +550,7 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
         RuntimeCommandEnvelope command = RuntimeCommandEnvelope.of(
                 RuntimeCommandTypes.CONVERSATION_MESSAGE_SEND, RuntimeType.OPENCODE,
-                opencodeSessionId, sendPayload);
+                opencodeSessionId, sendPayload, ctx.withRuntimeSessionId(opencodeSessionId));
 
         String userPromptSummary = "[multi-part skill invocation: " + skillName + "]";
         publishPromptDebugEvent(sessionId, opencodeSessionId, baseUrl, cwd.toString(), sendPayload, userPromptSummary);
@@ -533,6 +566,13 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
     @Override
     public void cancel(String sessionId) {
+        cancelWithContext(RuntimeOperationContext.empty().withRuntimeSessionId(sessionId));
+    }
+
+    @Override
+    public void cancelWithContext(RuntimeOperationContext context) {
+        RuntimeOperationContext ctx = context == null ? RuntimeOperationContext.empty() : context;
+        String sessionId = ctx.runtimeSessionId();
         String opencodeSessionId = resolveOpencodeSessionId(sessionId);
         if (opencodeSessionId == null) {
             log.info("Cancel ignored because no opencode session is mapped for {}", sessionId);
@@ -549,7 +589,7 @@ public class OpenCodeRuntimeAdapter implements AgentRuntimeAdapter {
 
         RuntimeCommandEnvelope command = RuntimeCommandEnvelope.of(
                 RuntimeCommandTypes.CONVERSATION_CANCEL, RuntimeType.OPENCODE,
-                opencodeSessionId, payload);
+                opencodeSessionId, payload, ctx.withRuntimeSessionId(opencodeSessionId));
         RuntimeAckEnvelope ack = commandTransport.send(command);
         if (!ack.success()) {
             throw new RuntimeException("opencode abort failed: " + ack.message());

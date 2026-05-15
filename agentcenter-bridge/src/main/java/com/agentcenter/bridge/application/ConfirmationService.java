@@ -24,6 +24,7 @@ import com.agentcenter.bridge.api.dto.ConfirmationRequestDto;
 import com.agentcenter.bridge.api.dto.ResolveConfirmationRequest;
 import com.agentcenter.bridge.api.dto.RuntimeEventDto;
 import com.agentcenter.bridge.application.runtime.RuntimeGateway;
+import com.agentcenter.bridge.application.runtime.RuntimeOperationContext;
 import com.agentcenter.bridge.application.runtime.translation.PermissionConfirmationHandler;
 import com.agentcenter.bridge.application.runtime.translation.QuestionConfirmationHandler;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationActionType;
@@ -410,13 +411,17 @@ public class ConfirmationService {
 
         try {
             RuntimeType runtimeType = RuntimeType.valueOf(session.getRuntimeType());
-            String runtimeSessionId = runtimeGateway.ensureSession(
-                    runtimeType, session.getWorkItemId(), session.getId(), session.getRuntimeSessionId());
+            RuntimeOperationContext runtimeContext = RuntimeOperationContext
+                    .forSession(session.getWorkItemId(), session.getId(), session.getRuntimeSessionId());
+            String runtimeSessionId = runtimeGateway.ensureSessionWithContext(runtimeType, runtimeContext);
+            if (runtimeSessionId == null || runtimeSessionId.isBlank()) {
+                throw new IllegalStateException("Runtime session recovery returned an empty session id");
+            }
             if (runtimeSessionId != null && !runtimeSessionId.equals(session.getRuntimeSessionId())) {
                 session.setRuntimeSessionId(runtimeSessionId);
                 agentSessionMapper.update(session);
             }
-            runtimeGateway.sendMessage(runtimeType, runtimeSessionId, prompt);
+            runtimeGateway.sendMessageWithContext(runtimeType, runtimeContext.withRuntimeSessionId(runtimeSessionId), prompt);
             logRuntimeIntervention(confirmation, actionType, "sent", false);
             publishRuntimeInterventionStatus(confirmation, "已把恢复指令发送给 Runtime。", false);
         } catch (Exception e) {

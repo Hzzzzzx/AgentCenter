@@ -25,6 +25,7 @@ import com.agentcenter.bridge.api.dto.SendMessageRequest;
 import com.agentcenter.bridge.api.dto.SessionRuntimeResourceDto;
 import com.agentcenter.bridge.application.confirmation.ConfirmationCreatedEventPayloadBuilder;
 import com.agentcenter.bridge.application.runtime.RuntimeGateway;
+import com.agentcenter.bridge.application.runtime.RuntimeOperationContext;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationRequestType;
 import com.agentcenter.bridge.domain.confirmation.ConfirmationStatus;
 import com.agentcenter.bridge.domain.runtime.RuntimeEventSource;
@@ -401,13 +402,18 @@ public class AgentSessionService {
                 sleepBeforeSafeRetry(attempt);
             }
             try {
-                runtimeSessionId = runtimeGateway.ensureSession(
-                        runtimeType, session.getWorkItemId(), session.getId(), runtimeSessionId);
+                RuntimeOperationContext runtimeContext = RuntimeOperationContext
+                        .forSession(session.getWorkItemId(), session.getId(), runtimeSessionId)
+                        .withProjectId(projectId);
+                runtimeSessionId = runtimeGateway.ensureSessionWithContext(runtimeType, runtimeContext);
                 if (runtimeSessionId != null && !runtimeSessionId.equals(session.getRuntimeSessionId())) {
                     session.setRuntimeSessionId(runtimeSessionId);
                     sessionMapper.update(session);
                 }
-                runtimeGateway.sendMessage(runtimeType, runtimeSessionId, outboundContent);
+                runtimeGateway.sendMessageWithContext(
+                        runtimeType,
+                        runtimeContext.withRuntimeSessionId(runtimeSessionId),
+                        outboundContent);
                 return RuntimeDispatchResult.ok(runtimeSessionId, retryCount);
             } catch (Exception error) {
                 lastError = errorMessage(error);
@@ -415,7 +421,11 @@ public class AgentSessionService {
                     break;
                 }
                 try {
-                    runtimeSessionId = runtimeGateway.createSession(runtimeType, session.getWorkItemId(), session.getId());
+                    runtimeSessionId = runtimeGateway.createSessionWithContext(
+                            runtimeType,
+                            RuntimeOperationContext
+                                    .forSession(session.getWorkItemId(), session.getId(), null)
+                                    .withProjectId(projectId));
                     session.setRuntimeSessionId(runtimeSessionId);
                     sessionMapper.update(session);
                 } catch (Exception createError) {
