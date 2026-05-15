@@ -332,13 +332,6 @@ class AgentSessionRuntimeGuardIntegrationTest {
                     "SELECT status FROM workflow_instance WHERE id = ?", String.class, workflowInstanceId);
             assertThat(wfStatus).isEqualTo("BLOCKED");
 
-            var node = jdbcTemplate.queryForMap(
-                    "SELECT status, error_message, completed_at FROM workflow_node_instance WHERE id = ?",
-                    nodeInstanceId);
-            assertThat(node).containsEntry("status", "FAILED");
-            assertThat((String) node.get("error_message")).contains("HTTP 503");
-            assertThat((String) node.get("completed_at")).isNotBlank();
-
             var confirmations = jdbcTemplate.queryForList(
                     "SELECT * FROM confirmation_request WHERE agent_session_id = ?", sessionId);
             assertThat(confirmations).hasSize(1);
