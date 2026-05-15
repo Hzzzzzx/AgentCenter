@@ -310,8 +310,9 @@ describe('ConfirmationCard.vue', () => {
     expect(document.body.textContent).toContain('目标用户')
     expect(document.body.textContent).toContain('范围边界')
     expect(document.body.textContent).toContain('验收标准')
-    expect(document.body.querySelectorAll('.confirmation-dialog__field-tab')).toHaveLength(3)
-    expect(document.body.querySelector('#confirmation-field-PRD-SCOPE')).toBeNull()
+    expect(document.body.querySelectorAll('.confirmation-dialog__field-tab')).toHaveLength(0)
+    expect(document.body.querySelectorAll('.confirmation-dialog__field')).toHaveLength(3)
+    expect(document.body.querySelector('#confirmation-field-PRD-SCOPE')).not.toBeNull()
 
     const submitButton = document.body.querySelector<HTMLButtonElement>('.confirmation-card__action--approve')!
     expect(submitButton.disabled).toBe(true)
@@ -320,15 +321,10 @@ describe('ConfirmationCard.vue', () => {
     audience.value = '企业管理员'
     audience.dispatchEvent(new Event('input'))
 
-    const tabs = [...document.body.querySelectorAll<HTMLButtonElement>('.confirmation-dialog__field-tab')]
-    await tabs[1].click()
-    await wrapper.vm.$nextTick()
     const scope = document.body.querySelector<HTMLTextAreaElement>('#confirmation-field-PRD-SCOPE')!
     scope.value = '只覆盖 PRD 阶段，不做 HLD'
     scope.dispatchEvent(new Event('input'))
 
-    await tabs[2].click()
-    await wrapper.vm.$nextTick()
     const acceptance = document.body.querySelector<HTMLTextAreaElement>('#confirmation-field-PRD-ACCEPTANCE')!
     acceptance.value = '页面出现三个必填输入框'
     acceptance.dispatchEvent(new Event('input'))
@@ -387,9 +383,6 @@ describe('ConfirmationCard.vue', () => {
     const priorityOptions = [...document.body.querySelectorAll<HTMLButtonElement>('.confirmation-dialog__field-menu-option')]
     await priorityOptions[1].click()
 
-    const tabs = [...document.body.querySelectorAll<HTMLButtonElement>('.confirmation-dialog__field-tab')]
-    await tabs[1].click()
-    await wrapper.vm.$nextTick()
     const accepted = document.body.querySelector<HTMLInputElement>('#confirmation-field-accepted')!
     accepted.checked = true
     accepted.dispatchEvent(new Event('change'))

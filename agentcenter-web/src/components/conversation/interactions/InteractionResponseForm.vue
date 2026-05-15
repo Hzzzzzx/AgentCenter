@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed } from 'vue'
 import type {
   ConfirmationActionType,
   ConfirmationRequestDto,
@@ -12,6 +12,8 @@ import {
   fieldPlaceholder,
   fieldQuestion,
   isFieldComplete,
+  multiSelectValues,
+  serializeMultiSelectValues,
   type FieldValueMap,
   type InteractionFormSubmission,
 } from './interactionSubmit'
@@ -36,11 +38,13 @@ const props = withDefaults(defineProps<{
   permissionScopeText?: string | null
   showDetailAction?: boolean
   showEnterSessionAction?: boolean
+  deferSubmit?: boolean
 }>(), {
   recovering: false,
   permissionScopeText: null,
   showDetailAction: false,
   showEnterSessionAction: false,
+  deferSubmit: false,
 })
 
 const emit = defineEmits<{
@@ -57,7 +61,6 @@ const emit = defineEmits<{
 
 const options = computed<InteractionOption[]>(() => props.schema?.options ?? [])
 const fields = computed<InteractionField[]>(() => props.schema?.fields ?? [])
-const activeFieldId = ref('')
 const isMultiSelect = computed(() => props.schema?.selection === 'multi')
 const allowCustomChoice = computed(() => props.schema?.allowCustom === true)
 const customChoiceText = computed(() => props.customChoice.trim())
@@ -74,14 +77,37 @@ const usesOptionControl = computed(() => {
   return (props.confirmation.requestType === 'APPROVAL' || props.confirmation.requestType === 'CONFIRM')
     && options.value.length > 0
 })
-const visibleFields = computed<InteractionField[]>(() => {
-  if (fields.value.length <= 1) return fields.value
-  const activeField = fields.value.find(field => field.id === activeFieldId.value) ?? fields.value[0]
-  return activeField ? [activeField] : []
+const permissionOptions = computed<InteractionOption[]>(() => [
+  { id: 'once', label: '允许一次', description: '仅本次工具调用生效', actionType: 'APPROVE' },
+  { id: 'always', label: '本次会话允许同类请求', description: '同类路径自动放行', actionType: 'APPROVE' },
+  { id: 'reject', label: '拒绝', description: '当前工具调用会停止', actionType: 'REJECT' },
+])
+const exceptionOptions = computed<InteractionOption[]>(() =>
+  options.value.length
+    ? options.value
+    : [
+        { id: 'RETRY', label: '重试当前节点', description: '按当前上下文重新执行', actionType: 'RETRY' },
+        { id: 'SUPPLEMENT', label: '补充信息后继续', description: '把恢复指令交给 Agent', actionType: 'SUPPLEMENT' },
+        { id: 'SKIP', label: '跳过该节点继续', description: '保留阻塞记录并推进后续节点', actionType: 'SKIP' },
+        { id: 'REJECT', label: '拒绝', description: '停止当前恢复动作', actionType: 'REJECT' },
+      ]
+)
+const barOptions = computed<InteractionOption[]>(() => {
+  if (isPermission.value) return permissionOptions.value
+  if (isException.value) return exceptionOptions.value
+  return options.value
+})
+const usesBarOptionControl = computed(() =>
+  usesOptionControl.value
+  || (props.variant === 'bar' && props.deferSubmit && (isPermission.value || isException.value))
+)
+const defaultSelectedOptionId = computed(() => {
+  const candidates = props.variant === 'bar' && props.deferSubmit ? barOptions.value : options.value
+  return candidates[0]?.id ?? ''
 })
 const effectiveSelectedOptionId = computed(() => {
   if (allowCustomChoice.value && customChoiceText.value) return '__custom__'
-  return props.selectedOptionId || options.value[0]?.id || ''
+  return props.selectedOptionId || defaultSelectedOptionId.value
 })
 const canSubmitChoice = computed(() => {
   if (!usesOptionControl.value) return true
@@ -120,11 +146,11 @@ const dialogQuestion = computed(() => {
 })
 const showAggregateFieldQuestion = computed(() => fields.value.length === 1 && Boolean(dialogQuestion.value))
 const primaryLabel = computed(() => {
-  if (isInputRequired.value) return '提交补充'
+  if (isInputRequired.value) return '提交'
   if (props.confirmation.requestType === 'DECISION') return '提交选择'
   if (isArtifactReview.value) return '提交审阅'
   if ((props.confirmation.requestType === 'APPROVAL' || props.confirmation.requestType === 'CONFIRM') && options.value.length > 0) return '提交选择'
-  if (isException.value) return props.inputText.trim() ? '提交补充' : '重试'
+  if (isException.value) return props.inputText.trim() ? '提交' : '重试'
   return props.variant === 'dialog' ? '通过' : '确认'
 })
 const secondaryLabel = computed(() => {
@@ -133,16 +159,6 @@ const secondaryLabel = computed(() => {
   if (props.confirmation.requestType === 'APPROVAL') return '退回'
   return '拒绝'
 })
-
-watch(fields, (nextFields) => {
-  if (!nextFields.length) {
-    activeFieldId.value = ''
-    return
-  }
-  if (!nextFields.some(field => field.id === activeFieldId.value)) {
-    activeFieldId.value = nextFields[0].id
-  }
-}, { immediate: true })
 
 function buttonBusyLabel(reply: 'once' | 'always' | 'reject') {
   if (!props.busyAction?.includes(reply)) return null
@@ -155,32 +171,6 @@ function isChoiceSelected(option: InteractionOption): boolean {
   return isMultiSelect.value
     ? selectedChoiceSet.value.has(option.id)
     : effectiveSelectedOptionId.value === option.id
-}
-
-function isFieldActive(field: InteractionField): boolean {
-  return fields.value.length <= 1 || activeFieldId.value === field.id
-}
-
-function selectField(fieldId: string) {
-  activeFieldId.value = fieldId
-}
-
-function selectNextIncompleteField(currentFieldId: string) {
-  const currentIndex = fields.value.findIndex(field => field.id === currentFieldId)
-  if (currentIndex < 0) return
-  const nextField = fields.value
-    .slice(currentIndex + 1)
-    .find(field => !isFieldComplete(field, props.fieldValues))
-  if (nextField) activeFieldId.value = nextField.id
-}
-
-function questionOrdinal(index: number): string {
-  const labels = ['一', '二', '三', '四', '五', '六', '七', '八', '九']
-  return labels[index] ?? String(index + 1)
-}
-
-function isFieldAnswered(field: InteractionField): boolean {
-  return isFieldComplete(field, props.fieldValues)
 }
 
 function allowsFieldCustom(field: InteractionField): boolean {
@@ -202,6 +192,10 @@ function isFieldOptionSelected(field: InteractionField, option: FieldSelectOptio
 
 function fieldCustomValue(field: InteractionField): string {
   const value = props.fieldValues[field.id] ?? ''
+  if (field.type === 'multiselect') {
+    const presetValues = new Set((field.options ?? []).map(option => option.value))
+    return multiSelectValues(value).filter(item => !presetValues.has(item)).join('，')
+  }
   return value && !hasPresetFieldValue(field, value) ? value : ''
 }
 
@@ -229,11 +223,30 @@ function updateFieldValue(fieldId: string, event: Event) {
 
 function updateFieldSelectValue(fieldId: string, value: string) {
   emit('update:fieldValue', fieldId, value)
-  selectNextIncompleteField(fieldId)
+}
+
+function isFieldMultiOptionSelected(field: InteractionField, option: FieldSelectOption): boolean {
+  return multiSelectValues(props.fieldValues[field.id]).includes(option.value)
+}
+
+function updateFieldMultiSelectValue(field: InteractionField, value: string) {
+  const current = new Set(multiSelectValues(props.fieldValues[field.id]))
+  if (current.has(value)) current.delete(value)
+  else current.add(value)
+  emit('update:fieldValue', field.id, serializeMultiSelectValues(Array.from(current)))
 }
 
 function updateFieldCustomValue(fieldId: string, event: Event) {
-  emit('update:fieldValue', fieldId, (event.target as HTMLInputElement).value)
+  const value = (event.target as HTMLInputElement).value
+  const field = fields.value.find(candidate => candidate.id === fieldId)
+  if (field?.type === 'multiselect') {
+    const presetValues = new Set((field.options ?? []).map(option => option.value))
+    const selectedPresets = multiSelectValues(props.fieldValues[fieldId]).filter(item => presetValues.has(item))
+    const customValues = value.split('，').flatMap(item => item.split(',')).map(item => item.trim()).filter(Boolean)
+    emit('update:fieldValue', fieldId, serializeMultiSelectValues([...selectedPresets, ...customValues]))
+    return
+  }
+  emit('update:fieldValue', fieldId, value)
 }
 
 function updateCheckboxField(fieldId: string, event: Event) {
@@ -337,10 +350,15 @@ function submitReject() {
         <strong>{{ barQuestion }}</strong>
       </div>
 
-      <div v-if="usesOptionControl" class="interaction-bar__control interaction-bar__control--options">
-        <template v-if="options.length">
+      <div v-if="isPermission" class="interaction-bar__hint interaction-bar__permission-hint">
+        <span>这是 OpenCode 原生工具授权，处理后才会继续执行当前工具。</span>
+        <span v-if="permissionScopeText">同类请求范围：{{ permissionScopeText }}</span>
+      </div>
+
+      <div v-if="usesBarOptionControl" class="interaction-bar__control interaction-bar__control--options">
+        <template v-if="barOptions.length">
           <button
-            v-for="(option, optionIndex) in options"
+            v-for="(option, optionIndex) in barOptions"
             :key="option.id"
             type="button"
             class="interaction-bar__option"
@@ -355,7 +373,7 @@ function submitReject() {
           </button>
         </template>
         <label v-if="allowCustomChoice" class="interaction-bar__custom-choice">
-          <span>自定义选择</span>
+          <span>自定义输入</span>
           <input
             :value="customChoice"
             class="interaction-bar__input"
@@ -365,7 +383,7 @@ function submitReject() {
           >
         </label>
         <input
-          v-if="!options.length && !allowCustomChoice"
+          v-if="!barOptions.length && !allowCustomChoice"
           :value="inputText"
           class="interaction-bar__input"
           type="text"
@@ -373,10 +391,10 @@ function submitReject() {
           @input="updateInputText"
         >
         <textarea
-          v-if="isArtifactReview"
+          v-if="isArtifactReview || isException"
           :value="reviewComment"
           class="interaction-bar__textarea interaction-bar__review-note"
-          placeholder="补充审阅备注..."
+          :placeholder="isException ? '补充恢复指令...' : '补充审阅备注...'"
           rows="2"
           @input="updateReviewComment"
         ></textarea>
@@ -388,29 +406,8 @@ function submitReject() {
         :class="{ 'interaction-bar__control--fields': fields.length > 0 }"
       >
         <template v-if="fields.length > 0">
-          <div v-if="fields.length > 1" class="interaction-bar__field-tabs" role="tablist" aria-label="待回答问题">
-            <button
-              v-for="(field, fieldIndex) in fields"
-              :key="field.id"
-              type="button"
-              class="interaction-bar__field-tab"
-              :class="{
-                'interaction-bar__field-tab--active': isFieldActive(field),
-                'interaction-bar__field-tab--answered': isFieldAnswered(field),
-              }"
-              role="tab"
-              :aria-selected="isFieldActive(field)"
-              @click="selectField(field.id)"
-            >
-              <span class="interaction-bar__field-tab-index">{{ fieldIndex + 1 }}</span>
-              <span class="interaction-bar__field-tab-copy">
-                <strong>问题{{ questionOrdinal(fieldIndex) }}</strong>
-                <span>{{ field.label }}</span>
-              </span>
-            </button>
-          </div>
           <div class="interaction-bar__fields">
-            <div v-for="field in visibleFields" :key="field.id" class="interaction-bar__field" role="tabpanel">
+            <div v-for="field in fields" :key="field.id" class="interaction-bar__field">
               <label :for="fieldInputId(field)" class="interaction-bar__field-label">
                 {{ field.label }}
                 <span v-if="field.required" class="interaction-bar__field-required">*</span>
@@ -451,7 +448,41 @@ function submitReject() {
                   </button>
                 </div>
                 <label v-if="allowsFieldCustom(field)" class="interaction-bar__field-custom">
-                  <span>自定义选择</span>
+                  <span>自定义输入</span>
+                  <input
+                    :value="fieldCustomValue(field)"
+                    class="interaction-bar__input interaction-bar__field-input"
+                    type="text"
+                    placeholder="输入自己的选择..."
+                    @input="(event: Event) => updateFieldCustomValue(field.id, event)"
+                  >
+                </label>
+              </template>
+              <template v-else-if="field.type === 'multiselect'">
+                <div
+                  :id="fieldInputId(field)"
+                  class="interaction-bar__field-menu interaction-bar__field-menu--multi"
+                  role="group"
+                  :aria-label="field.label"
+                >
+                  <button
+                    v-for="option in field.options ?? []"
+                    :key="option.value"
+                    type="button"
+                    class="interaction-bar__field-menu-option"
+                    :class="{ 'interaction-bar__field-menu-option--selected': isFieldMultiOptionSelected(field, option) }"
+                    role="checkbox"
+                    :aria-checked="isFieldMultiOptionSelected(field, option)"
+                    @click="updateFieldMultiSelectValue(field, option.value)"
+                  >
+                    <span class="interaction-bar__field-menu-dot"></span>
+                    <span class="interaction-bar__field-menu-copy">
+                      <strong>{{ option.label }}</strong>
+                    </span>
+                  </button>
+                </div>
+                <label v-if="allowsFieldCustom(field)" class="interaction-bar__field-custom">
+                  <span>自定义输入</span>
                   <input
                     :value="fieldCustomValue(field)"
                     class="interaction-bar__input interaction-bar__field-input"
@@ -515,7 +546,11 @@ function submitReject() {
         处理后 Agent 会继续推进当前节点。
       </div>
 
-      <div class="interaction-bar__actions" :class="{ 'interaction-bar__actions--permission': isPermission }">
+      <div
+        v-if="!deferSubmit"
+        class="interaction-bar__actions"
+        :class="{ 'interaction-bar__actions--permission': isPermission }"
+      >
         <template v-if="isPermission">
           <button type="button" class="interaction-bar__primary" :disabled="!!busyAction" @click="submitPermission('once')">
             {{ buttonBusyLabel('once') ?? '允许一次' }}
@@ -602,7 +637,7 @@ function submitReject() {
           </label>
         </div>
         <label v-if="allowCustomChoice" class="confirmation-dialog__custom-choice">
-          <span>自定义选择</span>
+          <span>自定义输入</span>
           <input
             :value="customChoice"
             class="confirmation-dialog__input"
@@ -646,29 +681,8 @@ function submitReject() {
         <p v-if="showAggregateFieldQuestion" class="confirmation-dialog__question">
           {{ dialogQuestion }}
         </p>
-        <div v-if="fields.length > 1" class="confirmation-dialog__field-tabs" role="tablist" aria-label="待回答问题">
-          <button
-            v-for="(field, fieldIndex) in fields"
-            :key="field.id"
-            type="button"
-            class="confirmation-dialog__field-tab"
-            :class="{
-              'confirmation-dialog__field-tab--active': isFieldActive(field),
-              'confirmation-dialog__field-tab--answered': isFieldAnswered(field),
-            }"
-            role="tab"
-            :aria-selected="isFieldActive(field)"
-            @click="selectField(field.id)"
-          >
-            <span class="confirmation-dialog__field-tab-index">{{ fieldIndex + 1 }}</span>
-            <span class="confirmation-dialog__field-tab-copy">
-              <strong>问题{{ questionOrdinal(fieldIndex) }}</strong>
-              <span>{{ field.label }}</span>
-            </span>
-          </button>
-        </div>
         <div v-if="fields.length" class="confirmation-dialog__fields">
-          <div v-for="field in visibleFields" :key="field.id" class="confirmation-dialog__field" role="tabpanel">
+          <div v-for="field in fields" :key="field.id" class="confirmation-dialog__field">
             <label :for="fieldInputId(field)" class="confirmation-dialog__field-label">
               {{ field.label }}
               <span v-if="field.required" class="confirmation-dialog__field-required">*</span>
@@ -709,7 +723,41 @@ function submitReject() {
                 </button>
               </div>
               <label v-if="allowsFieldCustom(field)" class="confirmation-dialog__field-custom">
-                <span>自定义选择</span>
+                <span>自定义输入</span>
+                <input
+                  :value="fieldCustomValue(field)"
+                  class="confirmation-dialog__input confirmation-dialog__field-input"
+                  type="text"
+                  placeholder="输入自己的选择..."
+                  @input="(event: Event) => updateFieldCustomValue(field.id, event)"
+                >
+              </label>
+            </template>
+            <template v-else-if="field.type === 'multiselect'">
+              <div
+                :id="fieldInputId(field)"
+                class="confirmation-dialog__field-menu confirmation-dialog__field-menu--multi"
+                role="group"
+                :aria-label="field.label"
+              >
+                <button
+                  v-for="option in field.options ?? []"
+                  :key="option.value"
+                  type="button"
+                  class="confirmation-dialog__field-menu-option"
+                  :class="{ 'confirmation-dialog__field-menu-option--selected': isFieldMultiOptionSelected(field, option) }"
+                  role="checkbox"
+                  :aria-checked="isFieldMultiOptionSelected(field, option)"
+                  @click="updateFieldMultiSelectValue(field, option.value)"
+                >
+                  <span class="confirmation-dialog__field-menu-dot"></span>
+                  <span class="confirmation-dialog__field-menu-copy">
+                    <strong>{{ option.label }}</strong>
+                  </span>
+                </button>
+              </div>
+              <label v-if="allowsFieldCustom(field)" class="confirmation-dialog__field-custom">
+                <span>自定义输入</span>
                 <input
                   :value="fieldCustomValue(field)"
                   class="confirmation-dialog__input confirmation-dialog__field-input"
@@ -882,90 +930,6 @@ function submitReject() {
   gap: 8px;
 }
 
-.interaction-bar__field-tabs,
-.confirmation-dialog__field-tabs {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
-  gap: 8px;
-  padding-bottom: 2px;
-}
-
-.interaction-bar__field-tab,
-.confirmation-dialog__field-tab {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 6px;
-  width: 100%;
-  min-height: 38px;
-  padding: 5px 9px;
-  border: 1px solid var(--border-color);
-  border-radius: 7px;
-  background: var(--bg-card);
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 850;
-  cursor: pointer;
-}
-
-.interaction-bar__field-tab-copy,
-.confirmation-dialog__field-tab-copy {
-  display: grid;
-  gap: 1px;
-  min-width: 0;
-  line-height: 1.2;
-}
-
-.interaction-bar__field-tab-copy strong,
-.confirmation-dialog__field-tab-copy strong,
-.interaction-bar__field-tab-copy span,
-.confirmation-dialog__field-tab-copy span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.interaction-bar__field-tab-copy strong,
-.confirmation-dialog__field-tab-copy strong {
-  color: var(--text-primary);
-  font-size: 11px;
-  font-weight: 900;
-}
-
-.interaction-bar__field-tab-copy span,
-.confirmation-dialog__field-tab-copy span {
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 750;
-}
-
-.interaction-bar__field-tab-index,
-.confirmation-dialog__field-tab-index {
-  display: inline-grid;
-  place-items: center;
-  flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  background: var(--bg-primary);
-  color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 900;
-}
-
-.interaction-bar__field-tab--active,
-.confirmation-dialog__field-tab--active {
-  border-color: var(--accent-blue);
-  background: var(--brand-soft);
-  color: var(--text-primary);
-}
-
-.interaction-bar__field-tab--answered .interaction-bar__field-tab-index,
-.confirmation-dialog__field-tab--answered .confirmation-dialog__field-tab-index {
-  background: var(--success);
-  color: var(--on-success);
-}
-
 .interaction-bar__option,
 .interaction-bar__input,
 .interaction-bar__ghost,
@@ -1115,6 +1079,11 @@ function submitReject() {
   border: 2px solid var(--border-strong);
   border-radius: 999px;
   background: var(--bg-card);
+}
+
+.interaction-bar__field-menu--multi .interaction-bar__field-menu-dot,
+.confirmation-dialog__field-menu--multi .confirmation-dialog__field-menu-dot {
+  border-radius: 3px;
 }
 
 .interaction-bar__field-menu-option--selected .interaction-bar__field-menu-dot,

@@ -12,9 +12,7 @@ import { useNotificationStore } from '../stores/notifications'
 import MessageList from '../components/conversation/MessageList.vue'
 import WorkflowNodeControlBar from '../components/conversation/WorkflowNodeControlBar.vue'
 import ConversationInteractionBar from '../components/conversation/ConversationInteractionBar.vue'
-import ConversationRuntimeStatusBar from '../components/conversation/ConversationRuntimeStatusBar.vue'
 import RunSummaryPanel from '../components/conversation/RunSummaryPanel.vue'
-import { projectRuntimeStatus } from '../components/conversation/projection/runtimeStatusProjector'
 import { sessionResourceApi, skillApi } from '../api/runtimeResources'
 import { DEFAULT_PROJECT_ID } from '../constants/projects'
 import { artifactApi } from '../api/artifacts'
@@ -200,8 +198,6 @@ const workflowNodeStateReason = computed<string | null>(() => {
 const inputPlaceholder = computed(() => {
   if (isHistoricalVersion.value) return '历史版本只读，切回当前版本后可继续输入...'
   if (isConversationRunning.value) return '对话运行中，可点击右侧按钮暂停...'
-  if (composerRecoveryInteraction.value?.requestType === 'EXCEPTION') return '输入你的恢复指令，Agent 会按这句话继续当前节点...'
-  if (composerRecoveryInteraction.value) return '输入你的补充、调整或继续指令，介入当前节点...'
   if (isWorkflowCompleted.value) return '流程已完成，可查看产物或输入新的补充指令...'
   const state = workflowNodeState.value
   if (state === 'NEEDS_USER_INPUT') return '补充输入后返回给 Agent...'
@@ -493,8 +489,7 @@ const currentStreamingText = computed(() =>
 )
 
 const isConversationRunning = computed(() =>
-  !composerRecoveryInteraction.value
-  && nodeStateInfo.value.type !== 'FAILED'
+  nodeStateInfo.value.type !== 'FAILED'
   && currentWorkflowInstance.value?.status !== 'BLOCKED'
   && currentWorkflowInstance.value?.status !== 'FAILED'
   && (
@@ -587,30 +582,9 @@ const currentInteractions = computed(() => {
   })
 })
 
-function canSubmitInteractionFromComposer(item: { requestType: ConfirmationRequestType }): boolean {
-  return item.requestType !== 'PERMISSION'
-}
-
-const composerRecoveryInteraction = computed(() =>
-  currentInteractions.value.find(canSubmitInteractionFromComposer) ?? null
-)
-
-const pendingExceptionCount = computed(() =>
-  currentInteractions.value.filter(item => item.requestType === 'EXCEPTION').length
-)
-
-const runtimeStatusProjection = computed(() =>
-  projectRuntimeStatus({
-    events: currentRuntimeEvents.value,
-    connected: runtimeStore.connected && runtimeStore.activeSessionId === sessionStore.activeSession?.id,
-    running: isConversationRunning.value,
-    pendingExceptionCount: pendingExceptionCount.value,
-  })
-)
-
 const shouldShowInputArea = computed(() =>
   !isHistoricalVersion.value
-  && (currentInteractions.value.length === 0 || Boolean(composerRecoveryInteraction.value))
+  && currentInteractions.value.length === 0
 )
 
 const shouldShowWorkflowNodeControl = computed(() =>
@@ -1106,11 +1080,6 @@ async function handleSend() {
   const text = inputText.value.trim()
   if (isHistoricalVersion.value) return
   if (!text || isConversationRunning.value) return
-  const recoveryInteraction = composerRecoveryInteraction.value
-  if (recoveryInteraction) {
-    await resolveComposerRecoveryInteraction(recoveryInteraction.id, text)
-    return
-  }
 
   const blockingInteraction = currentInteractions.value[0]
   if (blockingInteraction) {
@@ -1137,31 +1106,6 @@ async function handleSend() {
   runtimeStore.markBusy()
   await sessionStore.sendMessage(text)
   inputText.value = ''
-}
-
-async function resolveComposerRecoveryInteraction(confirmationId: string, text: string) {
-  runtimeStore.markBusy()
-  try {
-    notifyInteractionSubmitted()
-    armArtifactAutoPreview()
-    await confirmationStore.resolveConfirmation(confirmationId, {
-      actionType: 'SUPPLEMENT',
-      comment: text,
-      payload: { input: text },
-    }, { remove: true })
-    inputText.value = ''
-    await handleInteractionChanged(confirmationId)
-    scheduleInteractionFallbackSync(confirmationId)
-  } catch (error) {
-    runtimeStore.markIdle()
-    notificationStore.push({
-      anchor: 'right-panel',
-      tone: 'error',
-      title: '补充提交失败',
-      message: error instanceof Error ? error.message : '异常补充提交失败，请稍后重试。',
-      durationMs: 5200,
-    })
-  }
 }
 
 async function handleCancelReply() {
@@ -2009,10 +1953,6 @@ function timestamp(value: string | null | undefined): number {
       </div>
 
       <div class="conversation-workbench__composer">
-        <ConversationRuntimeStatusBar
-          v-if="sessionStore.activeSession && !isHistoricalVersion"
-          :status="runtimeStatusProjection"
-        />
         <ConversationInteractionBar
           v-if="currentInteractions.length"
           class="conversation-workbench__interaction-composer"

@@ -199,7 +199,7 @@ public class QuestionConfirmationHandler {
                 if (item.options().isEmpty()) {
                     field.put("type", "textarea");
                 } else {
-                    field.put("type", "select");
+                    field.put("type", item.multiple() ? "multiselect" : "select");
                     field.put("allowCustom", true);
                     field.set("options", fieldOptionArray(item.options()));
                 }
@@ -313,6 +313,14 @@ public class QuestionConfirmationHandler {
             List<List<String>> answers = new ArrayList<>();
             for (String fieldId : fieldOrder) {
                 Object value = fields.get(fieldId);
+                if (value instanceof Collection<?> collection) {
+                    List<String> values = collection.stream()
+                            .map(this::stringValue)
+                            .filter(text -> !text.isBlank())
+                            .toList();
+                    if (!values.isEmpty()) answers.add(values);
+                    continue;
+                }
                 String text = stringValue(value);
                 if (!text.isBlank()) {
                     answers.add(List.of(text));

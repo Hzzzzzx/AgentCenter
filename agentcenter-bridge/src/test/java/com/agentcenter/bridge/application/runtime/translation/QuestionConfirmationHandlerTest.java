@@ -154,6 +154,7 @@ class QuestionConfirmationHandlerTest {
                       "header": "验收标准",
                       "question": "用哪类标准证明完成？",
                       "options": ["UI 可见", "接口通过", "端到端通过"],
+                      "multiple": true,
                       "custom": false
                     }
                   ]
@@ -182,7 +183,7 @@ class QuestionConfirmationHandlerTest {
         assertEquals("select", schema.path("fields").get(1).path("type").asText());
         assertTrue(schema.path("fields").get(1).path("allowCustom").asBoolean());
         assertEquals("覆盖 PRD 和 HLD", schema.path("fields").get(1).path("options").get(1).path("value").asText());
-        assertEquals("select", schema.path("fields").get(2).path("type").asText());
+        assertEquals("multiselect", schema.path("fields").get(2).path("type").asText());
         assertTrue(schema.path("fields").get(2).path("allowCustom").asBoolean());
         assertEquals("端到端通过", schema.path("fields").get(2).path("options").get(2).path("label").asText());
     }
@@ -222,6 +223,28 @@ class QuestionConfirmationHandlerTest {
 
         verify(adapter).replyQuestion("ses_1", "q_1",
                 List.of(List.of("企业项目经理"), List.of("验收标准覆盖登录失败")));
+    }
+
+    @Test
+    void respondQuestionSendsMultiSelectFieldAnswersAsOneQuestionAnswer() {
+        ConfirmationRequestEntity entity = questionEntity(ConfirmationRequestType.INPUT_REQUIRED.name());
+        entity.setInteractionSchemaJson("""
+                {
+                  "fields": [
+                    {"id": "scope", "label": "范围", "type": "multiselect"}
+                  ]
+                }
+                """);
+        ResolveConfirmationRequest request = new ResolveConfirmationRequest(
+                ConfirmationActionType.SUPPLEMENT,
+                null,
+                Map.of("fields", Map.of(
+                        "scope", List.of("UI 可见", "端到端通过"))));
+
+        handler.respondQuestion(entity, request, ConfirmationActionType.SUPPLEMENT);
+
+        verify(adapter).replyQuestion("ses_1", "q_1",
+                List.of(List.of("UI 可见", "端到端通过")));
     }
 
     @Test

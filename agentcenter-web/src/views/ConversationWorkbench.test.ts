@@ -780,7 +780,7 @@ describe('ConversationWorkbench.vue', () => {
     )
   })
 
-  it('allows typed composer input to supplement the current interaction', async () => {
+  it('hides the composer input while the current interaction is active', async () => {
     const pinia = createPinia()
     setActivePinia(pinia)
     const wrapper = mount(ConversationWorkbench, {
@@ -798,25 +798,11 @@ describe('ConversationWorkbench.vue', () => {
     const interactionBar = wrapper.find('.interaction-bar')
     expect(interactionBar.exists()).toBe(true)
     expect(interactionBar.text()).toContain('确认继续下一步')
-    expect(interactionBar.text()).toContain('确认')
+    expect(interactionBar.text()).toContain('确认提交')
 
     const composer = wrapper.find('.conversation-workbench__composer')
     expect(composer.find('.interaction-bar').exists()).toBe(true)
-    expect(composer.find('.conversation-workbench__input-area').exists()).toBe(true)
-
-    const input = wrapper.find<HTMLInputElement>('.conversation-workbench__input')
-    await input.setValue('我先补一版调整意见，不要直接进下一步')
-    await wrapper.find('form.conversation-workbench__input-area').trigger('submit')
-    await flushPromises()
-
-    expect(confirmationApi.resolve).toHaveBeenCalledWith(
-      mocks.pendingConfirmation.id,
-      expect.objectContaining({
-        actionType: 'SUPPLEMENT',
-        comment: '我先补一版调整意见，不要直接进下一步',
-        payload: { input: '我先补一版调整意见，不要直接进下一步' },
-      }),
-    )
+    expect(composer.find('.conversation-workbench__input-area').exists()).toBe(false)
     expect(sessionApi.sendMessage).not.toHaveBeenCalled()
   })
 
@@ -890,7 +876,7 @@ describe('ConversationWorkbench.vue', () => {
     expect(wrapper.find('.conversation-workbench__send').attributes('aria-label')).toBe('发送消息')
   })
 
-  it('submits exception recovery from the composer with SUPPLEMENT', async () => {
+  it('submits exception recovery from the interaction summary with SUPPLEMENT', async () => {
     const failedWorkflow: WorkflowInstanceDto = {
       ...mocks.runningWorkflow,
       status: 'FAILED',
@@ -937,11 +923,16 @@ describe('ConversationWorkbench.vue', () => {
 
     await flushPromises()
 
-    expect(wrapper.find('.conversation-workbench__input-area').exists()).toBe(true)
+    expect(wrapper.find('.conversation-workbench__input-area').exists()).toBe(false)
     expect(wrapper.find('.interaction-bar').exists()).toBe(true)
 
-    const textarea = wrapper.find<HTMLTextAreaElement>('.interaction-bar__textarea')
+    const supplementOption = wrapper.findAll('.interaction-bar__option').find(option => option.text().includes('补充信息后继续'))
+    expect(supplementOption).toBeTruthy()
+    await supplementOption!.trigger('click')
+    const textarea = wrapper.find<HTMLTextAreaElement>('.interaction-bar__review-note')
     await textarea.setValue('请继续，但先限制在只读检查范围内')
+    const tabs = wrapper.findAll('.interaction-bar__tab')
+    await tabs[tabs.length - 1].trigger('click')
     await wrapper.find('.interaction-bar__primary').trigger('click')
     await flushPromises()
 

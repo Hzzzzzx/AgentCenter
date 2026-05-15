@@ -7,7 +7,7 @@ export interface InteractionOption {
   actionType?: ConfirmationActionType
 }
 
-type InteractionFieldType = 'text' | 'textarea' | 'number' | 'select' | 'checkbox'
+type InteractionFieldType = 'text' | 'textarea' | 'number' | 'select' | 'multiselect' | 'checkbox'
 
 export interface InteractionField {
   id: string
@@ -66,6 +66,7 @@ const VALID_FIELD_TYPES = new Set<InteractionFieldType>([
   'textarea',
   'number',
   'select',
+  'multiselect',
   'checkbox',
 ])
 

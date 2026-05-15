@@ -1,0 +1,1081 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AgentCenter 交互面板高保真</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f9;
+      --surface: #ffffff;
+      --surface-soft: #f1f5f4;
+      --surface-strong: #e8eef1;
+      --border: #d9e1e4;
+      --text: #1f2a32;
+      --muted: #64727b;
+      --faint: #8b989f;
+      --brand: #186f78;
+      --brand-soft: #dff0ef;
+      --brand-line: #8ec4c4;
+      --green: #24745c;
+      --green-soft: #e0f3eb;
+      --amber: #9f6326;
+      --amber-soft: #faeddc;
+      --red: #b43b3b;
+      --red-soft: #f7e2df;
+      --blue: #2c6fbd;
+      --blue-soft: #e0ecfb;
+      --shadow: 0 18px 45px rgba(38, 52, 57, 0.14);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        linear-gradient(180deg, #fbfcfd 0%, var(--bg) 46%, #eef3f1 100%);
+      color: var(--text);
+    }
+
+    button,
+    input,
+    textarea {
+      font: inherit;
+    }
+
+    .workspace {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 72px minmax(0, 1fr) 320px;
+      background: var(--bg);
+    }
+
+    .rail {
+      background: #ffffff;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding: 18px 12px;
+    }
+
+    .rail__mark {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: var(--brand);
+      color: #fff;
+      font-weight: 900;
+      letter-spacing: 0;
+    }
+
+    .rail__item {
+      width: 36px;
+      height: 36px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--muted);
+      display: grid;
+      place-items: center;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .rail__item--active {
+      border-color: var(--brand-line);
+      background: var(--brand-soft);
+      color: var(--brand);
+    }
+
+    .main {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .topbar {
+      height: 56px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(14px);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+    }
+
+    .topbar__title {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .topbar__title strong {
+      font-size: 14px;
+      font-weight: 900;
+    }
+
+    .topbar__title span {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .topbar__status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--brand-line);
+      border-radius: 8px;
+      padding: 6px 10px;
+      background: var(--brand-soft);
+      color: var(--brand);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .topbar__status::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--brand);
+    }
+
+    .conversation {
+      min-width: 0;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      padding: clamp(28px, 7vh, 72px) 24px 18px;
+      gap: 12px;
+    }
+
+    .messages {
+      width: min(920px, 100%);
+      margin: 0 auto;
+      display: grid;
+      gap: 12px;
+    }
+
+    .message {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.78);
+      padding: 12px 14px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .message strong {
+      color: var(--text);
+    }
+
+    .interaction-panel {
+      width: min(920px, 100%);
+      margin: 0 auto;
+      border: 1px solid color-mix(in srgb, var(--brand) 36%, var(--border));
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .interaction-tabs {
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      background: color-mix(in srgb, var(--brand-soft) 58%, #fff);
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .interaction-tabs::-webkit-scrollbar {
+      display: none;
+    }
+
+    .tab {
+      flex: 0 0 auto;
+      min-height: 30px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0 10px;
+      background: #fff;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .tab:hover {
+      border-color: var(--brand-line);
+      color: var(--brand);
+    }
+
+    .tab[aria-selected="true"] {
+      background: var(--brand);
+      border-color: var(--brand);
+      color: #fff;
+    }
+
+    .tab__state {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--faint);
+    }
+
+    .tab--done .tab__state {
+      background: var(--green);
+    }
+
+    .tab--active .tab__state {
+      background: #fff;
+    }
+
+    .tab--warn .tab__state {
+      background: var(--amber);
+    }
+
+    .tab--danger .tab__state {
+      background: var(--red);
+    }
+
+    .panel-body {
+      display: block;
+      min-height: 0;
+    }
+
+    .panel-main {
+      min-width: 0;
+      padding: 12px 18px 14px;
+      display: grid;
+      gap: 10px;
+      align-content: start;
+    }
+
+    .panel-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .panel-heading__copy {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      column-gap: 8px;
+      row-gap: 3px;
+      min-width: 0;
+    }
+
+    .type-badge {
+      width: fit-content;
+      border-radius: 8px;
+      padding: 2px 7px;
+      background: var(--blue-soft);
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 900;
+      line-height: 1.5;
+    }
+
+    .type-badge--permission {
+      background: var(--amber-soft);
+      color: var(--amber);
+    }
+
+    .type-badge--exception {
+      background: var(--red-soft);
+      color: var(--red);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 17px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.42;
+    }
+
+    .panel-heading__copy .lead {
+      grid-column: 1 / -1;
+    }
+
+    .question-list {
+      display: grid;
+      gap: 14px;
+    }
+
+    .question-row {
+      display: grid;
+      gap: 10px;
+      padding: 14px 0 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .question-row:first-child {
+      padding-top: 0;
+      border-top: 0;
+    }
+
+    .question-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .question-title strong {
+      font-size: 14px;
+      font-weight: 900;
+    }
+
+    .question-title span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .question-copy {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .choice-grid {
+      display: grid;
+      grid-template-columns: 1fr !important;
+      gap: 8px;
+      max-width: 640px;
+    }
+
+    .choice-grid--stack {
+      grid-template-columns: 1fr !important;
+    }
+
+    .choice {
+      min-width: 0;
+      min-height: 50px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 11px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .choice:hover {
+      border-color: var(--brand-line);
+    }
+
+    .choice[aria-pressed="true"] {
+      border-color: var(--brand);
+      background: var(--brand-soft);
+    }
+
+    .choice__dot {
+      flex: 0 0 auto;
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--faint);
+      border-radius: 50%;
+      background: #fff;
+    }
+
+    .choice[aria-pressed="true"] .choice__dot {
+      border-color: var(--brand);
+      box-shadow: inset 0 0 0 3px #fff;
+      background: var(--brand);
+    }
+
+    .choice__copy {
+      min-width: 0;
+      display: grid;
+      gap: 2px;
+    }
+
+    .choice__copy strong {
+      font-size: 13px;
+      font-weight: 900;
+      white-space: normal;
+    }
+
+    .choice__copy span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .choice--custom {
+      align-items: flex-start;
+      cursor: default;
+    }
+
+    .choice--custom .choice__copy {
+      width: 100%;
+      gap: 7px;
+    }
+
+    .choice__inline-input {
+      height: 36px;
+      border-radius: 8px;
+      font-size: 13px;
+      background: color-mix(in srgb, var(--surface-soft) 45%, #fff);
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+
+    .field label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    input,
+    textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.16s, box-shadow 0.16s;
+    }
+
+    input {
+      height: 38px;
+      padding: 0 10px;
+    }
+
+    textarea {
+      min-height: 74px;
+      resize: vertical;
+      padding: 10px;
+      line-height: 1.45;
+    }
+
+    input:focus,
+    textarea:focus {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 17%, transparent);
+    }
+
+    .permission-box,
+    .exception-box {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fff;
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .permission-target,
+    .exception-title {
+      display: grid;
+      gap: 5px;
+    }
+
+    .permission-target strong,
+    .exception-title strong {
+      font-size: 14px;
+    }
+
+    .permission-target code {
+      display: block;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface-soft);
+      padding: 9px 10px;
+      color: #294148;
+      font-size: 12px;
+      white-space: normal;
+      word-break: break-all;
+    }
+
+    .panel-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding-top: 2px;
+    }
+
+    .btn {
+      min-height: 34px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--text);
+      padding: 0 12px;
+      font-size: 13px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .btn:hover {
+      border-color: var(--brand-line);
+      color: var(--brand);
+    }
+
+    .btn--primary {
+      border-color: var(--brand);
+      background: var(--brand);
+      color: #fff;
+    }
+
+    .btn--primary:hover {
+      color: #fff;
+      background: #125c64;
+    }
+
+    .btn--danger {
+      border-color: color-mix(in srgb, var(--red) 40%, var(--border));
+      color: var(--red);
+    }
+
+    .summary-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .summary-item {
+      display: grid;
+      grid-template-columns: 108px minmax(0, 1fr);
+      gap: 12px;
+      border-top: 1px solid var(--border);
+      padding-top: 10px;
+    }
+
+    .summary-item:first-child {
+      border-top: 0;
+      padding-top: 0;
+    }
+
+    .summary-item span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .summary-item strong {
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .side-panel {
+      min-width: 0;
+      border-left: 1px solid var(--border);
+      background: #fff;
+      padding: 18px;
+      display: grid;
+      align-content: start;
+      gap: 14px;
+    }
+
+    .side-panel h2 {
+      margin: 0;
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+
+    .task-card,
+    .confirm-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      display: grid;
+      gap: 8px;
+      background: #fff;
+    }
+
+    .task-card strong,
+    .confirm-card strong {
+      font-size: 13px;
+    }
+
+    .task-card span,
+    .confirm-card span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .screen[hidden] {
+      display: none;
+    }
+
+    @media (max-width: 1080px) {
+      .workspace {
+        grid-template-columns: 56px minmax(0, 1fr);
+      }
+
+      .side-panel {
+        display: none;
+      }
+
+    }
+
+    @media (max-width: 720px) {
+      .topbar {
+        padding: 0 14px;
+      }
+
+      .conversation {
+        padding: 16px 12px 12px;
+      }
+
+      .messages {
+        display: none;
+      }
+
+      .panel-main {
+        padding: 14px;
+      }
+
+      .panel-heading {
+        display: grid;
+      }
+
+      .choice-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .panel-actions {
+        justify-content: stretch;
+      }
+
+      .panel-actions .btn {
+        flex: 1;
+      }
+
+      .summary-item {
+        grid-template-columns: 1fr;
+        gap: 4px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="workspace">
+    <aside class="rail" aria-label="主导航">
+      <div class="rail__mark">AC</div>
+      <div class="rail__item">首</div>
+      <div class="rail__item rail__item--active">话</div>
+      <div class="rail__item">流</div>
+      <div class="rail__item">验</div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar__title">
+          <strong>FE-0003 社区共享工具柜借还流程</strong>
+          <span>详细设计 (LLD) · OpenCode 工作流会话</span>
+        </div>
+        <div class="topbar__status">等待用户输入</div>
+      </header>
+
+      <section class="conversation" aria-label="对话工作台">
+        <div class="messages">
+          <div class="message"><strong>Agent</strong> 已完成需求拆分，并进入详细设计节点。当前节点需要补齐实现约束后继续。</div>
+          <div class="message"><strong>系统</strong> LLD 节点触发 5 个待处理项：3 个问题、1 个权限授权、1 个异常恢复。</div>
+        </div>
+
+        <section class="interaction-panel" aria-label="当前交互面板">
+          <nav class="interaction-tabs" role="tablist" aria-label="待处理项">
+            <button class="tab tab--done" type="button" role="tab" aria-selected="false" data-tab="q1">
+              <span class="tab__state"></span>
+              <span>问题一</span>
+            </button>
+            <button class="tab tab--active" type="button" role="tab" aria-selected="true" data-tab="q2">
+              <span class="tab__state"></span>
+              <span>问题二</span>
+            </button>
+            <button class="tab" type="button" role="tab" aria-selected="false" data-tab="q3">
+              <span class="tab__state"></span>
+              <span>问题三</span>
+            </button>
+            <button class="tab tab--warn" type="button" role="tab" aria-selected="false" data-tab="permission">
+              <span class="tab__state"></span>
+              <span>权限</span>
+            </button>
+            <button class="tab tab--danger" type="button" role="tab" aria-selected="false" data-tab="exception">
+              <span class="tab__state"></span>
+              <span>异常</span>
+            </button>
+            <button class="tab" type="button" role="tab" aria-selected="false" data-tab="summary">
+              <span class="tab__state"></span>
+              <span>确认提交</span>
+            </button>
+          </nav>
+
+          <div class="panel-body">
+            <div class="panel-main">
+              <section class="screen" data-screen="q1" hidden>
+                <div class="panel-heading">
+                  <div class="panel-heading__copy">
+                    <span class="type-badge">输入</span>
+                    <h1>目标用户</h1>
+                    <p class="lead">优先服务哪类用户？确认提交后 Agent 会按这个视角收敛详细设计。</p>
+                  </div>
+                </div>
+                <div class="choice-grid" data-choice-group="audience">
+                  <button class="choice" type="button" aria-pressed="true" data-value="产品负责人">
+                    <span class="choice__dot"></span>
+                    <span class="choice__copy"><strong>产品负责人</strong><span>关心进度和状态可见性</span></span>
+                  </button>
+                  <button class="choice" type="button" aria-pressed="false" data-value="DevOps 工程师">
+                    <span class="choice__dot"></span>
+                    <span class="choice__copy"><strong>DevOps 工程师</strong><span>关心运行链路和恢复动作</span></span>
+                  </button>
+                  <button class="choice" type="button" aria-pressed="false" data-value="测试负责人">
+                    <span class="choice__dot"></span>
+                    <span class="choice__copy"><strong>测试负责人</strong><span>关心验收证据和回归范围</span></span>
+                  </button>
+                  <div class="choice choice--custom" aria-pressed="false">
+                    <span class="choice__dot"></span>
+                    <span class="choice__copy">
+                      <strong>自定义输入</strong>
+                      <input class="choice__inline-input" data-value-key="audienceCustom" placeholder="输入其它目标用户...">
+                    </span>
+                  </div>
+                </div>
+              </section>
+
+              <section class="screen" data-screen="q2">
+                <div class="panel-heading">
+                  <div class="panel-heading__copy">
+                    <span class="type-badge">输入</span>
+                    <h1>范围边界</h1>
+                    <p class="lead">本次覆盖哪些范围？这个选择会决定后续 LLD 的深度和验证范围。</p>
+                  </div>
+                </div>
+
+                <div class="choice-grid" data-choice-group="scope">
+                  <button class="choice" type="button" aria-pressed="false" data-value="只覆盖 PRD">
+                    <span class="choice__dot"></span>
+                    <span class="choice__copy"><strong>只覆盖 PRD</strong><span>收敛到需求说明</span></span>
+                  </button>
+                  <button class="choice" type="button" aria-pressed="true" data-value="覆盖 PRD 和 HLD">
+                    <span class="choice__dot"></span>
+                    <span class="choice__copy"><strong>覆盖 PRD 和 HLD</strong><span>兼顾行为和模块边界</span></span>
+                  </button>
+                  <button class="choice" type="button" aria-pressed="false" data-value="覆盖完整链路">
+                    <span class="choice__dot"></span>
+                    <span class="choice__copy"><strong>覆盖完整链路</strong><span>包含验证和发布动作</span></span>
+                  </button>
+                  <div class="choice choice--custom" aria-pressed="false">
+                    <span class="choice__dot"></span>
+                    <span class="choice__copy">
+                      <strong>自定义输入</strong>
+                      <input class="choice__inline-input" data-value-key="scopeCustom" placeholder="输入自定义覆盖范围...">
+                    </span>
+                  </div>
+                </div>
+
+              </section>
+
+              <section class="screen" data-screen="q3" hidden>
+                <div class="panel-heading">
+                  <div class="panel-heading__copy">
+                    <span class="type-badge">输入</span>
+                    <h1>验收标准</h1>
+                    <p class="lead">用哪类标准证明完成？可多选，这会决定后续验收证据的组织方式。</p>
+                  </div>
+                </div>
+                <div class="choice-grid choice-grid--stack" data-choice-group="acceptance" data-multiple="true">
+                  <button class="choice" type="button" aria-pressed="false" data-value="UI 可见">
+                    <span class="choice__dot"></span>
+                    <span class="choice__copy"><strong>UI 可见</strong><span>面板状态与问题归属清晰</span></span>
+                  </button>
+                  <button class="choice" type="button" aria-pressed="false" data-value="接口通过">
+                    <span class="choice__dot"></span>
+                    <span class="choice__copy"><strong>接口通过</strong><span>确认项按上下文过滤</span></span>
+                  </button>
+                  <button class="choice" type="button" aria-pressed="false" data-value="端到端通过">
+                    <span class="choice__dot"></span>
+                    <span class="choice__copy"><strong>端到端通过</strong><span>从提问到恢复全链路验证</span></span>
+                  </button>
+                  <div class="choice choice--custom" aria-pressed="false">
+                    <span class="choice__dot"></span>
+                    <span class="choice__copy">
+                      <strong>自定义输入</strong>
+                      <input class="choice__inline-input" id="acceptance-note" data-value-key="acceptanceNote" value="优先保留前端交互验收截图和 store 过滤测试">
+                    </span>
+                  </div>
+                </div>
+              </section>
+
+              <section class="screen" data-screen="permission" hidden>
+                <div class="panel-heading">
+                  <div class="panel-heading__copy">
+                    <span class="type-badge type-badge--permission">权限</span>
+                    <h1>允许 Agent 访问外部目录？</h1>
+                    <p class="lead">处理后 OpenCode 才会继续当前工具调用。</p>
+                  </div>
+                </div>
+                <div class="permission-box">
+                  <div class="permission-target">
+                    <strong>访问范围</strong>
+                    <code>/Users/hzz/workspace/AgentCenter/runtime-workspace/.opencode/skills/*</code>
+                  </div>
+                  <div class="choice-grid" data-choice-group="permission">
+                    <button class="choice" type="button" aria-pressed="true" data-value="允许一次">
+                      <span class="choice__dot"></span>
+                      <span class="choice__copy"><strong>允许一次</strong><span>仅本次工具调用生效</span></span>
+                    </button>
+                    <button class="choice" type="button" aria-pressed="false" data-value="本次会话允许同类请求">
+                      <span class="choice__dot"></span>
+                      <span class="choice__copy"><strong>本次会话允许</strong><span>同类路径自动放行</span></span>
+                    </button>
+                    <button class="choice" type="button" aria-pressed="false" data-value="拒绝">
+                      <span class="choice__dot"></span>
+                      <span class="choice__copy"><strong>拒绝</strong><span>当前工具调用会停止</span></span>
+                    </button>
+                  </div>
+                </div>
+                <div class="panel-actions">
+                  <button class="btn" type="button">详情</button>
+                  <button class="btn btn--primary" type="button">提交</button>
+                </div>
+              </section>
+
+              <section class="screen" data-screen="exception" hidden>
+                <div class="panel-heading">
+                  <div class="panel-heading__copy">
+                    <span class="type-badge type-badge--exception">异常</span>
+                    <h1>Runtime 执行异常</h1>
+                    <p class="lead">当前节点已阻塞，处理后才会继续恢复工作流状态。</p>
+                  </div>
+                </div>
+                <div class="exception-box">
+                  <div class="exception-title">
+                    <strong>失败原因</strong>
+                    <p class="lead">OpenCode question reply timeout，确认项未收到 Runtime ack。</p>
+                  </div>
+                  <div class="field">
+                    <label for="exception-note">恢复指令</label>
+                    <textarea id="exception-note" data-value-key="exceptionNote">请基于当前上下文重试，但不要重复已经完成的文件写入。</textarea>
+                  </div>
+                </div>
+                <div class="panel-actions">
+                  <button class="btn btn--danger" type="button">拒绝</button>
+                  <button class="btn" type="button">跳过</button>
+                  <button class="btn btn--primary" type="button">重试</button>
+                </div>
+              </section>
+
+              <section class="screen" data-screen="summary" hidden>
+                <div class="panel-heading">
+                  <div class="panel-heading__copy">
+                    <span class="type-badge">确认</span>
+                    <h1>提交前确认</h1>
+                    <p class="lead">所有待处理项会分别提交到对应 confirmation，提交后当前节点继续恢复。</p>
+                  </div>
+                </div>
+                <div class="summary-list">
+                  <div class="summary-item">
+                    <span>问题一</span>
+                    <strong data-summary="audience">产品负责人</strong>
+                  </div>
+                  <div class="summary-item">
+                    <span>问题二</span>
+                    <strong data-summary="scope">覆盖 PRD 和 HLD</strong>
+                  </div>
+                  <div class="summary-item">
+                    <span>问题三</span>
+                    <strong><span data-summary="acceptance">未选择</span>；<span data-summary="acceptanceNote">优先保留前端交互验收截图和 store 过滤测试</span></strong>
+                  </div>
+                  <div class="summary-item">
+                    <span>权限</span>
+                    <strong data-summary="permission">允许一次</strong>
+                  </div>
+                  <div class="summary-item">
+                    <span>异常</span>
+                    <strong data-summary="exceptionNote">请基于当前上下文重试，但不要重复已经完成的文件写入。</strong>
+                  </div>
+                </div>
+                <div class="panel-actions">
+                  <button class="btn" type="button" data-jump="q3">返回修改</button>
+                  <button class="btn btn--primary" type="button">确认提交</button>
+                </div>
+              </section>
+            </div>
+
+          </div>
+        </section>
+
+      </section>
+    </main>
+
+    <aside class="side-panel" aria-label="待确认">
+      <h2>待确认</h2>
+      <div class="task-card">
+        <strong>FE-0003</strong>
+        <span>详细设计节点等待用户补齐交互问题。</span>
+      </div>
+      <div class="confirm-card">
+        <strong>问题一 · 已填写</strong>
+        <span>目标用户已选择。</span>
+      </div>
+      <div class="confirm-card">
+        <strong>问题二 · 进行中</strong>
+        <span>范围边界已选择，可继续确认。</span>
+      </div>
+      <div class="confirm-card">
+        <strong>问题三 · 未填写</strong>
+        <span>等待选择验收标准。</span>
+      </div>
+      <div class="confirm-card">
+        <strong>权限 · 待提交</strong>
+        <span>OpenCode 外部目录访问授权。</span>
+      </div>
+      <div class="confirm-card">
+        <strong>异常 · 待恢复</strong>
+        <span>Runtime 异常恢复策略。</span>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    const state = {
+      audience: '产品负责人',
+      scope: '覆盖 PRD 和 HLD',
+      acceptance: [],
+      acceptanceNote: '优先保留前端交互验收截图和 store 过滤测试',
+      permission: '允许一次',
+      exceptionNote: '请基于当前上下文重试，但不要重复已经完成的文件写入。'
+    };
+
+    const tabs = [...document.querySelectorAll('.tab')];
+    const screens = [...document.querySelectorAll('.screen')];
+
+    function showTab(id) {
+      tabs.forEach((tab) => {
+        const active = tab.dataset.tab === id;
+        tab.setAttribute('aria-selected', String(active));
+        tab.classList.toggle('tab--active', active);
+      });
+      screens.forEach((screen) => {
+        screen.hidden = screen.dataset.screen !== id;
+      });
+      if (location.hash !== `#${id}`) {
+        history.replaceState(null, '', `#${id}`);
+      }
+      updateSummary();
+    }
+
+    function setChoice(group, value, multiple = false) {
+      if (multiple) {
+        const next = new Set(Array.isArray(state[group]) ? state[group] : []);
+        if (next.has(value)) next.delete(value);
+        else next.add(value);
+        state[group] = [...next];
+      } else {
+        state[group] = value;
+      }
+      document.querySelectorAll(`[data-choice-group="${group}"] .choice`).forEach((button) => {
+        const active = multiple
+          ? (Array.isArray(state[group]) && state[group].includes(button.dataset.value))
+          : button.dataset.value === value;
+        button.setAttribute('aria-pressed', String(active));
+      });
+      updateTabStates();
+      updateSummary();
+      if (!multiple) advanceAfterChoice(group);
+    }
+
+    function advanceAfterChoice(group) {
+      const nextTab = {
+        audience: 'q2',
+        scope: 'q3',
+        acceptance: 'summary'
+      }[group];
+      if (nextTab) {
+        window.setTimeout(() => showTab(nextTab), 180);
+      }
+    }
+
+    function updateTabStates() {
+      const q1Done = Boolean(state.audience);
+      const q2Done = Boolean(state.scope);
+      const q3Done = Array.isArray(state.acceptance) ? state.acceptance.length > 0 : Boolean(state.acceptance);
+      const summaryDone = q1Done && q2Done && q3Done && Boolean(state.permission && state.exceptionNote);
+      document.querySelector('[data-tab="q1"]')?.classList.toggle('tab--done', q1Done);
+      document.querySelector('[data-tab="q2"]')?.classList.toggle('tab--done', q2Done);
+      document.querySelector('[data-tab="q3"]')?.classList.toggle('tab--done', q3Done);
+      document.querySelector('[data-tab="summary"]')?.classList.toggle('tab--done', summaryDone);
+    }
+
+    function updateSummary() {
+      document.querySelectorAll('[data-summary]').forEach((node) => {
+        const key = node.dataset.summary;
+        const value = state[key];
+        node.textContent = Array.isArray(value) ? (value.join('，') || '未选择') : (value || '未选择');
+      });
+    }
+
+    tabs.forEach((tab) => {
+      tab.addEventListener('click', () => showTab(tab.dataset.tab));
+    });
+
+    document.querySelectorAll('[data-choice-group]').forEach((group) => {
+      const key = group.dataset.choiceGroup;
+      const multiple = group.dataset.multiple === 'true';
+      group.querySelectorAll('.choice[data-value]').forEach((button) => {
+        button.addEventListener('click', () => setChoice(key, button.dataset.value, multiple));
+      });
+    });
+
+    document.querySelectorAll('[data-value-key]').forEach((field) => {
+      field.addEventListener('input', () => {
+        state[field.dataset.valueKey] = field.value.trim();
+        updateTabStates();
+        updateSummary();
+      });
+    });
+
+    document.querySelectorAll('[data-jump]').forEach((button) => {
+      button.addEventListener('click', () => showTab(button.dataset.jump));
+    });
+
+    updateTabStates();
+    updateSummary();
+    const initialTab = location.hash ? location.hash.slice(1) : '';
+    if (initialTab && tabs.some((tab) => tab.dataset.tab === initialTab)) {
+      showTab(initialTab);
+    }
+  </script>
+</body>
+</html>

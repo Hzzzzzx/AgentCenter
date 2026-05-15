@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import ConversationInteractionBar from './ConversationInteractionBar.vue'
 import { confirmationApi } from '../../api/confirmations'
@@ -38,6 +38,13 @@ function makeInteraction(overrides: Partial<ConfirmationRequestDto> = {}): Confi
   }
 }
 
+async function submitReview(wrapper: VueWrapper) {
+  const tabs = wrapper.findAll('.interaction-bar__tab')
+  await tabs[tabs.length - 1].trigger('click')
+  await wrapper.find('.interaction-bar__primary').trigger('click')
+  await flushPromises()
+}
+
 describe('ConversationInteractionBar.vue', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -62,12 +69,12 @@ describe('ConversationInteractionBar.vue', () => {
     expect(wrapper.find('.interaction-bar').exists()).toBe(true)
     expect(wrapper.text()).not.toContain('需要你确认')
     expect(wrapper.text()).not.toContain('FE1002 · 确认项浮层交互回归')
-    expect(wrapper.text()).toContain('问题 1')
-    expect(wrapper.text()).toContain('问题 2')
-    expect(wrapper.text()).toContain('确认')
+    expect(wrapper.text()).toContain('问题一')
+    expect(wrapper.text()).toContain('问题二')
+    expect(wrapper.text()).toContain('确认提交')
     expect(wrapper.text()).toContain('确认继续下一步')
     expect(wrapper.findAll('.interaction-bar__tab')).toHaveLength(3)
-    expect(wrapper.find('.interaction-bar__tab').text()).toBe('问题 1')
+    expect(wrapper.find('.interaction-bar__tab').text()).toBe('问题一')
     expect(wrapper.find('.interaction-bar__body .interaction-bar__tabs').exists()).toBe(false)
   })
 
@@ -102,7 +109,7 @@ describe('ConversationInteractionBar.vue', () => {
     expect(wrapper.text()).toContain('尚未填写')
   })
 
-  it('hides tabs when there is only one interaction', () => {
+  it('keeps the top tabs as the only navigation when there is one interaction', () => {
     const wrapper = mount(ConversationInteractionBar, {
       props: {
         interactions: [
@@ -117,8 +124,9 @@ describe('ConversationInteractionBar.vue', () => {
     })
 
     expect(wrapper.text()).not.toContain('需要你确认选择')
-    expect(wrapper.find('.interaction-bar__tabs').exists()).toBe(false)
-    expect(wrapper.text()).not.toContain('问题 1')
+    expect(wrapper.find('.interaction-bar__tabs').exists()).toBe(true)
+    expect(wrapper.text()).toContain('问题一')
+    expect(wrapper.text()).toContain('确认提交')
   })
 
   it('stacks decision options vertically', () => {
@@ -155,8 +163,7 @@ describe('ConversationInteractionBar.vue', () => {
     })
 
     await wrapper.findAll('.interaction-bar__option')[1].trigger('click')
-    await wrapper.find('.interaction-bar__primary').trigger('click')
-    await flushPromises()
+    await submitReview(wrapper)
 
     expect(confirmationApi.resolve).toHaveBeenCalledWith('confirm-2', {
       actionType: 'CHOOSE',
@@ -189,8 +196,7 @@ describe('ConversationInteractionBar.vue', () => {
     })
 
     await wrapper.findAll('.interaction-bar__option')[0].trigger('click')
-    await wrapper.find('.interaction-bar__primary').trigger('click')
-    await flushPromises()
+    await submitReview(wrapper)
 
     expect(confirmationApi.resolve).toHaveBeenCalledWith('confirm-action-type', {
       actionType: 'ADVANCE',
@@ -217,7 +223,7 @@ describe('ConversationInteractionBar.vue', () => {
       },
     })
 
-    await wrapper.find('.interaction-bar__primary').trigger('click')
+    await submitReview(wrapper)
 
     expect(wrapper.emitted('submitting')?.[0]).toEqual(['confirm-submit'])
     expect(wrapper.emitted('resolved')).toBeFalsy()
@@ -247,8 +253,7 @@ describe('ConversationInteractionBar.vue', () => {
 
     expect(wrapper.text()).not.toContain('[object Object]')
     await wrapper.findAll('.interaction-bar__option')[1].trigger('click')
-    await wrapper.find('.interaction-bar__primary').trigger('click')
-    await flushPromises()
+    await submitReview(wrapper)
 
     expect(confirmationApi.resolve).toHaveBeenCalledWith('confirm-value-options', {
       actionType: 'CHOOSE',
@@ -273,8 +278,7 @@ describe('ConversationInteractionBar.vue', () => {
     })
 
     await wrapper.find('.interaction-bar__textarea').setValue('请补充异常分支')
-    await wrapper.find('.interaction-bar__primary').trigger('click')
-    await flushPromises()
+    await submitReview(wrapper)
 
     expect(confirmationApi.resolve).toHaveBeenCalledWith('confirm-3', {
       actionType: 'SUPPLEMENT',
@@ -284,7 +288,7 @@ describe('ConversationInteractionBar.vue', () => {
     expect(wrapper.emitted('resolved')?.[0]).toEqual(['confirm-3'])
   })
 
-  it('switches multi-question prompts by tab while editing answers', async () => {
+  it('renders multi-question prompts vertically while editing answers', async () => {
     const wrapper = mount(ConversationInteractionBar, {
       props: {
         interactions: [
@@ -317,18 +321,15 @@ describe('ConversationInteractionBar.vue', () => {
       },
     })
 
-    const tabs = wrapper.findAll('.interaction-bar__field-tab')
-    expect(tabs).toHaveLength(2)
     const textareas = wrapper.findAll('textarea')
+    expect(wrapper.findAll('.interaction-bar__field-tab')).toHaveLength(0)
     expect(wrapper.text()).toContain('请确认目标用户是谁？')
-    expect(wrapper.text()).not.toContain('请说明验收标准是什么？')
+    expect(wrapper.text()).toContain('请说明验收标准是什么？')
     expect(textareas[0].attributes('placeholder')).toBe('输入你的回答...')
 
     await textareas[0].setValue('企业项目经理')
-
+    await textareas[1].setValue('端到端验收通过')
     expect(wrapper.text()).toContain('请确认目标用户是谁？')
-    await tabs[1].trigger('click')
-    expect(wrapper.text()).not.toContain('请确认目标用户是谁？')
     expect(wrapper.text()).toContain('请说明验收标准是什么？')
   })
 
@@ -398,10 +399,10 @@ describe('ConversationInteractionBar.vue', () => {
       },
     })
 
-    const alwaysButton = wrapper.findAll('button').find(button => button.text() === '本次会话允许同类请求')
-    expect(alwaysButton).toBeTruthy()
-    await alwaysButton!.trigger('click')
-    await flushPromises()
+    const alwaysOption = wrapper.findAll('.interaction-bar__option').find(button => button.text().includes('本次会话允许'))
+    expect(alwaysOption).toBeTruthy()
+    await alwaysOption!.trigger('click')
+    await submitReview(wrapper)
 
     expect(confirmationApi.resolve).toHaveBeenCalledWith('confirm-permission-always', {
       actionType: 'APPROVE',
@@ -436,8 +437,7 @@ describe('ConversationInteractionBar.vue', () => {
 
     await options[0].trigger('click')
     await options[2].trigger('click')
-    await wrapper.find('.interaction-bar__primary').trigger('click')
-    await flushPromises()
+    await submitReview(wrapper)
 
     expect(confirmationApi.resolve).toHaveBeenCalledWith('confirm-multi', {
       actionType: 'CHOOSE',
@@ -464,10 +464,10 @@ describe('ConversationInteractionBar.vue', () => {
       },
     })
 
-    const rejectButton = wrapper.findAll('button').find(button => button.text() === '拒绝')
-    expect(rejectButton).toBeTruthy()
-    await rejectButton!.trigger('click')
-    await flushPromises()
+    const rejectOption = wrapper.findAll('.interaction-bar__option').find(button => button.text().includes('拒绝'))
+    expect(rejectOption).toBeTruthy()
+    await rejectOption!.trigger('click')
+    await submitReview(wrapper)
 
     expect(confirmationApi.resolve).toHaveBeenCalledWith('confirm-exception-reject', {
       actionType: 'REJECT',
@@ -501,8 +501,7 @@ describe('ConversationInteractionBar.vue', () => {
 
     // Custom input with no preset selected → submits custom text
     await customInputEl.setValue('自定义方案X')
-    await wrapper.find('.interaction-bar__primary').trigger('click')
-    await flushPromises()
+    await submitReview(wrapper)
 
     expect(confirmationApi.resolve).toHaveBeenCalledWith('confirm-custom', {
       actionType: 'CHOOSE',
@@ -535,8 +534,7 @@ describe('ConversationInteractionBar.vue', () => {
     // Type custom text without clicking any preset option
     const customInputEl = wrapper.find('input[placeholder="自定义输入..."]')
     await customInputEl.setValue('完全自定义的方案文本')
-    await wrapper.find('.interaction-bar__primary').trigger('click')
-    await flushPromises()
+    await submitReview(wrapper)
 
     // Should submit the custom text, not the first preset option
     expect(confirmationApi.resolve).toHaveBeenCalledWith('confirm-custom', {
@@ -563,13 +561,15 @@ describe('ConversationInteractionBar.vue', () => {
       },
     })
 
+    await wrapper.findAll('.interaction-bar__tab')[1].trigger('click')
     const primary = wrapper.find('.interaction-bar__primary')
     expect(primary.attributes('disabled')).toBeDefined()
 
+    await wrapper.findAll('.interaction-bar__tab')[0].trigger('click')
     await wrapper.find('input[placeholder="自定义输入..."]').setValue('请 Agent 先列出 3 个方案')
-    expect(primary.attributes('disabled')).toBeUndefined()
-    await primary.trigger('click')
-    await flushPromises()
+    await wrapper.findAll('.interaction-bar__tab')[1].trigger('click')
+    expect(wrapper.find('.interaction-bar__primary').attributes('disabled')).toBeUndefined()
+    await submitReview(wrapper)
 
     expect(confirmationApi.resolve).toHaveBeenCalledWith('confirm-custom-only', {
       actionType: 'CHOOSE',
@@ -603,8 +603,7 @@ describe('ConversationInteractionBar.vue', () => {
 
     await wrapper.findAll('.interaction-bar__option')[1].trigger('click')
     await wrapper.find('.interaction-bar__review-note').setValue('补上失败回滚策略')
-    await wrapper.find('.interaction-bar__primary').trigger('click')
-    await flushPromises()
+    await submitReview(wrapper)
 
     expect(confirmationApi.resolve).toHaveBeenCalledWith('confirm-review', {
       actionType: 'REJECT',
@@ -640,10 +639,8 @@ describe('ConversationInteractionBar.vue', () => {
 
     expect(wrapper.find('.interaction-bar__fields').exists()).toBe(true)
     expect(wrapper.find('.interaction-bar__copy').exists()).toBe(false)
-    expect(wrapper.findAll('.interaction-bar__field-tab')).toHaveLength(3)
-    expect(wrapper.findAll('.interaction-bar__field-tab')[0].text()).toContain('问题一')
-    expect(wrapper.findAll('.interaction-bar__field-tab')[0].text()).toContain('模块名称')
-    expect(wrapper.findAll('.interaction-bar__field')).toHaveLength(1)
+    expect(wrapper.findAll('.interaction-bar__field-tab')).toHaveLength(0)
+    expect(wrapper.findAll('.interaction-bar__field')).toHaveLength(3)
     expect(wrapper.find('label[for="field-name"]').text()).toContain('模块名称')
     expect(wrapper.find('label[for="field-name"] .interaction-bar__field-required').exists()).toBe(true)
 
@@ -651,17 +648,14 @@ describe('ConversationInteractionBar.vue', () => {
     expect(nameInput.exists()).toBe(true)
     await nameInput.setValue('AuthService')
 
-    await wrapper.findAll('.interaction-bar__field-tab')[1].trigger('click')
     const descTextarea = wrapper.find('#field-desc')
     expect(descTextarea.exists()).toBe(true)
     await descTextarea.setValue('认证服务模块')
 
-    await wrapper.findAll('.interaction-bar__field-tab')[2].trigger('click')
     const countInput = wrapper.find('#field-count')
     expect(countInput.exists()).toBe(true)
     await countInput.setValue('3')
-    await wrapper.find('.interaction-bar__primary').trigger('click')
-    await flushPromises()
+    await submitReview(wrapper)
 
     expect(confirmationApi.resolve).toHaveBeenCalledWith('confirm-fields', {
       actionType: 'SUPPLEMENT',
@@ -694,6 +688,16 @@ describe('ConversationInteractionBar.vue', () => {
                     { value: 'high', label: '高' },
                   ],
                 },
+                {
+                  id: 'checks',
+                  label: '验收方式',
+                  type: 'multiselect',
+                  required: true,
+                  options: [
+                    { value: 'ui', label: 'UI 可见' },
+                    { value: 'e2e', label: '端到端通过' },
+                  ],
+                },
                 { id: 'accepted', label: '我确认风险', type: 'checkbox', required: true },
               ],
             }),
@@ -702,28 +706,28 @@ describe('ConversationInteractionBar.vue', () => {
       },
     })
 
-    const primary = wrapper.find('.interaction-bar__primary')
-    expect(primary.attributes('disabled')).toBeDefined()
     expect(wrapper.find('select#field-priority').exists()).toBe(false)
     expect(wrapper.find('.interaction-bar__field-menu').exists()).toBe(true)
 
     await wrapper.findAll('.interaction-bar__field-menu-option')[1].trigger('click')
-    expect(primary.attributes('disabled')).toBeDefined()
-    expect(wrapper.findAll('.interaction-bar__field-tab')[1].classes()).toContain('interaction-bar__field-tab--active')
+    await wrapper.findAll('.interaction-bar__tab')[1].trigger('click')
+    expect(wrapper.find('.interaction-bar__primary').attributes('disabled')).toBeDefined()
 
-    await wrapper.findAll('.interaction-bar__field-tab')[1].trigger('click')
+    await wrapper.findAll('.interaction-bar__tab')[0].trigger('click')
+    const multiselectOptions = wrapper.findAll('.interaction-bar__field-menu--multi .interaction-bar__field-menu-option')
+    expect(multiselectOptions).toHaveLength(2)
+    await multiselectOptions[0].trigger('click')
+    await multiselectOptions[1].trigger('click')
     await wrapper.find('#field-accepted').setValue(true)
-    expect(primary.attributes('disabled')).toBeUndefined()
-    await primary.trigger('click')
-    await flushPromises()
+    await submitReview(wrapper)
 
     expect(confirmationApi.resolve).toHaveBeenCalledWith('confirm-field-controls', {
       actionType: 'SUPPLEMENT',
       payload: {
-        input: '高\n是',
-        fields: { priority: 'high', accepted: 'true' },
+        input: '高\nUI 可见，端到端通过\n是',
+        fields: { priority: 'high', checks: ['ui', 'e2e'], accepted: 'true' },
       },
-      comment: '高\n是',
+      comment: '高\nUI 可见，端到端通过\n是',
     })
   })
 
@@ -745,9 +749,12 @@ describe('ConversationInteractionBar.vue', () => {
       },
     })
 
+    await wrapper.findAll('.interaction-bar__tab')[1].trigger('click')
     expect(wrapper.find('.interaction-bar__primary').attributes('disabled')).toBeDefined()
 
+    await wrapper.findAll('.interaction-bar__tab')[0].trigger('click')
     await wrapper.find('#field-name').setValue('filled')
+    await wrapper.findAll('.interaction-bar__tab')[1].trigger('click')
     expect(wrapper.find('.interaction-bar__primary').attributes('disabled')).toBeUndefined()
   })
 })

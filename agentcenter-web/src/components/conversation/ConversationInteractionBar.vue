@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useConfirmationStore } from '../../stores/confirmations'
 import { useNotificationStore } from '../../stores/notifications'
 import InteractionResponseForm from './interactions/InteractionResponseForm.vue'
 import { parseInteractionSchema, type InteractionSchema } from './interactions/interactionSchema'
 import {
+  buildInputSubmission,
+  buildMultiChoiceSubmission,
+  buildSingleChoiceSubmission,
   fieldDisplayValue,
   fieldRawValue,
+  isFieldComplete,
   type InteractionFormSubmission,
   toResolveRequest,
 } from './interactions/interactionSubmit'
@@ -39,6 +43,7 @@ const selectedChoices = ref<Record<string, Set<string>>>({})
 const customInput = ref<Record<string, string>>({})
 const fieldValues = ref<Record<string, Record<string, string>>>({})
 const reviewComment = ref<Record<string, string>>({})
+const autoAdvanceTimer = ref<number | null>(null)
 
 const typeLabels: Record<ConfirmationRequestType, string> = {
   CONFIRM: '确认',
@@ -69,7 +74,7 @@ const activeInteraction = computed(() => {
 })
 
 const reviewMode = computed(() =>
-  activeId.value === REVIEW_TAB_ID && visibleInteractions.value.length > 1
+  activeId.value === REVIEW_TAB_ID && visibleInteractions.value.length > 0
 )
 
 const activeSchema = computed<InteractionSchema | null>(() =>
@@ -103,14 +108,37 @@ const activeOption = computed({
     if (activeSchema.value?.allowCustom && (customInput.value[id]?.trim()?.length ?? 0) > 0) {
       return '__custom__'
     }
-    return selectedOptions.value[id] ?? (activeSchema.value?.options?.[0]?.id ?? '')
+    return selectedOptions.value[id] ?? defaultOptionId(activeInteraction.value)
   },
   set: (value: string) => {
-    if (activeInteraction.value) {
-      selectedOptions.value = { ...selectedOptions.value, [activeInteraction.value.id]: value }
-    }
+    setActiveOption(value)
   },
 })
+
+function permissionDefaultReply(): string {
+  return 'once'
+}
+
+function exceptionDefaultAction(item: ConfirmationRequestDto): string {
+  const schema = schemaFor(item)
+  return schema?.options?.[0]?.id ?? 'RETRY'
+}
+
+function defaultOptionId(item: ConfirmationRequestDto): string {
+  if (item.requestType === 'PERMISSION') return permissionDefaultReply()
+  if (item.requestType === 'EXCEPTION') return exceptionDefaultAction(item)
+  const schema = schemaFor(item)
+  return schema?.options?.[0]?.id ?? ''
+}
+
+function setActiveOption(value: string) {
+  if (!activeInteraction.value) return
+  const interaction = activeInteraction.value
+  selectedOptions.value = { ...selectedOptions.value, [interaction.id]: value }
+  if (activeSchema.value?.selection !== 'multi' && value !== '__custom__') {
+    scheduleAdvanceAfterChoice(interaction)
+  }
+}
 
 function setFieldValue(fieldId: string, value: string) {
   if (!activeInteraction.value) return
@@ -140,11 +168,32 @@ function toggleChoice(optionId: string) {
   selectedChoices.value = { ...selectedChoices.value, [id]: current }
 }
 
+function clearAutoAdvanceTimer() {
+  if (autoAdvanceTimer.value === null) return
+  window.clearTimeout(autoAdvanceTimer.value)
+  autoAdvanceTimer.value = null
+}
+
+function nextTabIdAfter(item: ConfirmationRequestDto): string {
+  const index = visibleInteractions.value.findIndex((candidate) => candidate.id === item.id)
+  const next = index >= 0 ? visibleInteractions.value[index + 1] : null
+  return next?.id ?? REVIEW_TAB_ID
+}
+
+function scheduleAdvanceAfterChoice(item: ConfirmationRequestDto) {
+  clearAutoAdvanceTimer()
+  autoAdvanceTimer.value = window.setTimeout(() => {
+    autoAdvanceTimer.value = null
+    if (activeId.value === item.id) activeId.value = nextTabIdAfter(item)
+  }, 140)
+}
+
 watch(
   visibleInteractions,
   (items) => {
     if (!items.length) {
       activeId.value = null
+      clearAutoAdvanceTimer()
       return
     }
     if (!activeId.value || (activeId.value !== REVIEW_TAB_ID && !items.some((item) => item.id === activeId.value))) {
@@ -154,9 +203,23 @@ watch(
   { immediate: true }
 )
 
+onBeforeUnmount(clearAutoAdvanceTimer)
+
 function interactionIndex(item: ConfirmationRequestDto): number {
   const index = visibleInteractions.value.findIndex((candidate) => candidate.id === item.id)
   return index >= 0 ? index + 1 : 1
+}
+
+function questionOrdinal(index: number): string {
+  const labels = ['一', '二', '三', '四', '五', '六', '七', '八', '九']
+  return labels[index] ?? String(index + 1)
+}
+
+function questionIndex(item: ConfirmationRequestDto): number {
+  const index = visibleInteractions.value
+    .filter((candidate) => candidate.requestType !== 'PERMISSION' && candidate.requestType !== 'EXCEPTION')
+    .findIndex((candidate) => candidate.id === item.id)
+  return index >= 0 ? index + 1 : interactionIndex(item)
 }
 
 function schemaFor(item: ConfirmationRequestDto): InteractionSchema | null {
@@ -323,7 +386,9 @@ function interactionQuestion(item: ConfirmationRequestDto): string {
 }
 
 function interactionTabTitle(item: ConfirmationRequestDto): string {
-  return `问题 ${interactionIndex(item)}`
+  if (item.requestType === 'PERMISSION') return '权限'
+  if (item.requestType === 'EXCEPTION') return '异常'
+  return `问题${questionOrdinal(questionIndex(item) - 1)}`
 }
 
 function activeTabTitle(item: ConfirmationRequestDto): string {
@@ -333,7 +398,19 @@ function activeTabTitle(item: ConfirmationRequestDto): string {
 
 function previewValueFor(item: ConfirmationRequestDto): string {
   const schema = schemaFor(item)
-  if (item.requestType === 'PERMISSION') return '待选择：允许一次 / 本次会话允许同类请求 / 拒绝'
+  if (item.requestType === 'PERMISSION') {
+    const reply = selectedOptions.value[item.id] ?? permissionDefaultReply()
+    if (reply === 'always') return '本次会话允许同类请求'
+    if (reply === 'reject') return '拒绝'
+    return '允许一次'
+  }
+  if (item.requestType === 'EXCEPTION') {
+    const action = selectedOptions.value[item.id] ?? exceptionDefaultAction(item)
+    const option = schema?.options?.find(candidate => candidate.id === action || candidate.label === action)
+    const note = reviewComment.value[item.id]?.trim()
+    const label = option?.label ?? action
+    return note ? `${label}；${note}` : label
+  }
   if (item.requestType === 'INPUT_REQUIRED') {
     const fields = schema?.fields ?? []
     if (fields.length) {
@@ -372,6 +449,131 @@ function previewValueFor(item: ConfirmationRequestDto): string {
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : '操作失败，请稍后重试'
 }
+
+function reviewTextFor(item: ConfirmationRequestDto): string {
+  return reviewComment.value[item.id]?.trim() ?? ''
+}
+
+function selectedOptionFor(item: ConfirmationRequestDto): string {
+  const custom = customInput.value[item.id]?.trim()
+  const schema = schemaFor(item)
+  if (schema?.allowCustom && custom) return '__custom__'
+  return selectedOptions.value[item.id] ?? defaultOptionId(item)
+}
+
+function buildExceptionSubmission(item: ConfirmationRequestDto): InteractionFormSubmission | null {
+  const schema = schemaFor(item)
+  const selected = selectedOptionFor(item)
+  const option = schema?.options?.find(candidate => candidate.id === selected || candidate.label === selected)
+  const action = (option?.actionType ?? selected).toUpperCase()
+  const note = reviewTextFor(item) || inputValues.value[item.id]?.trim() || ''
+  if (action === 'REJECT') {
+    return { actionType: 'REJECT', outcome: 'rejected', busyKey: 'REJECT', errorTitle: '拒绝失败' }
+  }
+  if (action === 'SKIP') {
+    return { actionType: 'SKIP', busyKey: 'SKIP', errorTitle: '跳过失败' }
+  }
+  if (action === 'SUPPLEMENT') {
+    if (!note) return null
+    return {
+      actionType: 'SUPPLEMENT',
+      payload: { input: note },
+      comment: note,
+      busyKey: 'SUPPLEMENT',
+      errorTitle: '提交补充失败',
+    }
+  }
+  if (note) {
+    return {
+      actionType: 'SUPPLEMENT',
+      payload: { input: note },
+      comment: note,
+      busyKey: 'SUPPLEMENT',
+      errorTitle: '提交补充失败',
+    }
+  }
+  return { actionType: 'RETRY', busyKey: 'RETRY', errorTitle: '重试失败' }
+}
+
+function buildPermissionSubmission(item: ConfirmationRequestDto): InteractionFormSubmission {
+  const reply = selectedOptionFor(item)
+  const actionType: ConfirmationActionType = reply === 'reject' ? 'REJECT' : 'APPROVE'
+  return {
+    actionType,
+    payload: { reply },
+    comment: reply,
+    outcome: reply === 'reject' ? 'rejected' : 'resolved',
+    busyKey: `PERMISSION:${reply}`,
+    errorTitle: '提交失败',
+  }
+}
+
+function buildChoiceSubmission(item: ConfirmationRequestDto, schema: InteractionSchema | null): InteractionFormSubmission | null {
+  const options = schema?.options ?? []
+  if (schema?.selection === 'multi') {
+    return buildMultiChoiceSubmission({
+      requestType: item.requestType,
+      interactionType: item.interactionType,
+      options,
+      selectedIds: Array.from(selectedChoices.value[item.id] ?? []),
+      customChoice: customInput.value[item.id]?.trim() ?? '',
+      remark: reviewTextFor(item),
+    })
+  }
+  return buildSingleChoiceSubmission({
+    requestType: item.requestType,
+    interactionType: item.interactionType,
+    options,
+    selectedId: selectedOptionFor(item) === '__custom__' ? null : selectedOptionFor(item),
+    customChoice: customInput.value[item.id]?.trim() ?? '',
+    fallbackChoice: options.length > 0 ? undefined : inputValues.value[item.id],
+    remark: reviewTextFor(item),
+  })
+}
+
+function buildInteractionSubmission(item: ConfirmationRequestDto): InteractionFormSubmission | null {
+  const schema = schemaFor(item)
+  if (item.requestType === 'PERMISSION') return buildPermissionSubmission(item)
+  if (item.requestType === 'EXCEPTION') return buildExceptionSubmission(item)
+  if (item.requestType === 'INPUT_REQUIRED') {
+    return buildInputSubmission(schema?.fields ?? [], fieldValues.value[item.id] ?? {}, inputValues.value[item.id] ?? '')
+  }
+  if (item.requestType === 'DECISION' || ((item.requestType === 'APPROVAL' || item.requestType === 'CONFIRM') && (schema?.options?.length ?? 0) > 0)) {
+    return buildChoiceSubmission(item, schema)
+  }
+  if (item.requestType === 'APPROVAL' || item.requestType === 'CONFIRM') {
+    return { actionType: 'APPROVE', busyKey: 'APPROVE', errorTitle: '通过失败' }
+  }
+  return null
+}
+
+function canSubmitInteraction(item: ConfirmationRequestDto): boolean {
+  const schema = schemaFor(item)
+  if (item.requestType === 'INPUT_REQUIRED') {
+    const fields = schema?.fields ?? []
+    if (fields.length) return fields.every(field => isFieldComplete(field, fieldValues.value[item.id] ?? {}))
+    return (inputValues.value[item.id]?.trim()?.length ?? 0) > 0
+  }
+  if (item.requestType === 'EXCEPTION') {
+    return selectedOptionFor(item).toUpperCase() !== 'SUPPLEMENT' || reviewTextFor(item).length > 0
+  }
+  if (item.requestType === 'DECISION' || ((item.requestType === 'APPROVAL' || item.requestType === 'CONFIRM') && (schema?.options?.length ?? 0) > 0)) {
+    if (schema?.selection === 'multi') {
+      return (selectedChoices.value[item.id]?.size ?? 0) > 0 || (customInput.value[item.id]?.trim()?.length ?? 0) > 0
+    }
+    if ((schema?.options?.length ?? 0) === 0 && !schema?.allowCustom) {
+      return (inputValues.value[item.id]?.trim()?.length ?? 0) > 0
+    }
+    if (schema?.allowCustom && (schema?.options?.length ?? 0) === 0) {
+      return (customInput.value[item.id]?.trim()?.length ?? 0) > 0
+    }
+  }
+  return true
+}
+
+const canSubmitReview = computed(() =>
+  visibleInteractions.value.length > 0 && visibleInteractions.value.every(canSubmitInteraction)
+)
 
 async function resolveActive(
   actionType: ConfirmationActionType,
@@ -417,6 +619,65 @@ async function resolveActive(
   }
 }
 
+async function submitReview() {
+  if (busyAction.value || !canSubmitReview.value) return
+  const pending = visibleInteractions.value.map((interaction) => ({
+    interaction,
+    submission: buildInteractionSubmission(interaction),
+  }))
+  const incomplete = pending.find(item => !item.submission)
+  if (incomplete) {
+    activeId.value = incomplete.interaction.id
+    notificationStore.push({
+      anchor: 'right-panel',
+      tone: 'warning',
+      title: '还有交互未完成',
+      message: `${incomplete.interaction.title} 需要先选择或填写。`,
+      durationMs: 4200,
+    })
+    return
+  }
+
+  busyAction.value = 'review'
+  const resolvedIds: string[] = []
+  try {
+    for (const item of pending) {
+      const submission = item.submission
+      if (!submission) continue
+      const interaction = item.interaction
+      emit('submitting', interaction.id)
+      confirmationStore.markRecovering(interaction.id)
+      recoveringConfirmationId.value = interaction.id
+      await confirmationStore.resolveConfirmation(interaction.id, toResolveRequest(submission), { remove: false })
+      resolvedIds.push(interaction.id)
+      const outcome = submission.outcome ?? (submission.actionType === 'REJECT' ? 'rejected' : 'resolved')
+      if (outcome === 'rejected') emit('rejected', interaction.id)
+      else emit('resolved', interaction.id)
+    }
+    notificationStore.push({
+      anchor: 'right-panel',
+      tone: 'success',
+      title: '交互已提交',
+      message: '本轮选择已同步到对应确认项，Agent 会继续恢复当前节点。',
+    })
+  } catch (error) {
+    const failed = pending.find(item => !resolvedIds.includes(item.interaction.id))?.interaction
+    if (failed) {
+      confirmationStore.clearRecovering(failed.id)
+      activeId.value = failed.id
+    }
+    notificationStore.push({
+      anchor: 'right-panel',
+      tone: 'error',
+      title: '提交失败',
+      message: errorMessage(error),
+      durationMs: 5200,
+    })
+  } finally {
+    busyAction.value = null
+  }
+}
+
 function handleFormSubmit(submission: InteractionFormSubmission) {
   void resolveActive(
     submission.actionType,
@@ -431,16 +692,22 @@ function handleFormSubmit(submission: InteractionFormSubmission) {
 
 <template>
   <section v-if="visibleInteractions.length" class="interaction-bar">
-    <div v-if="visibleInteractions.length > 1" class="interaction-bar__header">
+    <div class="interaction-bar__header">
       <div class="interaction-bar__tabs" role="tablist" aria-label="当前交互列表">
         <button
           v-for="item in visibleInteractions"
           :key="item.id"
           type="button"
           class="interaction-bar__tab"
-          :class="{ 'interaction-bar__tab--active': item.id === activeInteraction?.id }"
+          :class="{
+            'interaction-bar__tab--active': item.id === activeInteraction?.id,
+            'interaction-bar__tab--complete': canSubmitInteraction(item),
+            'interaction-bar__tab--warn': item.requestType === 'PERMISSION',
+            'interaction-bar__tab--danger': item.requestType === 'EXCEPTION',
+          }"
           @click="activeId = item.id"
         >
+          <span class="interaction-bar__tab-state"></span>
           <span>{{ interactionTabTitle(item) }}</span>
         </button>
         <button
@@ -449,7 +716,8 @@ function handleFormSubmit(submission: InteractionFormSubmission) {
           :class="{ 'interaction-bar__tab--active': reviewMode }"
           @click="activeId = REVIEW_TAB_ID"
         >
-          <span>确认</span>
+          <span class="interaction-bar__tab-state"></span>
+          <span>确认提交</span>
         </button>
       </div>
     </div>
@@ -477,6 +745,14 @@ function handleFormSubmit(submission: InteractionFormSubmission) {
           <button type="button" class="interaction-bar__ghost" @click="activeId = visibleInteractions[0]?.id ?? null">
             返回修改
           </button>
+          <button
+            type="button"
+            class="interaction-bar__primary"
+            :disabled="!!busyAction || !canSubmitReview"
+            @click="submitReview"
+          >
+            {{ busyAction === 'review' ? '提交中...' : '确认提交' }}
+          </button>
         </div>
       </div>
     </div>
@@ -498,6 +774,7 @@ function handleFormSubmit(submission: InteractionFormSubmission) {
         :review-comment="reviewComment[activeInteraction.id] ?? ''"
         :permission-scope-text="permissionScopeText(activeInteraction)"
         show-detail-action
+        defer-submit
         @update:input-text="activeInput = $event"
         @update:selected-option-id="activeOption = $event"
         @toggle-choice="toggleChoice"
@@ -592,6 +869,10 @@ function handleFormSubmit(submission: InteractionFormSubmission) {
 }
 
 .interaction-bar__tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   flex: 0 0 auto;
   min-height: 28px;
   padding: 0 10px;
@@ -603,16 +884,40 @@ function handleFormSubmit(submission: InteractionFormSubmission) {
   cursor: pointer;
 }
 
-.interaction-bar__tab span {
+.interaction-bar__tab span:not(.interaction-bar__tab-state) {
   font-size: 12px;
   font-weight: 900;
   color: inherit;
   white-space: nowrap;
 }
 
+.interaction-bar__tab-state {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--text-muted);
+}
+
+.interaction-bar__tab--complete .interaction-bar__tab-state {
+  background: var(--success);
+}
+
+.interaction-bar__tab--warn .interaction-bar__tab-state {
+  background: var(--warning);
+}
+
+.interaction-bar__tab--danger .interaction-bar__tab-state {
+  background: var(--error);
+}
+
 .interaction-bar__tab--active {
   border-color: var(--accent-blue);
-  background: var(--brand-soft);
+  background: var(--accent-blue);
+  color: var(--on-brand);
+}
+
+.interaction-bar__tab--active .interaction-bar__tab-state {
+  background: var(--on-brand);
 }
 
 .interaction-bar__recovering {

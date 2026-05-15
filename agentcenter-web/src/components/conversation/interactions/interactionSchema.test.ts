@@ -147,6 +147,30 @@ describe('parseInteractionSchema', () => {
     ])
   })
 
+  it('parses multiselect fields without downgrading them to select', () => {
+    const confirmation = makeConfirmation({
+      requestType: 'INPUT_REQUIRED',
+      interactionSchemaJson: JSON.stringify({
+        fields: [
+          {
+            id: 'acceptance',
+            label: '验收标准',
+            type: 'multiselect',
+            required: true,
+            options: [
+              { value: 'ui', label: 'UI 可见' },
+              { value: 'e2e', label: '端到端通过' },
+            ],
+          },
+        ],
+      }),
+    })
+
+    const schema = parseInteractionSchema(confirmation)
+
+    expect(schema!.fields![0].type).toBe('multiselect')
+  })
+
   it('provides default artifact review options when the backend omits them', () => {
     const confirmation = makeConfirmation({
       requestType: 'APPROVAL',

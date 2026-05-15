@@ -1,7 +1,7 @@
 # Prototype
 
 > 当前首页高保真原型
-> 最近更新：2026-05-11
+> 最近更新：2026-05-15
 
 ## 当前基线
 
@@ -43,6 +43,8 @@ node tools/opencode-bridge.mjs --mock --port 4789
 | 文件 | 说明 |
 |------|------|
 | [homepage.html](./homepage.html) | 静态高保真首页原型（当前基线） |
+| [INTERACTION-PANEL-TOP-TABS-DESIGN.md](./INTERACTION-PANEL-TOP-TABS-DESIGN.md) | 对话交互面板设计基线：顶部 tab 唯一导航、问题暂存、确认提交统一同步 |
+| [interaction-panel-top-tabs-hifi.html](./interaction-panel-top-tabs-hifi.html) | 对话交互面板高保真：保留顶部问题 tab，取消内层问题 tab，多问题纵向展开 |
 | [workflow-runtime-explainer.html](./workflow-runtime-explainer.html) | 当前工作流、对话 UI 映射和用户交互形态说明页 |
 | [../../agentcenter-web/public/prototypes/conversation-layered-turn-hifi.html](../../agentcenter-web/public/prototypes/conversation-layered-turn-hifi.html) | 对话 UI 映射高保真：文本主回答、有序执行步骤、工具/证据/决策按因果挂载 |
 | [../../agentcenter-web/public/prototypes/opencode-conversation-target-hifi.html](../../agentcenter-web/public/prototypes/opencode-conversation-target-hifi.html) | OpenCode 对话目标态高保真：输入触发、文本流式写入、当前段落自动展开、完成后自动收起、权限/异常可恢复 |

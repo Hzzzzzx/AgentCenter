@@ -6,6 +6,7 @@ import type {
 import type { InteractionField, InteractionOption, InteractionSchema } from './interactionSchema'
 
 export type FieldValueMap = Record<string, string>
+type FieldPayloadValue = string | string[]
 
 export interface InteractionSubmission {
   actionType: ConfirmationActionType
@@ -40,26 +41,59 @@ export function fieldPlaceholder(field: InteractionField): string {
   return field.type === 'textarea' ? '输入你的回答...' : '输入答案...'
 }
 
+export function multiSelectValues(value: string | string[] | undefined): string[] {
+  if (Array.isArray(value)) return value.map(item => item.trim()).filter(Boolean)
+  const raw = value?.trim() ?? ''
+  if (!raw) return []
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed)
+      ? parsed.map(item => String(item ?? '').trim()).filter(Boolean)
+      : [raw]
+  } catch {
+    return raw.split(',').map(item => item.trim()).filter(Boolean)
+  }
+}
+
+export function serializeMultiSelectValues(values: string[]): string {
+  return JSON.stringify([...new Set(values.map(value => value.trim()).filter(Boolean))])
+}
+
 export function fieldRawValue(field: InteractionField, values: FieldValueMap): string {
   if (field.type === 'checkbox') return values[field.id] === 'true' ? 'true' : 'false'
   return values[field.id]?.trim() ?? ''
 }
 
-export function fieldDisplayValue(field: InteractionField, value: string): string {
+export function fieldDisplayValue(field: InteractionField, value: string | string[]): string {
   if (field.type === 'checkbox') return value === 'true' ? '是' : (field.required ? '否' : '')
-  if (field.type === 'select') return field.options?.find(option => option.value === value)?.label ?? value
-  return value
+  if (field.type === 'multiselect') {
+    const selected = multiSelectValues(value)
+    return selected
+      .map(item => field.options?.find(option => option.value === item)?.label ?? item)
+      .join('，')
+  }
+  if (field.type === 'select') {
+    const selectedValue = Array.isArray(value) ? value[0] ?? '' : value
+    return field.options?.find(option => option.value === selectedValue)?.label ?? selectedValue
+  }
+  return Array.isArray(value) ? value.join('，') : value
 }
 
 export function isFieldComplete(field: InteractionField, values: FieldValueMap): boolean {
   if (!field.required) return true
   if (field.type === 'checkbox') return fieldRawValue(field, values) === 'true'
+  if (field.type === 'multiselect') return multiSelectValues(values[field.id]).length > 0
   return fieldRawValue(field, values).length > 0
 }
 
+function fieldPayloadValue(field: InteractionField, values: FieldValueMap): FieldPayloadValue {
+  if (field.type === 'multiselect') return multiSelectValues(values[field.id])
+  return fieldRawValue(field, values)
+}
+
 export function collectFieldPayload(fields: InteractionField[], values: FieldValueMap) {
-  const payloadFields = fields.reduce<Record<string, string>>((acc, field) => {
-    acc[field.id] = fieldRawValue(field, values)
+  const payloadFields = fields.reduce<Record<string, FieldPayloadValue>>((acc, field) => {
+    acc[field.id] = fieldPayloadValue(field, values)
     return acc
   }, {})
   const input = fields
