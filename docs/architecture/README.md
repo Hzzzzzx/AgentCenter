@@ -44,6 +44,7 @@ AgentCenter 当前首页已经收敛为白色网页端工作台：
 | 6.7 | [WORKFLOW-CONVERSATION-CLOSURE-DESIGN.md](./WORKFLOW-CONVERSATION-CLOSURE-DESIGN.md) | 首页工作项、后台工作流、任务会话和右侧待确认的闭环实施设计 |
 | 6.75 | **[WORKFLOW-SKILL-ORCHESTRATION-TARGET-STATE.md](./WORKFLOW-SKILL-ORCHESTRATION-TARGET-STATE.md)** | **下一阶段目标态：工作流作为跨 Runtime Skill 编排器，节点状态协议、多轮交互 Dock、手动/自动推进边界** |
 | 6.76 | **[MARKDOWN-ARTIFACT-REVIEW-CLOSURE-DESIGN.md](./MARKDOWN-ARTIFACT-REVIEW-CLOSURE-DESIGN.md)** | **Markdown 阶段产物审阅闭环：以用户 Skill 写入的 artifacts/*.md 为唯一产物源，对话内展示产物卡片，并让 ARTIFACT_REVIEW 绑定实际内容** |
+| 6.77 | **[OPENCODE-CONTEXT-COMPRESSION-STATE-RETENTION-1026.md](./OPENCODE-CONTEXT-COMPRESSION-STATE-RETENTION-1026.md)** | **1026 分支上下文压缩状态保持方案：解释工作流如何推进、提示词何时注入、OpenCode 如何接收上下文，以及不合并最新分支时的增量修复路径** |
 | 6.8 | [RUNTIME-RESOURCE-MANAGEMENT-DESIGN.md](./RUNTIME-RESOURCE-MANAGEMENT-DESIGN.md) | Skill 管理、MCP 管理、运行资源刷新、OpenCode 生效和会话页状态展示 |
 | 6.85 | [PROJECT-CONTEXT-INTEGRATION-GUIDE.md](./PROJECT-CONTEXT-INTEGRATION-GUIDE.md) | 项目管理上下文、全局项目数据 Provider 注册/切换、CloudeReq 数据源、同步按钮和后续 Bridge API 对接指南 |
 | 6.86 | [ENTERPRISE-PROJECT-DATA-PROVIDER-GUIDE.md](./ENTERPRISE-PROJECT-DATA-PROVIDER-GUIDE.md) | 企业内部项目数据实现位对接指南：接口能力、字段映射、扩展字段和验证清单 |
