@@ -1,7 +1,7 @@
 # AgentCenter 架构文档入口
 
 > 状态：讨论基线
-> 最近更新：2026-05-13
+> 最近更新：2026-05-15
 >
 > ⚠️ **M1 实施决策**：OpenCode Bridge M1 采用 HTTP+SSE 方案，详见 [ADR-001](./ADR-001-OPENCODE-BRIDGE-SSE-REST.md)。后续实现以 [OPENCODE-BRIDGE-EXECUTION-DESIGN.md](./OPENCODE-BRIDGE-EXECUTION-DESIGN.md) 为准。
 >
@@ -28,6 +28,11 @@ AgentCenter 当前首页已经收敛为白色网页端工作台：
 | 0 | [DISCUSSION-HANDOFF-2026-04-28.md](./DISCUSSION-HANDOFF-2026-04-28.md) | 跨 Agent 会话交接，快速理解当前讨论进展和下一步 |
 | 1 | [../PRODUCT-VISION.md](../PRODUCT-VISION.md) | 理解产品愿景和目标用户价值 |
 | 2 | [APPLICATION-ARCHITECTURE-BASELINE.md](./APPLICATION-ARCHITECTURE-BASELINE.md) | 固定企业级应用架构约束：统一上下文、多项目多用户、性能并发、安全治理 |
+| 2.1 | [CURRENT-FUNCTIONAL-CAPABILITY-MAP.md](./CURRENT-FUNCTIONAL-CAPABILITY-MAP.md) | 当前功能能力地图：宏观能力域、主链路、团队分组和里程碑 |
+| 2.2 | [CURRENT-FUNCTIONAL-WORKBREAKDOWN.md](./CURRENT-FUNCTIONAL-WORKBREAKDOWN.md) | 当前功能细粒度分工表：可分派任务包、owner 和优先级 |
+| 2.3 | [CURRENT-FEATURE-PRD.md](./CURRENT-FEATURE-PRD.md) | 当前功能 PRD：用户角色、核心旅程、优先级和验收口径 |
+| 2.4 | [CURRENT-FEATURE-HLD.md](./CURRENT-FEATURE-HLD.md) | 当前功能 HLD：模块边界、数据流、领域对象和 API 组 |
+| 2.5 | [CURRENT-FEATURE-LLD.md](./CURRENT-FEATURE-LLD.md) | 当前功能 LLD：前后端文件、接口、表、测试和实现拆分 |
 | 3 | [ARCHITECTURE-OVERVIEW.md](./ARCHITECTURE-OVERVIEW.md) | 理解现有 4+1 架构总览 |
 | 4 | [UNIFIED-DOMAIN-MODEL.md](./UNIFIED-DOMAIN-MODEL.md) | 理解核心领域对象和对象关系 |
 | 5 | **[OPENCODE-BRIDGE-EXECUTION-DESIGN.md](./OPENCODE-BRIDGE-EXECUTION-DESIGN.md)** | **OpenCode 实施交接设计：HTTP 命令、SSE 输出、数据模型、工作流、待确认和高保真联动** |

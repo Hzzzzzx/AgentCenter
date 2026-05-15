@@ -20,6 +20,11 @@
 | [README.md](./architecture/README.md) | 架构文档入口、4+1 视图边界和阅读顺序 | 活跃 |
 | [DISCUSSION-HANDOFF-2026-04-28.md](./architecture/DISCUSSION-HANDOFF-2026-04-28.md) | 当前讨论进展交接，供后续 Agent 会话继续讨论 | 活跃 |
 | [APPLICATION-ARCHITECTURE-BASELINE.md](./architecture/APPLICATION-ARCHITECTURE-BASELINE.md) | 企业级应用架构基线：统一上下文、多项目多用户、性能并发、安全治理 | 活跃 |
+| [CURRENT-FUNCTIONAL-CAPABILITY-MAP.md](./architecture/CURRENT-FUNCTIONAL-CAPABILITY-MAP.md) | 当前功能能力地图：宏观能力域、主链路、团队分组和里程碑 | 活跃 |
+| [CURRENT-FUNCTIONAL-WORKBREAKDOWN.md](./architecture/CURRENT-FUNCTIONAL-WORKBREAKDOWN.md) | 当前功能细粒度分工表：可分派任务包、owner 和优先级 | 活跃 |
+| [CURRENT-FEATURE-PRD.md](./architecture/CURRENT-FEATURE-PRD.md) | 当前功能 PRD：用户角色、核心旅程、优先级和验收口径 | 活跃 |
+| [CURRENT-FEATURE-HLD.md](./architecture/CURRENT-FEATURE-HLD.md) | 当前功能 HLD：模块边界、数据流、领域对象和 API 组 | 活跃 |
+| [CURRENT-FEATURE-LLD.md](./architecture/CURRENT-FEATURE-LLD.md) | 当前功能 LLD：前后端文件、接口、表、测试和实现拆分 | 活跃 |
 | [ARCHITECTURE-OVERVIEW.md](./architecture/ARCHITECTURE-OVERVIEW.md) | 4+1 视图架构总览 | 活跃 |
 | [UNIFIED-DOMAIN-MODEL.md](./architecture/UNIFIED-DOMAIN-MODEL.md) | 统一对象模型 (8+3 对象) | 活跃 |
 | [AGENT-RUNTIME-BRIDGE-DEVELOPMENT-BLUEPRINT.md](./architecture/AGENT-RUNTIME-BRIDGE-DEVELOPMENT-BLUEPRINT.md) | Java Bridge、Vue 工作台、OpenCode Runtime Adapter 开发蓝图 | 活跃 |
@@ -86,12 +91,12 @@
 
 | 类别 | 数量 |
 |------|------|
-| 架构文档 | 12 |
+| 架构文档 | 17 |
 | 原型与高保真 | 2 |
 | 综合调研 | 3 |
 | 平台专项调研 | 13 |
-| **总计** | **30** |
+| **总计** | **35** |
 
 ---
 
-*最后更新：2026-05-07*
+*最后更新：2026-05-15*
