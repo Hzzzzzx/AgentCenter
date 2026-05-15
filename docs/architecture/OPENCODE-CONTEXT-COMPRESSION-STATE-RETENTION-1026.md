@@ -21,6 +21,7 @@
 3. 1026 分支已经有上下文压缩检测和恢复提示，但它只覆盖重新进入 `runSkill` 的路径；大多数 `CONTINUE_CURRENT` 会直接裸发一条 runtime prompt，绕开完整上下文注入，这是当前最主要的丢状态入口。
 4. `runtime_operation` 表和 `skill.run` 类型已经存在，但当前 `DefaultRuntimeGateway.runSkill(...)` 没有创建 operation 记录。系统无法稳定回答“底层 OpenCode 这次节点执行到底派发到哪里、是否被接收、是否已经完成”。
 5. `workflow_node_instance.agent_state_payload_json` 当前是在结果返回后才写入，缺少“派发前”的持久化调用账本。服务重启、OpenCode 压缩、权限等待或长时间等待时，恢复逻辑没有一个可靠的 last dispatched invocation。
+6. 如果 OpenCode 完成了阶段正文但没有输出 `AGENTCENTER_NODE_STATE`，当前解析器会默认视为 `IN_PROGRESS`。这能避免误推进，但会让“已经完成但缺协议”的节点停在运行中，因此需要 Bridge 自动补签状态协议。
 
 ## 当前工作流如何推进
 
@@ -154,6 +155,18 @@ sequenceDiagram
 
 `OpenCodeRuntimeAdapter.refreshSkills(...)`、`refreshMcps(...)` 会清空 `agentToOpencodeSession`、`sessionWorkingDirectories`、`cancelGenerations` 并重启 OpenCode。运行中的工作流如果正好遇到刷新，Bridge 侧 session 到 OpenCode session 的映射会被破坏。
 
+### 6. 阶段完成但缺少 `AGENTCENTER_NODE_STATE`
+
+`WorkflowNodeInstructionComposer` 已经在 prompt 中要求 Agent 每次回复末尾输出 `AGENTCENTER_NODE_STATE`。但上下文压缩后，模型可能只输出阶段正文，忘记协议块。
+
+当前 `WorkflowNodeStateParser.parse(...)` 在找不到状态块时会返回 `WorkflowNodeState.defaultInProgress()`，reason 为 `No state block found`。这是一种安全降级：没有协议就不会保存最终 artifact，也不会进入下一节点。但它的副作用是：
+
+- Agent 已经完成 PRD/HLD/LLD 正文，Bridge 却只看到 `IN_PROGRESS`。
+- 用户看到阶段似乎完成了，但工作流节点不推进。
+- 下一轮继续如果又没有重新注入完整协议，OpenCode 更容易围绕旧摘要继续漂移。
+
+因此，协议缺失不能只靠提示词约束，必须在 Bridge 出口增加“状态补签”闭环。
+
 ## 1026 分支增量解决方案
 
 ### P0：先固定文档和认知
@@ -230,7 +243,54 @@ sequenceDiagram
 - 可以稳定回答“这次节点执行派发了吗、OpenCode 接收了吗、最后一次事件是什么、是不是超时”。
 - 后续恢复可以按 operation 找回工作流和节点，而不是反查不完整事件。
 
-### P4：推进守卫校验 invocation 与 operation
+### P4：缺少状态协议时自动补签
+
+在 `WorkflowCommandService.executeSkillOnNode(...)` 解析结果后增加出口校验：
+
+```text
+OpenCode 输出
+   |
+   v
+是否包含 AGENTCENTER_NODE_STATE?
+   | yes
+   v
+按协议推进 / 等待 / 阻塞
+   |
+   no
+   v
+发起 state-only repair prompt
+   |
+   v
+补到协议了吗?
+   | yes -> 使用原始正文 + 补签状态处理
+   | no  -> 创建异常确认，不推进
+```
+
+状态补签 prompt 只允许模型补协议，不允许重新生成阶段正文：
+
+```text
+你上一轮已经输出了当前节点内容，但缺少 AGENTCENTER_NODE_STATE。
+请只根据上一轮输出和本轮 AGENTCENTER_RESUME_STATE 判断节点状态。
+只返回一个 AGENTCENTER_NODE_STATE 注释块。
+不要重新生成正文，不要推进其他节点，不要输出额外解释。
+```
+
+处理规则：
+
+- 如果原始输出有正文但缺状态块，Bridge 先保留原始正文，不立即当作 artifact 保存。
+- Bridge 发起一次短的 `state-only` repair 调用，并重新注入 `AGENTCENTER_RESUME_STATE`。
+- 如果 repair 返回 `READY_TO_ADVANCE`，Bridge 使用“原始正文”作为 artifact 内容，使用“补签状态”作为节点推进依据。
+- 如果 repair 返回 `NEEDS_USER_INPUT` 或 `BLOCKED`，按补签状态创建确认项或异常项。
+- 如果 repair 仍没有状态块，创建异常确认，提供“重试当前节点 / 手动确认推进 / 补充输入”入口，不自动推进。
+- repair 调用必须带 `invocationId` / `runtimeOperationId`，并在 node payload 中标记 `stateRepairOfInvocationId`，防止把补签误当成新的业务正文。
+
+预期效果：
+
+- 模型忘记协议时，工作流不会静默卡死。
+- Bridge 仍然坚持“没有协议就不推进”，但会自动要求补协议。
+- 阶段正文和状态协议分开处理，避免 repair prompt 覆盖原始产物。
+
+### P5：推进守卫校验 invocation 与 operation
 
 扩展 `WorkflowNodeTransitionGuard`：
 
@@ -243,7 +303,7 @@ sequenceDiagram
 - OpenCode 压缩后重复输出旧节点结果，不会推进当前节点。
 - 子 Agent 或历史摘要中出现的状态块不能代表主 Agent 推进工作流。
 
-### P5：修复权限事件的 workflow/node 绑定
+### P6：修复权限事件的 workflow/node 绑定
 
 把 `PERMISSION_REQUESTED` 改为使用 `buildContextEnvelope(...)`，并确保 permission confirmation 写入：
 
@@ -260,7 +320,7 @@ sequenceDiagram
 - 如果缺少 node，则根据 active `skill.run` operation 修复绑定。
 - 如果仍无法定位，则创建“需要人工恢复”的异常确认，不直接裸发继续指令。
 
-### P6：刷新 Skill/MCP 时保护活跃会话
+### P7：刷新 Skill/MCP 时保护活跃会话
 
 1026 分支不需要一次性引入完整运行资源目标态，但至少要避免刷新动作破坏运行中的 workflow session：
 
@@ -274,9 +334,10 @@ sequenceDiagram
 1. P1：统一 `CONTINUE_CURRENT` 到 `resumeNodeAfterInteraction`。这是最高优先级，因为它直接解决“继续时丢工作流进度”。
 2. P2：派发前写节点恢复账本。让 DB 先拥有 last invocation。
 3. P3：补 `skill.run` operation。让运行态可追踪、可恢复、可解释。
-4. P5：修复权限事件上下文。防止 permission 待确认脱离工作流节点。
-5. P4：增加 invocation/operation 守卫。降低旧输出误推进风险。
-6. P6：保护刷新期间活跃会话。避免资源管理操作打断运行中工作流。
+4. P4：缺状态协议时自动补签。让“正文完成但缺协议”的节点可以安全闭环。
+5. P6：修复权限事件上下文。防止 permission 待确认脱离工作流节点。
+6. P5：增加 invocation/operation 守卫。降低旧输出误推进风险。
+7. P7：保护刷新期间活跃会话。避免资源管理操作打断运行中工作流。
 
 ## 验收标准
 
@@ -288,6 +349,8 @@ sequenceDiagram
 4. `runtime_operation` 中能看到 `skill.run`，并能按 workflow/node/session 查到状态。
 5. OpenCode 输出旧节点或 pending interaction 未完成时，Bridge 拒绝 `READY_TO_ADVANCE`。
 6. 权限确认产生的 confirmation 必须带 workflow/node 绑定，批准后能回到当前节点恢复执行。
+7. OpenCode 输出阶段正文但缺少 `AGENTCENTER_NODE_STATE` 时，Bridge 必须自动发起 state-only repair；repair 成功后用原始正文保存 artifact，用补签状态推进节点。
+8. state-only repair 仍缺协议时，Bridge 必须创建异常确认，不得自动推进节点。
 
 建议测试：
 
@@ -297,6 +360,9 @@ sequenceDiagram
 - 集成测试：`WorkflowMidSessionInputRoutingIntegrationTest`
 - 新增测试：`CONTINUE_CURRENT` 在 workflow session 中必须调用 `resumeNodeAfterInteraction`
 - 新增测试：`skill.run` operation 生命周期
+- 新增测试：缺少 `AGENTCENTER_NODE_STATE` 时触发 state-only repair
+- 新增测试：state-only repair 返回 `READY_TO_ADVANCE` 时保存原始正文而不是 repair 正文
+- 新增测试：state-only repair 再次缺协议时创建异常确认且不推进
 - 新增测试：permission requested event 带 workflow/node context
 
 ## 与最新分支的关系
