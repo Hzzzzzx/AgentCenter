@@ -1,0 +1,1703 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AgentCenter Current Message Display State</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f7fb;
+      --panel: #ffffff;
+      --surface: #f8fafc;
+      --surface-strong: #eef3f8;
+      --surface-blue: #edf5ff;
+      --surface-green: #edfdf7;
+      --surface-amber: #fff7e8;
+      --surface-red: #fff1f3;
+      --surface-violet: #f4f2ff;
+      --border: #d7e1ee;
+      --border-strong: #b8c6d8;
+      --text: #172033;
+      --muted: #617086;
+      --weak: #92a0b3;
+      --blue: #256ee8;
+      --blue-dark: #174ea6;
+      --green: #078260;
+      --amber: #b46a00;
+      --red: #d13c4d;
+      --violet: #6654d9;
+      --shadow: 0 18px 48px rgba(20, 34, 55, 0.12);
+      --shadow-soft: 0 10px 28px rgba(20, 34, 55, 0.08);
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(244, 247, 251, 0) 260px),
+        var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      letter-spacing: 0;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      cursor: default;
+    }
+
+    .page {
+      min-height: 100vh;
+      padding: 24px;
+      display: grid;
+      gap: 18px;
+    }
+
+    .brief {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 18px;
+      align-items: end;
+      max-width: 1680px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    .brief h1 {
+      margin: 0;
+      color: var(--text);
+      font-size: 28px;
+      line-height: 1.18;
+      font-weight: 950;
+    }
+
+    .brief p {
+      max-width: 860px;
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.7;
+      font-weight: 650;
+    }
+
+    .brief-meta {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .chip {
+      min-height: 28px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .chip strong {
+      color: var(--blue);
+      font-weight: 950;
+    }
+
+    .snapshot {
+      max-width: 1680px;
+      width: 100%;
+      min-height: 860px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-rows: 58px 1fr;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 260px minmax(360px, 1fr) auto;
+      align-items: center;
+      gap: 18px;
+      padding: 0 18px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.96);
+    }
+
+    .brand,
+    .search,
+    .top-actions,
+    .status-strip,
+    .left-item,
+    .session-row,
+    .message-meta,
+    .step-summary,
+    .right-tabs,
+    .toast {
+      display: flex;
+      align-items: center;
+    }
+
+    .brand {
+      gap: 10px;
+      min-width: 0;
+      font-weight: 950;
+    }
+
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: #5f61f2;
+      color: #fff;
+      font-family: var(--mono);
+      font-size: 15px;
+      box-shadow: 0 10px 24px rgba(95, 97, 242, 0.24);
+    }
+
+    .brand span:last-child {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .search {
+      height: 38px;
+      min-width: 0;
+      gap: 10px;
+      padding: 0 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--weak);
+      font-size: 13px;
+      font-weight: 750;
+    }
+
+    .search span:first-child {
+      font-family: var(--mono);
+      font-weight: 950;
+    }
+
+    .top-actions {
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .icon-button,
+    .pill-button {
+      min-height: 34px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .icon-button {
+      width: 36px;
+      display: grid;
+      place-items: center;
+      font-family: var(--mono);
+    }
+
+    .pill-button {
+      padding: 0 12px;
+    }
+
+    .pill-button.primary {
+      border-color: color-mix(in srgb, var(--blue) 45%, var(--border));
+      background: var(--surface-blue);
+      color: var(--blue-dark);
+    }
+
+    .workbench {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(224px, 252px) minmax(620px, 1fr) minmax(332px, 388px);
+    }
+
+    .sidebar,
+    .main,
+    .right-panel {
+      min-height: 0;
+    }
+
+    .sidebar {
+      padding: 16px 12px;
+      border-right: 1px solid var(--border);
+      background: var(--panel);
+      overflow: hidden;
+    }
+
+    .section-label {
+      margin: 4px 8px 9px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 950;
+    }
+
+    .nav-stack,
+    .session-stack,
+    .message-list,
+    .steps-body,
+    .confirmation-list,
+    .capability-grid {
+      display: grid;
+    }
+
+    .nav-stack {
+      gap: 4px;
+      margin-bottom: 22px;
+    }
+
+    .left-item {
+      min-height: 38px;
+      gap: 10px;
+      padding: 0 10px;
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 850;
+    }
+
+    .left-item.active {
+      background: var(--surface-blue);
+      color: var(--blue-dark);
+    }
+
+    .glyph {
+      width: 24px;
+      height: 24px;
+      display: grid;
+      place-items: center;
+      border-radius: 7px;
+      background: var(--surface-strong);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 950;
+      color: var(--muted);
+    }
+
+    .active .glyph {
+      background: #dcecff;
+      color: var(--blue);
+    }
+
+    .session-stack {
+      gap: 8px;
+    }
+
+    .session-row {
+      align-items: flex-start;
+      gap: 9px;
+      padding: 10px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      color: var(--muted);
+    }
+
+    .session-row.active {
+      border-color: color-mix(in srgb, var(--blue) 34%, var(--border));
+      background: var(--surface-blue);
+      color: var(--text);
+    }
+
+    .session-row strong,
+    .session-row small {
+      display: block;
+    }
+
+    .session-row strong {
+      font-size: 13px;
+      line-height: 1.25;
+      font-weight: 900;
+    }
+
+    .session-row small {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+      font-weight: 700;
+    }
+
+    .main {
+      position: relative;
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      background: var(--bg);
+      overflow: hidden;
+    }
+
+    .conversation-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 14px;
+      align-items: start;
+      padding: 18px 22px 14px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
+    }
+
+    .conversation-title h2 {
+      margin: 0;
+      color: var(--text);
+      font-size: 20px;
+      line-height: 1.25;
+      font-weight: 950;
+    }
+
+    .conversation-title p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+      font-weight: 650;
+    }
+
+    .status-strip {
+      justify-content: flex-end;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .state-pill {
+      min-height: 28px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 9px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .state-pill.online {
+      border-color: color-mix(in srgb, var(--green) 38%, var(--border));
+      background: var(--surface-green);
+      color: var(--green);
+    }
+
+    .state-pill.running {
+      border-color: color-mix(in srgb, var(--blue) 38%, var(--border));
+      background: var(--surface-blue);
+      color: var(--blue);
+    }
+
+    .state-pill.reload {
+      border-color: color-mix(in srgb, var(--amber) 42%, var(--border));
+      background: var(--surface-amber);
+      color: var(--amber);
+    }
+
+    .notice {
+      margin: 12px 22px 0;
+      padding: 9px 12px;
+      border: 1px solid color-mix(in srgb, var(--amber) 36%, var(--border));
+      border-radius: 8px;
+      background: var(--surface-amber);
+      color: var(--amber);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .message-scroll {
+      min-height: 0;
+      overflow: hidden;
+      padding: 18px 22px 20px;
+    }
+
+    .message-list {
+      gap: 16px;
+      max-width: 920px;
+      margin: 0 auto;
+    }
+
+    .user-turn {
+      display: grid;
+      justify-items: end;
+      gap: 5px;
+    }
+
+    .user-bubble {
+      width: min(620px, 72%);
+      padding: 12px;
+      border-radius: 16px 16px 4px 16px;
+      background: var(--blue);
+      color: #fff;
+      box-shadow: 0 10px 26px rgba(37, 110, 232, 0.2);
+    }
+
+    .workflow-eyebrow,
+    .message-time,
+    .mini-label {
+      color: color-mix(in srgb, currentColor 72%, transparent);
+      font-size: 11px;
+      font-weight: 850;
+    }
+
+    .user-bubble h3,
+    .answer h3,
+    .confirmation-card h3 {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.35;
+      font-weight: 950;
+    }
+
+    .user-bubble p,
+    .answer p,
+    .confirmation-card p,
+    .capability-card p {
+      margin: 0;
+      line-height: 1.6;
+    }
+
+    .workflow-meta {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px 12px;
+      margin-top: 10px;
+      color: rgba(255, 255, 255, 0.9);
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .workflow-meta span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .message-time {
+      color: var(--weak);
+    }
+
+    .assistant-turn {
+      display: grid;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .step-summary {
+      min-height: 42px;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 950;
+    }
+
+    .step-summary-left {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow: hidden;
+    }
+
+    .beacon {
+      width: 9px;
+      height: 9px;
+      flex: 0 0 auto;
+      border-radius: 999px;
+      background: var(--blue);
+      box-shadow: 0 0 0 6px rgba(37, 110, 232, 0.08);
+    }
+
+    .summary-badge,
+    .step-kind,
+    .step-state,
+    .option,
+    .tab-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      white-space: nowrap;
+      font-weight: 900;
+    }
+
+    .summary-badge {
+      min-height: 22px;
+      padding: 0 8px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .summary-badge.running {
+      border-color: color-mix(in srgb, var(--blue) 42%, var(--border));
+      background: var(--surface-blue);
+      color: var(--blue);
+    }
+
+    .summary-badge.waiting {
+      border-color: color-mix(in srgb, var(--amber) 44%, var(--border));
+      background: var(--surface-amber);
+      color: var(--amber);
+    }
+
+    .steps-body {
+      gap: 12px;
+      padding-top: 4px;
+    }
+
+    .step-item {
+      display: grid;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .step-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .step-title {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .step-kind {
+      min-height: 22px;
+      padding: 0 7px;
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .step-kind.tool {
+      background: var(--surface-blue);
+      color: var(--blue);
+    }
+
+    .step-kind.reasoning {
+      background: var(--surface-violet);
+      color: var(--violet);
+    }
+
+    .step-kind.decision {
+      background: var(--surface-amber);
+      color: var(--amber);
+    }
+
+    .step-title strong {
+      overflow: hidden;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 950;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .step-state {
+      min-height: 22px;
+      padding: 0 8px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .step-state.done {
+      border-color: color-mix(in srgb, var(--green) 36%, var(--border));
+      background: var(--surface-green);
+      color: var(--green);
+    }
+
+    .step-state.run {
+      border-color: color-mix(in srgb, var(--blue) 38%, var(--border));
+      background: var(--surface-blue);
+      color: var(--blue);
+    }
+
+    .step-state.wait {
+      border-color: color-mix(in srgb, var(--amber) 42%, var(--border));
+      background: var(--surface-amber);
+      color: var(--amber);
+    }
+
+    .step-detail {
+      display: grid;
+      gap: 7px;
+      padding: 8px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+      font-weight: 700;
+    }
+
+    .inline-part {
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    .tool-part {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 850;
+    }
+
+    .tool-part code {
+      overflow: hidden;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .answer {
+      max-width: 760px;
+      color: var(--text);
+      font-size: 15px;
+      line-height: 1.75;
+    }
+
+    .answer h3 {
+      margin-bottom: 8px;
+      font-size: 16px;
+    }
+
+    .answer ul {
+      margin: 8px 0 0;
+      padding-left: 20px;
+    }
+
+    .answer li {
+      margin: 4px 0;
+    }
+
+    .streaming-text {
+      margin: 0;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font: inherit;
+    }
+
+    .cursor {
+      color: var(--blue);
+      font-weight: 950;
+    }
+
+    .interaction-marker {
+      max-width: 680px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 850;
+    }
+
+    .interaction-dot {
+      width: 8px;
+      height: 8px;
+      flex: 0 0 auto;
+      border-radius: 999px;
+      background: var(--amber);
+      box-shadow: 0 0 0 4px rgba(180, 106, 0, 0.12);
+    }
+
+    .composer {
+      display: grid;
+      gap: 10px;
+      padding: 12px 22px 18px;
+      border-top: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(12px);
+    }
+
+    .interaction-bar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 10px 12px;
+      border: 1px solid color-mix(in srgb, var(--amber) 38%, var(--border));
+      border-radius: 8px;
+      background: var(--surface-amber);
+      color: var(--amber);
+      font-size: 13px;
+      font-weight: 850;
+    }
+
+    .interaction-actions {
+      display: flex;
+      gap: 7px;
+    }
+
+    .interaction-actions button {
+      min-height: 30px;
+      padding: 0 10px;
+      border: 1px solid color-mix(in srgb, var(--amber) 42%, var(--border));
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--amber);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .input-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 42px;
+      gap: 10px;
+    }
+
+    .input-row input {
+      min-width: 0;
+      height: 42px;
+      padding: 0 14px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel);
+      color: var(--weak);
+      font-size: 14px;
+      font-weight: 650;
+    }
+
+    .send-button {
+      width: 42px;
+      height: 42px;
+      border: 0;
+      border-radius: 10px;
+      background: var(--blue);
+      color: #fff;
+      font-family: var(--mono);
+      font-weight: 950;
+      box-shadow: 0 10px 24px rgba(37, 110, 232, 0.22);
+    }
+
+    .right-panel {
+      position: relative;
+      display: grid;
+      grid-template-rows: 52px auto 1fr;
+      border-left: 1px solid var(--border);
+      background: var(--panel);
+      overflow: hidden;
+    }
+
+    .right-tabs {
+      position: relative;
+      gap: 6px;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .right-tab {
+      min-height: 34px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 10px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .right-tab.active {
+      border-color: var(--border);
+      background: var(--surface);
+      color: var(--text);
+    }
+
+    .tab-badge {
+      min-width: 20px;
+      height: 20px;
+      padding: 0 6px;
+      border-radius: 999px;
+      background: var(--red);
+      color: #fff;
+      font-size: 11px;
+    }
+
+    .notification-layer {
+      position: relative;
+      z-index: 5;
+      width: auto;
+      display: grid;
+      gap: 8px;
+      margin: 10px 12px 0;
+      pointer-events: none;
+    }
+
+    .toast {
+      position: relative;
+      min-height: 44px;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 9px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.95);
+      box-shadow: var(--shadow-soft);
+      backdrop-filter: blur(14px);
+      pointer-events: auto;
+    }
+
+    .toast::before {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 3px;
+      border-radius: 8px 0 0 8px;
+      background: var(--blue);
+      content: "";
+    }
+
+    .toast.warning::before {
+      background: var(--amber);
+    }
+
+    .toast.error::before {
+      background: var(--red);
+    }
+
+    .toast-tone {
+      min-height: 20px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 7px;
+      border-radius: 6px;
+      background: var(--surface-blue);
+      color: var(--blue);
+      font-size: 10px;
+      font-weight: 950;
+      line-height: 1;
+    }
+
+    .toast.warning .toast-tone {
+      background: var(--surface-amber);
+      color: var(--amber);
+    }
+
+    .toast.error .toast-tone {
+      background: var(--surface-red);
+      color: var(--red);
+    }
+
+    .toast-body {
+      min-width: 0;
+      display: grid;
+      gap: 2px;
+    }
+
+    .toast-body strong,
+    .toast-body em {
+      white-space: normal;
+    }
+
+    .toast-body strong {
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 950;
+      line-height: 1.25;
+    }
+
+    .toast-body em {
+      color: var(--muted);
+      font-size: 11px;
+      font-style: normal;
+      font-weight: 700;
+      line-height: 1.35;
+    }
+
+    .toast-close {
+      width: 20px;
+      height: 20px;
+      flex: 0 0 auto;
+      border: 0;
+      border-radius: 5px;
+      background: transparent;
+      color: var(--weak);
+      font-size: 12px;
+      font-weight: 950;
+    }
+
+    .right-content {
+      min-height: 0;
+      padding: 14px;
+      overflow: hidden;
+    }
+
+    .confirmation-list {
+      gap: 10px;
+    }
+
+    .confirmation-card {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: 0 6px 16px rgba(20, 34, 55, 0.05);
+    }
+
+    .confirmation-card.active {
+      border-color: color-mix(in srgb, var(--amber) 44%, var(--border));
+      background: var(--surface-amber);
+    }
+
+    .confirmation-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .confirmation-card h3 {
+      font-size: 14px;
+    }
+
+    .confirmation-card p {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .decision-context {
+      display: grid;
+      gap: 6px;
+      padding: 9px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+
+    .decision-context div {
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      font-weight: 750;
+    }
+
+    .decision-context span {
+      color: var(--weak);
+      font-weight: 950;
+    }
+
+    .decision-context strong {
+      color: var(--text);
+      font-weight: 950;
+    }
+
+    .decision-context em {
+      color: var(--muted);
+      font-style: normal;
+      font-weight: 750;
+    }
+
+    .decision-context code {
+      display: block;
+      color: var(--blue-dark);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 850;
+      overflow-wrap: anywhere;
+      white-space: normal;
+    }
+
+    .workflow-mini {
+      display: grid;
+      gap: 7px;
+      padding: 9px 10px;
+      border: 1px solid color-mix(in srgb, var(--blue) 18%, var(--border));
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--surface-blue) 52%, var(--panel));
+    }
+
+    .workflow-mini-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 900;
+    }
+
+    .workflow-mini-title strong {
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 950;
+    }
+
+    .workflow-mini-track {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+
+    .workflow-mini-node {
+      min-height: 24px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 0 8px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 950;
+      white-space: nowrap;
+    }
+
+    .workflow-mini-node::before {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: currentColor;
+      content: "";
+    }
+
+    .workflow-mini-node.done {
+      border-color: color-mix(in srgb, var(--green) 32%, var(--border));
+      background: var(--surface-green);
+      color: var(--green);
+    }
+
+    .workflow-mini-node.current {
+      border-color: color-mix(in srgb, var(--blue) 45%, var(--border));
+      background: var(--panel);
+      color: var(--blue);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 12%, transparent);
+    }
+
+    .workflow-mini-node.pending {
+      color: var(--weak);
+    }
+
+    .workflow-mini-arrow {
+      color: var(--weak);
+      font-size: 11px;
+      font-weight: 950;
+    }
+
+    .priority {
+      min-height: 22px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 7px;
+      border-radius: 999px;
+      background: var(--surface-red);
+      color: var(--red);
+      font-size: 11px;
+      font-weight: 950;
+    }
+
+    .option-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+    }
+
+    .option {
+      min-height: 30px;
+      padding: 0 9px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .option.primary {
+      border-color: color-mix(in srgb, var(--blue) 36%, var(--border));
+      background: var(--surface-blue);
+      color: var(--blue);
+    }
+
+    .analysis-board {
+      max-width: 1680px;
+      width: 100%;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 14px;
+    }
+
+    .board-panel {
+      padding: 16px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .board-panel h2 {
+      margin: 0 0 12px;
+      font-size: 16px;
+      font-weight: 950;
+    }
+
+    .capability-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .capability-card {
+      min-height: 120px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+
+    .capability-card strong {
+      display: block;
+      margin-bottom: 7px;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 950;
+    }
+
+    .capability-card p {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .risk-list {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .risk-list li {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 9px;
+      align-items: start;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+      font-weight: 750;
+    }
+
+    .risk-list b {
+      color: var(--text);
+      font-weight: 950;
+    }
+
+    .risk-dot {
+      width: 8px;
+      height: 8px;
+      margin-top: 6px;
+      border-radius: 999px;
+      background: var(--amber);
+    }
+
+    .risk-dot.red {
+      background: var(--red);
+    }
+
+    .risk-dot.blue {
+      background: var(--blue);
+    }
+
+    @media (max-width: 1440px) {
+      .snapshot {
+        min-height: 920px;
+      }
+
+      .workbench {
+        grid-template-columns: 220px minmax(540px, 1fr) 300px;
+      }
+
+      .analysis-board {
+        grid-template-columns: 1fr;
+      }
+
+      .capability-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 980px) {
+      .page {
+        padding: 14px;
+      }
+
+      .brief,
+      .topbar,
+      .conversation-head,
+      .analysis-board {
+        grid-template-columns: 1fr;
+      }
+
+      .brief-meta,
+      .status-strip,
+      .top-actions {
+        justify-content: flex-start;
+      }
+
+      .snapshot {
+        min-height: 1180px;
+      }
+
+      .workbench {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar,
+      .right-panel {
+        display: none;
+      }
+
+      .capability-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .user-bubble {
+        width: min(100%, 620px);
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="brief">
+      <div>
+        <h1>当前消息展示能力 - 高保真现状快照</h1>
+        <p>这张图把当前 AgentCenter 已有的展示能力放在一屏里：对话主消息、流式输出、执行过程投影、待确认交互和右侧短通知。它表达的是“现在大概能看到什么”，不是优化后的目标态。</p>
+      </div>
+      <div class="brief-meta" aria-label="current implementation markers">
+        <span class="chip"><strong>SSE</strong> session events</span>
+        <span class="chip"><strong>300</strong> event buffer</span>
+        <span class="chip"><strong>5</strong> transient notices</span>
+        <span class="chip"><strong>right-panel</strong> anchor</span>
+      </div>
+    </header>
+
+    <section class="snapshot" aria-label="AgentCenter current message display mock">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark">AC</span>
+          <span>AgentCenter</span>
+        </div>
+        <div class="search">
+          <span>/</span>
+          <span>搜索 FE、US、工作流、会话或确认项</span>
+        </div>
+        <div class="top-actions">
+          <button class="icon-button" type="button" aria-label="刷新">R</button>
+          <button class="pill-button primary" type="button">同步项目数据</button>
+          <button class="pill-button" type="button">设置</button>
+        </div>
+      </header>
+
+      <div class="workbench">
+        <aside class="sidebar">
+          <div class="section-label">工作台</div>
+          <nav class="nav-stack" aria-label="workspace navigation">
+            <div class="left-item"><span class="glyph">H</span><span>首页</span></div>
+            <div class="left-item"><span class="glyph">B</span><span>看板</span></div>
+            <div class="left-item active"><span class="glyph">C</span><span>对话工作台</span></div>
+            <div class="left-item"><span class="glyph">W</span><span>工作流配置</span></div>
+          </nav>
+
+          <div class="section-label">任务会话</div>
+          <div class="session-stack">
+            <div class="session-row active">
+              <span class="glyph">FE</span>
+              <span>
+                <strong>FE-1021 登录重构</strong>
+                <small>PRD / HLD / LLD 流程中 - 等待用户审阅</small>
+              </span>
+            </div>
+            <div class="session-row">
+              <span class="glyph">US</span>
+              <span>
+                <strong>US-1204 订阅设置</strong>
+                <small>已生成 HLD，下一步 LLD</small>
+              </span>
+            </div>
+            <div class="session-row">
+              <span class="glyph">BUG</span>
+              <span>
+                <strong>BUG-401 拖拽异常</strong>
+                <small>Runtime 调用失败，需要恢复选择</small>
+              </span>
+            </div>
+          </div>
+        </aside>
+
+        <section class="main">
+          <header class="conversation-head">
+            <div class="conversation-title">
+              <h2>FE-1021 登录页重构 - 工作流会话</h2>
+              <p>当前展示层把消息、运行事件和确认项投影成一组回合；最终回复读 agent_message，过程读 runtime_event。</p>
+            </div>
+            <div class="status-strip">
+              <span class="state-pill running"><span class="beacon"></span>节点运行中</span>
+              <span class="state-pill online">SSE 已连接</span>
+              <span class="state-pill">14 Skill · 2 MCP</span>
+              <span class="state-pill reload">下次消息重载</span>
+            </div>
+          </header>
+
+          <div class="notice">Skill catalog 已刷新，当前会话会在下次发送消息时重建 Runtime session。</div>
+
+          <div class="message-scroll">
+            <div class="message-list">
+              <article class="user-turn">
+                <div class="user-bubble">
+                  <div class="workflow-eyebrow">用户输入</div>
+                  <h3>请基于 FE-1021 · 登录页重构，使用 Skill hld-design 执行概要设计</h3>
+                  <div class="workflow-meta">
+                    <span>编号 FE-1021</span>
+                    <span>节点 HLD</span>
+                    <span>Skill hld-design</span>
+                    <span>优先级 HIGH</span>
+                  </div>
+                </div>
+                <div class="message-time">10:16</div>
+              </article>
+
+              <article class="assistant-turn">
+                <div class="step-summary">
+                  <span class="step-summary-left">
+                    <span>已处理 6 个步骤 · 读取 1 个文件 · 搜索 2 次 · 调用 1 个 Skill · 生成 1 个产物</span>
+                  </span>
+                  <span class="summary-badge">展开详情</span>
+                </div>
+                <div class="answer">
+                  <h3>HLD 结论</h3>
+                  <p>登录页重构建议保留现有认证边界，把 UI 组件拆成账号输入、认证方式切换、错误提示和提交状态四个可测片段。</p>
+                  <ul>
+                    <li>前端继续通过 Bridge API 对接认证状态，不新增独立运行态数据源。</li>
+                    <li>需要在 LLD 里补齐失败态、加载态和企业 SSO 的回归验证。</li>
+                    <li>已生成 <strong>FE-1021-HLD.md</strong>，右侧产物预览可以打开查看。</li>
+                  </ul>
+                </div>
+              </article>
+
+              <article class="user-turn">
+                <div class="user-bubble">
+                  <h3>继续生成 LLD，重点看表单状态和错误通知。</h3>
+                </div>
+                <div class="message-time">10:18</div>
+              </article>
+
+              <article class="assistant-turn">
+                <div class="step-summary">
+                  <span class="step-summary-left">
+                    <span class="beacon"></span>
+                    <span>调用 hld-design · 正在处理当前请求</span>
+                  </span>
+                  <span class="summary-badge running">进行中</span>
+                </div>
+
+                <div class="steps-body">
+                  <div class="step-item">
+                    <div class="step-head">
+                      <span class="step-title">
+                        <span class="step-kind reasoning">深度思考</span>
+                        <strong>梳理 LLD 信息层级</strong>
+                      </span>
+                      <span class="step-state done">已完成</span>
+                    </div>
+                    <div class="step-detail">
+                      <div class="inline-part">推理摘要默认折叠，只在用户展开详情时展示；主对话不会直接暴露原始 reasoning payload。</div>
+                    </div>
+                  </div>
+
+                  <div class="step-item">
+                    <div class="step-head">
+                      <span class="step-title">
+                        <span class="step-kind tool">工具组</span>
+                        <strong>搜索代码 登录错误状态</strong>
+                      </span>
+                      <span class="step-state done">已完成</span>
+                    </div>
+                    <div class="step-detail">
+                      <div class="tool-part">
+                        <span class="glyph">RG</span>
+                        <span>搜索代码 <code>login error notification</code></span>
+                        <span class="summary-badge">完成</span>
+                      </div>
+                      <div class="tool-part">
+                        <span class="glyph">RD</span>
+                        <span>读取文件 <code>agentcenter-web/src/stores/notifications.ts</code></span>
+                        <span class="summary-badge">完成</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="step-item">
+                    <div class="step-head">
+                      <span class="step-title">
+                        <span class="step-kind tool">工具组</span>
+                        <strong>调用 lld-design</strong>
+                      </span>
+                      <span class="step-state run">进行中</span>
+                    </div>
+                    <div class="step-detail">
+                      <pre class="streaming-text">正在生成 LLD 草稿。当前已覆盖组件边界、Pinia 状态、通知触发点和回归测试清单<span class="cursor">▍</span></pre>
+                    </div>
+                  </div>
+
+                  <div class="step-item">
+                    <div class="step-head">
+                      <span class="step-title">
+                        <span class="step-kind decision">交互</span>
+                        <strong>需要审阅 LLD 草稿</strong>
+                      </span>
+                      <span class="step-state wait">等待输入</span>
+                    </div>
+                    <div class="step-detail">
+                      <div class="inline-part">
+                        <strong>现在需要你决定：</strong> 是否接受当前 LLD 的表单状态拆分，或补充错误通知的展示策略。
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="interaction-marker">
+                  <span class="interaction-dot"></span>
+                  <span>需要你处理当前交互 <strong>审阅 LLD 草稿</strong></span>
+                </div>
+              </article>
+            </div>
+          </div>
+
+          <footer class="composer">
+            <div class="interaction-bar">
+              <div>
+                <strong>待处理交互：</strong>审阅 LLD 草稿，选择后 Bridge 会恢复当前节点执行。
+              </div>
+              <div class="interaction-actions">
+                <button type="button">通过</button>
+                <button type="button">补充约束</button>
+                <button type="button">重新生成</button>
+              </div>
+            </div>
+            <div class="input-row">
+              <input value="当前节点等待确认，普通消息会被拦截为提示" aria-label="message input" readonly>
+              <button class="send-button" type="button" aria-label="send">S</button>
+            </div>
+          </footer>
+        </section>
+
+        <aside class="right-panel">
+          <div class="right-tabs">
+            <button class="right-tab active" type="button">待确认 <span class="tab-badge">3</span></button>
+            <button class="right-tab" type="button">事项详情</button>
+            <button class="right-tab" type="button">产物</button>
+          </div>
+
+          <div class="notification-layer" aria-label="right-panel notification bubbles">
+            <div class="toast">
+              <span class="toast-tone">提示</span>
+              <span class="toast-body">
+                <strong>FE-1021 登录页重构 · LLD 节点</strong>
+                <em>已选择「通过并进入实现」；Bridge 将继续生成实现计划。</em>
+              </span>
+              <button class="toast-close" type="button">x</button>
+            </div>
+            <div class="toast warning">
+              <span class="toast-tone">提醒</span>
+              <span class="toast-body">
+                <strong>FE-1021 登录页重构 · LLD 节点</strong>
+                <em>请先处理交互「审阅 LLD 草稿」；普通消息不会解除等待。</em>
+              </span>
+              <button class="toast-close" type="button">x</button>
+            </div>
+          </div>
+
+          <div class="right-content">
+            <div class="confirmation-list">
+              <article class="confirmation-card active">
+                <div class="confirmation-head">
+                  <div>
+                    <h3>FE-1021 · 审阅 LLD 草稿</h3>
+                    <p>登录页重构 · LLD 节点 · 当前卡在方案确认。</p>
+                  </div>
+                  <span class="priority">HIGH</span>
+                </div>
+                <div class="workflow-mini" aria-label="workflow progress">
+                  <div class="workflow-mini-title"><strong>当前工作流位置</strong><span>正在 LLD 节点等待确认</span></div>
+                  <div class="workflow-mini-track">
+                    <span class="workflow-mini-node done">PRD</span>
+                    <span class="workflow-mini-arrow">→</span>
+                    <span class="workflow-mini-node done">HLD</span>
+                    <span class="workflow-mini-arrow">→</span>
+                    <span class="workflow-mini-node current">LLD 当前</span>
+                    <span class="workflow-mini-arrow">→</span>
+                    <span class="workflow-mini-node pending">实现</span>
+                  </div>
+                </div>
+                <div class="decision-context" aria-label="LLD review context">
+                  <div><span>目的</span><strong>确认表单状态、错误通知和企业 SSO 回归验证是否可以进入实现。</strong></div>
+                  <div><span>决定</span><strong>通过后继续生成实现计划；补充约束会重新修订 LLD。</strong></div>
+                  <div><span>不处理</span><em>当前节点保持等待，普通消息不会推进工作流。</em></div>
+                </div>
+                <div class="option-row">
+                  <span class="option primary">通过并进入实现</span>
+                  <span class="option">补充约束</span>
+                  <span class="option">重新生成</span>
+                </div>
+              </article>
+
+              <article class="confirmation-card">
+                <div class="confirmation-head">
+                  <div>
+                    <h3>FE-1021 · 申请目录访问权限</h3>
+                    <p>登录页重构 · LLD 节点 · OpenCode Runtime</p>
+                  </div>
+                  <span class="priority">HIGH</span>
+                </div>
+                <div class="workflow-mini" aria-label="workflow progress">
+                  <div class="workflow-mini-title"><strong>当前工作流位置</strong><span>正在 LLD 节点申请权限</span></div>
+                  <div class="workflow-mini-track">
+                    <span class="workflow-mini-node done">PRD</span>
+                    <span class="workflow-mini-arrow">→</span>
+                    <span class="workflow-mini-node done">HLD</span>
+                    <span class="workflow-mini-arrow">→</span>
+                    <span class="workflow-mini-node current">LLD 当前</span>
+                    <span class="workflow-mini-arrow">→</span>
+                    <span class="workflow-mini-node pending">实现</span>
+                  </div>
+                </div>
+                <div class="decision-context" aria-label="permission request context">
+                  <div><span>目的</span><strong>读取受保护测试目录，补齐企业 SSO 回归验证材料。</strong></div>
+                  <div><span>权限</span><strong>只读访问 protected 测试目录</strong></div>
+                  <div><span>范围</span><code>runtime-workspace/.opencode/skills/protected</code></div>
+                  <div><span>拒绝</span><em>LLD 会继续，但 SSO 回归证据会标记为缺失。</em></div>
+                </div>
+                <div class="option-row">
+                  <span class="option primary">允许一次</span>
+                  <span class="option">始终允许</span>
+                  <span class="option">拒绝</span>
+                </div>
+              </article>
+
+              <article class="confirmation-card">
+                <div class="confirmation-head">
+                  <div>
+                    <h3>FE-1021 · Runtime 执行中断</h3>
+                    <p>登录页重构 · LLD 节点 · Bridge 已自动重试 1 次。</p>
+                  </div>
+                  <span class="priority">HIGH</span>
+                </div>
+                <div class="decision-context" aria-label="runtime recovery context">
+                  <div><span>原因</span><strong>OpenCode 返回目录权限等待，当前 LLD 生成暂停。</strong></div>
+                  <div><span>建议</span><strong>补充指令继续，说明先跳过 protected 目录并标记验证缺口。</strong></div>
+                  <div><span>影响</span><em>选择跳过会保留主设计，但回归测试章节证据不足。</em></div>
+                </div>
+                <div class="option-row">
+                  <span class="option primary">补充指令继续</span>
+                  <span class="option">防呆重试</span>
+                  <span class="option">跳过</span>
+                </div>
+              </article>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+    </section>
+
+    <section class="analysis-board" aria-label="current display capability notes">
+      <div class="board-panel">
+        <h2>当前已经具备的展示能力</h2>
+        <div class="capability-grid">
+          <article class="capability-card">
+            <strong>文本主回答</strong>
+            <p>最终 assistant message 作为主要阅读内容；流式阶段用 streamingText 临时展示，完成后补拉落库消息。</p>
+          </article>
+          <article class="capability-card">
+            <strong>执行过程投影</strong>
+            <p>runtime events 按 seqNo、createdAt 和到达顺序排序，工具、推理、产物、错误被压缩成步骤。</p>
+          </article>
+          <article class="capability-card">
+            <strong>待交互内联</strong>
+            <p>CONFIRMATION_CREATED 会进入确认 store，并在对话区和右侧待确认面板同时出现。</p>
+          </article>
+          <article class="capability-card">
+            <strong>右侧短通知</strong>
+            <p>成功、失败、警告提示统一走 NotificationBubbles，目前主要挂在 right-panel。</p>
+          </article>
+          <article class="capability-card">
+            <strong>断线局部可见</strong>
+            <p>浏览器 SSE error 会写入本地 runtime ERROR 事件，进入主对话过程里。</p>
+          </article>
+          <article class="capability-card">
+            <strong>事件回放缓冲</strong>
+            <p>前端保留 eventBuffer，重连时可用 afterSeq 或 Last-Event-ID 继续补齐会话事件。</p>
+          </article>
+        </div>
+      </div>
+
+      <div class="board-panel">
+        <h2>现状里最影响体验的地方</h2>
+        <ul class="risk-list">
+          <li><span class="risk-dot red"></span><span><b>通知不够可靠：</b>右侧折叠时短通知不可见，重要阻塞事件和普通成功提示混在同一层。</span></li>
+          <li><span class="risk-dot"></span><span><b>状态语义偏弱：</b>顶部只有已连接/连接中，用户看不出最后同步点、重连状态和事件是否补齐。</span></li>
+          <li><span class="risk-dot"></span><span><b>展示靠启发式过滤：</b>heartbeat、tool lifecycle、snapshot delta 都由前端规则消噪，语义还不够硬。</span></li>
+          <li><span class="risk-dot blue"></span><span><b>确认入口分散：</b>同一个阻塞点同时出现在主对话、右栏和短通知里，主次关系还不够清楚。</span></li>
+        </ul>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

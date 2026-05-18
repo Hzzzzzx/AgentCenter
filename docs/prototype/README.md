@@ -1,7 +1,7 @@
 # Prototype
 
 > 当前首页高保真原型
-> 最近更新：2026-05-11
+> 最近更新：2026-05-18
 
 ## 当前基线
 
@@ -44,8 +44,10 @@ node tools/opencode-bridge.mjs --mock --port 4789
 |------|------|
 | [homepage.html](./homepage.html) | 静态高保真首页原型（当前基线） |
 | [workflow-runtime-explainer.html](./workflow-runtime-explainer.html) | 当前工作流、对话 UI 映射和用户交互形态说明页 |
+| [../../agentcenter-web/public/prototypes/current-message-display-state-hifi.html](../../agentcenter-web/public/prototypes/current-message-display-state-hifi.html) | 当前消息展示能力高保真现状快照：对话流、执行过程、确认项和右侧通知的现有呈现方式 |
 | [../../agentcenter-web/public/prototypes/conversation-layered-turn-hifi.html](../../agentcenter-web/public/prototypes/conversation-layered-turn-hifi.html) | 对话 UI 映射高保真：文本主回答、有序执行步骤、工具/证据/决策按因果挂载 |
 | [../../agentcenter-web/public/prototypes/opencode-conversation-target-hifi.html](../../agentcenter-web/public/prototypes/opencode-conversation-target-hifi.html) | OpenCode 对话目标态高保真：输入触发、文本流式写入、当前段落自动展开、完成后自动收起、权限/异常可恢复 |
+| [../../.sisyphus/evidence/current-message-display-state-hifi.png](../../.sisyphus/evidence/current-message-display-state-hifi.png) | 当前消息展示能力高保真现状截图证据 |
 | [../../.sisyphus/evidence/conversation-layered-turn-sequenced-steps.png](../../.sisyphus/evidence/conversation-layered-turn-sequenced-steps.png) | 对话 UI 有序步骤原型截图证据 |
 | [../../.sisyphus/evidence/opencode-conversation-target-hifi-streaming.png](../../.sisyphus/evidence/opencode-conversation-target-hifi-streaming.png) | OpenCode 目标态流式过程截图证据 |
 | [../../.sisyphus/evidence/opencode-conversation-target-hifi-dynamic-demo.png](../../.sisyphus/evidence/opencode-conversation-target-hifi-dynamic-demo.png) | OpenCode 目标态动态演示截图证据 |
