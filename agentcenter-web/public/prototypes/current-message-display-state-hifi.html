@@ -149,8 +149,7 @@
     .session-row,
     .message-meta,
     .step-summary,
-    .right-tabs,
-    .toast {
+    .right-tabs {
       display: flex;
       align-items: center;
     }
@@ -816,7 +815,7 @@
     .right-panel {
       position: relative;
       display: grid;
-      grid-template-rows: 52px auto 1fr;
+      grid-template-rows: 52px 1fr;
       border-left: 1px solid var(--border);
       background: var(--panel);
       overflow: hidden;
@@ -859,112 +858,10 @@
       font-size: 11px;
     }
 
-    .notification-layer {
-      position: relative;
-      z-index: 5;
-      width: auto;
-      display: grid;
-      gap: 8px;
-      margin: 10px 12px 0;
-      pointer-events: none;
-    }
-
-    .toast {
-      position: relative;
-      min-height: 44px;
-      align-items: flex-start;
-      gap: 8px;
-      padding: 9px 10px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      background: rgba(255, 255, 255, 0.95);
-      box-shadow: var(--shadow-soft);
-      backdrop-filter: blur(14px);
-      pointer-events: auto;
-    }
-
-    .toast::before {
-      position: absolute;
-      inset: 0 auto 0 0;
-      width: 3px;
-      border-radius: 8px 0 0 8px;
-      background: var(--blue);
-      content: "";
-    }
-
-    .toast.warning::before {
-      background: var(--amber);
-    }
-
-    .toast.error::before {
-      background: var(--red);
-    }
-
-    .toast-tone {
-      min-height: 20px;
-      display: inline-flex;
-      align-items: center;
-      padding: 0 7px;
-      border-radius: 6px;
-      background: var(--surface-blue);
-      color: var(--blue);
-      font-size: 10px;
-      font-weight: 950;
-      line-height: 1;
-    }
-
-    .toast.warning .toast-tone {
-      background: var(--surface-amber);
-      color: var(--amber);
-    }
-
-    .toast.error .toast-tone {
-      background: var(--surface-red);
-      color: var(--red);
-    }
-
-    .toast-body {
-      min-width: 0;
-      display: grid;
-      gap: 2px;
-    }
-
-    .toast-body strong,
-    .toast-body em {
-      white-space: normal;
-    }
-
-    .toast-body strong {
-      color: var(--text);
-      font-size: 12px;
-      font-weight: 950;
-      line-height: 1.25;
-    }
-
-    .toast-body em {
-      color: var(--muted);
-      font-size: 11px;
-      font-style: normal;
-      font-weight: 700;
-      line-height: 1.35;
-    }
-
-    .toast-close {
-      width: 20px;
-      height: 20px;
-      flex: 0 0 auto;
-      border: 0;
-      border-radius: 5px;
-      background: transparent;
-      color: var(--weak);
-      font-size: 12px;
-      font-weight: 950;
-    }
-
     .right-content {
       min-height: 0;
       padding: 14px;
-      overflow: hidden;
+      overflow: auto;
     }
 
     .confirmation-list {
@@ -1137,6 +1034,11 @@
       color: var(--red);
       font-size: 11px;
       font-weight: 950;
+    }
+
+    .priority.medium {
+      background: var(--surface-amber);
+      color: var(--amber);
     }
 
     .option-row {
@@ -1318,13 +1220,13 @@
     <header class="brief">
       <div>
         <h1>当前消息展示能力 - 高保真现状快照</h1>
-        <p>这张图把当前 AgentCenter 已有的展示能力放在一屏里：对话主消息、流式输出、执行过程投影、待确认交互和右侧短通知。它表达的是“现在大概能看到什么”，不是优化后的目标态。</p>
+        <p>这张图把当前 AgentCenter 已有的展示能力放在一屏里：对话主消息、流式输出、执行过程投影，以及不同场景下的待确认交互卡。它表达的是“现在大概能看到什么”，不是优化后的目标态。</p>
       </div>
       <div class="brief-meta" aria-label="current implementation markers">
         <span class="chip"><strong>SSE</strong> session events</span>
         <span class="chip"><strong>300</strong> event buffer</span>
-        <span class="chip"><strong>5</strong> transient notices</span>
-        <span class="chip"><strong>right-panel</strong> anchor</span>
+        <span class="chip"><strong>8</strong> interaction scenarios</span>
+        <span class="chip"><strong>workflow</strong> node cards</span>
       </div>
     </header>
 
@@ -1540,28 +1442,9 @@
 
         <aside class="right-panel">
           <div class="right-tabs">
-            <button class="right-tab active" type="button">待确认 <span class="tab-badge">3</span></button>
+            <button class="right-tab active" type="button">待确认 <span class="tab-badge">8</span></button>
             <button class="right-tab" type="button">事项详情</button>
             <button class="right-tab" type="button">产物</button>
-          </div>
-
-          <div class="notification-layer" aria-label="right-panel notification bubbles">
-            <div class="toast">
-              <span class="toast-tone">提示</span>
-              <span class="toast-body">
-                <strong>FE-1021 登录页重构 · LLD 节点</strong>
-                <em>已选择「通过并进入实现」；Bridge 将继续生成实现计划。</em>
-              </span>
-              <button class="toast-close" type="button">x</button>
-            </div>
-            <div class="toast warning">
-              <span class="toast-tone">提醒</span>
-              <span class="toast-body">
-                <strong>FE-1021 登录页重构 · LLD 节点</strong>
-                <em>请先处理交互「审阅 LLD 草稿」；普通消息不会解除等待。</em>
-              </span>
-              <button class="toast-close" type="button">x</button>
-            </div>
           </div>
 
           <div class="right-content">
@@ -1639,6 +1522,18 @@
                   </div>
                   <span class="priority">HIGH</span>
                 </div>
+                <div class="workflow-mini" aria-label="workflow progress">
+                  <div class="workflow-mini-title"><strong>当前工作流位置</strong><span>正在 LLD 节点等待恢复</span></div>
+                  <div class="workflow-mini-track">
+                    <span class="workflow-mini-node done">PRD</span>
+                    <span class="workflow-mini-arrow">→</span>
+                    <span class="workflow-mini-node done">HLD</span>
+                    <span class="workflow-mini-arrow">→</span>
+                    <span class="workflow-mini-node current">LLD 当前</span>
+                    <span class="workflow-mini-arrow">→</span>
+                    <span class="workflow-mini-node pending">实现</span>
+                  </div>
+                </div>
                 <div class="decision-context" aria-label="runtime recovery context">
                   <div><span>原因</span><strong>OpenCode 返回目录权限等待，当前 LLD 生成暂停。</strong></div>
                   <div><span>建议</span><strong>补充指令继续，说明先跳过 protected 目录并标记验证缺口。</strong></div>
@@ -1648,6 +1543,166 @@
                   <span class="option primary">补充指令继续</span>
                   <span class="option">防呆重试</span>
                   <span class="option">跳过</span>
+                </div>
+              </article>
+
+              <article class="confirmation-card">
+                <div class="confirmation-head">
+                  <div>
+                    <h3>US-1204 · 补充订阅规则</h3>
+                    <p>订阅设置 · PRD 节点 · 缺少业务约束。</p>
+                  </div>
+                  <span class="priority medium">MED</span>
+                </div>
+                <div class="workflow-mini" aria-label="workflow progress">
+                  <div class="workflow-mini-title"><strong>当前工作流位置</strong><span>正在 PRD 节点补齐输入</span></div>
+                  <div class="workflow-mini-track">
+                    <span class="workflow-mini-node current">PRD 当前</span>
+                    <span class="workflow-mini-arrow">→</span>
+                    <span class="workflow-mini-node pending">HLD</span>
+                    <span class="workflow-mini-arrow">→</span>
+                    <span class="workflow-mini-node pending">LLD</span>
+                    <span class="workflow-mini-arrow">→</span>
+                    <span class="workflow-mini-node pending">实现</span>
+                  </div>
+                </div>
+                <div class="decision-context" aria-label="missing information context">
+                  <div><span>缺口</span><strong>需要明确免费版、试用期和企业版的订阅提醒频率。</strong></div>
+                  <div><span>决定</span><strong>补充规则后继续 PRD；使用默认值会写入待确认假设。</strong></div>
+                  <div><span>不处理</span><em>PRD 会保持草稿态，后续设计节点不会启动。</em></div>
+                </div>
+                <div class="option-row">
+                  <span class="option primary">补充规则</span>
+                  <span class="option">使用默认值</span>
+                  <span class="option">暂停任务</span>
+                </div>
+              </article>
+
+              <article class="confirmation-card">
+                <div class="confirmation-head">
+                  <div>
+                    <h3>BUG-401 · 测试失败处理</h3>
+                    <p>拖拽异常 · 验证节点 · E2E 回归未通过。</p>
+                  </div>
+                  <span class="priority">HIGH</span>
+                </div>
+                <div class="workflow-mini" aria-label="workflow progress">
+                  <div class="workflow-mini-title"><strong>当前工作流位置</strong><span>正在验证节点等待处理</span></div>
+                  <div class="workflow-mini-track">
+                    <span class="workflow-mini-node done">复现</span>
+                    <span class="workflow-mini-arrow">→</span>
+                    <span class="workflow-mini-node done">修复</span>
+                    <span class="workflow-mini-arrow">→</span>
+                    <span class="workflow-mini-node current">验证当前</span>
+                    <span class="workflow-mini-arrow">→</span>
+                    <span class="workflow-mini-node pending">关闭</span>
+                  </div>
+                </div>
+                <div class="decision-context" aria-label="test failure context">
+                  <div><span>原因</span><strong>拖拽边界用例失败，当前修复可能漏掉虚拟滚动场景。</strong></div>
+                  <div><span>建议</span><strong>回到修复节点补齐边界逻辑，再自动重跑 E2E。</strong></div>
+                  <div><span>风险</span><em>标记已知风险会允许继续，但看板会保留未关闭缺陷。</em></div>
+                </div>
+                <div class="option-row">
+                  <span class="option primary">修复后重跑</span>
+                  <span class="option">标记已知风险</span>
+                  <span class="option">停止流程</span>
+                </div>
+              </article>
+
+              <article class="confirmation-card">
+                <div class="confirmation-head">
+                  <div>
+                    <h3>FE-1021 · 产物覆盖确认</h3>
+                    <p>登录页重构 · LLD 节点 · 同名文档已存在。</p>
+                  </div>
+                  <span class="priority medium">MED</span>
+                </div>
+                <div class="workflow-mini" aria-label="workflow progress">
+                  <div class="workflow-mini-title"><strong>当前工作流位置</strong><span>正在 LLD 节点写入产物</span></div>
+                  <div class="workflow-mini-track">
+                    <span class="workflow-mini-node done">PRD</span>
+                    <span class="workflow-mini-arrow">→</span>
+                    <span class="workflow-mini-node done">HLD</span>
+                    <span class="workflow-mini-arrow">→</span>
+                    <span class="workflow-mini-node current">LLD 当前</span>
+                    <span class="workflow-mini-arrow">→</span>
+                    <span class="workflow-mini-node pending">实现</span>
+                  </div>
+                </div>
+                <div class="decision-context" aria-label="artifact overwrite context">
+                  <div><span>目的</span><strong>保存新的 FE-1021-LLD.md，覆盖旧版会替换右侧产物预览。</strong></div>
+                  <div><span>建议</span><strong>保留旧版并另存副本，方便比较本轮变更。</strong></div>
+                  <div><span>影响</span><em>直接覆盖后仍可从 Git 历史找回，但工作台只显示最新版。</em></div>
+                </div>
+                <div class="option-row">
+                  <span class="option primary">另存副本</span>
+                  <span class="option">覆盖旧版</span>
+                  <span class="option">取消写入</span>
+                </div>
+              </article>
+
+              <article class="confirmation-card">
+                <div class="confirmation-head">
+                  <div>
+                    <h3>US-1204 · 变更冲突处理</h3>
+                    <p>订阅设置 · 实现节点 · 远端已有新提交。</p>
+                  </div>
+                  <span class="priority">HIGH</span>
+                </div>
+                <div class="workflow-mini" aria-label="workflow progress">
+                  <div class="workflow-mini-title"><strong>当前工作流位置</strong><span>正在实现节点处理冲突</span></div>
+                  <div class="workflow-mini-track">
+                    <span class="workflow-mini-node done">PRD</span>
+                    <span class="workflow-mini-arrow">→</span>
+                    <span class="workflow-mini-node done">HLD</span>
+                    <span class="workflow-mini-arrow">→</span>
+                    <span class="workflow-mini-node done">LLD</span>
+                    <span class="workflow-mini-arrow">→</span>
+                    <span class="workflow-mini-node current">实现当前</span>
+                  </div>
+                </div>
+                <div class="decision-context" aria-label="merge conflict context">
+                  <div><span>原因</span><strong>同一份订阅配置文件被远端分支修改，自动合并会覆盖部分字段。</strong></div>
+                  <div><span>决定</span><strong>选择采用远端、保留当前，或进入人工合并。</strong></div>
+                  <div><span>风险</span><em>错误选择会影响订阅提醒规则，建议人工合并。</em></div>
+                </div>
+                <div class="option-row">
+                  <span class="option primary">人工合并</span>
+                  <span class="option">采用远端</span>
+                  <span class="option">保留当前</span>
+                </div>
+              </article>
+
+              <article class="confirmation-card">
+                <div class="confirmation-head">
+                  <div>
+                    <h3>WORK-2207 · 发布审批</h3>
+                    <p>SSO 联调 · 发布节点 · 影响企业登录入口。</p>
+                  </div>
+                  <span class="priority">HIGH</span>
+                </div>
+                <div class="workflow-mini" aria-label="workflow progress">
+                  <div class="workflow-mini-title"><strong>当前工作流位置</strong><span>正在发布节点等待审批</span></div>
+                  <div class="workflow-mini-track">
+                    <span class="workflow-mini-node done">实现</span>
+                    <span class="workflow-mini-arrow">→</span>
+                    <span class="workflow-mini-node done">测试</span>
+                    <span class="workflow-mini-arrow">→</span>
+                    <span class="workflow-mini-node current">发布当前</span>
+                    <span class="workflow-mini-arrow">→</span>
+                    <span class="workflow-mini-node pending">监控</span>
+                  </div>
+                </div>
+                <div class="decision-context" aria-label="release approval context">
+                  <div><span>目的</span><strong>将 SSO 回调修复发布到测试环境，验证企业登录链路。</strong></div>
+                  <div><span>前提</span><strong>单测通过，E2E 仍缺少企业 IdP 真机验证。</strong></div>
+                  <div><span>影响</span><em>立即发布会触发测试环境短暂重启，约 2 分钟。</em></div>
+                </div>
+                <div class="option-row">
+                  <span class="option primary">批准发布</span>
+                  <span class="option">预约窗口</span>
+                  <span class="option">退回补测</span>
                 </div>
               </article>
             </div>
@@ -1674,8 +1729,8 @@
             <p>CONFIRMATION_CREATED 会进入确认 store，并在对话区和右侧待确认面板同时出现。</p>
           </article>
           <article class="capability-card">
-            <strong>右侧短通知</strong>
-            <p>成功、失败、警告提示统一走 NotificationBubbles，目前主要挂在 right-panel。</p>
+            <strong>多场景确认卡</strong>
+            <p>方案确认、权限申请、运行恢复、信息补充、测试失败、冲突、发布审批等场景统一使用决策卡呈现。</p>
           </article>
           <article class="capability-card">
             <strong>断线局部可见</strong>
@@ -1691,10 +1746,10 @@
       <div class="board-panel">
         <h2>现状里最影响体验的地方</h2>
         <ul class="risk-list">
-          <li><span class="risk-dot red"></span><span><b>通知不够可靠：</b>右侧折叠时短通知不可见，重要阻塞事件和普通成功提示混在同一层。</span></li>
+          <li><span class="risk-dot red"></span><span><b>卡片密度偏高：</b>多场景都展示后右栏需要滚动，优先级、分组和折叠策略还需要继续收敛。</span></li>
           <li><span class="risk-dot"></span><span><b>状态语义偏弱：</b>顶部只有已连接/连接中，用户看不出最后同步点、重连状态和事件是否补齐。</span></li>
           <li><span class="risk-dot"></span><span><b>展示靠启发式过滤：</b>heartbeat、tool lifecycle、snapshot delta 都由前端规则消噪，语义还不够硬。</span></li>
-          <li><span class="risk-dot blue"></span><span><b>确认入口分散：</b>同一个阻塞点同时出现在主对话、右栏和短通知里，主次关系还不够清楚。</span></li>
+          <li><span class="risk-dot blue"></span><span><b>确认入口仍需排序：</b>主对话、右栏卡片和底部输入拦截都能承接交互，下一步需要明确谁是主入口。</span></li>
         </ul>
       </div>
     </section>
