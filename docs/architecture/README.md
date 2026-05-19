@@ -46,6 +46,7 @@ AgentCenter 当前首页已经收敛为白色网页端工作台：
 | 6.76 | **[MARKDOWN-ARTIFACT-REVIEW-CLOSURE-DESIGN.md](./MARKDOWN-ARTIFACT-REVIEW-CLOSURE-DESIGN.md)** | **Markdown 阶段产物审阅闭环：以用户 Skill 写入的 artifacts/*.md 为唯一产物源，对话内展示产物卡片，并让 ARTIFACT_REVIEW 绑定实际内容** |
 | 6.761 | **[FILE-FIRST-ARTIFACT-PREVIEW-DESIGN.md](./FILE-FIRST-ARTIFACT-PREVIEW-DESIGN.md)** | **文件优先产物预览目标态：工作流、对话、Runtime 中任何受控工作区文件输出或修改都算产物，DB 只做索引和状态，不做产物真源** |
 | 6.77 | **[OPENCODE-CONTEXT-COMPRESSION-STATE-RETENTION-1026.md](./OPENCODE-CONTEXT-COMPRESSION-STATE-RETENTION-1026.md)** | **1026 分支上下文压缩状态保持方案：解释工作流如何推进、提示词何时注入、OpenCode 如何接收上下文，以及不合并最新分支时的增量修复路径** |
+| 6.78 | **[WORKFLOW-STATE-RETENTION-CLOSURE-1026.md](./WORKFLOW-STATE-RETENTION-CLOSURE-1026.md)** | **Workflow State Retention 闭环方案：基于 1026 分支分析，明确 DB 权威状态、Snapshot 投影、Runtime Operation、后端监听、OpenCode hook 和 Watchdog 的整体设计与方案对比** |
 | 6.8 | [RUNTIME-RESOURCE-MANAGEMENT-DESIGN.md](./RUNTIME-RESOURCE-MANAGEMENT-DESIGN.md) | Skill 管理、MCP 管理、运行资源刷新、OpenCode 生效和会话页状态展示 |
 | 6.85 | [PROJECT-CONTEXT-INTEGRATION-GUIDE.md](./PROJECT-CONTEXT-INTEGRATION-GUIDE.md) | 项目管理上下文、全局项目数据 Provider 注册/切换、CloudeReq 数据源、同步按钮和后续 Bridge API 对接指南 |
 | 6.86 | [ENTERPRISE-PROJECT-DATA-PROVIDER-GUIDE.md](./ENTERPRISE-PROJECT-DATA-PROVIDER-GUIDE.md) | 企业内部项目数据实现位对接指南：接口能力、字段映射、扩展字段和验证清单 |
