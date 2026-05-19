@@ -30,6 +30,7 @@ AgentCenter 当前首页已经收敛为白色网页端工作台：
 | 2 | [APPLICATION-ARCHITECTURE-BASELINE.md](./APPLICATION-ARCHITECTURE-BASELINE.md) | 固定企业级应用架构约束：统一上下文、多项目多用户、性能并发、安全治理 |
 | 3 | [ARCHITECTURE-OVERVIEW.md](./ARCHITECTURE-OVERVIEW.md) | 理解现有 4+1 架构总览 |
 | 4 | [UNIFIED-DOMAIN-MODEL.md](./UNIFIED-DOMAIN-MODEL.md) | 理解核心领域对象和对象关系 |
+| 4.5 | [DOCUMENTATION-GOVERNANCE.md](./DOCUMENTATION-GOVERNANCE.md) | 理解文档生命周期、归档状态、Design Sync 和防腐化规则 |
 | 5 | **[OPENCODE-BRIDGE-EXECUTION-DESIGN.md](./OPENCODE-BRIDGE-EXECUTION-DESIGN.md)** | **OpenCode 实施交接设计：HTTP 命令、SSE 输出、数据模型、工作流、待确认和高保真联动** |
 | 6 | [AGENT-RUNTIME-BRIDGE-DEVELOPMENT-BLUEPRINT.md](./AGENT-RUNTIME-BRIDGE-DEVELOPMENT-BLUEPRINT.md) | Java Bridge 和 Vue 工作台的总体开发蓝图 |
 | 6.1 | **[AGENT-RUNTIME-PROTOCOL-LAYER-DESIGN.md](./AGENT-RUNTIME-PROTOCOL-LAYER-DESIGN.md)** | **下一阶段目标状态：统一 Runtime 协议层、Provider/Transport 分离、同时支持 HTTP(S)+SSE 与 WebSocket** |
@@ -94,3 +95,7 @@ AgentCenter 当前首页已经收敛为白色网页端工作台：
 3. 提炼经验：哪些交互、架构、模块或机制值得借鉴。
 4. 判断引入方式：概念借鉴、模式复用、适配器集成、直接依赖、拒绝引入。
 5. 回写影响：如果影响产品或架构，更新对应 4+1 视图和 ADR。
+
+## 文档治理与归档
+
+文档生命周期、归档状态、Design Sync、任务完成后的 Documentation Impact Check 见 [DOCUMENTATION-GOVERNANCE.md](./DOCUMENTATION-GOVERNANCE.md)。架构文档被替代时，不要静默删除；应标注 `Superseded` 或 `Stale`，并在索引中指向新的 source of truth。

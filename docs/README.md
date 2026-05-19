@@ -22,6 +22,7 @@
 | [APPLICATION-ARCHITECTURE-BASELINE.md](./architecture/APPLICATION-ARCHITECTURE-BASELINE.md) | 企业级应用架构基线：统一上下文、多项目多用户、性能并发、安全治理 | 活跃 |
 | [ARCHITECTURE-OVERVIEW.md](./architecture/ARCHITECTURE-OVERVIEW.md) | 4+1 视图架构总览 | 活跃 |
 | [UNIFIED-DOMAIN-MODEL.md](./architecture/UNIFIED-DOMAIN-MODEL.md) | 统一对象模型 (8+3 对象) | 活跃 |
+| [DOCUMENTATION-GOVERNANCE.md](./architecture/DOCUMENTATION-GOVERNANCE.md) | 文档生命周期、归档状态、Design Sync 和防腐化规则 | 活跃 |
 | [AGENT-RUNTIME-BRIDGE-DEVELOPMENT-BLUEPRINT.md](./architecture/AGENT-RUNTIME-BRIDGE-DEVELOPMENT-BLUEPRINT.md) | Java Bridge、Vue 工作台、OpenCode Runtime Adapter 开发蓝图 | 活跃 |
 | [AGENT-RUNTIME-PROTOCOL-LAYER-DESIGN.md](./architecture/AGENT-RUNTIME-PROTOCOL-LAYER-DESIGN.md) | 多 Agent Runtime 统一协议层：Command/Event/Ack、Provider/Transport 分离、HTTP(S)+SSE 与 WebSocket 支持 | 活跃 |
 | [CONVERSATION-UI-EVENT-MAPPING-DESIGN.md](./architecture/CONVERSATION-UI-EVENT-MAPPING-DESIGN.md) | 对话 UI 事件映射：文本主回答、流式阶段段落、自动展开/收起、权限三态和异常可见化 | 活跃 |
