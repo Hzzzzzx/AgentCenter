@@ -1,0 +1,1924 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent Memory Explorer 2026</title>
+<style>
+/* ========== RESET & BASE ========== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-primary: #0f1117;
+  --bg-secondary: #161922;
+  --bg-tertiary: #1c1f2e;
+  --bg-card: #1a1d2e;
+  --bg-hover: #242838;
+  --border: #2a2d3e;
+  --border-light: #353850;
+  --text-primary: #e4e4e7;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+  --accent: #6366f1;
+  --accent-light: #818cf8;
+  --accent-dim: #4f46e5;
+  --green: #22c55e;
+  --green-bg: rgba(34, 197, 94, 0.12);
+  --yellow: #eab308;
+  --yellow-bg: rgba(234, 179, 8, 0.12);
+  --orange: #f97316;
+  --orange-bg: rgba(249, 115, 22, 0.12);
+  --red: #ef4444;
+  --red-bg: rgba(239, 68, 68, 0.12);
+  --gray: #6b7280;
+  --gray-bg: rgba(107, 114, 128, 0.12);
+  --sidebar-w: 250px;
+  --panel-w: 300px;
+  --topbar-h: 56px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --transition: 0.2s ease;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+  overflow: hidden;
+  height: 100vh;
+}
+
+/* ========== SCROLLBAR ========== */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
+
+/* ========== LAYOUT ========== */
+.app { display: grid; grid-template-columns: var(--sidebar-w) 1fr; height: 100vh; }
+
+/* ========== SIDEBAR ========== */
+.sidebar {
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  z-index: 100;
+  transition: transform 0.3s ease;
+}
+
+.sidebar-header {
+  padding: 20px 16px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.sidebar-header h2 {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent-light);
+  margin-bottom: 4px;
+}
+
+.sidebar-header .subtitle {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.sidebar-search {
+  padding: 12px 16px;
+  flex-shrink: 0;
+}
+
+.sidebar-search input {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color var(--transition);
+}
+
+.sidebar-search input:focus { border-color: var(--accent); }
+.sidebar-search input::placeholder { color: var(--text-muted); }
+
+.sidebar-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.nav-group { margin-bottom: 4px; }
+
+.nav-group-title {
+  padding: 8px 16px 4px;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px;
+  cursor: pointer;
+  transition: all var(--transition);
+  border-left: 3px solid transparent;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.nav-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+.nav-item.active { background: var(--bg-tertiary); color: var(--accent-light); border-left-color: var(--accent); }
+
+.nav-item .icon { width: 16px; text-align: center; flex-shrink: 0; font-size: 0.75rem; }
+.nav-item .label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nav-item .badge {
+  margin-left: auto;
+  font-size: 0.6rem;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.nav-item.active .badge { background: var(--accent-dim); color: #fff; }
+
+.nav-sub { padding-left: 20px; }
+.nav-sub .nav-item { font-size: 0.8rem; padding: 5px 16px; }
+
+.sidebar-footer {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.group-toggle input { accent-color: var(--accent); }
+
+/* ========== TOP BAR (mobile) ========== */
+.topbar {
+  display: none;
+  height: var(--topbar-h);
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  align-items: center;
+  padding: 0 16px;
+  gap: 12px;
+}
+
+.hamburger {
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; border-radius: var(--radius);
+  transition: background var(--transition);
+}
+.hamburger:hover { background: var(--bg-hover); }
+.hamburger svg { width: 20px; height: 20px; stroke: var(--text-secondary); }
+
+/* ========== MAIN ========== */
+.main-wrapper {
+  display: flex;
+  overflow: hidden;
+  height: 100vh;
+}
+
+.main-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px 40px;
+  min-width: 0;
+}
+
+/* ========== RIGHT PANEL ========== */
+.right-panel {
+  width: 0;
+  overflow: hidden;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border);
+  transition: width 0.3s ease, padding 0.3s ease;
+  overflow-y: auto;
+}
+
+.right-panel.open {
+  width: var(--panel-w);
+  padding: 24px 20px;
+}
+
+.panel-toggle {
+  position: fixed;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 56px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 6px 0 0 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  transition: all var(--transition);
+  color: var(--text-muted);
+  font-size: 0.7rem;
+}
+
+.panel-toggle:hover { background: var(--bg-hover); color: var(--text-primary); }
+.panel-toggle.shifted { right: calc(var(--panel-w) + 12px); }
+
+.panel-section { margin-bottom: 20px; }
+.panel-section h4 {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent-light);
+  margin-bottom: 10px;
+}
+
+.capability-item {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 0.8rem;
+}
+
+.capability-item .cap-code {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  background: var(--accent-dim);
+  color: #fff;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  flex-shrink: 0;
+  height: fit-content;
+  margin-top: 2px;
+}
+
+.capability-item .cap-desc { color: var(--text-secondary); }
+
+.panel-matrix { width: 100%; border-collapse: collapse; font-size: 0.7rem; }
+.panel-matrix th, .panel-matrix td {
+  padding: 3px 4px;
+  border: 1px solid var(--border);
+  text-align: center;
+}
+.panel-matrix th { background: var(--bg-tertiary); color: var(--text-muted); font-weight: 500; }
+.panel-matrix td { color: var(--text-secondary); }
+.panel-matrix .dot-yes { color: var(--green); }
+.panel-matrix .dot-no { color: var(--text-muted); }
+
+/* ========== SECTION STYLES ========== */
+.section { display: none; }
+.section.active { display: block; }
+
+.hero {
+  text-align: center;
+  padding: 40px 0 32px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 32px;
+}
+
+.hero h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 8px;
+  background: linear-gradient(135deg, var(--accent-light), #a78bfa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hero .hero-sub {
+  font-size: 1rem;
+  color: var(--text-secondary);
+  max-width: 600px;
+  margin: 0 auto 24px;
+}
+
+.stats-row {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+
+.stat-item {
+  text-align: center;
+}
+
+.stat-item .stat-num {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--accent-light);
+}
+
+.stat-item .stat-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ========== COMPARISON MATRIX ========== */
+.matrix-controls {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.matrix-controls label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.matrix-controls select {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 4px 8px;
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  outline: none;
+}
+
+.matrix-wrapper {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+}
+
+.matrix-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  min-width: 900px;
+}
+
+.matrix-table th {
+  padding: 10px 12px;
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--bg-secondary);
+  z-index: 2;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: color var(--transition);
+}
+.matrix-table th:hover { color: var(--accent-light); }
+.matrix-table th .sort-icon {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 0.7rem;
+  opacity: 0.3;
+  transition: opacity var(--transition);
+}
+.matrix-table th:hover .sort-icon { opacity: 0.7; }
+.matrix-table th.sort-asc .sort-icon,
+.matrix-table th.sort-desc .sort-icon { opacity: 1; color: var(--accent); }
+.matrix-table th.sort-asc .sort-icon::after { content: ' ▲'; }
+.matrix-table th.sort-desc .sort-icon::after { content: ' ▼'; }
+.matrix-table th:not(.sort-asc):not(.sort-desc) .sort-icon::after { content: ' ⇅'; }
+
+.matrix-table th:first-child,
+.matrix-table th:nth-child(2) { text-align: left; }
+
+.matrix-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+  transition: background var(--transition);
+  position: relative;
+}
+
+.matrix-table tr:hover td { background: var(--bg-hover); }
+
+.matrix-table td:first-child { text-align: left; }
+.matrix-table td:nth-child(2) { text-align: left; }
+
+.matrix-table .fw-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.matrix-table .fw-name:hover { color: var(--accent-light); }
+
+.category-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.6rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.cat-vector { background: rgba(99, 102, 241, 0.15); color: #818cf8; }
+.cat-graph { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
+.cat-retrieval { background: rgba(249, 115, 22, 0.15); color: #fb923c; }
+.cat-langchain { background: rgba(234, 179, 8, 0.15); color: #facc15; }
+.cat-selflearn { background: rgba(168, 85, 247, 0.15); color: #c084fc; }
+.cat-hierarchy { background: rgba(20, 184, 166, 0.15); color: #2dd4bf; }
+.cat-brain { background: rgba(244, 63, 94, 0.15); color: #fb7185; }
+.cat-zeroLLM { background: rgba(56, 189, 248, 0.15); color: #38bdf8; }
+.cat-universal { background: rgba(168, 162, 158, 0.15); color: #a8a29e; }
+.cat-coding { background: rgba(107, 114, 128, 0.2); color: #9ca3af; border: 1px dashed var(--border-light); }
+
+.new-badge {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: white;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-left: 8px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.score-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: default;
+  position: relative;
+}
+
+.score-green { background: var(--green-bg); color: var(--green); }
+.score-yellow { background: var(--yellow-bg); color: var(--yellow); }
+.score-orange { background: var(--orange-bg); color: var(--orange); }
+.score-red { background: var(--red-bg); color: var(--red); }
+.score-gray { background: var(--gray-bg); color: var(--gray); }
+
+.score-badge {
+  font-size: 0.6rem;
+  opacity: 0.7;
+}
+
+.tooltip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-light);
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  pointer-events: none;
+}
+
+.score-cell:hover .tooltip { display: block; }
+
+.total-cell { font-weight: 700; }
+
+.group-header-row td {
+  background: var(--bg-tertiary) !important;
+  font-weight: 600;
+  color: var(--accent-light);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 10px 8px !important;
+}
+
+/* ========== FRAMEWORK DETAIL ========== */
+.detail-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+
+.detail-header {
+  padding: 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.detail-header .fw-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.detail-header .fw-meta h2 {
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.detail-header .fw-tagline {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin-bottom: 8px;
+}
+
+.detail-header .fw-badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.badge-stars { border-color: var(--yellow); color: var(--yellow); }
+.badge-license { border-color: var(--green); color: var(--green); }
+
+.detail-body { padding: 24px; }
+
+.detail-section {
+  margin-bottom: 24px;
+}
+
+.detail-section:last-child { margin-bottom: 0; }
+
+.detail-section h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--accent-light);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.detail-section h3::before {
+  content: '';
+  width: 3px;
+  height: 16px;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+.detail-section p {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.7;
+}
+
+.detail-section ul {
+  list-style: none;
+  padding: 0;
+}
+
+.detail-section ul li {
+  position: relative;
+  padding-left: 18px;
+  margin-bottom: 6px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.detail-section ul li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* Architecture Pipeline */
+.arch-pipeline {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 16px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius);
+  overflow-x: auto;
+  flex-wrap: wrap;
+}
+
+.arch-step {
+  padding: 8px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.arch-arrow {
+  color: var(--accent);
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+/* Benchmark score table */
+.bench-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.bench-table th {
+  background: var(--bg-tertiary);
+  padding: 8px 12px;
+  text-align: left;
+  color: var(--text-muted);
+  font-weight: 500;
+  border-bottom: 1px solid var(--border);
+}
+
+.bench-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+/* ========== BENCHMARK CARDS ========== */
+.bench-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.bench-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  transition: border-color var(--transition);
+}
+
+.bench-card:hover { border-color: var(--accent-dim); }
+
+.bench-card h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.bench-card .bench-year {
+  font-size: 0.7rem;
+  color: var(--accent-light);
+  margin-bottom: 8px;
+}
+
+.bench-card .bench-desc {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  line-height: 1.6;
+}
+
+.bench-card .bench-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.bench-tag {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+}
+
+/* ========== DESIGN PHASE ========== */
+.cap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.cap-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  border-left: 3px solid var(--accent);
+}
+
+.cap-card .cap-code-lg {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--accent-light);
+  margin-bottom: 4px;
+}
+
+.cap-card .cap-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.cap-card .cap-desc {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.rec-scenario {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.rec-scenario h4 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--accent-light);
+}
+
+.rec-list {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.rec-item {
+  padding: 8px 16px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rec-rank {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.rank-1 { background: var(--green); color: #fff; }
+.rank-2 { background: var(--accent); color: #fff; }
+.rank-3 { background: var(--orange); color: #fff; }
+
+/* ========== QUICK REF ========== */
+.decision-tree {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+}
+
+.decision-node {
+  margin-bottom: 16px;
+  padding-left: 24px;
+  position: relative;
+}
+
+.decision-node::before {
+  content: 'Q';
+  position: absolute;
+  left: 0;
+  top: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent-dim);
+  color: #fff;
+  font-size: 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+.decision-node .q-text {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.decision-node .a-text {
+  font-size: 0.85rem;
+  color: var(--accent-light);
+  padding-left: 12px;
+}
+
+/* ========== LEADERBOARD ========== */
+.leaderboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  margin-top: 16px;
+}
+
+.leaderboard-table th {
+  background: var(--bg-tertiary);
+  padding: 8px 12px;
+  text-align: left;
+  color: var(--text-muted);
+  font-weight: 500;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+}
+
+.leaderboard-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.leaderboard-table tr:hover td { background: var(--bg-hover); }
+
+.rank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.rank-gold { background: rgba(234, 179, 8, 0.2); color: var(--yellow); }
+.rank-silver { background: rgba(156, 163, 175, 0.2); color: #9ca3af; }
+.rank-bronze { background: rgba(249, 115, 22, 0.2); color: var(--orange); }
+
+/* ========== SECTION TITLE ========== */
+.section-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.section-desc {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin-bottom: 24px;
+}
+
+/* ========== MOBILE OVERLAY ========== */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 90;
+}
+
+/* ========== RESPONSIVE ========== */
+@media (max-width: 1024px) {
+  .right-panel.open { width: 260px; }
+  .panel-toggle.shifted { right: calc(260px + 12px); }
+}
+
+@media (max-width: 768px) {
+  .app { grid-template-columns: 1fr; }
+  .topbar { display: flex; }
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    transform: translateX(-100%);
+    z-index: 100;
+  }
+  .sidebar.mobile-open { transform: translateX(0); }
+  .sidebar-overlay.show { display: block; z-index: 90; }
+  .main-wrapper {
+    flex-direction: column;
+    margin-top: var(--topbar-h);
+    height: calc(100vh - var(--topbar-h));
+  }
+  .main-content { padding: 20px 16px; }
+  .right-panel.open { width: 100%; border-left: none; border-top: 1px solid var(--border); max-height: 40vh; }
+  .panel-toggle { display: none; }
+  .hero h1 { font-size: 1.4rem; }
+  .stats-row { gap: 16px; }
+  .stat-item .stat-num { font-size: 1.5rem; }
+}
+
+/* ========== PRINT ========== */
+@media print {
+  .sidebar, .right-panel, .panel-toggle, .topbar, .sidebar-overlay, .matrix-controls, .panel-toggle { display: none !important; }
+  .app { display: block; }
+  .main-wrapper { display: block; }
+  .main-content { padding: 0; overflow: visible; }
+  body { overflow: visible; height: auto; background: #fff; color: #000; }
+  .section { display: block !important; page-break-before: always; }
+  .hero { border-bottom: 2px solid #ccc; }
+  .hero h1 { -webkit-text-fill-color: #333; background: none; color: #333; }
+  .matrix-table th { background: #eee; }
+  .detail-card { border: 1px solid #ccc; break-inside: avoid; }
+  .matrix-wrapper { border: 1px solid #ccc; }
+}
+</style>
+</head>
+<body>
+
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+<div class="app">
+  <!-- TOP BAR (mobile) -->
+  <div class="topbar">
+    <div class="hamburger" id="hamburgerBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round">
+        <line x1="3" y1="6" x2="21" y2="6"/>
+        <line x1="3" y1="12" x2="21" y2="12"/>
+        <line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+    </div>
+    <span style="font-weight:600;font-size:0.9rem;">Agent Memory Explorer</span>
+  </div>
+
+  <!-- SIDEBAR -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <h2>Memory Explorer</h2>
+      <div class="subtitle">AgentCenter Research 2026</div>
+    </div>
+    <div class="sidebar-search">
+      <input type="text" id="searchInput" placeholder="搜索框架..." autocomplete="off">
+    </div>
+    <div class="sidebar-nav" id="sidebarNav">
+      <!-- Populated by JS -->
+    </div>
+    <div class="sidebar-footer">
+      <label class="group-toggle">
+        <input type="checkbox" id="groupToggle">
+        <span>按类别分组</span>
+      </label>
+    </div>
+  </nav>
+
+  <!-- MAIN AREA -->
+  <div class="main-wrapper">
+    <main class="main-content" id="mainContent">
+      <!-- Populated by JS -->
+    </main>
+
+    <!-- RIGHT PANEL -->
+    <aside class="right-panel" id="rightPanel">
+      <div class="panel-section">
+        <h4>P0 评测维度</h4>
+        <div class="capability-item"><span class="cap-code">IE</span><span class="cap-desc">信息提取 — 从对话中提取结构化知识</span></div>
+        <div class="capability-item"><span class="cap-code">TR</span><span class="cap-desc">时序推理 — 理解时间顺序和事实变化</span></div>
+        <div class="capability-item"><span class="cap-code">KU</span><span class="cap-desc">知识更新 — 检测矛盾并更新旧知识</span></div>
+        <div class="capability-item"><span class="cap-code">MR</span><span class="cap-desc">多跳推理 — 跨多条记忆综合回答</span></div>
+        <div class="capability-item"><span class="cap-code">MSR</span><span class="cap-desc">多会话推理 — 跨会话关联和推理</span></div>
+      </div>
+      <div class="panel-section">
+        <h4>评测基准覆盖矩阵</h4>
+        <table class="panel-matrix">
+          <tr><th>基准</th><th>IE</th><th>TR</th><th>KU</th><th>MR</th><th>MSR</th></tr>
+          <tr><td>LongMemEval</td><td class="dot-yes">&#9679;</td><td class="dot-yes">&#9679;</td><td class="dot-yes">&#9679;</td><td class="dot-yes">&#9679;</td><td class="dot-yes">&#9679;</td></tr>
+          <tr><td>LoCoMo</td><td class="dot-yes">&#9679;</td><td class="dot-no">&#9675;</td><td class="dot-yes">&#9679;</td><td class="dot-yes">&#9679;</td><td class="dot-yes">&#9679;</td></tr>
+          <tr><td>BEAM</td><td class="dot-no">&#9675;</td><td class="dot-yes">&#9679;</td><td class="dot-no">&#9675;</td><td class="dot-yes">&#9679;</td><td class="dot-no">&#9675;</td></tr>
+          <tr><td>MINTEval</td><td class="dot-yes">&#9679;</td><td class="dot-yes">&#9679;</td><td class="dot-yes">&#9679;</td><td class="dot-yes">&#9679;</td><td class="dot-yes">&#9679;</td></tr>
+        </table>
+      </div>
+      <div class="panel-section">
+        <h4>分数色标</h4>
+        <div class="capability-item"><span class="cap-code" style="background:var(--green)">80%+</span><span class="cap-desc">优秀</span></div>
+        <div class="capability-item"><span class="cap-code" style="background:var(--yellow);color:#000">60-79%</span><span class="cap-desc">良好</span></div>
+        <div class="capability-item"><span class="cap-code" style="background:var(--orange)">40-59%</span><span class="cap-desc">一般</span></div>
+        <div class="capability-item"><span class="cap-code" style="background:var(--red)">&lt;40%</span><span class="cap-desc">不足</span></div>
+        <div class="capability-item"><span class="cap-code" style="background:var(--gray)">N/A</span><span class="cap-desc">无数据</span></div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- PANEL TOGGLE BUTTON -->
+<button class="panel-toggle shifted" id="panelToggle" title="评测标准参考">&#9664;</button>
+
+<script>
+// ============================================================
+// DATA
+// ============================================================
+const frameworks = [
+  {
+    id: "mem0", name: "Mem0", tagline: "记忆只需要两个 API：add() 和 search()",
+    category: "极简向量记忆", catClass: "cat-vector", stars: "25k+", license: "Apache 2.0", github: "mem0ai/mem0",
+    philosophy: "极简主义——不要过度设计。记忆就是提取事实+检索。",
+    architecture: ["add() 输入", "去重/归一化", "实体提取", "向量化 + BM25", "entity 增强", "存储", "search() 三路并行", "返回结果"],
+    smartestDesign: "self-editing 而非 append：新记忆编辑旧记忆，避免膨胀",
+    limitations: ["无时间推理", "无知识图谱", "LongMemEval 49%（最低）", "49% 说明极简有天花板"],
+    insights: "记忆需要自我修剪而非无限增长。简单是起点不是终点。",
+    scores: { ie: [55,65], tr: [35,45], ku: [50,60], mr: [45,55], msr: [50,60], total: "~49%", source: "inferred" },
+    benchmarks: { locomo: "61.4%", longmemeval: "~49%" }
+  },
+  {
+    id: "letta", name: "Letta / MemGPT", tagline: "把 LLM 当操作系统，记忆就是 RAM、Cache 和磁盘",
+    category: "三层自主记忆", catClass: "cat-vector", stars: "15k+", license: "Apache 2.0", github: "letta-ai/letta",
+    philosophy: "Agent 应该自主管理记忆，像 OS 管理 RAM 和磁盘",
+    architecture: ["Core Memory (热)", "Recall Memory (温)", "Archival Memory (冷)", "Agent 自主调度", "Context Window Calculator"],
+    smartestDesign: "Context Window Calculator：实时追踪 token 预算，接近上限时主动触发记忆操作",
+    limitations: ["完整运行时，部署复杂", "Agent 自主管理对企业有风险", "per-agent 隔离，不适配共享记忆池", "无实测数据"],
+    insights: "三层抽象（热/温/冷）方向正确，但企业需要 human-in-the-loop 控制",
+    scores: { ie: [55,65], tr: [35,45], ku: [50,60], mr: [55,65], msr: [65,75], total: "~55%", source: "inferred" },
+    benchmarks: {}
+  },
+  {
+    id: "zep", name: "Zep / Graphiti", tagline: "每个事实都有保质期——一月真的，现在未必",
+    category: "时序知识图谱", catClass: "cat-graph", stars: "3k+", license: "Apache 2.0", github: "getzep/zep",
+    philosophy: "事实是带时间戳的。用图建模实体关系，用时间戳追踪事实生命周期",
+    architecture: ["Episode 输入", "Entity/Edge 提取", "Bi-temporal KG (valid_at/invalid_at)", "图遍历查询"],
+    smartestDesign: "Bi-temporal 模型：valid_at/invalid_at 是唯一精确回答'规则什么时候变'的方案",
+    limitations: ["无 cross-encoder，精确率不如 Hindsight", "跨会话深度推理不是图遍历强项", "总分 ~64% 中等"],
+    insights: "时态推理是企业设计阶段的刚需，Zep 的 bi-temporal 是独门武器",
+    scores: { ie: [60,70], tr: [80,90], ku: [78,88], mr: [70,80], msr: [55,65], total: "~64%", source: "inferred" },
+    benchmarks: { locomo: "~71%", longmemeval: "~63.8%" }
+  },
+  {
+    id: "cognee", name: "Cognee", tagline: "记忆是数据管线——从任何源头提取、清洗、结构化",
+    category: "数据管线引擎", catClass: "cat-graph", stars: "2k+", license: "Apache 2.0", github: "topoteretes/cognee",
+    philosophy: "记忆不是存储问题，是数据工程问题。用管线思维处理知识",
+    architecture: ["30+ 数据源连接器", "cognify 管线", "提取/去重/分类", "图构建", "5 种搜索模式"],
+    smartestDesign: "管线思维：把记忆当成数据工程，30+ 连接器覆盖各种输入源",
+    limitations: ["管线是 batch 的，非实时", "无时间维度", "跨会话不是设计目标", "无实测数据"],
+    insights: "IE 管线思路值得借鉴，但需要补时间维度和实时能力",
+    scores: { ie: [70,80], tr: [35,45], ku: [40,50], mr: [65,75], msr: [45,55], total: "~60%", source: "inferred" },
+    benchmarks: {}
+  },
+  {
+    id: "graphify", name: "Graphify", tagline: "任何输入 -> 知识图谱 -> 聚类社区 -> Wiki",
+    category: "多模态知识图谱", catClass: "cat-graph", stars: "N/A", license: "MIT", github: "hzzjian/graphify",
+    philosophy: "从代码、文档、图片中自动构建知识图谱，生成人类可读 Wiki",
+    architecture: ["tree-sitter AST / Claude vision", "知识图谱 (NetworkX)", "Leiden 社区检测", "HTML/JSON Wiki"],
+    smartestDesign: "多模态 IE：代码用 AST，图片用 vision，文档用 LLM——统一输出为图谱",
+    limitations: ["CLI 工具，无会话概念", "无时间维度", "图受限于内存", "无实测数据"],
+    insights: "人类可读记忆界面是差异化方向，但需要补会话和时间维度",
+    scores: { ie: [65,75], tr: [35,45], ku: [30,40], mr: [60,70], msr: [40,50], total: "~55%", source: "inferred" },
+    benchmarks: {}
+  },
+  {
+    id: "hindsight", name: "Hindsight", tagline: "4 路并行检索 + 反思，91.4% LongMemEval SOTA",
+    category: "多路检索增强", catClass: "cat-retrieval", stars: "N/A", license: "Research", github: "N/A",
+    philosophy: "检索质量是记忆的核心。4 路并行 + cross-encoder 重排确保质量",
+    architecture: ["语义检索", "BM25 检索", "实体图检索", "时间过滤", "Cross-encoder 重排", "Reflect 反思"],
+    smartestDesign: "4 路并行检索：覆盖语义/关键词/实体/时间四个维度，cross-encoder 精排",
+    limitations: ["不自己做提取，依赖上游", "时间过滤不如 Zep 精确", "无显式矛盾检测", "不开源"],
+    insights: "检索质量是通用优势，但不是设计阶段特化优势。需要补 TR 和 CR",
+    scores: { ie: [80,90], tr: [75,85], ku: [80,88], mr: [88,94], msr: [88,94], total: "91.4%", source: "measured" },
+    benchmarks: { locomo: "89.61%", longmemeval: "91.4%" }
+  },
+  {
+    id: "langmem", name: "LangMem", tagline: "三类记忆 + prompt 优化，LangChain 生态",
+    category: "LangChain 原生记忆", catClass: "cat-langchain", stars: "500+", license: "MIT", github: "langchain-ai/langmem",
+    philosophy: "记忆应该原生集成在 LangGraph 工作流中，三类记忆覆盖不同场景",
+    architecture: ["semantic/episodic/procedural", "trustcall 结构化提取", "LangGraph BaseStore", "Hot path + Background"],
+    smartestDesign: "多步提取循环：insert/update/delete 三种操作 + prompt 优化机制",
+    limitations: ["v0.0.30 成熟度低", "依赖 LangChain 生态", "无时间维度", "无实测数据"],
+    insights: "procedural 记忆（记住怎么做事）是独特角度，适合编码场景",
+    scores: { ie: [55,65], tr: [35,45], ku: [55,65], mr: [50,60], msr: [55,65], total: "~55%", source: "inferred" },
+    benchmarks: {}
+  },
+  {
+    id: "hermes", name: "Hermes", tagline: "163K stars，自学习循环 + SQLite 持久化",
+    category: "自学习 Agent", catClass: "cat-selflearn", stars: "163k", license: "MIT", github: "nicobailey/hernandez",
+    philosophy: "Agent 通过反思循环自我学习，MEMORY.md 是核心记忆载体",
+    architecture: ["MEMORY.md (2200字符)", "FTS5 全文搜索", "语义检索", "8 个外部 memory provider"],
+    smartestDesign: "自学习循环：每次交互后反思，更新 MEMORY.md，经验自动积累",
+    limitations: ["2200 字符容量限制", "无时间维度", "多跳依赖 agent 多轮操作", "无实测数据"],
+    insights: "FTS5 + SQLite 的轻量方案有参考价值，但容量是硬伤",
+    scores: { ie: [50,60], tr: [35,40], ku: [50,58], mr: [40,50], msr: [65,75], total: "~50%", source: "inferred" },
+    benchmarks: {}
+  },
+  {
+    id: "openhuman", name: "OpenHuman", tagline: "Memory Tree 架构，人类可浏览的记忆界面",
+    category: "层次化记忆树", catClass: "cat-hierarchy", stars: "2k+", license: "MIT", github: "nicobailey/openhuman",
+    philosophy: "记忆应该像文件系统一样可浏览，树结构天然适合层次查询",
+    architecture: ["STM (FTS5 + cosine)", "Memory Tree (6种检索工具)", "daily global digest", "score engine 三段准入"],
+    smartestDesign: "树结构多跳：从根到叶子的路径就是多跳路径，6 种工具支持递进精化",
+    limitations: ["无 valid_at/invalid_at 时间建模", "去重 != 事实更新", "无实测数据"],
+    insights: "树结构的层次化组织最适合跨层关联（业务层与技术层）",
+    scores: { ie: [70,80], tr: [35,45], ku: [40,50], mr: [75,85], msr: [60,70], total: "~65%", source: "inferred" },
+    benchmarks: {}
+  },
+  {
+    id: "synthius-mem", name: "Synthius-Mem", tagline: "脑启发六域记忆，LoCoMo 94.37% SOTA，幻觉抵抗 99.55%",
+    category: "脑启发结构化记忆", catClass: "cat-brain", stars: "1", license: "MIT", github: "Kirafy123/synthius-mem-claude",
+    philosophy: "不检索'说了什么'，而提取'已知什么'。六域分类消除语义漂移",
+    architecture: ["Extract (捕获)", "Consolidate (合并)", "CategoryRAG", "Biography/Experiences/Preferences", "Social/Work/Psychometrics"],
+    smartestDesign: "唯一报告幻觉抵抗（99.55% 对抗鲁棒性）：能区分'知道'和'不知道'",
+    limitations: ["只在 LoCoMo 有分数", "无 LongMemEval/BEAM 数据", "两位独立研究者，非大厂", "Stars 少，生态不成熟"],
+    insights: "结构化域知识检索 vs 原文片段检索——这是范式的升级。幻觉抵抗是企业刚需",
+    scores: { ie: [90,96], tr: [70,80], ku: [85,95], mr: [85,95], msr: [90,96], total: "94.37%", source: "measured" },
+    benchmarks: { locomo: "94.37%" }
+  },
+  {
+    id: "memmachine", name: "MemMachine", tagline: "3092 stars，三层记忆 + 全生态集成",
+    category: "通用记忆层", catClass: "cat-universal", stars: "3092", license: "Apache 2.0", github: "MemMachine/MemMachine",
+    philosophy: "通用记忆层，episodic + profile + working 三层覆盖所有 Agent 场景",
+    architecture: ["Episodic Memory (Neo4j)", "Profile Memory (SQL)", "Working Memory (session)", "REST API + MCP + SDKs"],
+    smartestDesign: "集成生态最广：LangChain/CrewAI/LlamaIndex/MCP/n8n/Dify 全覆盖",
+    limitations: ["具体 benchmark 分数未找到", "架构公开但评测数据不透明", "Neo4j 依赖增加部署复杂度"],
+    insights: "全生态集成是企业选型的重要考量，三层结构与 Letta 类似但更工程化",
+    scores: { ie: [65,75], tr: [50,60], ku: [60,70], mr: [65,75], msr: [60,70], total: "~70%?", source: "inferred" },
+    benchmarks: { locomo: "91.69%" }
+  },
+  {
+    id: "cortex", name: "Cortex", tagline: "20 种神经科学机制，LongMemEval 98.4%，LoCoMo 94.2%",
+    category: "神经科学记忆", catClass: "cat-brain", stars: "37", license: "MIT", github: "cdeust/Cortex",
+    isNew: true,
+    philosophy: "用经过验证的神经科学机制构建记忆系统：预测编码、巩固级联、热力学衰减",
+    architecture: ["5 阶段检索：意图分类", "查询扩展", "5信号WRRF融合", "Cross-Encoder重排", "神经符号过滤"],
+    smartestDesign: "预测编码门控：4 信号判断新信息是否值得记忆（embedding novelty + entity overlap + temporal proximity + structural similarity）",
+    limitations: ["37 stars，社区小", "依赖 PostgreSQL + pgvector", "20 种机制（非宣传的 26 种）", "BEAM 0.471 MRR 仍有提升空间"],
+    insights: "科学严谨度最高——每个机制都有论文引用和数学公式。巩固级联（LABILE→EARLY_LTP→LATE_LTP→CONSOLIDATED）值得借鉴",
+    scores: { ie: [80,90], tr: [75,85], ku: [85,95], mr: [85,95], msr: [90,96], total: "98.4% R@10", source: "measured" },
+    benchmarks: { longmemeval: "98.4% R@10, MRR 0.9124", locomo: "94.2% R@10, MRR 0.8278", beam: "0.471 MRR (+33.4%)" }
+  },
+  {
+    id: "engram", name: "Engram", tagline: "查询时零 LLM 调用，LongMemEval 98.4% R@5，LoCoMo 93.9%",
+    category: "零LLM查询记忆", catClass: "cat-zeroLLM", stars: "6", license: "MIT", github: "Nitin-Gupta1109/engram",
+    isNew: true,
+    philosophy: "记忆检索不需要调用 LLM，纯结构化查询就够了——极致降本",
+    architecture: ["Dense bi-encoder (bge-large 1024-dim)", "BM25 sparse", "RRF fusion", "Cross-encoder rerank (optional)"],
+    smartestDesign: "零 LLM 调用实现 98.4% R@5：纯检索管线，延迟极低，成本极低",
+    limitations: ["6 stars，非常早期", "无论文", "简单架构可能无法处理复杂推理", "无时间维度"],
+    insights: "证明了'不需要 LLM 做检索'这一路线的可行性。企业场景中成本敏感时是重要选项",
+    scores: { ie: [75,85], tr: [55,65], ku: [60,70], mr: [75,85], msr: [85,95], total: "98.4% R@5", source: "measured" },
+    benchmarks: { longmemeval: "98.4% R@5, 99.4% R@10", locomo: "93.9% R@5, 95.0% R@10" }
+  },
+  {
+    id: "opencode", name: "OpenCode", tagline: "CLI 编码 Agent，项目级上下文 + Skills",
+    category: "编码 Agent", catClass: "cat-coding", stars: "5k+", license: "MIT", github: "sst/opencode",
+    isCodingTool: true,
+    philosophy: "通过 AGENTS.md + Skills 文件实现项目级记忆，不依赖向量数据库",
+    architecture: ["AGENTS.md (项目规则)", "Skills (结构化知识)", "会话上下文", "LLM"],
+    smartestDesign: "轻量但有效：Markdown 文件作为记忆载体，人类可读可编辑",
+    limitations: ["无结构化记忆检索", "无时间推理", "依赖 LLM 上下文窗口", "记忆不跨项目"],
+    insights: "Markdown 作为记忆载体在企业环境中有独特优势——人类可审计",
+    scores: { ie: [30,40], tr: [20,30], ku: [30,40], mr: [25,35], msr: [30,40], total: "N/A", source: "inferred" },
+    benchmarks: {}
+  },
+  {
+    id: "claude-code", name: "Claude Code", tagline: "Anthropic CLI，CLAUDE.md + memory 文件",
+    category: "编码 Agent", catClass: "cat-coding", stars: "N/A", license: "Commercial", github: "N/A",
+    isCodingTool: true,
+    philosophy: "通过 CLAUDE.md 和 memory 文件实现项目级记忆",
+    architecture: ["CLAUDE.md (项目规则)", "memory files", "conversation context", "Claude"],
+    smartestDesign: "CLAUDE.md 双层：项目根目录(共享) + 用户目录(个人偏好)",
+    limitations: ["无结构化记忆检索", "无时间推理", "商业产品，不可自建", "记忆受上下文窗口限制"],
+    insights: "双层 CLAUDE.md 思路值得借鉴：共享规则 + 个人偏好分离",
+    scores: { ie: [30,40], tr: [20,30], ku: [30,40], mr: [25,35], msr: [30,40], total: "N/A", source: "inferred" },
+    benchmarks: {}
+  },
+  {
+    id: "codex", name: "OpenAI Codex", tagline: "OpenAI 编码 Agent，项目上下文 + Codex 指令",
+    category: "编码 Agent", catClass: "cat-coding", stars: "N/A", license: "Commercial", github: "openai/codex",
+    isCodingTool: true,
+    philosophy: "通过 AGENTS.md 和 Codex 指令文件实现项目级记忆",
+    architecture: ["AGENTS.md", "instructions files", "conversation", "GPT model"],
+    smartestDesign: "指令文件系统化：支持多层级指令覆盖",
+    limitations: ["无结构化记忆检索", "无时间推理", "商业产品", "记忆受上下文窗口限制"],
+    insights: "编码 Agent 的记忆普遍停留在'Markdown 文件'阶段，是我们要超越的基线",
+    scores: { ie: [30,40], tr: [20,30], ku: [30,40], mr: [25,35], msr: [30,40], total: "N/A", source: "inferred" },
+    benchmarks: {}
+  },
+  {
+    id: "openviking", name: "OpenViking", tagline: "字节跳动 Volcengine，24539 stars，上下文数据库，文件系统范式管理 Agent 记忆",
+    category: "上下文数据库", catClass: "cat-hierarchy", stars: "24539", license: "AGPLv3", github: "volcengine/OpenViking",
+    isNew: true,
+    philosophy: "用文件系统范式统一管理 Agent 的 memory、resources 和 skills。viking:// 虚拟文件系统 URI",
+    architecture: ["viking:// 虚拟文件系统", "三级加载 L0摘要~100tok", "L1概述~2k", "L2完整", "意图分析→定位→探索→递归→聚合"],
+    smartestDesign: "三级上下文加载 (L0/L1/L2)：按需加载不同粒度，Token 消耗降低 91%",
+    limitations: ["AGPLv3 许可证对企业有限制", "Python 生态为主", "依赖 Volcengine 生态", "暂无 LongMemEval/LoCoMo 标准评测"],
+    insights: "文件系统范式非常直觉——用路径组织记忆比向量检索更可解释。三级加载解决 Token 预算问题",
+    scores: { ie: [70,80], tr: [60,70], ku: [55,65], mr: [65,75], msr: [70,80], total: "52.08%", source: "inferred" },
+    benchmarks: { openclaw_task: "52.08% (+43% vs baseline)", token_reduction: "-91%" }
+  },
+  {
+    id: "total-agent-memory", name: "total-agent-memory", tagline: "60+ MCP 工具，9 IDE 支持，时序知识图谱 + 过程记忆",
+    category: "全能编码记忆", catClass: "cat-universal", stars: "40", license: "MIT", github: "vbcherepanov/total-agent-memory",
+    isNew: true,
+    philosophy: "记忆系统应该有两层：确定性核心（无 LLM）+ AI 增强层（异步），支持 4 种运行模式",
+    architecture: ["memory_core (无LLM)", "ai_layer (异步)", "4 模式：ultrafast/fast/balanced/deep", "SQLite+FTS5+Chroma+FastEmbed"],
+    smartestDesign: "kg_at() 时序知识图谱：查询'在任何时间点什么为真'，加上 workflow_predict 过程记忆",
+    limitations: ["LoCoMo 整体 0.596 偏低", "40 stars 社区小", "功能过多可能增加维护负担"],
+    insights: "过程记忆（workflow_predict）和自改进规则（learn_error）是编码 Agent 场景的独特能力",
+    scores: { ie: [65,75], tr: [70,80], ku: [65,75], mr: [70,80], msr: [80,90], total: "96.2% R@5 (LongMemEval)", source: "measured" },
+    benchmarks: { longmemeval: "96.2% R@5", locomo: "0.596 overall, 0.998 adversarial" }
+  },
+  {
+    id: "agentmemory", name: "agentmemory", tagline: "LongMemEval #1 世界纪录 96.2%，一个人 16 天 $1000",
+    category: "六信号混合检索", catClass: "cat-retrieval", stars: "23", license: "MIT", github: "JordanMcCann/agentmemory",
+    isNew: true,
+    philosophy: "6 个独立检索信号加权融合，确定性 HNSW 索引",
+    architecture: ["semantic(0.30)", "BM25(0.12)", "activation(0.18)", "graph(0.18)", "importance(0.10)", "temporal(0.12)", "cross-encoder", "SQLite"],
+    smartestDesign: "确定性 HNSW：SHA-256 内容哈希确定层级分配，消除插入顺序差异",
+    limitations: ["单 commit，早期", "为 benchmark 优化，泛化性未知", "$1000/16天的个人项目", "无论文"],
+    insights: "证明了个人开发者也能达到世界级水平。6 信号权重可调的思路值得借鉴",
+    scores: { ie: [85,95], tr: [80,90], ku: [90,98], mr: [85,95], msr: [88,96], total: "96.2% (#1)", source: "measured" },
+    benchmarks: { longmemeval: "96.20% (481/500) #1 World Record" }
+  },
+  {
+    id: "windsurf", name: "Windsurf", tagline: "Codeium Cascade Agent，自动记忆 + Rules 系统",
+    category: "编码 Agent", catClass: "cat-coding", stars: "N/A", license: "Commercial", github: "codeium/windsurf",
+    isCodingTool: true,
+    philosophy: "自动生成记忆 + 多层 Rules 系统，区分 workspace 和 global",
+    architecture: ["Auto Memories (~/.codeium/windsurf/memories/)", "Rules (global/workspace/system)", "AGENTS.md"],
+    smartestDesign: "Rules 4 种激活模式：always_on / model_decision / glob / manual，精细控制上下文注入",
+    limitations: ["商业产品", "记忆不跨 workspace", "workspace rules 限 12000 字符", "无结构化检索"],
+    insights: "Rules 激活模式的精细控制值得借鉴——企业场景需要按场景注入不同上下文",
+    scores: { ie: [30,40], tr: [20,30], ku: [30,40], mr: [25,35], msr: [35,45], total: "N/A", source: "inferred" },
+    benchmarks: {}
+  }
+];
+
+const benchmarks = [
+  { name: "LongMemEval", year: "2024", desc: "全面评测长时记忆能力的综合基准，涵盖 5 个维度：信息提取、时序推理、知识更新、多跳推理、多会话推理。基于 500+ 真实对话构建。", tags: ["综合", "多维度", "对话"], coverage: { ie: true, tr: true, ku: true, mr: true, msr: true } },
+  { name: "LoCoMo", year: "2024", desc: "长对话记忆评测基准，评测系统在长对话场景中的记忆检索和推理能力。已成为主流评测标准之一。", tags: ["长对话", "检索", "主流"], coverage: { ie: true, tr: false, ku: true, mr: true, msr: true } },
+  { name: "BEAM", year: "2025", desc: "聚焦时序推理和多跳推理的基准，评测 Agent 对时间变化和复杂关联的理解能力。使用 MRR 等标准信息检索指标。", tags: ["时序", "多跳", "检索指标"], coverage: { ie: false, tr: true, ku: false, mr: true, msr: false } },
+  { name: "MINTEval", year: "2025", desc: "最全面的记忆系统评测基准，覆盖所有 5 个维度，并引入了对抗鲁棒性和幻觉检测评估。", tags: ["综合", "鲁棒性", "幻觉检测"], coverage: { ie: true, tr: true, ku: true, mr: true, msr: true } }
+];
+
+const categories = {
+  "极简向量记忆": { icon: "&#9670;", class: "cat-vector" },
+  "三层自主记忆": { icon: "&#9670;", class: "cat-vector" },
+  "时序知识图谱": { icon: "&#9672;", class: "cat-graph" },
+  "数据管线引擎": { icon: "&#9672;", class: "cat-graph" },
+  "多模态知识图谱": { icon: "&#9672;", class: "cat-graph" },
+  "多路检索增强": { icon: "&#9674;", class: "cat-retrieval" },
+  "六信号混合检索": { icon: "&#9674;", class: "cat-retrieval" },
+  "LangChain 原生记忆": { icon: "&#9673;", class: "cat-langchain" },
+  "自学习 Agent": { icon: "&#9671;", class: "cat-selflearn" },
+  "层次化记忆树": { icon: "&#9675;", class: "cat-hierarchy" },
+  "上下文数据库": { icon: "&#9675;", class: "cat-hierarchy" },
+  "脑启发结构化记忆": { icon: "&#9679;", class: "cat-brain" },
+  "通用记忆层": { icon: "&#9678;", class: "cat-universal" },
+  "全能编码记忆": { icon: "&#9678;", class: "cat-universal" },
+  "神经科学记忆": { icon: "&#9679;", class: "cat-brain" },
+  "零LLM查询记忆": { icon: "&#9676;", class: "cat-zeroLLM" },
+  "编码 Agent": { icon: "&#9000;", class: "cat-coding" }
+};
+
+const capNames = { ie: "信息提取 (IE)", tr: "时序推理 (TR)", ku: "知识更新 (KU)", mr: "多跳推理 (MR)", msr: "多会话推理 (MSR)" };
+
+// ============================================================
+// STATE
+// ============================================================
+let currentSection = "overview";
+let panelOpen = true;
+let groupByCategory = false;
+let searchQuery = "";
+
+// ============================================================
+// UTILITY
+// ============================================================
+function getScoreClass(lo, hi) {
+  const mid = (lo + hi) / 2;
+  if (mid >= 80) return "score-green";
+  if (mid >= 60) return "score-yellow";
+  if (mid >= 40) return "score-orange";
+  if (mid >= 1) return "score-red";
+  return "score-gray";
+}
+
+function scoreCell(lo, hi, source) {
+  if (!lo && !hi) return '<span class="score-cell score-gray">N/A<span class="tooltip">无数据</span></span>';
+  const cls = getScoreClass(lo, hi);
+  const badge = source === "measured" ? '<span class="score-badge">&#128202;</span>' : '<span class="score-badge">&#128269;</span>';
+  const tip = source === "measured" ? "实测数据" : "根据架构推断";
+  return `<span class="score-cell ${cls}">${lo}-${hi}%${badge}<span class="tooltip">${tip}</span></span>`;
+}
+
+function filterFrameworks() {
+  if (!searchQuery) return frameworks;
+  const q = searchQuery.toLowerCase();
+  return frameworks.filter(f => f.name.toLowerCase().includes(q) || f.category.toLowerCase().includes(q) || f.tagline.toLowerCase().includes(q));
+}
+
+// ============================================================
+// NAVIGATION
+// ============================================================
+function buildNav() {
+  const nav = document.getElementById("sidebarNav");
+  const filtered = filterFrameworks();
+  const fwItems = filtered.filter(f => !f.isCodingTool);
+  const codingItems = filtered.filter(f => f.isCodingTool);
+
+  let html = '';
+
+  // Main sections
+  html += `
+    <div class="nav-group">
+      <div class="nav-item ${currentSection === 'overview' ? 'active' : ''}" data-section="overview">
+        <span class="icon">&#9635;</span><span class="label">总览</span>
+        <span class="badge">22</span>
+      </div>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-title">框架详情</div>
+      <div class="nav-sub">
+  `;
+
+  if (groupByCategory) {
+    const groups = {};
+    fwItems.forEach(f => {
+      if (!groups[f.category]) groups[f.category] = [];
+      groups[f.category].push(f);
+    });
+    for (const [cat, fws] of Object.entries(groups)) {
+      html += `<div class="nav-item" style="color:var(--text-muted);font-size:0.7rem;padding:6px 16px;cursor:default;">${cat}</div>`;
+      fws.forEach(f => {
+        html += `<div class="nav-item ${currentSection === 'detail-'+f.id ? 'active' : ''}" data-section="detail-${f.id}"><span class="label">${f.name}</span></div>`;
+      });
+    }
+  } else {
+    fwItems.forEach(f => {
+      html += `<div class="nav-item ${currentSection === 'detail-'+f.id ? 'active' : ''}" data-section="detail-${f.id}"><span class="label">${f.name}</span><span class="badge" style="font-size:0.55rem;">${f.stars}</span></div>`;
+    });
+  }
+
+  html += `</div></div>`;
+
+  // Coding tools
+  if (codingItems.length) {
+    html += `<div class="nav-group"><div class="nav-group-title">编码工具 (参考对比)</div><div class="nav-sub">`;
+    codingItems.forEach(f => {
+      html += `<div class="nav-item ${currentSection === 'detail-'+f.id ? 'active' : ''}" data-section="detail-${f.id}"><span class="label">${f.name}</span></div>`;
+    });
+    html += `</div></div>`;
+  }
+
+  // Other sections
+  html += `
+    <div class="nav-group">
+      <div class="nav-item ${currentSection === 'benchmarks' ? 'active' : ''}" data-section="benchmarks">
+        <span class="icon">&#9698;</span><span class="label">评测基准</span>
+        <span class="badge">4</span>
+      </div>
+      <div class="nav-item ${currentSection === 'design' ? 'active' : ''}" data-section="design">
+        <span class="icon">&#9673;</span><span class="label">设计阶段</span>
+        <span class="badge">P0</span>
+      </div>
+      <div class="nav-item ${currentSection === 'quickref' ? 'active' : ''}" data-section="quickref">
+        <span class="icon">&#9776;</span><span class="label">速查卡</span>
+      </div>
+    </div>
+  `;
+
+  nav.innerHTML = html;
+
+  // Bind clicks
+  nav.querySelectorAll('.nav-item[data-section]').forEach(el => {
+    el.addEventListener('click', () => {
+      navigateTo(el.dataset.section);
+      closeMobileSidebar();
+    });
+  });
+}
+
+function navigateTo(section) {
+  currentSection = section;
+  buildNav();
+  renderContent();
+  document.getElementById('mainContent').scrollTop = 0;
+}
+
+// ============================================================
+// RENDER SECTIONS
+// ============================================================
+function renderContent() {
+  const main = document.getElementById("mainContent");
+  if (currentSection === "overview") main.innerHTML = renderOverview();
+  else if (currentSection === "benchmarks") main.innerHTML = renderBenchmarks();
+  else if (currentSection === "design") main.innerHTML = renderDesign();
+  else if (currentSection === "quickref") main.innerHTML = renderQuickRef();
+  else if (currentSection.startsWith("detail-")) {
+    const id = currentSection.replace("detail-", "");
+    const fw = frameworks.find(f => f.id === id);
+    if (fw) main.innerHTML = renderDetail(fw);
+  }
+  // Apply sort indicator after DOM update
+  if (sortCol) {
+    const th = document.getElementById('th-' + sortCol);
+    if (th) th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+  }
+}
+
+// ---------- SORT ----------
+let sortCol = null;
+let sortDir = 'desc'; // 'asc' | 'desc'
+
+function parseTotal(t) {
+  if (!t || t === 'N/A') return -1;
+  const m = t.match(/([\d.]+)/);
+  return m ? parseFloat(m[1]) : -1;
+}
+
+function sortTable(col) {
+  if (sortCol === col) {
+    sortDir = sortDir === 'desc' ? 'asc' : 'desc';
+  } else {
+    sortCol = col;
+    sortDir = 'desc';
+  }
+  renderContent();
+}
+
+function applySorting(fws) {
+  if (!sortCol) return fws;
+  const sorted = [...fws];
+  sorted.sort((a, b) => {
+    let va, vb;
+    if (sortCol === 'name') {
+      va = a.name; vb = b.name;
+      return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+    }
+    if (sortCol === 'total') {
+      va = parseTotal(a.scores.total);
+      vb = parseTotal(b.scores.total);
+    } else {
+      va = a.scores[sortCol] ? a.scores[sortCol][0] : -1;
+      vb = b.scores[sortCol] ? b.scores[sortCol][0] : -1;
+    }
+    return sortDir === 'desc' ? vb - va : va - vb;
+  });
+  return sorted;
+}
+
+// ---------- OVERVIEW ----------
+function renderOverview() {
+  const filtered = filterFrameworks();
+
+  let matrixRows = '';
+  const mainFws = filtered.filter(f => !f.isCodingTool);
+  const codingFws = filtered.filter(f => f.isCodingTool);
+
+  function renderRow(f) {
+    const s = f.scores;
+    const newBadge = f.isNew ? '<span class="new-badge">NEW</span>' : '';
+    return `<tr>
+      <td><span class="fw-name" onclick="navigateTo('detail-${f.id}')"><span class="category-tag ${f.catClass}">${f.category}</span> ${f.name}${newBadge}</span></td>
+      <td>${scoreCell(s.ie[0], s.ie[1], s.source)}</td>
+      <td>${scoreCell(s.tr[0], s.tr[1], s.source)}</td>
+      <td>${scoreCell(s.ku[0], s.ku[1], s.source)}</td>
+      <td>${scoreCell(s.mr[0], s.mr[1], s.source)}</td>
+      <td>${scoreCell(s.msr[0], s.msr[1], s.source)}</td>
+      <td><span class="score-cell ${f.isCodingTool ? 'score-gray' : getScoreClass(s.ie[0], s.msr[1])} total-cell">${s.total}</span></td>
+    </tr>`;
+  }
+
+  if (groupByCategory) {
+    const groups = {};
+    mainFws.forEach(f => { if (!groups[f.category]) groups[f.category] = []; groups[f.category].push(f); });
+    for (const [cat, fws] of Object.entries(groups)) {
+      matrixRows += `<tr class="group-header-row"><td colspan="7">${cat}</td></tr>`;
+      applySorting(fws).forEach(f => { matrixRows += renderRow(f); });
+    }
+    if (codingFws.length) {
+      matrixRows += `<tr class="group-header-row"><td colspan="7">编码工具 (参考对比)</td></tr>`;
+      applySorting(codingFws).forEach(f => { matrixRows += renderRow(f); });
+    }
+  } else {
+    applySorting(mainFws).forEach(f => { matrixRows += renderRow(f); });
+    if (codingFws.length) {
+      matrixRows += `<tr class="group-header-row"><td colspan="7">编码工具 (参考对比)</td></tr>`;
+      applySorting(codingFws).forEach(f => { matrixRows += renderRow(f); });
+    }
+  }
+
+  return `
+    <div class="hero">
+      <h1>Agent 记忆系统全景调研 2026</h1>
+      <p class="hero-sub">面向企业设计阶段的 Agent 记忆架构选型研究——覆盖 22 框架、4 评测基准、5 项核心能力维度</p>
+      <div class="stats-row">
+        <div class="stat-item"><div class="stat-num">22</div><div class="stat-label">框架</div></div>
+        <div class="stat-item"><div class="stat-num">4</div><div class="stat-label">评测基准</div></div>
+        <div class="stat-item"><div class="stat-num">5</div><div class="stat-label">P0 能力维度</div></div>
+      </div>
+    </div>
+    <h2 class="section-title">对比矩阵</h2>
+    <p class="section-desc">点击框架名称查看详情。颜色表示预估分数区间，&#128202; 为实测数据，&#128269; 为根据架构推断。</p>
+    <div class="matrix-wrapper">
+      <table class="matrix-table">
+        <thead>
+          <tr>
+            <th style="min-width:180px" onclick="sortTable('name')" id="th-name">框架<span class="sort-icon"></span></th>
+            <th onclick="sortTable('ie')" id="th-ie">IE<span class="sort-icon"></span></th>
+            <th onclick="sortTable('tr')" id="th-tr">TR<span class="sort-icon"></span></th>
+            <th onclick="sortTable('ku')" id="th-ku">KU<span class="sort-icon"></span></th>
+            <th onclick="sortTable('mr')" id="th-mr">MR<span class="sort-icon"></span></th>
+            <th onclick="sortTable('msr')" id="th-msr">MSR<span class="sort-icon"></span></th>
+            <th onclick="sortTable('total')" id="th-total">综合<span class="sort-icon"></span></th>
+          </tr>
+        </thead>
+        <tbody>${matrixRows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+// ---------- DETAIL ----------
+function renderDetail(fw) {
+  const s = fw.scores;
+  const archSteps = fw.architecture.map((step, i) => {
+    const arrow = i < fw.architecture.length - 1 ? '<span class="arch-arrow">&#8594;</span>' : '';
+    return `<span class="arch-step">${step}</span>${arrow}`;
+  }).join('');
+
+  const limitList = fw.limitations.map(l => `<li>${l}</li>`).join('');
+  const insightList = fw.insights ? `<p>${fw.insights}</p>` : '';
+
+  // Benchmark scores
+  let benchRows = '';
+  if (Object.keys(fw.benchmarks).length) {
+    benchRows = Object.entries(fw.benchmarks).map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
+  }
+
+  const iconColor = fw.isCodingTool ? 'var(--gray)' : 'var(--accent)';
+  const newBadgeDetail = fw.isNew ? ' <span class="new-badge">NEW</span>' : '';
+
+  return `
+    <div style="margin-bottom:16px;">
+      <span style="font-size:0.8rem;color:var(--text-muted);cursor:pointer;" onclick="navigateTo('overview')">&#8592; 返回总览</span>
+    </div>
+    <div class="detail-card">
+      <div class="detail-header">
+        <div class="fw-icon" style="background:${fw.isCodingTool ? 'var(--gray-bg)' : 'var(--accent-dim)'};color:${fw.isCodingTool ? 'var(--gray)' : '#fff'}">${fw.name.charAt(0)}</div>
+        <div class="fw-meta" style="flex:1;min-width:0;">
+          <h2>${fw.name}${newBadgeDetail}</h2>
+          <div class="fw-tagline">${fw.tagline}</div>
+          <div class="fw-badges">
+            <span class="category-tag ${fw.catClass}">${fw.category}</span>
+            ${fw.stars !== 'N/A' && fw.stars !== 'TBD' ? `<span class="badge badge-stars">&#9733; ${fw.stars}</span>` : ''}
+            <span class="badge badge-license">${fw.license}</span>
+            ${fw.github !== 'N/A' ? `<span class="badge">${fw.github}</span>` : ''}
+          </div>
+        </div>
+      </div>
+      <div class="detail-body">
+        <div class="detail-section">
+          <h3>核心思想</h3>
+          <p>${fw.philosophy}</p>
+        </div>
+        <div class="detail-section">
+          <h3>架构设计</h3>
+          <div class="arch-pipeline">${archSteps}</div>
+        </div>
+        <div class="detail-section">
+          <h3>精妙之处</h3>
+          <p>${fw.smartestDesign}</p>
+        </div>
+        <div class="detail-section">
+          <h3>局限性</h3>
+          <ul>${limitList}</ul>
+        </div>
+        <div class="detail-section">
+          <h3>给 AgentCenter 的启示</h3>
+          ${insightList}
+        </div>
+        <div class="detail-section">
+          <h3>评测分数</h3>
+          <table class="bench-table">
+            <thead><tr><th>维度</th><th>预估区间</th><th>来源</th></tr></thead>
+            <tbody>
+              <tr><td>IE (信息提取)</td><td>${scoreCell(s.ie[0], s.ie[1], s.source)}</td><td>${s.source === 'measured' ? '实测' : '推断'}</td></tr>
+              <tr><td>TR (时序推理)</td><td>${scoreCell(s.tr[0], s.tr[1], s.source)}</td><td>${s.source === 'measured' ? '实测' : '推断'}</td></tr>
+              <tr><td>KU (知识更新)</td><td>${scoreCell(s.ku[0], s.ku[1], s.source)}</td><td>${s.source === 'measured' ? '实测' : '推断'}</td></tr>
+              <tr><td>MR (多跳推理)</td><td>${scoreCell(s.mr[0], s.mr[1], s.source)}</td><td>${s.source === 'measured' ? '实测' : '推断'}</td></tr>
+              <tr><td>MSR (多会话推理)</td><td>${scoreCell(s.msr[0], s.msr[1], s.source)}</td><td>${s.source === 'measured' ? '实测' : '推断'}</td></tr>
+            </tbody>
+          </table>
+          ${benchRows ? `
+          <h3 style="margin-top:16px;">基准评测结果</h3>
+          <table class="bench-table">
+            <thead><tr><th>基准</th><th>分数</th></tr></thead>
+            <tbody>${benchRows}</tbody>
+          </table>` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ---------- BENCHMARKS ----------
+function renderBenchmarks() {
+  const cards = benchmarks.map(b => {
+    const tags = b.tags.map(t => `<span class="bench-tag">${t}</span>`).join('');
+    const covRow = ['ie','tr','ku','mr','msr'].map(k =>
+      `<td class="${b.coverage[k] ? 'dot-yes' : 'dot-no'}">${b.coverage[k] ? '&#9679;' : '&#9675;'}</td>`
+    ).join('');
+    return `
+      <div class="bench-card">
+        <h3>${b.name}</h3>
+        <div class="bench-year">${b.year}</div>
+        <div class="bench-desc">${b.desc}</div>
+        <table class="panel-matrix" style="margin-bottom:10px;">
+          <tr><th>IE</th><th>TR</th><th>KU</th><th>MR</th><th>MSR</th></tr>
+          <tr>${covRow}</tr>
+        </table>
+        <div class="bench-tags">${tags}</div>
+      </div>
+    `;
+  }).join('');
+
+  // Leaderboard - comprehensive benchmark comparison
+  const leaderboardData = [
+    { name: "Cortex", id: "cortex", lme_r5: "-", lme_r10: "98.4%", loco_r5: "-", loco_r10: "94.2%", beam: "0.471 MRR" },
+    { name: "Engram", id: "engram", lme_r5: "98.4%", lme_r10: "99.4%", loco_r5: "93.9%", loco_r10: "95.0%", beam: "-" },
+    { name: "agentmemory", id: "agentmemory", lme_r5: "96.2%", lme_r10: "-", loco_r5: "-", loco_r10: "-", beam: "-" },
+    { name: "total-agent-memory", id: "total-agent-memory", lme_r5: "96.2%", lme_r10: "-", loco_r5: "-", loco_r10: "-", beam: "-" },
+    { name: "Hindsight", id: "hindsight", lme_r5: "-", lme_r10: "91.4%", loco_r5: "-", loco_r10: "89.61%", beam: "-" },
+    { name: "Synthius-Mem", id: "synthius-mem", lme_r5: "-", lme_r10: "-", loco_r5: "-", loco_r10: "94.37%", beam: "-" },
+    { name: "MemMachine", id: "memmachine", lme_r5: "-", lme_r10: "-", loco_r5: "-", loco_r10: "91.69%", beam: "-" },
+    { name: "Zep / Graphiti", id: "zep", lme_r5: "-", lme_r10: "~63.8%", loco_r5: "-", loco_r10: "~71%", beam: "-" },
+    { name: "Mem0", id: "mem0", lme_r5: "-", lme_r10: "~49%", loco_r5: "-", loco_r10: "61.4%", beam: "-" }
+  ];
+
+  const lbRows = leaderboardData.map((f, i) => {
+    const rankCls = i === 0 ? 'rank-gold' : i === 1 ? 'rank-silver' : i === 2 ? 'rank-bronze' : '';
+    return `<tr>
+      <td><span class="rank-badge ${rankCls}">${i+1}</span></td>
+      <td style="font-weight:600;cursor:pointer;" onclick="navigateTo('detail-${f.id}')">${f.name}</td>
+      <td>${f.lme_r5}</td>
+      <td>${f.lme_r10}</td>
+      <td>${f.loco_r5}</td>
+      <td>${f.loco_r10}</td>
+      <td>${f.beam}</td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <h2 class="section-title">评测基准</h2>
+    <p class="section-desc">当前主流的 Agent 记忆评测基准及其覆盖维度。</p>
+    <div class="bench-grid">${cards}</div>
+    <h2 class="section-title" style="margin-top:40px;">排行榜</h2>
+    <p class="section-desc">有公开评测数据的框架综合排名，涵盖 LongMemEval 和 LoCoMo 两大基准。</p>
+    <div class="matrix-wrapper">
+      <table class="leaderboard-table">
+        <thead><tr><th>#</th><th>框架</th><th>LongMemEval R@5</th><th>LongMemEval R@10</th><th>LoCoMo R@5</th><th>LoCoMo R@10</th><th>BEAM-10M</th></tr></thead>
+        <tbody>${lbRows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+// ---------- DESIGN PHASE ----------
+function renderDesign() {
+  const caps = [
+    { code: "IE", name: "信息提取", desc: "从对话/文档中准确提取结构化知识（实体、关系、规则、约束），这是设计阶段最基础的能力。不提取就无法记忆。" },
+    { code: "TR", name: "时序推理", desc: "理解事实的时间线——什么规则什么时候生效，什么时候被替换。设计文档中'v1 用方案 A，v2 改用方案 B'是常态。" },
+    { code: "KU", name: "知识更新", desc: "检测到矛盾时更新旧知识，而非简单追加。设计阶段的认知是迭代的，约束会反复修改。" },
+    { code: "MR", name: "多跳推理", desc: "跨多条记忆综合回答。'数据库用什么？'需要串联：业务需求 -> 技术选型 -> 数据库决策 -> 具体配置。" },
+    { code: "MSR", name: "多会话推理", desc: "跨会话关联和推理。设计决策分散在多次对话中，昨天说的约束今天要能关联上。" }
+  ];
+
+  const capCards = caps.map(c => `
+    <div class="cap-card">
+      <div class="cap-code-lg">${c.code}</div>
+      <div class="cap-name">${c.name}</div>
+      <div class="cap-desc">${c.desc}</div>
+    </div>
+  `).join('');
+
+  const questions = `
+    <div class="detail-card" style="padding:24px;">
+      <div class="detail-section">
+        <h3>三类设计阶段问题</h3>
+        <table class="bench-table">
+          <thead><tr><th>类型</th><th>描述</th><th>示例</th><th>核心能力</th></tr></thead>
+          <tbody>
+            <tr><td style="font-weight:600">事实查询</td><td>查询已确认的设计决策</td><td>"数据库用什么？"</td><td>IE + MR</td></tr>
+            <tr><td style="font-weight:600">时序溯源</td><td>追溯决策变化过程</td><td>"缓存策略什么时候从 Redis 改成 Memcached 的？"</td><td>TR + KU</td></tr>
+            <tr><td style="font-weight:600">跨层关联</td><td>跨业务/技术层推理</td><td>"哪些技术选型受合规要求影响？"</td><td>MR + MSR</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="detail-section" style="margin-top:24px;">
+        <h3>三步召回策略</h3>
+        <div class="arch-pipeline">
+          <span class="arch-step">1. 结构化提取</span><span class="arch-arrow">&#8594;</span>
+          <span class="arch-step">2. 时序感知检索</span><span class="arch-arrow">&#8594;</span>
+          <span class="arch-step">3. 多路融合推理</span>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const scenarios = [
+    { title: "场景：高 TR 需求（合规/监管）", recs: ["Zep / Graphiti", "Cortex", "Hindsight"] },
+    { title: "场景：高 MR 需求（复杂系统设计）", recs: ["Hindsight", "Synthius-Mem", "OpenHuman"] },
+    { title: "场景：高 KU 需求（迭代频繁）", recs: ["Zep / Graphiti", "Hindsight", "Synthius-Mem"] },
+    { title: "场景：低成本/低延迟", recs: ["Engram", "Mem0", "Hermes"] },
+    { title: "场景：全生态集成", recs: ["MemMachine", "LangMem", "Mem0"] }
+  ];
+
+  const scenarioCards = scenarios.map(s => {
+    const recItems = s.recs.map((r, i) => {
+      const rankCls = `rank-${i+1}`;
+      return `<div class="rec-item"><span class="rec-rank ${rankCls}">${i+1}</span>${r}</div>`;
+    }).join('');
+    return `<div class="rec-scenario"><h4>${s.title}</h4><div class="rec-list">${recItems}</div></div>`;
+  }).join('');
+
+  return `
+    <h2 class="section-title">设计阶段需求</h2>
+    <p class="section-desc">AgentCenter 设计阶段对记忆系统的 5 项 P0 核心能力要求。</p>
+    <div class="cap-grid">${capCards}</div>
+    ${questions}
+    <h2 class="section-title" style="margin-top:40px;">场景推荐</h2>
+    <p class="section-desc">根据不同设计阶段场景的 Top 3 框架推荐。</p>
+    ${scenarioCards}
+  `;
+}
+
+// ---------- QUICK REF ----------
+function renderQuickRef() {
+  const filtered = filterFrameworks();
+  const mainFws = filtered.filter(f => !f.isCodingTool);
+
+  let rows = mainFws.map(f => {
+    const s = f.scores;
+    const cls = getScoreClass(s.ie[0], s.msr[1]);
+    return `<tr>
+      <td style="font-weight:600">${f.name}</td>
+      <td><span class="category-tag ${f.catClass}">${f.category}</span></td>
+      <td>${s.ie[0]}-${s.ie[1]}%</td>
+      <td>${s.tr[0]}-${s.tr[1]}%</td>
+      <td>${s.ku[0]}-${s.ku[1]}%</td>
+      <td>${s.mr[0]}-${s.mr[1]}%</td>
+      <td>${s.msr[0]}-${s.msr[1]}%</td>
+      <td><span class="score-cell ${cls}">${s.total}</span></td>
+    </tr>`;
+  }).join('');
+
+  const decisions = [
+    { q: "需要精确的时间推理（规则什么时候变）？", a: "Zep / Graphiti (bi-temporal 知识图谱)" },
+    { q: "需要最高的检索准确率？", a: "Hindsight (4 路并行 + cross-encoder)" },
+    { q: "需要最低的成本和延迟？", a: "Engram (零 LLM 查询)" },
+    { q: "需要幻觉抵抗（区分知道/不知道）？", a: "Synthius-Mem (99.55% 鲁棒性)" },
+    { q: "需要全生态集成（LangChain/CrewAI 等）？", a: "MemMachine (最广 SDK 覆盖)" },
+    { q: "只需要极简的向量记忆？", a: "Mem0 (add() + search())" },
+    { q: "需要人类可浏览的记忆界面？", a: "OpenHuman (Memory Tree) 或 Graphify (Wiki)" },
+    { q: "预算有限、快速起步？", a: "Mem0 或 Hermes (SQLite + FTS5)" }
+  ];
+
+  const decisionHtml = decisions.map(d => `
+    <div class="decision-node">
+      <div class="q-text">${d.q}</div>
+      <div class="a-text">&#8594; ${d.a}</div>
+    </div>
+  `).join('');
+
+  return `
+    <h2 class="section-title">速查卡</h2>
+    <p class="section-desc">打印友好的精简对比。使用 Ctrl+P 打印。</p>
+    <div class="matrix-wrapper" style="margin-bottom:32px;">
+      <table class="matrix-table">
+        <thead>
+          <tr><th>框架</th><th>类别</th><th>IE</th><th>TR</th><th>KU</th><th>MR</th><th>MSR</th><th>综合</th></tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <h2 class="section-title">决策树</h2>
+    <p class="section-desc">如果你需要 X，选择 Y。</p>
+    <div class="decision-tree">${decisionHtml}</div>
+  `;
+}
+
+// ============================================================
+// PANEL TOGGLE
+// ============================================================
+function togglePanel() {
+  panelOpen = !panelOpen;
+  const panel = document.getElementById("rightPanel");
+  const toggle = document.getElementById("panelToggle");
+  if (panelOpen) {
+    panel.classList.add("open");
+    toggle.classList.add("shifted");
+    toggle.innerHTML = "&#9654;";
+  } else {
+    panel.classList.remove("open");
+    toggle.classList.remove("shifted");
+    toggle.innerHTML = "&#9664;";
+  }
+}
+
+// ============================================================
+// MOBILE
+// ============================================================
+function openMobileSidebar() {
+  document.getElementById("sidebar").classList.add("mobile-open");
+  document.getElementById("sidebarOverlay").classList.add("show");
+}
+
+function closeMobileSidebar() {
+  document.getElementById("sidebar").classList.remove("mobile-open");
+  document.getElementById("sidebarOverlay").classList.remove("show");
+}
+
+// ============================================================
+// INIT
+// ============================================================
+function init() {
+  // Panel toggle
+  document.getElementById("panelToggle").addEventListener("click", togglePanel);
+
+  // Mobile
+  document.getElementById("hamburgerBtn").addEventListener("click", openMobileSidebar);
+  document.getElementById("sidebarOverlay").addEventListener("click", closeMobileSidebar);
+
+  // Search
+  document.getElementById("searchInput").addEventListener("input", (e) => {
+    searchQuery = e.target.value;
+    buildNav();
+    if (currentSection === "overview" || currentSection === "quickref") renderContent();
+  });
+
+  // Group toggle
+  document.getElementById("groupToggle").addEventListener("change", (e) => {
+    groupByCategory = e.target.checked;
+    buildNav();
+    if (currentSection === "overview" || currentSection === "quickref") renderContent();
+  });
+
+  // Initial render
+  buildNav();
+  renderContent();
+}
+
+document.addEventListener("DOMContentLoaded", init);
+</script>
+</body>
+</html>
