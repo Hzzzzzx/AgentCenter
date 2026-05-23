@@ -31,9 +31,14 @@
 | **HNSW 参数** | M=16, ef_construction=100, ef_search=50, seed=42 |
 | **检索信号数** | 6 路加权融合 |
 | **外部依赖** | 零 (纯 Python) |
-| **许可证** | 开源 |
+| **许可证** | Apache 2.0 |
 | **维护状态** | 活跃 |
 | **适合场景** | 高质量记忆检索、无时态推理需求、轻量部署 |
+| **GitHub** | https://github.com/rohitg00/agentmemory |
+| **Stars** | 16,574 |
+| **npm 包** | @agentmemory/agentmemory |
+| **语言** | TypeScript |
+| **开源状态** | ✅ 开源 |
 
 ---
 

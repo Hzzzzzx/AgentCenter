@@ -35,6 +35,8 @@
 | 包名 | @tencentdb-agent-memory/memory-tencentdb |
 | 版本 | v0.3.5 |
 | 仓库 | https://github.com/Tencent/TencentDB-Agent-Memory |
+| Stars | 新项目 |
+| 开源状态 | ✅ Yes |
 | 许可 | MIT |
 | 语言 | TypeScript (ESM) |
 | 运行时 | Node.js >= 22.16 |

@@ -22,9 +22,12 @@
 |------|-----|
 | **项目名称** | OpenCode |
 | **开发组织** | opencode-ai |
+| **GitHub** | https://github.com/opencode-ai/opencode |
+| **Stars** | 12,700 |
+| **开源状态** | ✅ Yes（已 Archived → charmbracelet/crush） |
+| **许可证** | MIT |
 | **定位** | AI 编程工具 / CLI |
 | **技术栈** | Node.js + CLI |
-| **许可证** | 专有（需登录使用） |
 | **记忆相关文件** | AGENTS.md（项目级）+ ~/.config/opencode/skills/（全局） |
 | **存储介质** | 文件系统（Markdown/YAML/JSON） |
 | **跨会话自动记忆** | 无 |

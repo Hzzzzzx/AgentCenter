@@ -31,14 +31,15 @@
 | 维度 | 数据 |
 |------|------|
 | 名称 | Engram |
-| 主导公司 | 独立开源项目（具体公司待确认） |
-| GitHub 仓库 | github.com/your-org/engram（待确认） |
-| Stars | 中等（具体数值待确认） |
-| 许可协议 | 开源（具体协议待确认） |
+| 主导公司 | EngramMemory（独立开源项目） |
+| GitHub 仓库 | https://github.com/EngramMemory/engram-memory |
+| Stars | 29 |
+| 许可协议 | MIT (NOASSERTION) |
 | 支持语言 | Python |
 | 最后更新 | 活跃维护中 |
 | 核心定位 | 零 LLM 查询型记忆框架 |
 | 技术栈 | FAISS / Qdrant + SQLite |
+| 开源状态 | ✅ 开源 |
 
 ---
 
@@ -476,7 +477,7 @@ Engram 证明检索可以零 LLM。那理解、推理、生成呢？能否建立
 
 ## 参考资源
 
-- GitHub: https://github.com/your-org/engram（待确认）
+- GitHub: https://github.com/EngramMemory/engram-memory
 - FAISS: https://github.com/facebookresearch/faiss
 - Qdrant: https://github.com/qdrant/qdrant
 - BM25: https://www.elastic.co/guide/en/elasticsearch/guide/current/pluggable-similarites.html

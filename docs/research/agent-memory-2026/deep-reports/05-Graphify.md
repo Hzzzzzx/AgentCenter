@@ -24,9 +24,12 @@
 |------|-----|
 | **项目名称** | Graphify |
 | **开发组织** | neuronpedia |
+| **GitHub** | 无独立仓库（GitNexus skill） |
+| **Stars** | N/A |
+| **许可证** | MIT |
+| **开源状态** | ⚠️ 部分（GitNexus skill，非独立仓库） |
 | **定位** | 本地知识图谱构建工具 |
 | **技术栈** | Python + tree-sitter + NetworkX + graspologic |
-| **许可证** | MIT |
 | **存储介质** | 内存（NetworkX DiGraph）+ 文件导出 |
 | **持久化** | 无（进程结束后图谱消失） |
 | **Benchmark 数据** | 无 |

@@ -22,9 +22,12 @@
 |------|-----|
 | **项目名称** | Codex |
 | **开发组织** | OpenAI |
+| **GitHub** | https://github.com/openai/codex |
+| **Stars** | 84,800 |
+| **开源状态** | ✅ Yes |
+| **许可证** | Apache 2.0 |
 | **定位** | AI 编程 CLI 工具 |
 | **技术栈** | Python + CLI |
-| **许可证** | 专有（需 OpenAI API 访问） |
 | **记忆相关文件** | AGENTS.md（项目级）+ memories/（设计存在但未使用）+ goals_1.sqlite |
 | **存储介质** | 文件系统（Markdown）+ SQLite |
 | **跨会话自动记忆** | 无（memories/ 未使用） |

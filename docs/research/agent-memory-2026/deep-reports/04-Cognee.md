@@ -31,9 +31,10 @@
 | 维度 | 内容 |
 |------|------|
 | **项目名称** | Cognee |
-| **GitHub** | topoteretes/cognee |
-| **Stars** | ~12,000 |
+| **GitHub** | https://github.com/topoteretes/cognee |
+| **Stars** | 17,500 |
 | **License** | Apache 2.0 |
+| **开源状态** | ✅ 开源 |
 | **主要语言** | Python |
 | **最新更新** | 2026-05（持续活跃） |
 | **融资情况** | €7.5M（2026年） |

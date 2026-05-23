@@ -30,10 +30,11 @@
 |------|------|
 | 名称 | Hindsight |
 | 主导公司 | Vectorize.io |
-| GitHub 仓库 | github.com/your-org/hindsight（待补充） |
-| Stars | ~4,000 |
+| GitHub 仓库 | https://github.com/vectorize-io/hindsight |
+| Stars | 14,261 |
 | 融资金额 | $3.5M |
-| 许可协议 | 开源（具体协议待确认） |
+| 许可协议 | MIT |
+| 开源状态 | ✅ 开源 |
 | 支持语言 | Python / TypeScript |
 | 最后更新 | 活跃维护中 |
 | 核心定位 | 检索优先（Retrieval-First） |
@@ -399,10 +400,9 @@ Hindsight 目前假设上游已有记忆，不管理存储。但在 AgentCenter 
 
 ## 参考资源
 
-- GitHub: https://github.com/your-org/hindsight（待补充）
+- GitHub: https://github.com/vectorize-io/hindsight
 - Vectorize.io 官网: https://vectorize.io
 - LongMemEval 论文: arXiv:2512.12818
-- 相关技术博客: https://vectorize.io/blog/hindsight（待补充）
 
 ---
 

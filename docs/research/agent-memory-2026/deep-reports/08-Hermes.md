@@ -26,7 +26,10 @@
 | **开发组织** | binjie09 |
 | **定位** | Local-first AI Agent + 记忆系统 |
 | **技术栈** | Python + SQLite FTS5 + Markdown |
-| **许可证** | 未明确（开源） |
+| **GitHub** | https://github.com/vincentwi/hermes-memory-tree |
+| **Stars** | 1 |
+| **License** | 未明确 |
+| **开源状态** | ⚠️ 代码公开但未标明 License |
 | **存储介质** | Markdown 文件 + SQLite |
 | **持久化** | 本地文件系统 |
 | **Benchmark 数据** | 无 |

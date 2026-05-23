@@ -32,9 +32,10 @@
 | 维度 | 内容 |
 |------|------|
 | **项目名称** | LangMem |
-| **GitHub** | langchain-ai/langmem |
-| **Stars** | ~1,464 |
+| **GitHub** | https://github.com/langchain-ai/langmem |
+| **Stars** | 1,500 |
 | **License** | MIT |
+| **开源状态** | ✅ Yes |
 | **主要语言** | Python |
 | **最新版本** | 0.0.30 |
 | **生态定位** | LangChain/LangGraph 生态下的记忆框架 |

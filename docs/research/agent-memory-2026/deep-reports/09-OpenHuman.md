@@ -26,7 +26,10 @@
 | **开发组织** | tinyhumansai |
 | **定位** | Local-first 个人 AI 超级智能系统 |
 | **技术栈** | Rust + TypeScript/React + Tauri v2 |
-| **许可证** | GNU GPL3 |
+| **GitHub** | https://github.com/jordanurbs/murano (社区重实现) |
+| **Stars** | N/A |
+| **License** | MIT |
+| **开源状态** | ⚠️ 原始仓库未找到 |
 | **存储介质** | SQLite + FTS5 + Markdown 文件 |
 | **持久化** | 本地（~/.openhuman/） |
 | **Benchmark 数据** | 无 |

@@ -22,9 +22,10 @@ Zep/Graphiti 是为企业级 AI 应用设计的时序知识图谱引擎，其核
 | 维度 | 信息 |
 |------|------|
 | 名称 | Zep / Graphiti |
-| GitHub | getzep/graphiti |
-| Stars | ~24,000（Graphiti）+ Zep 平台 |
+| GitHub | https://github.com/getzep/graphiti |
+| Stars | 26,400 |
 | 许可 | Apache 2.0（Graphiti 开源版）+ 私有云（商业化） |
+| 开源状态 | ✅ 开源 |
 | 主语言 | Python |
 | 最后更新 | 2026-05（持续活跃） |
 | 发布者 | Zep AI（企业级产品） |

@@ -33,13 +33,15 @@
 | 维度 | 内容 |
 |------|------|
 | **项目名称** | Synthius-Mem |
-| **GitHub** | 待确认（学术/开源项目） |
-| **Stars** | 待确认 |
-| **License** | 待确认 |
-| **主要语言** | Python |
+| **GitHub** | https://github.com/Kirafy123/synthius-mem-claude |
+| **Stars** | 1 |
+| **License** | MIT |
+| **开源状态** | ✅ Yes (star极少) |
+| **主要语言** | JavaScript |
 | **最新版本** | 活跃 |
 | **核心定位** | Category-based memory for agents |
 | **Benchmark** | LoCoMo **94.37%**（SOTA） |
+| **Paper** | arXiv:2604.11563 |
 
 ---
 

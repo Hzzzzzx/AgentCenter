@@ -32,9 +32,12 @@
 | **检索信号数** | 6 路 (BM25 + Dense + Fuzzy + Graph + CrossEncoder + MMR) |
 | **融合方式** | RRF (Reciprocal Rank Fusion) |
 | **运行时模式** | 4 种 (ultrafast/fast/balanced/deep) |
-| **许可证** | 开源 |
+| **许可证** | MIT |
 | **维护状态** | 活跃 |
 | **适合场景** | 时态推理 + 高质量检索、轻量部署、无需图数据库 |
+| **GitHub** | https://github.com/vbcherepanov/total-agent-memory |
+| **Stars** | 41 |
+| **开源状态** | ✅ 开源 |
 
 ---
 

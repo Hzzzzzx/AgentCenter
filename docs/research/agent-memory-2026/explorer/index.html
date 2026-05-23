@@ -595,6 +595,11 @@ body {
 
 .badge-stars { border-color: var(--yellow); color: var(--yellow); }
 .badge-license { border-color: var(--green); color: var(--green); }
+.badge-note { border-color: var(--orange); color: var(--orange); font-style: italic; }
+.badge-oss-open { border-color: var(--green); color: var(--green); background: var(--green-bg); }
+.badge-oss-partial { border-color: var(--yellow); color: var(--yellow); background: var(--yellow-bg); }
+.badge-oss-closed { border-color: var(--red); color: var(--red); background: var(--red-bg); }
+.badge-oss-agpl { border-color: var(--orange); color: var(--orange); background: var(--orange-bg); }
 
 .detail-body { padding: 24px; }
 
@@ -1075,7 +1080,8 @@ body {
 const frameworks = [
   {
     id: "mem0", name: "Mem0", tagline: "记忆只需要两个 API：add() 和 search()",
-    category: "极简向量记忆", catClass: "cat-vector", stars: "25k+", license: "Apache 2.0", github: "mem0ai/mem0",
+    category: "极简向量记忆", catClass: "cat-vector", stars: "56.5k", license: "Apache 2.0", github: "mem0ai/mem0",
+    deepReport: "01-Mem0.md", language: "Python",
     philosophy: "极简主义——不要过度设计。记忆就是提取事实+检索。",
     architecture: ["add() 输入", "去重/归一化", "实体提取", "向量化 + BM25", "entity 增强", "存储", "search() 三路并行", "返回结果"],
     smartestDesign: "self-editing 而非 append：新记忆编辑旧记忆，避免膨胀",
@@ -1086,7 +1092,8 @@ const frameworks = [
   },
   {
     id: "letta", name: "Letta / MemGPT", tagline: "把 LLM 当操作系统，记忆就是 RAM、Cache 和磁盘",
-    category: "三层自主记忆", catClass: "cat-vector", stars: "15k+", license: "Apache 2.0", github: "letta-ai/letta",
+    category: "三层自主记忆", catClass: "cat-vector", stars: "22.9k", license: "Apache 2.0", github: "letta-ai/letta",
+    deepReport: "02-Letta-MemGPT.md", language: "Python",
     philosophy: "Agent 应该自主管理记忆，像 OS 管理 RAM 和磁盘",
     architecture: ["Core Memory (热)", "Recall Memory (温)", "Archival Memory (冷)", "Agent 自主调度", "Context Window Calculator"],
     smartestDesign: "Context Window Calculator：实时追踪 token 预算，接近上限时主动触发记忆操作",
@@ -1097,7 +1104,8 @@ const frameworks = [
   },
   {
     id: "zep", name: "Zep / Graphiti", tagline: "每个事实都有保质期——一月真的，现在未必",
-    category: "时序知识图谱", catClass: "cat-graph", stars: "3k+", license: "Apache 2.0", github: "getzep/zep",
+    category: "时序知识图谱", catClass: "cat-graph", stars: "26.4k", license: "Apache 2.0", github: "getzep/graphiti",
+    deepReport: "03-Zep-Graphiti.md", language: "Python",
     philosophy: "事实是带时间戳的。用图建模实体关系，用时间戳追踪事实生命周期",
     architecture: ["Episode 输入", "Entity/Edge 提取", "Bi-temporal KG (valid_at/invalid_at)", "图遍历查询"],
     smartestDesign: "Bi-temporal 模型：valid_at/invalid_at 是唯一精确回答'规则什么时候变'的方案",
@@ -1108,7 +1116,8 @@ const frameworks = [
   },
   {
     id: "cognee", name: "Cognee", tagline: "记忆是数据管线——从任何源头提取、清洗、结构化",
-    category: "数据管线引擎", catClass: "cat-graph", stars: "2k+", license: "Apache 2.0", github: "topoteretes/cognee",
+    category: "数据管线引擎", catClass: "cat-graph", stars: "17.5k", license: "Apache 2.0", github: "topoteretes/cognee",
+    deepReport: "04-Cognee.md", language: "Python",
     philosophy: "记忆不是存储问题，是数据工程问题。用管线思维处理知识",
     architecture: ["30+ 数据源连接器", "cognify 管线", "提取/去重/分类", "图构建", "5 种搜索模式"],
     smartestDesign: "管线思维：把记忆当成数据工程，30+ 连接器覆盖各种输入源",
@@ -1119,7 +1128,8 @@ const frameworks = [
   },
   {
     id: "graphify", name: "Graphify", tagline: "任何输入 -> 知识图谱 -> 聚类社区 -> Wiki",
-    category: "多模态知识图谱", catClass: "cat-graph", stars: "N/A", license: "MIT", github: "hzzjian/graphify",
+    category: "多模态知识图谱", catClass: "cat-graph", stars: "N/A", license: "MIT", github: "N/A",
+    deepReport: "05-Graphify.md", language: "Python", note: "GitNexus skill",
     philosophy: "从代码、文档、图片中自动构建知识图谱，生成人类可读 Wiki",
     architecture: ["tree-sitter AST / Claude vision", "知识图谱 (NetworkX)", "Leiden 社区检测", "HTML/JSON Wiki"],
     smartestDesign: "多模态 IE：代码用 AST，图片用 vision，文档用 LLM——统一输出为图谱",
@@ -1130,7 +1140,8 @@ const frameworks = [
   },
   {
     id: "hindsight", name: "Hindsight", tagline: "4 路并行检索 + 反思，91.4% LongMemEval SOTA",
-    category: "多路检索增强", catClass: "cat-retrieval", stars: "N/A", license: "Research", github: "N/A",
+    category: "多路检索增强", catClass: "cat-retrieval", stars: "14.3k", license: "MIT", github: "vectorize-io/hindsight",
+    deepReport: "06-Hindsight.md", language: "Python",
     philosophy: "检索质量是记忆的核心。4 路并行 + cross-encoder 重排确保质量",
     architecture: ["语义检索", "BM25 检索", "实体图检索", "时间过滤", "Cross-encoder 重排", "Reflect 反思"],
     smartestDesign: "4 路并行检索：覆盖语义/关键词/实体/时间四个维度，cross-encoder 精排",
@@ -1141,7 +1152,8 @@ const frameworks = [
   },
   {
     id: "langmem", name: "LangMem", tagline: "三类记忆 + prompt 优化，LangChain 生态",
-    category: "LangChain 原生记忆", catClass: "cat-langchain", stars: "500+", license: "MIT", github: "langchain-ai/langmem",
+    category: "LangChain 原生记忆", catClass: "cat-langchain", stars: "1.5k", license: "MIT", github: "langchain-ai/langmem",
+    deepReport: "07-LangMem.md", language: "Python",
     philosophy: "记忆应该原生集成在 LangGraph 工作流中，三类记忆覆盖不同场景",
     architecture: ["semantic/episodic/procedural", "trustcall 结构化提取", "LangGraph BaseStore", "Hot path + Background"],
     smartestDesign: "多步提取循环：insert/update/delete 三种操作 + prompt 优化机制",
@@ -1151,8 +1163,9 @@ const frameworks = [
     benchmarks: {}
   },
   {
-    id: "hermes", name: "Hermes", tagline: "163K stars，自学习循环 + SQLite 持久化",
-    category: "自学习 Agent", catClass: "cat-selflearn", stars: "163k", license: "MIT", github: "nicobailey/hernandez",
+    id: "hermes", name: "Hermes", tagline: "自学习循环 + SQLite 持久化",
+    category: "自学习 Agent", catClass: "cat-selflearn", stars: "1", license: "未明确", github: "vincentwi/hermes-memory-tree",
+    deepReport: "08-Hermes.md", language: "TypeScript",
     philosophy: "Agent 通过反思循环自我学习，MEMORY.md 是核心记忆载体",
     architecture: ["MEMORY.md (2200字符)", "FTS5 全文搜索", "语义检索", "8 个外部 memory provider"],
     smartestDesign: "自学习循环：每次交互后反思，更新 MEMORY.md，经验自动积累",
@@ -1163,7 +1176,8 @@ const frameworks = [
   },
   {
     id: "openhuman", name: "OpenHuman", tagline: "Memory Tree 架构，人类可浏览的记忆界面",
-    category: "层次化记忆树", catClass: "cat-hierarchy", stars: "2k+", license: "MIT", github: "nicobailey/openhuman",
+    category: "层次化记忆树", catClass: "cat-hierarchy", stars: "N/A", license: "MIT", github: "jordanurbs/murano",
+    deepReport: "09-OpenHuman.md", language: "TypeScript", note: "社区重实现",
     philosophy: "记忆应该像文件系统一样可浏览，树结构天然适合层次查询",
     architecture: ["STM (FTS5 + cosine)", "Memory Tree (6种检索工具)", "daily global digest", "score engine 三段准入"],
     smartestDesign: "树结构多跳：从根到叶子的路径就是多跳路径，6 种工具支持递进精化",
@@ -1175,6 +1189,7 @@ const frameworks = [
   {
     id: "synthius-mem", name: "Synthius-Mem", tagline: "脑启发六域记忆，LoCoMo 94.37% SOTA，幻觉抵抗 99.55%",
     category: "脑启发结构化记忆", catClass: "cat-brain", stars: "1", license: "MIT", github: "Kirafy123/synthius-mem-claude",
+    deepReport: "12-Synthius-Mem.md", language: "Python",
     philosophy: "不检索'说了什么'，而提取'已知什么'。六域分类消除语义漂移",
     architecture: ["Extract (捕获)", "Consolidate (合并)", "CategoryRAG", "Biography/Experiences/Preferences", "Social/Work/Psychometrics"],
     smartestDesign: "唯一报告幻觉抵抗（99.55% 对抗鲁棒性）：能区分'知道'和'不知道'",
@@ -1185,7 +1200,8 @@ const frameworks = [
   },
   {
     id: "memmachine", name: "MemMachine", tagline: "3092 stars，三层记忆 + 全生态集成",
-    category: "通用记忆层", catClass: "cat-universal", stars: "3092", license: "Apache 2.0", github: "MemMachine/MemMachine",
+    category: "通用记忆层", catClass: "cat-universal", stars: "3.1k", license: "Apache 2.0", github: "MemMachine/MemMachine",
+    deepReport: "11-MemMachine.md", language: "Python",
     philosophy: "通用记忆层，episodic + profile + working 三层覆盖所有 Agent 场景",
     architecture: ["Episodic Memory (Neo4j)", "Profile Memory (SQL)", "Working Memory (session)", "REST API + MCP + SDKs"],
     smartestDesign: "集成生态最广：LangChain/CrewAI/LlamaIndex/MCP/n8n/Dify 全覆盖",
@@ -1197,7 +1213,7 @@ const frameworks = [
   {
     id: "cortex", name: "Cortex", tagline: "20 种神经科学机制，LongMemEval 98.4%，LoCoMo 94.2%",
     category: "神经科学记忆", catClass: "cat-brain", stars: "37", license: "MIT", github: "cdeust/Cortex",
-    isNew: true,
+    isNew: true, deepReport: "13-Cortex.md", language: "Python",
     philosophy: "用经过验证的神经科学机制构建记忆系统：预测编码、巩固级联、热力学衰减",
     architecture: ["5 阶段检索：意图分类", "查询扩展", "5信号WRRF融合", "Cross-Encoder重排", "神经符号过滤"],
     smartestDesign: "预测编码门控：4 信号判断新信息是否值得记忆（embedding novelty + entity overlap + temporal proximity + structural similarity）",
@@ -1208,8 +1224,8 @@ const frameworks = [
   },
   {
     id: "engram", name: "Engram", tagline: "查询时零 LLM 调用，LongMemEval 98.4% R@5，LoCoMo 93.9%",
-    category: "零LLM查询记忆", catClass: "cat-zeroLLM", stars: "6", license: "MIT", github: "Nitin-Gupta1109/engram",
-    isNew: true,
+    category: "零LLM查询记忆", catClass: "cat-zeroLLM", stars: "29", license: "MIT", github: "EngramMemory/engram-memory",
+    isNew: true, deepReport: "14-Engram.md", language: "Python",
     philosophy: "记忆检索不需要调用 LLM，纯结构化查询就够了——极致降本",
     architecture: ["Dense bi-encoder (bge-large 1024-dim)", "BM25 sparse", "RRF fusion", "Cross-encoder rerank (optional)"],
     smartestDesign: "零 LLM 调用实现 98.4% R@5：纯检索管线，延迟极低，成本极低",
@@ -1220,8 +1236,8 @@ const frameworks = [
   },
   {
     id: "opencode", name: "OpenCode", tagline: "CLI 编码 Agent，项目级上下文 + Skills",
-    category: "编码 Agent", catClass: "cat-coding", stars: "5k+", license: "MIT", github: "sst/opencode",
-    isCodingTool: true,
+    category: "编码 Agent", catClass: "cat-coding", stars: "12.7k", license: "MIT", github: "opencode-ai/opencode",
+    isCodingTool: true, deepReport: "18-OpenCode.md", language: "Go", note: "Archived → Crush",
     philosophy: "通过 AGENTS.md + Skills 文件实现项目级记忆，不依赖向量数据库",
     architecture: ["AGENTS.md (项目规则)", "Skills (结构化知识)", "会话上下文", "LLM"],
     smartestDesign: "轻量但有效：Markdown 文件作为记忆载体，人类可读可编辑",
@@ -1232,8 +1248,8 @@ const frameworks = [
   },
   {
     id: "claude-code", name: "Claude Code", tagline: "Anthropic CLI，CLAUDE.md + memory 文件",
-    category: "编码 Agent", catClass: "cat-coding", stars: "N/A", license: "Commercial", github: "N/A",
-    isCodingTool: true,
+    category: "编码 Agent", catClass: "cat-coding", stars: "126k", license: "Proprietary", github: "anthropics/claude-code",
+    isCodingTool: true, deepReport: "19-Claude-Code.md", language: "TypeScript", note: "⚠️ Partial OSS",
     philosophy: "通过 CLAUDE.md 和 memory 文件实现项目级记忆",
     architecture: ["CLAUDE.md (项目规则)", "memory files", "conversation context", "Claude"],
     smartestDesign: "CLAUDE.md 双层：项目根目录(共享) + 用户目录(个人偏好)",
@@ -1244,8 +1260,8 @@ const frameworks = [
   },
   {
     id: "codex", name: "OpenAI Codex", tagline: "OpenAI 编码 Agent，项目上下文 + Codex 指令",
-    category: "编码 Agent", catClass: "cat-coding", stars: "N/A", license: "Commercial", github: "openai/codex",
-    isCodingTool: true,
+    category: "编码 Agent", catClass: "cat-coding", stars: "84.8k", license: "Apache 2.0", github: "openai/codex",
+    isCodingTool: true, deepReport: "20-Codex.md", language: "TypeScript",
     philosophy: "通过 AGENTS.md 和 Codex 指令文件实现项目级记忆",
     architecture: ["AGENTS.md", "instructions files", "conversation", "GPT model"],
     smartestDesign: "指令文件系统化：支持多层级指令覆盖",
@@ -1256,8 +1272,8 @@ const frameworks = [
   },
   {
     id: "openviking", name: "OpenViking", tagline: "字节跳动 Volcengine，24539 stars，上下文数据库，文件系统范式管理 Agent 记忆",
-    category: "上下文数据库", catClass: "cat-hierarchy", stars: "24539", license: "AGPLv3", github: "volcengine/OpenViking",
-    isNew: true,
+    category: "上下文数据库", catClass: "cat-hierarchy", stars: "24.5k", license: "AGPL 3.0", github: "volcengine/OpenViking",
+    isNew: true, deepReport: "17-OpenViking.md", language: "Python",
     philosophy: "用文件系统范式统一管理 Agent 的 memory、resources 和 skills。viking:// 虚拟文件系统 URI",
     architecture: ["viking:// 虚拟文件系统", "三级加载 L0摘要~100tok", "L1概述~2k", "L2完整", "意图分析→定位→探索→递归→聚合"],
     smartestDesign: "三级上下文加载 (L0/L1/L2)：按需加载不同粒度，Token 消耗降低 91%",
@@ -1268,8 +1284,8 @@ const frameworks = [
   },
   {
     id: "total-agent-memory", name: "total-agent-memory", tagline: "60+ MCP 工具，9 IDE 支持，时序知识图谱 + 过程记忆",
-    category: "全能编码记忆", catClass: "cat-universal", stars: "40", license: "MIT", github: "vbcherepanov/total-agent-memory",
-    isNew: true,
+    category: "全能编码记忆", catClass: "cat-universal", stars: "41", license: "MIT", github: "vbcherepanov/total-agent-memory",
+    isNew: true, deepReport: "16-total-agent-memory.md", language: "Python",
     philosophy: "记忆系统应该有两层：确定性核心（无 LLM）+ AI 增强层（异步），支持 4 种运行模式",
     architecture: ["memory_core (无LLM)", "ai_layer (异步)", "4 模式：ultrafast/fast/balanced/deep", "SQLite+FTS5+Chroma+FastEmbed"],
     smartestDesign: "kg_at() 时序知识图谱：查询'在任何时间点什么为真'，加上 workflow_predict 过程记忆",
@@ -1280,8 +1296,8 @@ const frameworks = [
   },
   {
     id: "agentmemory", name: "agentmemory", tagline: "LongMemEval #1 世界纪录 96.2%，一个人 16 天 $1000",
-    category: "六信号混合检索", catClass: "cat-retrieval", stars: "23", license: "MIT", github: "JordanMcCann/agentmemory",
-    isNew: true,
+    category: "六信号混合检索", catClass: "cat-retrieval", stars: "16.6k", license: "Apache 2.0", github: "rohitg00/agentmemory",
+    isNew: true, deepReport: "15-agentmemory.md", language: "TypeScript",
     philosophy: "6 个独立检索信号加权融合，确定性 HNSW 索引",
     architecture: ["semantic(0.30)", "BM25(0.12)", "activation(0.18)", "graph(0.18)", "importance(0.10)", "temporal(0.12)", "cross-encoder", "SQLite"],
     smartestDesign: "确定性 HNSW：SHA-256 内容哈希确定层级分配，消除插入顺序差异",
@@ -1292,8 +1308,8 @@ const frameworks = [
   },
   {
     id: "windsurf", name: "Windsurf", tagline: "Codeium Cascade Agent，自动记忆 + Rules 系统",
-    category: "编码 Agent", catClass: "cat-coding", stars: "N/A", license: "Commercial", github: "codeium/windsurf",
-    isCodingTool: true,
+    category: "编码 Agent", catClass: "cat-coding", stars: "N/A", license: "Proprietary", github: "N/A",
+    isCodingTool: true, deepReport: "21-Windsurf.md", language: "N/A", note: "❌ No public repo",
     philosophy: "自动生成记忆 + 多层 Rules 系统，区分 workspace 和 global",
     architecture: ["Auto Memories (~/.codeium/windsurf/memories/)", "Rules (global/workspace/system)", "AGENTS.md"],
     smartestDesign: "Rules 4 种激活模式：always_on / model_decision / glob / manual，精细控制上下文注入",
@@ -1305,7 +1321,7 @@ const frameworks = [
   {
     id: "tencentdb-agent-memory", name: "TencentDB-Agent-Memory", tagline: "4层渐进式Agent记忆管线，从原始对话到用户画像全自动精炼",
     category: "渐进式管线", catClass: "cat-pipeline", stars: "New", license: "MIT", github: "Tencent/TencentDB-Agent-Memory",
-    isNew: true,
+    isNew: true, deepReport: "22-TencentDB-Agent-Memory.md", language: "Node.js",
     philosophy: "记忆不是一次性提取，而是渐进式精炼——L0原始→L1结构化→L2场景→L3画像",
     architecture: ["L0 原始对话", "L1 结构化去重", "L2 场景关联", "L3 用户画像", "Hybrid RRF 检索", "Split-state checkpoint"],
     smartestDesign: "4层渐进管线最完整：L0→L3 全自动精炼，PersonaMem 从 48% 提升到 76%，Token 消耗降低 61.38%",
@@ -1436,6 +1452,10 @@ function buildNav() {
   // Other sections
   html += `
     <div class="nav-group">
+      <div class="nav-item ${currentSection === 'oss-overview' ? 'active' : ''}" data-section="oss-overview">
+        <span class="icon">&#9854;</span><span class="label">开源概览</span>
+        <span class="badge">OSS</span>
+      </div>
       <div class="nav-item ${currentSection === 'benchmarks' ? 'active' : ''}" data-section="benchmarks">
         <span class="icon">&#9698;</span><span class="label">评测基准</span>
         <span class="badge">4</span>
@@ -1478,6 +1498,7 @@ function navigateTo(section) {
 function renderContent() {
   const main = document.getElementById("mainContent");
   if (currentSection === "overview") main.innerHTML = renderOverview();
+  else if (currentSection === "oss-overview") main.innerHTML = renderOssOverview();
   else if (currentSection === "benchmarks") main.innerHTML = renderBenchmarks();
   else if (currentSection === "design") main.innerHTML = renderDesign();
   else if (currentSection === "coding") main.innerHTML = renderCoding();
@@ -1611,6 +1632,15 @@ function renderOverview() {
   `;
 }
 
+// ---------- OPEN SOURCE STATUS BADGE ----------
+function getOpenSourceStatus(license, github) {
+  if (!github || github === 'N/A') return { icon: '❌', label: '闭源', cls: 'badge-oss-closed' };
+  if (license === 'Proprietary') return { icon: '⚠️', label: '部分开源', cls: 'badge-oss-partial' };
+  if (license && license.startsWith('AGPL')) return { icon: '⚠️', label: 'AGPL', cls: 'badge-oss-agpl' };
+  // Apache, MIT, BSD, etc.
+  return { icon: '✅', label: '开源', cls: 'badge-oss-open' };
+}
+
 // ---------- DETAIL ----------
 function renderDetail(fw) {
   const s = fw.scores;
@@ -1631,6 +1661,22 @@ function renderDetail(fw) {
   const iconColor = fw.isCodingTool ? 'var(--gray)' : 'var(--accent)';
   const newBadgeDetail = fw.isNew ? ' <span class="new-badge">NEW</span>' : '';
 
+  // 开源状态 badge
+  const ossStatus = getOpenSourceStatus(fw.license, fw.github);
+
+  // GitHub link
+  const githubHtml = fw.github && fw.github !== 'N/A'
+    ? `<a href="https://github.com/${fw.github}" target="_blank" rel="noopener" style="color:var(--accent-light);text-decoration:none;">${fw.github} &#8599;</a>`
+    : '<span style="color:var(--text-muted);">无公开仓库</span>';
+
+  // Deep report link
+  const deepReportHtml = fw.deepReport
+    ? `<a href="../deep-reports/${fw.deepReport}" target="_blank" style="color:var(--accent-light);text-decoration:none;font-size:0.8rem;">📄 深度报告</a>`
+    : '';
+
+  // Note badge
+  const noteHtml = fw.note ? `<span class="badge badge-note">${fw.note}</span>` : '';
+
   return `
     <div style="margin-bottom:16px;">
       <span style="font-size:0.8rem;color:var(--text-muted);cursor:pointer;" onclick="navigateTo('overview')">&#8592; 返回总览</span>
@@ -1642,10 +1688,16 @@ function renderDetail(fw) {
           <h2>${fw.name}${newBadgeDetail}</h2>
           <div class="fw-tagline">${fw.tagline}</div>
           <div class="fw-badges">
+            <span class="badge ${ossStatus.cls}">${ossStatus.icon} ${ossStatus.label}</span>
             <span class="category-tag ${fw.catClass}">${fw.category}</span>
-            ${fw.stars !== 'N/A' && fw.stars !== 'TBD' ? `<span class="badge badge-stars">&#9733; ${fw.stars}</span>` : ''}
+            ${fw.stars !== 'N/A' && fw.stars !== 'TBD' && fw.stars !== 'New' ? `<span class="badge badge-stars">&#9733; ${fw.stars}</span>` : ''}
             <span class="badge badge-license">${fw.license}</span>
-            ${fw.github !== 'N/A' ? `<span class="badge">${fw.github}</span>` : ''}
+            ${fw.language ? `<span class="badge">${fw.language}</span>` : ''}
+            ${noteHtml}
+          </div>
+          <div style="margin-top:8px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+            <span style="font-size:0.8rem;color:var(--text-secondary);">GitHub: ${githubHtml}</span>
+            ${deepReportHtml}
           </div>
         </div>
       </div>
@@ -1690,6 +1742,123 @@ function renderDetail(fw) {
           </table>` : ''}
         </div>
       </div>
+    </div>
+  `;
+}
+
+// ---------- OSS OVERVIEW ----------
+let ossSortCol = 'stars';
+let ossSortDir = 'desc';
+let ossLicenseFilter = 'all';
+
+function parseStarsToNum(stars) {
+  if (!stars || stars === 'N/A' || stars === 'New' || stars === 'TBD') return -1;
+  const s = stars.toString().toLowerCase().replace(/,/g, '');
+  if (s.endsWith('k')) return parseFloat(s) * 1000;
+  return parseFloat(s) || -1;
+}
+
+function sortOssTable(col) {
+  if (ossSortCol === col) {
+    ossSortDir = ossSortDir === 'desc' ? 'asc' : 'desc';
+  } else {
+    ossSortCol = col;
+    ossSortDir = 'desc';
+  }
+  renderContent();
+}
+
+function filterByLicense(fw) {
+  if (ossLicenseFilter === 'all') return true;
+  if (ossLicenseFilter === 'oss') {
+    return ['Apache 2.0', 'MIT', 'BSD-2-Clause', 'BSD-3-Clause'].includes(fw.license);
+  }
+  if (ossLicenseFilter === 'agpl') return fw.license && fw.license.startsWith('AGPL');
+  if (ossLicenseFilter === 'proprietary') return fw.license === 'Proprietary';
+  return true;
+}
+
+function renderOssOverview() {
+  const filtered = filterFrameworks().filter(filterByLicense);
+
+  const sorted = [...filtered].sort((a, b) => {
+    let va, vb;
+    if (ossSortCol === 'name') {
+      va = a.name; vb = b.name;
+      return ossSortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+    }
+    if (ossSortCol === 'stars') {
+      va = parseStarsToNum(a.stars);
+      vb = parseStarsToNum(b.stars);
+    } else if (ossSortCol === 'license') {
+      va = a.license || ''; vb = b.license || '';
+      return ossSortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+    } else if (ossSortCol === 'language') {
+      va = a.language || ''; vb = b.language || '';
+      return ossSortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+    } else if (ossSortCol === 'oss') {
+      const ossOrder = { '开源': 0, 'AGPL': 1, '部分开源': 2, '闭源': 3 };
+      va = ossOrder[getOpenSourceStatus(a.license, a.github).label] ?? 9;
+      vb = ossOrder[getOpenSourceStatus(b.license, b.github).label] ?? 9;
+    }
+    return ossSortDir === 'desc' ? vb - va : va - vb;
+  });
+
+  const rows = sorted.map(fw => {
+    const ossStatus = getOpenSourceStatus(fw.license, fw.github);
+    const githubHtml = fw.github && fw.github !== 'N/A'
+      ? `<a href="https://github.com/${fw.github}" target="_blank" rel="noopener" style="color:var(--accent-light);text-decoration:none;font-size:0.75rem;">${fw.github}</a>`
+      : '<span style="color:var(--text-muted);font-size:0.75rem;">无公开仓库</span>';
+    const starsHtml = fw.stars && fw.stars !== 'N/A' && fw.stars !== 'New' && fw.stars !== 'TBD'
+      ? `<span style="color:var(--yellow);font-weight:600;">⭐ ${fw.stars}</span>`
+      : '<span style="color:var(--text-muted);">—</span>';
+    const deepReportHtml = fw.deepReport
+      ? `<a href="../deep-reports/${fw.deepReport}" target="_blank" style="font-size:0.7rem;">📄</a>`
+      : '';
+    return `<tr>
+      <td style="font-weight:600;cursor:pointer;white-space:nowrap;" onclick="navigateTo('detail-${fw.id}')">${fw.name} ${deepReportHtml}</td>
+      <td style="font-size:0.75rem;">${githubHtml}</td>
+      <td>${starsHtml}</td>
+      <td><span class="badge badge-license" style="font-size:0.65rem;">${fw.license}</span></td>
+      <td><span class="badge ${ossStatus.cls}" style="font-size:0.65rem;">${ossStatus.icon} ${ossStatus.label}</span></td>
+      <td style="font-size:0.8rem;color:var(--text-secondary);">${fw.language || '—'}</td>
+    </tr>`;
+  }).join('');
+
+  const sortIndicator = (col) => {
+    const active = ossSortCol === col;
+    const icon = active ? (ossSortDir === 'desc' ? ' ▼' : ' ▲') : ' ⇅';
+    const cls = active ? (ossSortDir === 'desc' ? 'sort-desc' : 'sort-asc') : '';
+    return `class="${cls}"`;
+  };
+
+  return `
+    <h2 class="section-title">开源概览</h2>
+    <p class="section-desc">所有框架的开源状态、GitHub 仓库、Stars、许可证和语言一览。可排序、可按许可证类型过滤。</p>
+    <div class="matrix-controls" style="margin-bottom:16px;">
+      <label>许可证过滤：
+        <select onchange="ossLicenseFilter=this.value;renderContent();" style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);padding:4px 8px;border-radius:var(--radius);font-size:0.8rem;">
+          <option value="all" ${ossLicenseFilter==='all'?'selected':''}>全部</option>
+          <option value="oss" ${ossLicenseFilter==='oss'?'selected':''}>开源 (Apache/MIT/BSD)</option>
+          <option value="agpl" ${ossLicenseFilter==='agpl'?'selected':''}>AGPL</option>
+          <option value="proprietary" ${ossLicenseFilter==='proprietary'?'selected':''}>Proprietary</option>
+        </select>
+      </label>
+    </div>
+    <div class="matrix-wrapper">
+      <table class="matrix-table" style="min-width:800px;">
+        <thead>
+          <tr>
+            <th style="text-align:left;min-width:140px;" onclick="sortOssTable('name')" id="th-oss-name">框架<span class="sort-icon"></span></th>
+            <th style="text-align:left;min-width:160px;" onclick="sortOssTable('name')" id="th-oss-github">GitHub<span class="sort-icon"></span></th>
+            <th onclick="sortOssTable('stars')" id="th-oss-stars">⭐ Stars<span class="sort-icon"></span></th>
+            <th onclick="sortOssTable('license')" id="th-oss-license">许可证<span class="sort-icon"></span></th>
+            <th onclick="sortOssTable('oss')" id="th-oss-status">开源状态<span class="sort-icon"></span></th>
+            <th onclick="sortOssTable('language')" id="th-oss-lang">语言<span class="sort-icon"></span></th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
     </div>
   `;
 }

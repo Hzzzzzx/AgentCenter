@@ -32,9 +32,10 @@
 | 维度 | 内容 |
 |------|------|
 | **项目名称** | MemMachine |
-| **GitHub** | 待确认（开源项目） |
-| **Stars** | 待确认 |
-| **License** | MIT |
+| **GitHub** | https://github.com/MemMachine/MemMachine |
+| **Stars** | 3,092 |
+| **License** | Apache 2.0 |
+| **开源状态** | ✅ Yes |
 | **主要语言** | Python |
 | **最新版本** | 活跃维护 |
 | **核心定位** | 三层记忆架构的 agent 记忆框架 |

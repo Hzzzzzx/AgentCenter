@@ -24,9 +24,12 @@
 |------|-----|
 | **项目名称** | Claude Code |
 | **开发组织** | Anthropic |
+| **GitHub** | https://github.com/anthropics/claude-code |
+| **Stars** | 126,000 |
+| **开源状态** | ⚠️ 部分开源（代码可见但非真正 OSS） |
+| **许可证** | Proprietary |
 | **定位** | AI 编程 CLI 工具 |
 | **技术栈** | Node.js + CLI |
-| **许可证** | 专有（需 Anthropic API 访问） |
 | **记忆相关文件** | CLAUDE.md（项目级）+ ~/.claude/skills/（全局）+ projects/ |
 | **存储介质** | 文件系统（Markdown/YAML/JSON） |
 | **跨会话自动记忆** | 无（auto memory 为空） |

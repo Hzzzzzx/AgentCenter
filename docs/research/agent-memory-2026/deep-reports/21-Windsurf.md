@@ -22,9 +22,12 @@
 |------|-----|
 | **项目名称** | Windsurf |
 | **开发组织** | Codeium |
+| **GitHub** | ❌ 无公开仓库 |
+| **Stars** | N/A |
+| **开源状态** | ❌ 闭源（商业 IDE 产品） |
+| **许可证** | Proprietary |
 | **定位** | AI 编程 IDE / 工具 |
 | **技术栈** | Electron + WebView |
-| **许可证** | 专有（需 Codeium 账户） |
 | **记忆相关文件** | .windsurf/rules/（规则目录）|
 | **存储介质** | 文件系统（Markdown/YAML） |
 | **跨会话自动记忆** | 无（规则需手动维护） |

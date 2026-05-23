@@ -34,14 +34,15 @@
 |------|------|
 | **项目名称** | OpenViking |
 | **开发方** | 字节跳动 / Volcengine |
-| **GitHub** | 待确认（开源项目） |
-| **Stars** | **24,539+** |
-| **License** | **AGPLv3** |
+| **GitHub** | https://github.com/volcengine/OpenViking |
+| **Stars** | **24,540** |
+| **License** | **AGPL 3.0** |
 | **主要语言** | Python |
 | **最新版本** | 活跃维护 |
 | **核心定位** | Viking virtual filesystem memory protocol |
 | **核心创新** | viking:// 协议 + 三级加载（L0/L1/L2）|
 | **Benchmark** | 降 91% token 消耗 |
+| **开源状态** | ✅ 开源（强 CopyLeft） |
 
 ---
 
