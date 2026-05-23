@@ -465,6 +465,7 @@ body {
 .cat-zeroLLM { background: rgba(56, 189, 248, 0.15); color: #38bdf8; }
 .cat-universal { background: rgba(168, 162, 158, 0.15); color: #a8a29e; }
 .cat-coding { background: rgba(107, 114, 128, 0.2); color: #9ca3af; border: 1px dashed var(--border-light); }
+.cat-pipeline { background: rgba(56, 189, 248, 0.15); color: #7dd3fc; }
 
 .new-badge {
   background: linear-gradient(135deg, #6366f1, #8b5cf6);
@@ -1300,6 +1301,18 @@ const frameworks = [
     insights: "Rules 激活模式的精细控制值得借鉴——企业场景需要按场景注入不同上下文",
     scores: { ie: [30,40], tr: [20,30], ku: [30,40], mr: [25,35], msr: [35,45], total: "N/A", source: "inferred" },
     benchmarks: {}
+  },
+  {
+    id: "tencentdb-agent-memory", name: "TencentDB-Agent-Memory", tagline: "4层渐进式Agent记忆管线，从原始对话到用户画像全自动精炼",
+    category: "渐进式管线", catClass: "cat-pipeline", stars: "New", license: "MIT", github: "Tencent/TencentDB-Agent-Memory",
+    isNew: true,
+    philosophy: "记忆不是一次性提取，而是渐进式精炼——L0原始→L1结构化→L2场景→L3画像",
+    architecture: ["L0 原始对话", "L1 结构化去重", "L2 场景关联", "L3 用户画像", "Hybrid RRF 检索", "Split-state checkpoint"],
+    smartestDesign: "4层渐进管线最完整：L0→L3 全自动精炼，PersonaMem 从 48% 提升到 76%，Token 消耗降低 61.38%",
+    limitations: ["Node.js only", "LongMemEval 52.86% 中等", "15场景上限", "无图数据库"],
+    insights: "渐进式精炼思路适合 AgentCenter——从原始对话自动构建用户画像，本地零依赖运行",
+    scores: { ie: [70,80], tr: [40,50], ku: [75,85], mr: [35,45], msr: [85,90], total: "52.86%", source: "measured" },
+    benchmarks: { longmemeval: "52.86%", locomo: "43.87%", beam: "51.33%", personamem: "76%", custom: "Token↓61.38%, 成功率↑51.52%" }
   }
 ];
 
@@ -1327,7 +1340,8 @@ const categories = {
   "全能编码记忆": { icon: "&#9678;", class: "cat-universal" },
   "神经科学记忆": { icon: "&#9679;", class: "cat-brain" },
   "零LLM查询记忆": { icon: "&#9676;", class: "cat-zeroLLM" },
-  "编码 Agent": { icon: "&#9000;", class: "cat-coding" }
+  "编码 Agent": { icon: "&#9000;", class: "cat-coding" },
+  "渐进式管线": { icon: "&#9656;", class: "cat-pipeline" }
 };
 
 const capNames = { ie: "信息提取 (IE)", tr: "时序推理 (TR)", ku: "知识更新 (KU)", mr: "多跳推理 (MR)", msr: "多会话推理 (MSR)" };
@@ -1382,7 +1396,7 @@ function buildNav() {
     <div class="nav-group">
       <div class="nav-item ${currentSection === 'overview' ? 'active' : ''}" data-section="overview">
         <span class="icon">&#9635;</span><span class="label">总览</span>
-        <span class="badge">22</span>
+        <span class="badge">23</span>
       </div>
     </div>
     <div class="nav-group">
@@ -1430,6 +1444,10 @@ function buildNav() {
         <span class="icon">&#9673;</span><span class="label">设计阶段</span>
         <span class="badge">P0</span>
       </div>
+      <div class="nav-item ${currentSection === 'coding' ? 'active' : ''}" data-section="coding">
+        <span class="icon">&#9000;</span><span class="label">编码阶段</span>
+        <span class="badge">10</span>
+      </div>
       <div class="nav-item ${currentSection === 'quickref' ? 'active' : ''}" data-section="quickref">
         <span class="icon">&#9776;</span><span class="label">速查卡</span>
       </div>
@@ -1462,6 +1480,7 @@ function renderContent() {
   if (currentSection === "overview") main.innerHTML = renderOverview();
   else if (currentSection === "benchmarks") main.innerHTML = renderBenchmarks();
   else if (currentSection === "design") main.innerHTML = renderDesign();
+  else if (currentSection === "coding") main.innerHTML = renderCoding();
   else if (currentSection === "quickref") main.innerHTML = renderQuickRef();
   else if (currentSection.startsWith("detail-")) {
     const id = currentSection.replace("detail-", "");
@@ -1472,6 +1491,10 @@ function renderContent() {
   if (sortCol) {
     const th = document.getElementById('th-' + sortCol);
     if (th) th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+  }
+  if (codingSortCol) {
+    const th = document.getElementById('th-coding-' + codingSortCol);
+    if (th) th.classList.add(codingSortDir === 'asc' ? 'sort-asc' : 'sort-desc');
   }
 }
 
@@ -1560,9 +1583,9 @@ function renderOverview() {
   return `
     <div class="hero">
       <h1>Agent 记忆系统全景调研 2026</h1>
-      <p class="hero-sub">面向企业设计阶段的 Agent 记忆架构选型研究——覆盖 22 框架、4 评测基准、5 项核心能力维度</p>
+      <p class="hero-sub">面向企业设计阶段的 Agent 记忆架构选型研究——覆盖 23 框架、4 评测基准、5 项核心能力维度</p>
       <div class="stats-row">
-        <div class="stat-item"><div class="stat-num">22</div><div class="stat-label">框架</div></div>
+        <div class="stat-item"><div class="stat-num">23</div><div class="stat-label">框架</div></div>
         <div class="stat-item"><div class="stat-num">4</div><div class="stat-label">评测基准</div></div>
         <div class="stat-item"><div class="stat-num">5</div><div class="stat-label">P0 能力维度</div></div>
       </div>
@@ -1702,7 +1725,8 @@ function renderBenchmarks() {
     { name: "Synthius-Mem", id: "synthius-mem", lme_r5: "-", lme_r10: "-", loco_r5: "-", loco_r10: "94.37%", beam: "-" },
     { name: "MemMachine", id: "memmachine", lme_r5: "-", lme_r10: "-", loco_r5: "-", loco_r10: "91.69%", beam: "-" },
     { name: "Zep / Graphiti", id: "zep", lme_r5: "-", lme_r10: "~63.8%", loco_r5: "-", loco_r10: "~71%", beam: "-" },
-    { name: "Mem0", id: "mem0", lme_r5: "-", lme_r10: "~49%", loco_r5: "-", loco_r10: "61.4%", beam: "-" }
+    { name: "Mem0", id: "mem0", lme_r5: "-", lme_r10: "~49%", loco_r5: "-", loco_r10: "61.4%", beam: "-" },
+    { name: "TencentDB-Agent-Memory", id: "tencentdb-agent-memory", lme_r5: "-", lme_r10: "52.86%", loco_r5: "-", loco_r10: "43.87%", beam: "51.33%" }
   ];
 
   const lbRows = leaderboardData.map((f, i) => {
@@ -1799,6 +1823,141 @@ function renderDesign() {
     <h2 class="section-title" style="margin-top:40px;">场景推荐</h2>
     <p class="section-desc">根据不同设计阶段场景的 Top 3 框架推荐。</p>
     ${scenarioCards}
+  `;
+}
+
+// ---------- CODING PHASE DATA ----------
+const codingDimensions = [
+  { key: 'preciseRetrieval', name: '精确检索', desc: '精确关键词/符号匹配，定位具体代码、函数名、变量名' },
+  { key: 'semanticAssoc', name: '语义关联', desc: '理解代码意图，关联相似实现模式（如"类似的认证逻辑"）' },
+  { key: 'temporalReasoning', name: '时序推理', desc: '理解代码变更时间线，追溯"什么时候改的""为什么改"' },
+  { key: 'multiHopReasoning', name: '多跳推理', desc: '跨文件/模块综合推理（调用链追踪、依赖分析）' },
+  { key: 'realtimeIndex', name: '实时索引', desc: '代码变更后快速更新索引，支持增量索引' },
+  { key: 'conflictDetection', name: '冲突检测', desc: '检测记忆矛盾（同一接口两种实现、过期约束）' },
+  { key: 'incrementalUpdate', name: '增量更新', desc: '检测到变更时更新旧记忆，非简单追加' },
+  { key: 'codeStructure', name: '代码结构感知', desc: '理解 AST、调用图、模块边界等代码结构' },
+  { key: 'contextEfficiency', name: '上下文效率', desc: 'Token 效率，精准注入最少上下文完成编码任务' },
+  { key: 'deployComplexity', name: '部署复杂度', desc: '部署难度，分数越高越易部署（反向指标转正向）' }
+];
+
+const codingScores = {
+  mem0:                   { preciseRetrieval:[40,50], semanticAssoc:[60,70], temporalReasoning:[35,45], multiHopReasoning:[40,50], realtimeIndex:[50,60], conflictDetection:[50,60], incrementalUpdate:[55,65], codeStructure:[20,30], contextEfficiency:[60,70], deployComplexity:[85,95] },
+  letta:                  { preciseRetrieval:[45,55], semanticAssoc:[55,65], temporalReasoning:[35,45], multiHopReasoning:[50,60], realtimeIndex:[40,50], conflictDetection:[45,55], incrementalUpdate:[50,60], codeStructure:[25,35], contextEfficiency:[65,75], deployComplexity:[30,40] },
+  zep:                    { preciseRetrieval:[60,70], semanticAssoc:[70,80], temporalReasoning:[80,90], multiHopReasoning:[65,75], realtimeIndex:[55,65], conflictDetection:[75,85], incrementalUpdate:[70,80], codeStructure:[40,50], contextEfficiency:[65,75], deployComplexity:[50,60] },
+  cognee:                 { preciseRetrieval:[55,65], semanticAssoc:[65,75], temporalReasoning:[35,45], multiHopReasoning:[60,70], realtimeIndex:[40,50], conflictDetection:[40,50], incrementalUpdate:[45,55], codeStructure:[55,65], contextEfficiency:[55,65], deployComplexity:[45,55] },
+  graphify:               { preciseRetrieval:[50,60], semanticAssoc:[70,80], temporalReasoning:[35,45], multiHopReasoning:[65,75], realtimeIndex:[30,40], conflictDetection:[30,40], incrementalUpdate:[35,45], codeStructure:[85,95], contextEfficiency:[60,70], deployComplexity:[70,80] },
+  hindsight:              { preciseRetrieval:[85,95], semanticAssoc:[80,90], temporalReasoning:[75,85], multiHopReasoning:[88,94], realtimeIndex:[50,60], conflictDetection:[60,70], incrementalUpdate:[75,85], codeStructure:[35,45], contextEfficiency:[75,85], deployComplexity:[40,50] },
+  langmem:                { preciseRetrieval:[45,55], semanticAssoc:[55,65], temporalReasoning:[35,45], multiHopReasoning:[45,55], realtimeIndex:[55,65], conflictDetection:[55,65], incrementalUpdate:[55,65], codeStructure:[30,40], contextEfficiency:[60,70], deployComplexity:[70,80] },
+  hermes:                 { preciseRetrieval:[50,60], semanticAssoc:[45,55], temporalReasoning:[35,40], multiHopReasoning:[40,50], realtimeIndex:[60,70], conflictDetection:[45,55], incrementalUpdate:[50,58], codeStructure:[25,35], contextEfficiency:[40,50], deployComplexity:[90,98] },
+  openhuman:              { preciseRetrieval:[70,80], semanticAssoc:[65,75], temporalReasoning:[35,45], multiHopReasoning:[75,85], realtimeIndex:[50,60], conflictDetection:[40,50], incrementalUpdate:[40,50], codeStructure:[35,45], contextEfficiency:[70,80], deployComplexity:[65,75] },
+  'synthius-mem':         { preciseRetrieval:[85,95], semanticAssoc:[85,95], temporalReasoning:[70,80], multiHopReasoning:[85,95], realtimeIndex:[40,50], conflictDetection:[85,95], incrementalUpdate:[85,95], codeStructure:[30,40], contextEfficiency:[80,90], deployComplexity:[50,60] },
+  memmachine:             { preciseRetrieval:[65,75], semanticAssoc:[70,80], temporalReasoning:[50,60], multiHopReasoning:[65,75], realtimeIndex:[60,70], conflictDetection:[55,65], incrementalUpdate:[60,70], codeStructure:[45,55], contextEfficiency:[65,75], deployComplexity:[40,50] },
+  cortex:                 { preciseRetrieval:[80,90], semanticAssoc:[80,90], temporalReasoning:[75,85], multiHopReasoning:[85,95], realtimeIndex:[55,65], conflictDetection:[80,90], incrementalUpdate:[85,95], codeStructure:[35,45], contextEfficiency:[80,90], deployComplexity:[35,45] },
+  engram:                 { preciseRetrieval:[80,90], semanticAssoc:[75,85], temporalReasoning:[55,65], multiHopReasoning:[75,85], realtimeIndex:[70,80], conflictDetection:[55,65], incrementalUpdate:[60,70], codeStructure:[30,40], contextEfficiency:[85,95], deployComplexity:[75,85] },
+  openviking:             { preciseRetrieval:[75,85], semanticAssoc:[70,80], temporalReasoning:[60,70], multiHopReasoning:[65,75], realtimeIndex:[65,75], conflictDetection:[55,65], incrementalUpdate:[60,70], codeStructure:[60,70], contextEfficiency:[90,98], deployComplexity:[55,65] },
+  'total-agent-memory':   { preciseRetrieval:[70,80], semanticAssoc:[65,75], temporalReasoning:[70,80], multiHopReasoning:[70,80], realtimeIndex:[75,85], conflictDetection:[65,75], incrementalUpdate:[70,80], codeStructure:[55,65], contextEfficiency:[80,90], deployComplexity:[60,70] },
+  agentmemory:            { preciseRetrieval:[85,95], semanticAssoc:[80,90], temporalReasoning:[80,90], multiHopReasoning:[85,95], realtimeIndex:[50,60], conflictDetection:[85,95], incrementalUpdate:[90,98], codeStructure:[30,40], contextEfficiency:[75,85], deployComplexity:[55,65] },
+  'tencentdb-agent-memory': { preciseRetrieval:[70,80], semanticAssoc:[70,80], temporalReasoning:[40,50], multiHopReasoning:[35,45], realtimeIndex:[75,85], conflictDetection:[75,85], incrementalUpdate:[75,85], codeStructure:[30,40], contextEfficiency:[85,90], deployComplexity:[70,80] }
+};
+
+// coding phase sort state (separate from overview sort)
+let codingSortCol = null;
+let codingSortDir = 'desc';
+
+function sortCodingTable(col) {
+  if (codingSortCol === col) {
+    codingSortDir = codingSortDir === 'desc' ? 'asc' : 'desc';
+  } else {
+    codingSortCol = col;
+    codingSortDir = 'desc';
+  }
+  renderContent();
+}
+
+function applyCodingSorting(fws) {
+  if (!codingSortCol) return fws;
+  const sorted = [...fws];
+  sorted.sort((a, b) => {
+    const sa = codingScores[a.id];
+    const sb = codingScores[b.id];
+    if (!sa || !sb) return 0;
+    if (codingSortCol === 'name') {
+      return codingSortDir === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
+    }
+    const va = sa[codingSortCol] ? sa[codingSortCol][0] : -1;
+    const vb = sb[codingSortCol] ? sb[codingSortCol][0] : -1;
+    return codingSortDir === 'desc' ? vb - va : va - vb;
+  });
+  return sorted;
+}
+
+function renderCoding() {
+  const filtered = filterFrameworks();
+  const mainFws = filtered.filter(f => !f.isCodingTool);
+  const codingFws = filtered.filter(f => f.isCodingTool);
+
+  const dimHeaders = codingDimensions.map(d =>
+    `<th onclick="sortCodingTable('${d.key}')" id="th-coding-${d.key}" title="${d.desc}">${d.name}<span class="sort-icon"></span></th>`
+  ).join('');
+
+  function renderCodingRow(f) {
+    const scores = codingScores[f.id];
+    if (!scores) return '';
+    const newBadge = f.isNew ? '<span class="new-badge">NEW</span>' : '';
+    const cells = codingDimensions.map(d => {
+      const v = scores[d.key];
+      if (!v) return '<td><span class="score-cell score-gray">N/A</span></td>';
+      return `<td>${scoreCell(v[0], v[1], f.scores.source)}</td>`;
+    }).join('');
+    return `<tr>
+      <td style="text-align:left"><span class="fw-name" onclick="navigateTo('detail-${f.id}')"><span class="category-tag ${f.catClass}">${f.category}</span> ${f.name}${newBadge}</span></td>
+      ${cells}
+    </tr>`;
+  }
+
+  let matrixRows = '';
+  const sorted = applyCodingSorting(mainFws);
+  sorted.forEach(f => { matrixRows += renderCodingRow(f); });
+
+  if (codingFws.length) {
+    matrixRows += `<tr class="group-header-row"><td colspan="${codingDimensions.length + 1}">编码工具 (参考对比)</td></tr>`;
+    codingFws.forEach(f => {
+      const scores = codingScores[f.id];
+      if (!scores) {
+        // Coding tools without coding scores - show N/A row
+        const cells = codingDimensions.map(() => '<td><span class="score-cell score-gray">N/A</span></td>').join('');
+        matrixRows += `<tr><td style="text-align:left"><span class="fw-name" onclick="navigateTo('detail-${f.id}')"><span class="category-tag ${f.catClass}">${f.category}</span> ${f.name}</span></td>${cells}</tr>`;
+      } else {
+        matrixRows += renderCodingRow(f);
+      }
+    });
+  }
+
+  // Capability cards
+  const capCards = codingDimensions.map(d => `
+    <div class="cap-card">
+      <div class="cap-code-lg" style="font-size:0.9rem;">${d.name}</div>
+      <div class="cap-desc">${d.desc}</div>
+    </div>
+  `).join('');
+
+  return `
+    <h2 class="section-title">编码阶段评测</h2>
+    <p class="section-desc">面向编码场景的 10 项核心能力维度评估，覆盖代码检索、变更追踪、结构感知和部署效率。</p>
+    <div class="cap-grid">${capCards}</div>
+    <h2 class="section-title" style="margin-top:32px;">编码能力对比矩阵</h2>
+    <p class="section-desc">点击列头排序。颜色表示预估分数区间，&#128202; 为实测数据，&#128269; 为根据架构推断。</p>
+    <div class="matrix-wrapper">
+      <table class="matrix-table" style="min-width:1200px;">
+        <thead>
+          <tr>
+            <th style="min-width:180px;text-align:left" onclick="sortCodingTable('name')" id="th-coding-name">框架<span class="sort-icon"></span></th>
+            ${dimHeaders}
+          </tr>
+        </thead>
+        <tbody>${matrixRows}</tbody>
+      </table>
+    </div>
   `;
 }
 
@@ -1903,14 +2062,14 @@ function init() {
   document.getElementById("searchInput").addEventListener("input", (e) => {
     searchQuery = e.target.value;
     buildNav();
-    if (currentSection === "overview" || currentSection === "quickref") renderContent();
+    if (currentSection === "overview" || currentSection === "quickref" || currentSection === "coding") renderContent();
   });
 
   // Group toggle
   document.getElementById("groupToggle").addEventListener("change", (e) => {
     groupByCategory = e.target.checked;
     buildNav();
-    if (currentSection === "overview" || currentSection === "quickref") renderContent();
+    if (currentSection === "overview" || currentSection === "quickref" || currentSection === "coding") renderContent();
   });
 
   // Initial render
