@@ -180,6 +180,7 @@ function HomeDesign() {
         selected={selectedProject()?.worktree}
         selectProject={selectProject}
         chooseProject={() => void chooseProject()}
+        openResourceCenter={() => navigate("/agentcenter/resources")}
         openSettings={openSettings}
         openHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
         language={language}
@@ -234,6 +235,7 @@ function HomeProjectColumn(props: {
   selected?: string
   selectProject: (directory: string) => void
   chooseProject: () => void
+  openResourceCenter: () => void
   openSettings: () => void
   openHelp: () => void
   language: ReturnType<typeof useLanguage>
@@ -285,6 +287,14 @@ function HomeProjectColumn(props: {
         </Show>
       </div>
       <div class="mt-4 flex min-w-0 flex-col gap-1">
+        <button
+          type="button"
+          class={`${HOME_PROJECT_NAV_ROW} text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted`}
+          onClick={props.openResourceCenter}
+        >
+          <IconV2 name="grid-plus" size="small" />
+          <span>能力中心</span>
+        </button>
         <button
           type="button"
           class={`${HOME_PROJECT_NAV_ROW} text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted`}

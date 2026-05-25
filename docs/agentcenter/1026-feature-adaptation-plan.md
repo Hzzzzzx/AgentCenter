@@ -298,6 +298,32 @@ Deliverables:
 - target capability docs linked from `docs/agentcenter/README.md`;
 - no runtime code changes.
 
+### P0.5: Resource Center Mock
+
+Goal:
+
+- add a deterministic center-style management surface for project runtime
+  resources without wiring real backend behavior yet.
+
+Build:
+
+- home entry named `能力中心`;
+- resource center route;
+- mock Skill management table;
+- mock MCP management table;
+- shared status vocabulary for normal, warning, failed, and disabled;
+- detail panel that shows scope, install/connect summary, references, and
+  follow-up integration points.
+
+Acceptance:
+
+- users can visually inspect how project-level Skill and MCP management will be
+  organized;
+- no old Vue/Java resource management code is ported;
+- no real upload, delete, start, stop, or health probe is triggered;
+- later backend registry/reconciler can replace mock data without changing the
+  product concept.
+
 ### P1: Workspace Entry Boundary
 
 Goal:
