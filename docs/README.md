@@ -20,6 +20,7 @@
 | [README.md](./architecture/README.md) | 架构文档入口、4+1 视图边界和阅读顺序 | 活跃 |
 | [DISCUSSION-HANDOFF-2026-04-28.md](./architecture/DISCUSSION-HANDOFF-2026-04-28.md) | 当前讨论进展交接，供后续 Agent 会话继续讨论 | 活跃 |
 | [APPLICATION-ARCHITECTURE-BASELINE.md](./architecture/APPLICATION-ARCHITECTURE-BASELINE.md) | 企业级应用架构基线：统一上下文、多项目多用户、性能并发、安全治理 | 活跃 |
+| [WORKSPACE-SANDBOX-MODEL-DESIGN.md](./architecture/WORKSPACE-SANDBOX-MODEL-DESIGN.md) | 1026 分支工作空间、作业空间、运行沙盒、产物提升和实施计划 | 活跃 |
 | [ARCHITECTURE-OVERVIEW.md](./architecture/ARCHITECTURE-OVERVIEW.md) | 4+1 视图架构总览 | 活跃 |
 | [UNIFIED-DOMAIN-MODEL.md](./architecture/UNIFIED-DOMAIN-MODEL.md) | 统一对象模型 (8+3 对象) | 活跃 |
 | [DOCUMENTATION-GOVERNANCE.md](./architecture/DOCUMENTATION-GOVERNANCE.md) | 文档生命周期、归档状态、Design Sync 和防腐化规则 | 活跃 |
@@ -87,12 +88,12 @@
 
 | 类别 | 数量 |
 |------|------|
-| 架构文档 | 12 |
+| 架构文档 | 13 |
 | 原型与高保真 | 2 |
 | 综合调研 | 3 |
 | 平台专项调研 | 13 |
-| **总计** | **30** |
+| **总计** | **31** |
 
 ---
 
-*最后更新：2026-05-07*
+*最后更新：2026-05-25*

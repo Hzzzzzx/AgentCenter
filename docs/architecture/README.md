@@ -28,6 +28,7 @@ AgentCenter 当前首页已经收敛为白色网页端工作台：
 | 0 | [DISCUSSION-HANDOFF-2026-04-28.md](./DISCUSSION-HANDOFF-2026-04-28.md) | 跨 Agent 会话交接，快速理解当前讨论进展和下一步 |
 | 1 | [../PRODUCT-VISION.md](../PRODUCT-VISION.md) | 理解产品愿景和目标用户价值 |
 | 2 | [APPLICATION-ARCHITECTURE-BASELINE.md](./APPLICATION-ARCHITECTURE-BASELINE.md) | 固定企业级应用架构约束：统一上下文、多项目多用户、性能并发、安全治理 |
+| 2.5 | [WORKSPACE-SANDBOX-MODEL-DESIGN.md](./WORKSPACE-SANDBOX-MODEL-DESIGN.md) | 固定 1026 分支工作空间、作业空间、运行沙盒、产物提升和实施计划 |
 | 3 | [ARCHITECTURE-OVERVIEW.md](./ARCHITECTURE-OVERVIEW.md) | 理解现有 4+1 架构总览 |
 | 4 | [UNIFIED-DOMAIN-MODEL.md](./UNIFIED-DOMAIN-MODEL.md) | 理解核心领域对象和对象关系 |
 | 4.5 | [DOCUMENTATION-GOVERNANCE.md](./DOCUMENTATION-GOVERNANCE.md) | 理解文档生命周期、归档状态、Design Sync 和防腐化规则 |
