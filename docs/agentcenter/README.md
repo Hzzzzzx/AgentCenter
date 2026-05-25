@@ -6,6 +6,9 @@ implementation base.
 
 ## Documents
 
+- `opencode-native-branch-tracker.md`: tracks what has actually changed on the
+  OpenCode-native branch after the baseline import, including committed mocks,
+  planning-only docs, and user feedback.
 - `1026-feature-adaptation-plan.md`: maps useful capabilities from the old
   `codex/from-2026-05-14-1026` branch into this OpenCode-native branch, including
   what to keep, translate, defer, or drop.
