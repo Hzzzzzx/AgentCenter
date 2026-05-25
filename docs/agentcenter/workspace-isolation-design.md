@@ -49,12 +49,17 @@ AgentCenter should treat workspace as the product entry point, and directory as 
 
 ```text
 Tenant
-  -> User
-      -> Work Item
-          -> AgentCenter Workspace
-              -> controlled worktree directory
-              -> OpenCode project/session/file/diff runtime
-              -> AgentCenter workflow state and artifacts
+  -> Workspace
+      -> Project
+          -> Work Item
+              -> AgentCenter Workspace
+                  -> User Project Workspace
+                  -> Run Sandbox
+                  -> OpenCode project/session/file/diff runtime
+                  -> AgentCenter workflow state and artifacts
+
+User
+  -> User Project Workspace
 ```
 
 The browser should not be trusted to choose a raw filesystem directory. It may choose a `workspaceId`; the server resolves that id to a directory only after checking ownership.
@@ -66,7 +71,10 @@ Entity ownership:
 | User / tenant | AgentCenter auth layer | Phase 2 local dev can use a fixed user resolver. |
 | Work item | AgentCenter registry | Product-level task, requirement, ticket, or workflow entry. |
 | Workspace | AgentCenter registry | Authorization boundary and server-owned directory mapping. |
-| Directory / worktree | Filesystem under AgentCenter workspace root | Runtime detail; never chosen directly by browser. |
+| Project shared workspace | Filesystem under AgentCenter workspace root | Confirmed project material and promoted artifacts. |
+| User project workspace | Filesystem under AgentCenter workspace root | User-owned working material inside a project. |
+| Run sandbox | Filesystem under AgentCenter workspace root | Temporary per-run output and evidence. |
+| Directory / worktree | Resolved filesystem path under one of the controlled workspace roots | Runtime detail; never chosen directly by browser. |
 | OpenCode session/message/part | OpenCode native storage | Conversation source of truth remains OpenCode. |
 | Workflow run/node/artifact | AgentCenter registry | Durable product state, referenced from OpenCode messages/tools. |
 
@@ -76,19 +84,26 @@ Use a single controlled workspace root, configurable by environment.
 
 ```text
 $AGENTCENTER_WORKSPACE_ROOT/
-  users/
-    {userId}/
+  tenants/
+    {tenantId}/
       workspaces/
         {workspaceId}/
-          repo/       # OpenCode worktree, passed to existing directory-scoped runtime
-          meta/       # AgentCenter metadata cache, not a product database
-          artifacts/  # optional filesystem payloads for large generated files
+          projects/
+            {projectId}/
+              shared/        # confirmed project material and promoted artifacts
+              users/
+                {userId}/    # user project workspace, active OpenCode directory in early phases
+              runs/
+                {runId}/     # per-run sandbox for temporary output and evidence
+              meta/          # optional cache; not a product database
 ```
 
 Defaults for local development:
 
 ```text
 AGENTCENTER_WORKSPACE_ROOT=~/.local/share/opencode-agentcenter/workspaces
+AGENTCENTER_DEV_TENANT_ID=default
+AGENTCENTER_DEV_WORKSPACE_ID=default
 AGENTCENTER_DEV_USER_ID=local
 ```
 
@@ -96,13 +111,20 @@ Rules:
 
 - `workspaceId` is an opaque id, not a path.
 - `worktree` must be canonicalized with `realpath`.
-- resolved `worktree` must stay under `$AGENTCENTER_WORKSPACE_ROOT/users/{userId}/workspaces/{workspaceId}/repo`.
-- workspace-owned artifact files must stay under `$AGENTCENTER_WORKSPACE_ROOT/users/{userId}/workspaces/{workspaceId}/artifacts`.
+- resolved project shared, user project, and run sandbox roots must stay under `$AGENTCENTER_WORKSPACE_ROOT/tenants/{tenantId}/workspaces/{workspaceId}/projects/{projectId}`.
+- workspace-owned artifact files must stay under a controlled project/user/run root and must be indexed before preview or promotion.
 - browser routes and API payloads should not accept arbitrary absolute paths for session entry.
 - OpenCode native file tree, file preview, diff, tool rendering, and session events continue to operate on the resolved `worktree`.
 - deletion and archival operate on registry state first; physical cleanup can be asynchronous.
 
 For local development only, a workspace may bind to an existing local repo through `source.type = "local-dev"`. That path must still be registered server-side and must not be accepted directly from the browser during session entry.
+
+OpenCode adaptation phases:
+
+- Phase 1 opens a user project workspace or registered local-dev worktree as the active OpenCode directory so native file tree, preview, diff, and session UI remain intact.
+- Phase 2 creates per-run sandbox directories and records their binding in AgentCenter run metadata.
+- Phase 3 promotes selected run artifacts into user or project space through confirmation.
+- Phase 4 can add stricter per-run code isolation with git worktrees or patch promotion when needed.
 
 ## Data Model
 
@@ -111,11 +133,14 @@ Phase 2 adds an AgentCenter workspace registry inside this OpenCode fork, separa
 ```ts
 type AgentCenterWorkspace = {
   id: string
-  tenantId?: string
+  tenantId: string
+  workspaceId: string
+  projectId: string
   userId: string
   workItemId?: string
   name: string
-  worktree: string
+  projectSharedRoot: string
+  userProjectRoot: string
   source?: {
     type: "empty" | "git" | "local-dev"
     url?: string
@@ -128,7 +153,9 @@ type AgentCenterWorkspace = {
 
 type AgentCenterWorkItem = {
   id: string
-  tenantId?: string
+  tenantId: string
+  workspaceId: string
+  projectId: string
   ownerUserId: string
   title: string
   status: "open" | "running" | "blocked" | "done" | "archived"
@@ -139,11 +166,13 @@ type AgentCenterWorkItem = {
 
 type AgentCenterWorkflowRun = {
   id: string
-  tenantId?: string
+  tenantId: string
+  workspaceId: string
+  projectId: string
   userId: string
   workItemId: string
-  workspaceId: string
   sessionId?: string
+  runRoot?: string
   status: "idle" | "running" | "waiting" | "failed" | "done"
   state: Record<string, unknown>
   createdAt: number
@@ -152,17 +181,34 @@ type AgentCenterWorkflowRun = {
 
 type AgentCenterArtifact = {
   id: string
-  tenantId?: string
+  tenantId: string
+  workspaceId: string
+  projectId: string
   userId: string
   workItemId?: string
-  workspaceId: string
   workflowRunId?: string
   sessionId?: string
-  kind: "file" | "diff" | "report" | "preview" | "log" | "external"
+  kind: "upload" | "file" | "diff" | "report" | "preview" | "log" | "external"
   title: string
   uri: string
+  promotionStatus?: "run" | "user" | "project"
   metadata?: Record<string, unknown>
   createdAt: number
+}
+
+type AgentCenterRun = {
+  id: string
+  tenantId: string
+  workspaceId: string
+  projectId: string
+  userId: string
+  workItemId?: string
+  workflowRunId?: string
+  sessionId?: string
+  runRoot: string
+  status: "created" | "dispatching" | "running" | "waiting" | "failed" | "done"
+  createdAt: number
+  updatedAt: number
 }
 ```
 

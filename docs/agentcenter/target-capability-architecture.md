@@ -427,6 +427,10 @@ Add later only where product state is missing:
 
 ## Implementation Plan
 
+Before implementation, read `1026-feature-adaptation-plan.md`. It is the
+compatibility matrix for deciding which old AgentCenter 1026 branch capabilities
+are kept, translated, deferred, or dropped in this OpenCode-native branch.
+
 ### P0: Clean OpenCode Fork And Reduction
 
 Status: started.
@@ -441,12 +445,14 @@ Done in the current branch:
 
 ### P1: Workspace Boundary Foundation
 
-Goal: make the product entry point workspace-based and user-isolated.
+Goal: make the product entry point workspace-based and user-isolated, while
+preserving the 1026 scope shape of tenant, workspace, project, user, work item,
+and run.
 
 Build:
 
 - AgentCenter user resolver for local dev and future auth integration
-- workspace registry storage
+- workspace/project registry storage
 - controlled workspace root resolver
 - workspace list/create/open APIs
 - Web home page that opens workspace ids instead of raw directories
@@ -487,6 +493,7 @@ Goal: make AgentCenter workflow state durable and compaction-safe.
 
 Build:
 
+- run ledger inspired by the 1026 `runtime_operation` design
 - workflow run registry
 - workflow event/checkpoint store
 - AgentCenter tools listed above
