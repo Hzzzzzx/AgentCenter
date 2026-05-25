@@ -9,6 +9,9 @@ implementation base.
 - `opencode-native-branch-tracker.md`: tracks what has actually changed on the
   OpenCode-native branch after the baseline import, including committed mocks,
   planning-only docs, and user feedback.
+- `1026-frontend-feature-cards.md`: breaks the 1026 Vue frontend into
+  page-level feature cards so the team can decide which UI shells and function
+  points should be kept, redesigned, deferred, or dropped.
 - `1026-feature-adaptation-plan.md`: maps useful capabilities from the old
   `codex/from-2026-05-14-1026` branch into this OpenCode-native branch, including
   what to keep, translate, defer, or drop.

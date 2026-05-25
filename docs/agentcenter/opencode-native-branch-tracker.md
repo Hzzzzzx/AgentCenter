@@ -81,6 +81,7 @@ behavior:
 
 | Document | Purpose |
 | --- | --- |
+| `docs/agentcenter/1026-frontend-feature-cards.md` | Breaks the 1026 Vue frontend into page-level feature cards for UI/function selection. |
 | `docs/agentcenter/1026-feature-adaptation-plan.md` | Maps old 1026 AgentCenter capabilities into OpenCode-native decisions. |
 | `docs/agentcenter/target-capability-architecture.md` | Defines the intended AgentCenter capability model above OpenCode. |
 | `docs/agentcenter/workspace-isolation-design.md` | Designs user/workspace/project directory ownership and future isolation. |
