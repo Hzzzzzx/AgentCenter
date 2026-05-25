@@ -1,0 +1,1717 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>指挥式纯 AI 编码实践：AgentCenter 开发过程复盘</title>
+  <style>
+    :root {
+      --bg: #f7f8fb;
+      --paper: #ffffff;
+      --ink: #172033;
+      --muted: #647084;
+      --line: #dfe4ee;
+      --blue: #2563eb;
+      --cyan: #0891b2;
+      --green: #16a34a;
+      --amber: #d97706;
+      --red: #dc2626;
+      --violet: #7c3aed;
+      --slate: #334155;
+      --soft-blue: #e9f0ff;
+      --soft-cyan: #e6f7fb;
+      --soft-green: #eaf8ee;
+      --soft-amber: #fff4df;
+      --soft-red: #fff0f0;
+      --soft-violet: #f2edff;
+      --shadow: 0 18px 45px rgba(23, 32, 51, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(180deg, #ffffff 0%, var(--bg) 420px),
+        var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      letter-spacing: 0;
+    }
+
+    a {
+      color: inherit;
+    }
+
+    .shell {
+      display: grid;
+      grid-template-columns: 250px minmax(0, 1fr);
+      gap: 28px;
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 28px;
+    }
+
+    .side {
+      position: sticky;
+      top: 20px;
+      align-self: start;
+      background: rgba(255, 255, 255, 0.82);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      padding: 18px;
+      backdrop-filter: blur(12px);
+    }
+
+    .brand {
+      display: grid;
+      gap: 8px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 14px;
+    }
+
+    .brand strong {
+      font-size: 16px;
+    }
+
+    .brand span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .nav {
+      display: grid;
+      gap: 6px;
+    }
+
+    .nav a {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 34px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      color: var(--slate);
+      text-decoration: none;
+      font-size: 13px;
+    }
+
+    .nav a:hover {
+      background: #eef3fb;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--blue);
+      flex: 0 0 auto;
+    }
+
+    main {
+      display: grid;
+      gap: 22px;
+      min-width: 0;
+    }
+
+    .hero {
+      display: grid;
+      gap: 22px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+      padding: 34px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      width: fit-content;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: var(--soft-cyan);
+      color: #155e75;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      max-width: 980px;
+      font-size: 40px;
+      line-height: 1.14;
+      font-weight: 850;
+      overflow-wrap: anywhere;
+    }
+
+    .lead {
+      max-width: 1020px;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.75;
+      overflow-wrap: anywhere;
+    }
+
+    .thesis {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 18px;
+    }
+
+    .thesis-card {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 18px;
+      background: #fbfcff;
+    }
+
+    .thesis-card.primary {
+      background: linear-gradient(135deg, #172033 0%, #1f3a5f 100%);
+      color: #ffffff;
+      border: 0;
+    }
+
+    .thesis-card.primary p {
+      color: rgba(255, 255, 255, 0.82);
+    }
+
+    .thesis-card h3 {
+      font-size: 15px;
+      margin-bottom: 8px;
+    }
+
+    .thesis-card p {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.7;
+      overflow-wrap: anywhere;
+    }
+
+    .section {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+      padding: 26px;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .section-head h2 {
+      font-size: 22px;
+      line-height: 1.25;
+    }
+
+    .section-head p {
+      max-width: 620px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+      text-align: right;
+      overflow-wrap: anywhere;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .metric {
+      display: grid;
+      gap: 8px;
+      min-height: 132px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #ffffff;
+      padding: 16px;
+    }
+
+    .metric strong {
+      color: var(--ink);
+      font-size: 28px;
+      line-height: 1.05;
+      font-weight: 900;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .scope-note {
+      margin-top: 14px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #f8fafc;
+      padding: 12px 14px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    .bar-list {
+      display: grid;
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .bar-row {
+      display: grid;
+      grid-template-columns: 150px minmax(0, 1fr) 150px;
+      align-items: center;
+      gap: 12px;
+      color: var(--slate);
+      font-size: 13px;
+      font-weight: 750;
+    }
+
+    .bar-track {
+      height: 12px;
+      border-radius: 999px;
+      background: #edf2f7;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--cyan), var(--blue));
+    }
+
+    .feature-matrix {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .feature-domain {
+      display: grid;
+      gap: 8px;
+      min-height: 150px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #ffffff;
+      padding: 14px;
+    }
+
+    .feature-domain h3 {
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .feature-domain p {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .comparison-table {
+      display: grid;
+      gap: 10px;
+    }
+
+    .comparison-row {
+      display: grid;
+      grid-template-columns: 170px minmax(0, 1fr) minmax(0, 1fr);
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    .comparison-cell {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #ffffff;
+      padding: 13px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .comparison-cell.head {
+      display: grid;
+      align-items: center;
+      background: #172033;
+      color: #ffffff;
+      font-weight: 850;
+    }
+
+    .comparison-cell.label {
+      color: var(--ink);
+      background: #f8fafc;
+      font-weight: 850;
+    }
+
+    .closure-flow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .closure-step {
+      position: relative;
+      display: grid;
+      gap: 8px;
+      min-height: 148px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #ffffff;
+      padding: 14px;
+    }
+
+    .closure-step strong {
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .closure-step p {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .closure-index {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      color: #ffffff;
+      background: var(--blue);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .prototype-showcase {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 280px;
+      gap: 16px;
+      align-items: stretch;
+    }
+
+    .prototype-frame {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #101827;
+      overflow: hidden;
+      margin: 0;
+    }
+
+    .prototype-frame img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .prototype-caption {
+      display: grid;
+      gap: 12px;
+      align-content: start;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fbfcff;
+      padding: 16px;
+    }
+
+    .prototype-caption h3 {
+      font-size: 15px;
+      line-height: 1.4;
+    }
+
+    .prototype-caption p {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #ffffff;
+      padding: 16px;
+      min-width: 0;
+    }
+
+    .card h3 {
+      font-size: 15px;
+      margin-bottom: 8px;
+    }
+
+    .card p,
+    .card li {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+      overflow-wrap: anywhere;
+    }
+
+    ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      padding: 4px 9px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #f8fafc;
+      color: var(--slate);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .quote {
+      display: grid;
+      gap: 8px;
+      border-left: 4px solid var(--blue);
+      background: var(--soft-blue);
+      padding: 14px 16px;
+      border-radius: 10px;
+    }
+
+    .quote strong {
+      font-size: 13px;
+      color: #1d4ed8;
+    }
+
+    .quote p {
+      color: #1e293b;
+      font-size: 14px;
+      line-height: 1.75;
+      overflow-wrap: anywhere;
+    }
+
+    .timeline {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .timeline::before {
+      content: "";
+      position: absolute;
+      left: 7%;
+      right: 7%;
+      top: 35px;
+      height: 3px;
+      background: linear-gradient(90deg, var(--cyan), var(--blue), var(--violet), var(--amber));
+      border-radius: 999px;
+    }
+
+    .moment {
+      position: relative;
+      display: grid;
+      gap: 10px;
+      align-content: start;
+      min-height: 190px;
+      padding: 0 4px;
+    }
+
+    .pin {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      place-items: center;
+      width: 72px;
+      height: 72px;
+      margin: 0 auto;
+      border: 4px solid #ffffff;
+      border-radius: 999px;
+      background: var(--soft-blue);
+      box-shadow: 0 12px 24px rgba(37, 99, 235, 0.15);
+      color: var(--blue);
+      font-size: 18px;
+      font-weight: 850;
+    }
+
+    .moment:nth-child(2) .pin { background: var(--soft-cyan); color: var(--cyan); }
+    .moment:nth-child(3) .pin { background: var(--soft-violet); color: var(--violet); }
+    .moment:nth-child(4) .pin { background: var(--soft-green); color: var(--green); }
+    .moment:nth-child(5) .pin { background: var(--soft-amber); color: var(--amber); }
+    .moment:nth-child(6) .pin { background: var(--soft-red); color: var(--red); }
+    .moment:nth-child(7) .pin { background: var(--soft-blue); color: var(--blue); }
+
+    .moment h3 {
+      text-align: center;
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .moment p {
+      color: var(--muted);
+      text-align: center;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .diagram {
+      width: 100%;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fbfcff;
+    }
+
+    svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .axis-label {
+      font-size: 13px;
+      fill: #475569;
+      font-weight: 700;
+    }
+
+    .svg-title {
+      font-size: 18px;
+      fill: #172033;
+      font-weight: 850;
+    }
+
+    .svg-text {
+      font-size: 13px;
+      fill: #334155;
+    }
+
+    .svg-muted {
+      font-size: 12px;
+      fill: #647084;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 24px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .pill.blue { color: #1d4ed8; background: var(--soft-blue); }
+    .pill.green { color: #15803d; background: var(--soft-green); }
+    .pill.amber { color: #b45309; background: var(--soft-amber); }
+    .pill.red { color: #b91c1c; background: var(--soft-red); }
+
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .compare .card:first-child {
+      border-color: #fecaca;
+      background: linear-gradient(180deg, #fff7f7 0%, #ffffff 100%);
+    }
+
+    .compare .card:last-child {
+      border-color: #bbf7d0;
+      background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%);
+    }
+
+    .script {
+      display: grid;
+      gap: 12px;
+      counter-reset: talk;
+    }
+
+    .script-step {
+      display: grid;
+      grid-template-columns: 38px minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #ffffff;
+    }
+
+    .script-step::before {
+      counter-increment: talk;
+      content: counter(talk);
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      background: var(--ink);
+      color: #ffffff;
+      font-weight: 850;
+    }
+
+    .script-step h3 {
+      font-size: 14px;
+      margin-bottom: 5px;
+    }
+
+    .script-step p {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+      overflow-wrap: anywhere;
+    }
+
+    .footer-note {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.7;
+      text-align: center;
+      padding: 12px 0 30px;
+    }
+
+    @media (max-width: 1100px) {
+      .shell {
+        grid-template-columns: 1fr;
+      }
+
+      .side {
+        position: static;
+      }
+
+      .nav {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .thesis,
+      .grid-2,
+      .grid-3,
+      .grid-4,
+      .metrics-grid,
+      .feature-matrix,
+      .prototype-showcase,
+      .comparison-row,
+      .closure-flow,
+      .compare {
+        grid-template-columns: 1fr;
+      }
+
+      .timeline {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .timeline::before {
+        display: none;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .shell {
+        padding: 14px;
+      }
+
+      .hero,
+      .section {
+        padding: 20px;
+      }
+
+      h1 {
+        font-size: 28px;
+      }
+
+      .lead {
+        font-size: 15px;
+      }
+
+      .section-head {
+        display: grid;
+      }
+
+      .section-head p {
+        text-align: left;
+      }
+
+      .nav,
+      .timeline {
+        grid-template-columns: 1fr;
+      }
+
+      .bar-row {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+    }
+
+    @media print {
+      body {
+        background: #ffffff;
+      }
+
+      .shell {
+        display: block;
+        max-width: none;
+        padding: 0;
+      }
+
+      .side {
+        display: none;
+      }
+
+      main {
+        gap: 14px;
+      }
+
+      .hero,
+      .section {
+        break-inside: avoid;
+        box-shadow: none;
+        border-color: #d0d7e2;
+        border-radius: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="side" aria-label="报告导航">
+      <div class="brand">
+        <strong>AgentCenter 分享报告</strong>
+        <span>指挥式纯 AI 编码实践：从高保真原型到 1026 分支。</span>
+      </div>
+      <nav class="nav">
+        <a href="#summary"><span class="dot"></span>核心叙事</a>
+        <a href="#confidence"><span class="dot"></span>信心来源</a>
+        <a href="#first-prototype"><span class="dot"></span>第一版高保真</a>
+        <a href="#numbers"><span class="dot"></span>量化背景</a>
+        <a href="#surface"><span class="dot"></span>功能面</a>
+        <a href="#effect"><span class="dot"></span>实际效果</a>
+        <a href="#timeline"><span class="dot"></span>发展时间线</a>
+        <a href="#method"><span class="dot"></span>指挥方法</a>
+        <a href="#change"><span class="dot"></span>开发变化</a>
+        <a href="#quality-loop"><span class="dot"></span>质量闭环</a>
+        <a href="#sdd"><span class="dot"></span>SDD 演进</a>
+        <a href="#threshold"><span class="dot"></span>模型阈值</a>
+        <a href="#tools"><span class="dot"></span>工具增强</a>
+        <a href="#break"><span class="dot"></span>不破不立</a>
+        <a href="#talk"><span class="dot"></span>分享主线</a>
+      </nav>
+    </aside>
+
+    <main>
+      <header class="hero" id="summary">
+        <span class="eyebrow">AgentCenter 开发复盘</span>
+        <h1>指挥式纯 AI 编码实践</h1>
+        <p class="lead">
+          AgentCenter 的开发过程形成了一条清晰路径：团队需要一个面向 AI DevOps 的 Agent 能力，我们用 Codex 在极短时间内生成高保真原型，让想法变成可感知的产品形态；随后用多栏工作台承载高信息密度场景，通过 SDD、强模型、检查工具和代码关系工具，把 AI 从“聊天辅助”推进为“可放手的工程执行单元”。
+        </p>
+        <div class="thesis">
+          <div class="thesis-card primary">
+            <h3>核心观点</h3>
+            <p>
+              AI 编码的关键不是 prompt 技巧，而是把人的产品判断、架构边界和验收标准组织成一套 Agent 能持续执行、检查、复盘、交接的工作协议。
+            </p>
+          </div>
+          <div class="thesis-card">
+            <h3>组织方式</h3>
+            <p>
+              这不是展示某个项目有多复杂，而是展示一种新的编码组织方式：人负责方向、边界和判断，Agent 负责实现、验证和闭环。
+            </p>
+          </div>
+        </div>
+      </header>
+
+      <section class="section" id="confidence">
+        <div class="section-head">
+          <h2>为什么有信心直接采用指挥式纯 AI 编码</h2>
+          <p>这不是一次突然押注，而是建立在前置实践、能力边界判断和质量闭环预案上的选择。真正的信心不是“相信 AI 不会出错”，而是知道它在哪个区间有效，以及出错后如何收敛。</p>
+        </div>
+        <div class="grid-3">
+          <div class="card">
+            <span class="pill blue">前置实践</span>
+            <h3>已经验证过这种组织方式</h3>
+            <p>在 AgentCenter 之前，已经用类似的 AI 指挥式编码方式做过几十万行级别的工程探索。高保真、原型、功能骨架、调试修复这些环节，已经有过可感知的效果验证。</p>
+          </div>
+          <div class="card">
+            <span class="pill green">能力边界</span>
+            <h3>知道它能做到哪里</h3>
+            <p>强模型已经能覆盖大量功能明确、场景明确、验收明确的编码任务。关键不是无限相信模型，而是把任务放在它的可用区间里，并把模糊复杂任务先澄清、拆小、设验收。</p>
+          </div>
+          <div class="card">
+            <span class="pill amber">收敛预案</span>
+            <h3>质量问题可以继续被组织</h3>
+            <p>代码质量问题不是被忽略，而是被拆成不同阶段的看护点：当场用检查和测试兜住，后续用代码关系工具、更多 Agent、复盘和重构持续收敛。</p>
+          </div>
+        </div>
+        <div class="quote" style="margin-top: 14px;">
+          <strong>信心公式</strong>
+          <p>前置实践证明“能跑起来”，能力边界判断决定“怎么拆任务”，质量闭环预案保证“跑偏后能收回来”。这三件事合在一起，才构成采用指挥式纯 AI 编码的底气。</p>
+        </div>
+      </section>
+
+      <section class="section" id="first-prototype">
+        <div class="section-head">
+          <h2>第一版高保真：先让想法被看见</h2>
+          <p>这张图对应 2026-04-29 前后的第一版高保真页面。它体现了 AI 在早期阶段最大的价值：快速把抽象方向变成可感知、可讨论、可决策的产品形态。</p>
+        </div>
+        <div class="prototype-showcase">
+          <figure class="prototype-frame">
+            <img src="prototype/first-highfi-a-version-2026-04-29.png" alt="AgentCenter 第一版黑色高保真原型截图" />
+          </figure>
+          <div class="prototype-caption">
+            <span class="pill blue">早期原型</span>
+            <h3>从“AI DevOps Agent”到“工作台形态”</h3>
+            <p>第一版高保真的意义不是功能完整，而是把团队讨论从抽象概念拉到同一张可见界面上：左侧 Agent 队列、中间 AI 洞察、建议操作、流水线和历史记录，已经把“工作台”气质打出来。</p>
+            <p>后续的多栏工作台、对话能力、任务看板、工作流节点和 Runtime Bridge，都是在这个视觉锚点之后逐步收敛出来的。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="numbers">
+        <div class="section-head">
+          <h2>量化背景：2026-04-29 到 2026-05-14</h2>
+          <p>一组可复查数字展示了这轮实践的密度：短周期、多会话、高提交量，并伴随持续验证和收敛。</p>
+        </div>
+        <div class="metrics-grid">
+          <div class="metric">
+            <strong>15 天</strong>
+            <span>2026-04-29 11:33 到 2026-05-14 10:26，约 15 天自然跨度，12 个活跃提交日。</span>
+          </div>
+          <div class="metric">
+            <strong>169</strong>
+            <span>从 2026-04-29 实际开发起点到 1026 节点的提交数，其中 feat 56 次、fix 70 次。</span>
+          </div>
+          <div class="metric">
+            <strong>46 + 4</strong>
+            <span>46 个可检索 AgentCenter Codex 会话，4 个 OpenCode worker 批次，形成“Codex 指挥 + worker 执行”的雏形。</span>
+          </div>
+          <div class="metric">
+            <strong>140,264</strong>
+            <span>提交层面的代码/文档 churn：120,242 行新增、20,022 行删除，体现持续生成和持续收敛。</span>
+          </div>
+          <div class="metric">
+            <strong>581</strong>
+            <span>1026 分支已跟踪文件数，覆盖 Vue 前端、Java Bridge、runtime workspace、原型和架构文档。</span>
+          </div>
+          <div class="metric">
+            <strong>72,225</strong>
+            <span>总代码行数：产品代码 48,890 行，测试代码 23,335 行。</span>
+          </div>
+          <div class="metric">
+            <strong>23,335</strong>
+            <span>测试代码细分：Bridge 测试约 14,316 行，前端测试约 9,019 行。</span>
+          </div>
+          <div class="metric">
+            <strong>809</strong>
+            <span>可识别自动化测试用例入口：Java 530 个，前端 Vitest 279 个。</span>
+          </div>
+        </div>
+        <div class="bar-list" aria-label="规模分布">
+          <div class="bar-row">
+            <span>总代码</span>
+            <div class="bar-track"><div class="bar-fill" style="width: 100%;"></div></div>
+            <span>72,225 行</span>
+          </div>
+          <div class="bar-row">
+            <span>产品代码</span>
+            <div class="bar-track"><div class="bar-fill" style="width: 68%;"></div></div>
+            <span>48,890 行</span>
+          </div>
+          <div class="bar-row">
+            <span>Markdown 文档</span>
+            <div class="bar-track"><div class="bar-fill" style="width: 40%; background: linear-gradient(90deg, var(--violet), var(--blue));"></div></div>
+            <span>74 篇 / 19,349 行</span>
+          </div>
+          <div class="bar-row">
+            <span>测试代码</span>
+            <div class="bar-track"><div class="bar-fill" style="width: 32%; background: linear-gradient(90deg, var(--green), var(--cyan));"></div></div>
+            <span>23,335 行</span>
+          </div>
+          <div class="bar-row">
+            <span>原型 HTML</span>
+            <div class="bar-track"><div class="bar-fill" style="width: 64%; background: linear-gradient(90deg, var(--amber), var(--red));"></div></div>
+            <span>31,466 行</span>
+          </div>
+        </div>
+        <p class="scope-note">
+          统计口径：起点取 2026-04-29 11:33 的实际开发 commit `7707fab1`，终点取 2026-05-14 10:26 的 1026 节点 commit `6f2e0416`。代码量、文档量、测试量按 `6f2e0416` 的 tracked 文件统计；Codex 会话按日志中 `cwd=/Users/hzz/workspace/AgentCenter` 且处于 2026-04-29 00:00 到 2026-05-14 10:26 区间统计。
+        </p>
+      </section>
+
+      <section class="section" id="surface">
+        <div class="section-head">
+          <h2>功能面：10 个功能域，32 项可识别能力</h2>
+          <p>这部分按功能域展开 1026 分支已经长出的能力面：前端工作台、Java Bridge、Runtime Adapter、文档和验证体系已经连成一个可运行系统。</p>
+        </div>
+        <div class="grid-4" style="margin-bottom: 14px;">
+          <div class="card">
+            <h3>9 个 Web 视图</h3>
+            <p>首页、看板、对话工作台、工作流配置、Skill/MCP/Runtime/项目上下文设置等。</p>
+          </div>
+          <div class="card">
+            <h3>11 个 Bridge Controller</h3>
+            <p>覆盖会话、事项、工作流、确认项、Artifact、Runtime 资源、事件流和项目数据。</p>
+          </div>
+          <div class="card">
+            <h3>10 个 Pinia Store</h3>
+            <p>前端状态覆盖任务、会话、工作流、确认、runtime、资源、主题和通知。</p>
+          </div>
+          <div class="card">
+            <h3>23 个 DB Migration</h3>
+            <p>从 M1 schema 到 workflow、runtime event、artifact、project context 等数据结构。</p>
+          </div>
+        </div>
+        <div class="feature-matrix">
+          <div class="feature-domain">
+            <span class="pill blue">包含 3 项能力</span>
+            <h3>高信息密度工作台</h3>
+            <p>多栏布局、折叠面板、主题系统。</p>
+          </div>
+          <div class="feature-domain">
+            <span class="pill green">包含 4 项能力</span>
+            <h3>会话与对话</h3>
+            <p>会话列表、流式输出、工具调用渲染、错误展示。</p>
+          </div>
+          <div class="feature-domain">
+            <span class="pill amber">包含 3 项能力</span>
+            <h3>任务看板</h3>
+            <p>Work Item、状态投影、卡片视图。</p>
+          </div>
+          <div class="feature-domain">
+            <span class="pill blue">包含 5 项能力</span>
+            <h3>工作流编排</h3>
+            <p>节点配置、批量启动、重启历史、阶段投影、状态恢复。</p>
+          </div>
+          <div class="feature-domain">
+            <span class="pill green">包含 3 项能力</span>
+            <h3>确认与交互</h3>
+            <p>确认卡片、多问题表单、自定义输入。</p>
+          </div>
+          <div class="feature-domain">
+            <span class="pill amber">包含 4 项能力</span>
+            <h3>Runtime Bridge</h3>
+            <p>OpenCode 对接、SSE 事件、REST 命令、进程生命周期。</p>
+          </div>
+          <div class="feature-domain">
+            <span class="pill blue">包含 3 项能力</span>
+            <h3>Skill / MCP / 资源</h3>
+            <p>Skill 管理、MCP 管理、资源审计。</p>
+          </div>
+          <div class="feature-domain">
+            <span class="pill green">包含 3 项能力</span>
+            <h3>项目上下文</h3>
+            <p>Provider 切换、范围选择、scope sync。</p>
+          </div>
+          <div class="feature-domain">
+            <span class="pill amber">包含 2 项能力</span>
+            <h3>Artifact</h3>
+            <p>对话产物捕获、文件预览。</p>
+          </div>
+          <div class="feature-domain">
+            <span class="pill blue">包含 2 项能力</span>
+            <h3>工程支撑</h3>
+            <p>设置、通知。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="effect">
+        <div class="section-head">
+          <h2>实际效果：功能可用，验证加速</h2>
+          <p>到 1026 节点，目标功能已经开发成可运行系统。它不是最终稳定版，仍有一些明显问题需要继续收敛；但已经足够支撑其他成员基于系统接入、测试和调整业务相关 Skill，快速验证最初的产品设想。</p>
+        </div>
+        <div class="grid-3">
+          <div class="card">
+            <span class="pill green">功能落地</span>
+            <h3>想要的能力已经长出来</h3>
+            <p>对话、任务看板、工作流、Skill/MCP、Runtime Bridge、确认交互和设置等核心功能点已经形成可操作工作台，不再只是高保真或单点 demo。</p>
+          </div>
+          <div class="card">
+            <span class="pill blue">多人验证</span>
+            <h3>其他成员可以基于系统试起来</h3>
+            <p>业务相关 Skill 可以放到系统里做测试、调整和联调，团队不必停留在概念讨论，而是可以围绕真实操作结果判断方向。</p>
+          </div>
+          <div class="card">
+            <span class="pill amber">继续收敛</span>
+            <h3>问题进入后续看护</h3>
+            <p>当前仍有明显问题和体验细节需要继续打磨，但这些问题已经可以被放进检查、复盘、重构和更多 Agent 的收敛流程里。</p>
+          </div>
+        </div>
+        <div class="grid-4" style="margin-top: 14px;">
+          <div class="card">
+            <h3>1. 功能开发出来</h3>
+            <p>核心模块可以被点击、配置、运行和联动。</p>
+          </div>
+          <div class="card">
+            <h3>2. Skill 放进去测</h3>
+            <p>业务相关 Skill 能进入真实系统环境验证。</p>
+          </div>
+          <div class="card">
+            <h3>3. 测试中调整</h3>
+            <p>根据运行效果修正流程、提示、接口和体验。</p>
+          </div>
+          <div class="card">
+            <h3>4. 快速验证想法</h3>
+            <p>把“方向是否可行”从讨论推进到可操作验证。</p>
+          </div>
+        </div>
+        <div class="quote" style="margin-top: 14px;">
+          <strong>效果判断</strong>
+          <p>这轮实践最显著的价值，是把一个 AI DevOps Agent 的想法快速推进到可被多人试用、可接入业务 Skill、可暴露真实问题的系统状态。它还没有完全稳定，但已经能支撑快速落地和持续验证。</p>
+        </div>
+      </section>
+
+      <section class="section" id="timeline">
+        <div class="section-head">
+          <h2>发展时间线：从产品形态到可运行系统</h2>
+          <p>时间线呈现了从想法、原型、边界、路线试错、外部强模型快跑到反馈收敛的完整推进路径。</p>
+        </div>
+        <div class="timeline" aria-label="AgentCenter 开发时间线">
+          <div class="moment">
+            <div class="pin">01</div>
+            <h3>契机出现</h3>
+            <p>团队出现面向 AI DevOps 的 Agent 能力需求，触发我们已有的 AgentCenter 资料积累。</p>
+          </div>
+          <div class="moment">
+            <div class="pin">02</div>
+            <h3>5 分钟高保真</h3>
+            <p>Codex 快速生成黑色背景高保真，让模糊想法变成可以被看见和讨论的产品形态。</p>
+          </div>
+          <div class="moment">
+            <div class="pin">03</div>
+            <h3>正式高保真</h3>
+            <p>基于高信息密度页面探索，选择多栏工作台布局承载任务、对话、流程、工具和协作。</p>
+          </div>
+          <div class="moment">
+            <div class="pin">04</div>
+            <h3>边界收敛</h3>
+            <p>第一版边界被逐步收敛：明确核心模块、暂缓愿景项，并确定工作流节点与对话能力的出现方式。</p>
+          </div>
+          <div class="moment">
+            <div class="pin">05</div>
+            <h3>方向走偏</h3>
+            <p>内部适配路线演进困难，方向和实现开始偏离，推进效率不足，促使我们重新判断执行路径。</p>
+          </div>
+          <div class="moment">
+            <div class="pin">06</div>
+            <h3>7-8 小时成型</h3>
+            <p>决定用外部强模型快速演进一版，连续编码搭起对话、看板、Skill、MCP、设置和工作流骨架。</p>
+          </div>
+          <div class="moment">
+            <div class="pin">07</div>
+            <h3>进入收敛期</h3>
+            <p>通过 SDD、code check、代码关系检索、复盘和重构，让系统从“跑起来”走向“稳下来”。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="method">
+        <div class="section-head">
+          <h2>指挥式协作：人负责判断，Agent 负责执行闭环</h2>
+          <p>关键差异在于：AI 不再只是逐句辅助写代码，而是被组织成一个可放手执行的工程系统。</p>
+        </div>
+        <div class="grid-3">
+          <div class="card">
+            <span class="pill blue">人类输入</span>
+            <h3>愿景、边界、验收</h3>
+            <p>人负责给出产品愿景、页面形态、信息架构、版本边界和验收方式，为 Agent 明确执行方向。</p>
+          </div>
+          <div class="card">
+            <span class="pill green">Agent 执行</span>
+            <h3>实现、调试、检查</h3>
+            <p>Agent 负责查代码、写代码、跑检查、修问题、产出可运行系统，而不是停留在建议层。</p>
+          </div>
+          <div class="card">
+            <span class="pill amber">反馈闭环</span>
+            <h3>截图、测试、复盘</h3>
+            <p>截图、code check、测试、影响分析和复盘共同构成反馈闭环，用证据约束执行偏差并推动修正。</p>
+          </div>
+        </div>
+        <div class="quote" style="margin-top: 14px;">
+          <strong>一句话主张</strong>
+          <p>指挥式编码不是陪 AI 一句一句写代码，而是给出愿景、设计和验收，让 Agent 自己拆解、执行、检查、修复；人的角色更接近产品和架构负责人，在关键节点做判断和纠偏。</p>
+        </div>
+      </section>
+
+      <section class="section" id="change">
+        <div class="section-head">
+          <h2>相比传统开发，改变了什么</h2>
+          <p>指挥式纯 AI 编码不是把传统工程动作全部取消，而是重新分配了人和 Agent 的职责：人更集中在方向、边界和验收，Agent 承担大规模执行、检查和修复。</p>
+        </div>
+        <div class="comparison-table">
+          <div class="comparison-row">
+            <div class="comparison-cell head">维度</div>
+            <div class="comparison-cell head">传统开发</div>
+            <div class="comparison-cell head">指挥式纯 AI 编码</div>
+          </div>
+          <div class="comparison-row">
+            <div class="comparison-cell label">需求到实现</div>
+            <div class="comparison-cell">人把需求拆成开发任务，再按模块逐步手写、联调、修复。</div>
+            <div class="comparison-cell">人给出愿景、页面形态、边界和验收标准，Agent 负责拆解、实现、调试和提交可运行结果。</div>
+          </div>
+          <div class="comparison-row">
+            <div class="comparison-cell label">人的主要工作</div>
+            <div class="comparison-cell">大量时间消耗在写代码、查调用、补上下文、排错和改测试。</div>
+            <div class="comparison-cell">主要精力转向产品判断、架构边界、任务切分、关键节点验收和风险决策。</div>
+          </div>
+          <div class="comparison-row">
+            <div class="comparison-cell label">交付节奏</div>
+            <div class="comparison-cell">功能推进更接近线性过程，产出速度受单人编码和联调时间限制。</div>
+            <div class="comparison-cell">多会话、多 Agent 可以并行推进，先快速生成可运行骨架，再围绕问题持续收敛。</div>
+          </div>
+          <div class="comparison-row">
+            <div class="comparison-cell label">文档作用</div>
+            <div class="comparison-cell">文档经常是事后说明、交接材料，和执行过程容易脱节。</div>
+            <div class="comparison-cell">PRD、HLD、LLD、Verification 变成约束 Agent 的执行协议，用来控制不跑偏、不断上下文。</div>
+          </div>
+          <div class="comparison-row">
+            <div class="comparison-cell label">质量控制</div>
+            <div class="comparison-cell">代码评审、测试、回归和问题复盘常在后段集中出现。</div>
+            <div class="comparison-cell">code check、typecheck、test、build、截图和影响分析被前置到 Agent 的当场闭环里。</div>
+          </div>
+          <div class="comparison-row">
+            <div class="comparison-cell label">失败处理</div>
+            <div class="comparison-cell">修复经常停留在当前 bug，经验沉淀依赖人工记忆和事后复盘。</div>
+            <div class="comparison-cell">报错、跑偏、上下文丢失会反向沉淀为 SDD 规则、检查项和下一轮指挥约束。</div>
+          </div>
+        </div>
+        <div class="quote" style="margin-top: 14px;">
+          <strong>核心变化</strong>
+          <p>变化不是“AI 会不会写代码”，而是执行力发生变化后，人的角色从持续看护执行，转向设计目标、定义边界、组织反馈和判断结果。</p>
+        </div>
+      </section>
+
+      <section class="section" id="quality-loop">
+        <div class="section-head">
+          <h2>传统代码问题，如何进入新闭环</h2>
+          <p>类型错误、接口不一致、状态机跑偏、UI 重叠、测试失败和回归风险并没有消失。变化在于，这些问题不再只靠人长时间盯着，而是被组织成 Agent 可感知、可修复、可验证、可复盘的闭环。</p>
+        </div>
+        <div class="closure-flow">
+          <div class="closure-step">
+            <span class="closure-index">1</span>
+            <strong>发现问题</strong>
+            <p>通过 typecheck、test、build、运行日志、截图和人工验收，把问题从感觉变成证据。</p>
+          </div>
+          <div class="closure-step">
+            <span class="closure-index">2</span>
+            <strong>定位影响</strong>
+            <p>用代码关系图、影响分析、rg、调用链和分层排查，减少 Agent 盲读文件和误读上下文。</p>
+          </div>
+          <div class="closure-step">
+            <span class="closure-index">3</span>
+            <strong>指令修复</strong>
+            <p>把问题场景、边界、相关模块和验收方式交给 Agent，让它围绕目标完成修改。</p>
+          </div>
+          <div class="closure-step">
+            <span class="closure-index">4</span>
+            <strong>验证结果</strong>
+            <p>重新跑检查、测试、构建、curl 或截图；失败就继续收敛，而不是用主观判断宣布完成。</p>
+          </div>
+          <div class="closure-step">
+            <span class="closure-index">5</span>
+            <strong>沉淀规则</strong>
+            <p>把高频失败模式写回 SDD、计划、审查卡片和后续提示，让下一轮执行少踩同样的问题。</p>
+          </div>
+        </div>
+        <div class="grid-3" style="margin-top: 14px;">
+          <div class="card">
+            <span class="pill red">问题没有消失</span>
+            <h3>传统质量风险仍然存在</h3>
+            <p>类型、接口、状态、并发、测试、UI、回归、上下文污染，这些问题在 AI 编码里仍然会出现，甚至因为生成速度更快而更容易暴露。</p>
+          </div>
+          <div class="card">
+            <span class="pill green">闭环方式变化</span>
+            <h3>从人工盯守到工具反馈</h3>
+            <p>让 Agent 带着检查工具和感知工具工作：代码关系工具告诉它影响面，测试和截图告诉它是否真的改对。</p>
+          </div>
+          <div class="card">
+            <span class="pill blue">人的责任保留</span>
+            <h3>方向和验收不能外包</h3>
+            <p>人仍然负责决定目标是否正确、边界是否合理、风险是否可接受，以及什么时候需要收紧任务粒度。</p>
+          </div>
+        </div>
+        <div class="quote" style="margin-top: 14px;">
+          <strong>一句话判断</strong>
+          <p>质量不是靠相信 AI，而是靠把 AI 放进可验证的工程闭环里：检查发现问题，影响分析定位问题，测试和截图证明问题被修掉。</p>
+        </div>
+      </section>
+
+      <section class="section" id="sdd">
+        <div class="section-head">
+          <h2>SDD 不是重流程，而是让 AI 不跑偏的控制系统</h2>
+          <p>这套 SDD 来自实践：吸收 Superpowers、OpenSpec、GSD、oh-my-opencode 等思路，再从真实报错和跑偏里反向沉淀规则。</p>
+        </div>
+        <div class="diagram" aria-label="SDD 演进循环图">
+          <svg viewBox="0 0 1100 520" role="img">
+            <defs>
+              <marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+                <path d="M0,0 L0,6 L8,3 z" fill="#2563eb"></path>
+              </marker>
+              <filter id="cardShadow" x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#172033" flood-opacity="0.12"></feDropShadow>
+              </filter>
+            </defs>
+            <rect width="1100" height="520" fill="#fbfcff"></rect>
+            <text x="40" y="50" class="svg-title">从实践中长出来的 SDD</text>
+            <text x="40" y="78" class="svg-muted">目标不是写更多文档，而是降低持续看护成本，让 Agent 能按设计实现、按反馈收敛。</text>
+
+            <g filter="url(#cardShadow)">
+              <rect x="70" y="150" width="190" height="110" rx="16" fill="#e9f0ff" stroke="#bfdbfe"></rect>
+              <text x="105" y="190" class="axis-label">1. 先跑起来</text>
+              <text x="100" y="220" class="svg-text">愿景 + 高保真</text>
+              <text x="100" y="244" class="svg-text">让系统快速成型</text>
+
+              <rect x="330" y="150" width="190" height="110" rx="16" fill="#fff4df" stroke="#fed7aa"></rect>
+              <text x="360" y="190" class="axis-label">2. 暴露问题</text>
+              <text x="360" y="220" class="svg-text">报错、跑偏</text>
+              <text x="360" y="244" class="svg-text">上下文丢失</text>
+
+              <rect x="590" y="150" width="190" height="110" rx="16" fill="#f2edff" stroke="#ddd6fe"></rect>
+              <text x="620" y="190" class="axis-label">3. 要求复盘</text>
+              <text x="620" y="220" class="svg-text">让 Agent 回看过程</text>
+              <text x="620" y="244" class="svg-text">总结失败模式</text>
+
+              <rect x="850" y="150" width="190" height="110" rx="16" fill="#eaf8ee" stroke="#bbf7d0"></rect>
+              <text x="880" y="190" class="axis-label">4. 规则沉淀</text>
+              <text x="880" y="220" class="svg-text">PRD / HLD / LLD</text>
+              <text x="880" y="244" class="svg-text">Verification</text>
+            </g>
+
+            <path d="M260 205 L320 205" stroke="#2563eb" stroke-width="3" marker-end="url(#arrow)"></path>
+            <path d="M520 205 L580 205" stroke="#2563eb" stroke-width="3" marker-end="url(#arrow)"></path>
+            <path d="M780 205 L840 205" stroke="#2563eb" stroke-width="3" marker-end="url(#arrow)"></path>
+            <path d="M945 270 C930 375, 180 390, 165 270" fill="none" stroke="#2563eb" stroke-width="3" marker-end="url(#arrow)"></path>
+
+            <rect x="190" y="340" width="720" height="96" rx="18" fill="#172033"></rect>
+            <text x="245" y="382" fill="#ffffff" font-size="20" font-weight="850">核心目的：减少人的微操和陪跑</text>
+            <text x="245" y="414" fill="rgba(255,255,255,0.78)" font-size="14">让 Agent 从“需要一句句喂”的工具，变成“给方向后能自己推进、验证、复盘”的执行系统。</text>
+          </svg>
+        </div>
+        <div class="grid-4" style="margin-top: 14px;">
+          <div class="card">
+            <h3>PRD</h3>
+            <p>明确做什么、不做什么、第一版成功标准。</p>
+          </div>
+          <div class="card">
+            <h3>HLD</h3>
+            <p>明确模块之间怎么连，边界在哪里。</p>
+          </div>
+          <div class="card">
+            <h3>LLD</h3>
+            <p>明确改哪些文件、接口、状态和组件。</p>
+          </div>
+          <div class="card">
+            <h3>Verification</h3>
+            <p>明确如何证明做对：检查、测试、截图、证据。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="threshold">
+        <div class="section-head">
+          <h2>模型能力阈值：不是所有模型都能撑住指挥式编码</h2>
+          <p>这组判断来自两组实际使用对比：Codex + GPT-5.5 更接近可放手闭环，OpenCode + GLM-5 在长程复杂任务里更容易把人拉回陪跑和看护。信心的来源不是认为模型能覆盖所有任务，而是强模型已经能覆盖大量目标清楚、场景清楚的编码任务。</p>
+        </div>
+        <div class="diagram" aria-label="模型能力阈值图">
+          <svg viewBox="0 0 1100 560" role="img">
+            <rect width="1100" height="560" fill="#fbfcff"></rect>
+            <text x="50" y="54" class="svg-title">从“辅助聊天”到“工程执行单元”的临界点</text>
+            <text x="50" y="82" class="svg-muted">基于 Codex + GPT-5.5 与 OpenCode + GLM-5 的使用对比。横轴是任务复杂度，纵轴是有效闭环能力。</text>
+
+            <line x1="110" y1="455" x2="1010" y2="455" stroke="#94a3b8" stroke-width="2"></line>
+            <line x1="110" y1="455" x2="110" y2="125" stroke="#94a3b8" stroke-width="2"></line>
+            <text x="925" y="492" class="axis-label">任务复杂度</text>
+            <text x="32" y="138" class="axis-label" transform="rotate(-90 32 138)">有效闭环能力</text>
+
+            <rect x="110" y="255" width="900" height="58" fill="#eaf8ee" opacity="0.8"></rect>
+            <text x="130" y="290" fill="#15803d" font-size="15" font-weight="850">可用区间：能理解目标、保持上下文、按设计执行、发现问题并有效修复</text>
+
+            <path d="M130 420 C310 390, 470 355, 650 245 C780 170, 885 145, 990 135" fill="none" stroke="#2563eb" stroke-width="5"></path>
+            <path d="M130 430 C300 420, 500 408, 660 382 C790 360, 900 338, 990 315" fill="none" stroke="#dc2626" stroke-width="5" stroke-dasharray="12 10"></path>
+
+            <circle cx="650" cy="245" r="8" fill="#2563eb"></circle>
+            <circle cx="660" cy="382" r="8" fill="#dc2626"></circle>
+            <line x1="650" y1="245" x2="650" y2="455" stroke="#2563eb" stroke-width="2" stroke-dasharray="8 8"></line>
+            <text x="675" y="238" fill="#1d4ed8" font-size="14" font-weight="850">Codex + GPT-5.5 跨过临界点</text>
+            <text x="675" y="262" class="svg-muted">10-30 分钟一轮有效闭环</text>
+            <text x="690" y="378" fill="#b91c1c" font-size="14" font-weight="850">OpenCode + GLM-5 卡在阈值下</text>
+            <text x="690" y="402" class="svg-muted">更慢，且可能越改越偏</text>
+
+            <rect x="155" y="132" width="260" height="84" rx="14" fill="#e9f0ff" stroke="#bfdbfe"></rect>
+            <text x="178" y="164" fill="#1d4ed8" font-size="15" font-weight="850">Codex + GPT-5.5 体感</text>
+            <text x="178" y="190" class="svg-text">描述场景后能查、想、改、验</text>
+
+            <rect x="155" y="322" width="260" height="84" rx="14" fill="#fff0f0" stroke="#fecaca"></rect>
+            <text x="178" y="354" fill="#b91c1c" font-size="15" font-weight="850">OpenCode + GLM-5 体感</text>
+            <text x="178" y="380" class="svg-text">需要更多微操，仍不一定改好</text>
+
+            <text x="120" y="520" fill="#172033" font-size="18" font-weight="850">关键判断：</text>
+            <text x="220" y="520" class="svg-text">强模型使人进入“指挥”状态；弱模型容易把协作重新拉回陪跑和看护。</text>
+          </svg>
+        </div>
+        <div class="diagram" style="margin-top: 14px;" aria-label="强模型任务覆盖决策图">
+          <svg viewBox="0 0 1100 700" role="img">
+            <defs>
+              <marker id="arrowClear" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+                <path d="M0,0 L0,6 L8,3 z" fill="#2563eb"></path>
+              </marker>
+              <marker id="arrowAmber" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+                <path d="M0,0 L0,6 L8,3 z" fill="#d97706"></path>
+              </marker>
+            </defs>
+            <rect width="1100" height="700" fill="#fbfcff"></rect>
+            <text x="50" y="54" class="svg-title">为什么敢放手：强模型覆盖的是“清楚任务”</text>
+            <text x="50" y="82" class="svg-muted">先判断任务是否清楚，再判断复杂度；清楚任务交给 Agent，模糊任务先被组织清楚。</text>
+
+            <rect x="130" y="108" width="840" height="36" rx="12" fill="#eaf8ee" stroke="#bbf7d0"></rect>
+            <text x="180" y="131" fill="#15803d" font-size="14" font-weight="850">强模型的可用区间：清楚、可拆、可验证的编码任务</text>
+
+            <text x="82" y="240" class="axis-label" transform="rotate(-90 82 240)">任务清晰度</text>
+            <text x="500" y="610" class="axis-label">任务复杂度</text>
+            <text x="126" y="168" fill="#15803d" font-size="13" font-weight="850">清楚：目标 / 场景 / 验收明确</text>
+            <text x="126" y="564" fill="#b45309" font-size="13" font-weight="850">模糊：目标 / 边界 / 验收缺失</text>
+            <text x="190" y="590" class="svg-muted">简单 / 中等</text>
+            <text x="800" y="590" class="svg-muted">复杂 / 长链路</text>
+
+            <rect x="130" y="180" width="870" height="370" rx="22" fill="#ffffff" stroke="#dfe4ee"></rect>
+            <line x1="565" y1="180" x2="565" y2="550" stroke="#dfe4ee" stroke-width="2"></line>
+            <line x1="130" y1="365" x2="1000" y2="365" stroke="#dfe4ee" stroke-width="2"></line>
+
+            <rect x="152" y="202" width="390" height="140" rx="18" fill="#eaf8ee" stroke="#86efac"></rect>
+            <text x="180" y="239" fill="#15803d" font-size="15" font-weight="850">1. 直接指挥 Agent</text>
+            <text x="180" y="269" fill="#172033" font-size="19" font-weight="850">清楚 + 不复杂</text>
+            <text x="180" y="302" class="svg-text">页面调整、接口对齐、小功能、明确 bug 修复</text>
+            <text x="180" y="327" class="svg-text">给目标和验收，Agent 自己查、改、测、收敛</text>
+
+            <rect x="588" y="202" width="390" height="140" rx="18" fill="#e9f0ff" stroke="#93c5fd"></rect>
+            <text x="616" y="239" fill="#1d4ed8" font-size="15" font-weight="850">2. 拆分后指挥 Agent</text>
+            <text x="616" y="269" fill="#172033" font-size="19" font-weight="850">清楚 + 复杂</text>
+            <text x="616" y="302" class="svg-text">多模块、长链路、跨前后端、状态机或工作流</text>
+            <text x="616" y="327" class="svg-text">先拆成 PRD / HLD / LLD / Verification，再分批执行</text>
+
+            <rect x="152" y="386" width="390" height="132" rx="18" fill="#fff4df" stroke="#fed7aa"></rect>
+            <text x="180" y="424" fill="#b45309" font-size="15" font-weight="850">3. 先补清楚</text>
+            <text x="180" y="454" fill="#172033" font-size="19" font-weight="850">模糊 + 不复杂</text>
+            <text x="180" y="486" class="svg-text">补场景、输入输出、完成标准后</text>
+            <text x="180" y="511" class="svg-text">再进入直接指挥区</text>
+
+            <rect x="588" y="386" width="390" height="132" rx="18" fill="#fff0f0" stroke="#fecaca"></rect>
+            <text x="616" y="424" fill="#b91c1c" font-size="15" font-weight="850">4. 不直接丢给 AI</text>
+            <text x="616" y="454" fill="#172033" font-size="19" font-weight="850">模糊 + 复杂</text>
+            <text x="616" y="486" class="svg-text">最容易跑偏、误改、越修越乱</text>
+            <text x="616" y="511" class="svg-text">先设计澄清、边界收敛、影响分析</text>
+
+            <path d="M350 386 L350 350" fill="none" stroke="#d97706" stroke-width="3" stroke-dasharray="8 7" marker-end="url(#arrowAmber)"></path>
+            <rect x="260" y="348" width="180" height="30" rx="999" fill="#fff7ed" stroke="#fed7aa"></rect>
+            <text x="287" y="368" fill="#b45309" font-size="13" font-weight="850">补场景 + 验收</text>
+
+            <path d="M790 386 L790 350" fill="none" stroke="#2563eb" stroke-width="3" stroke-dasharray="8 7" marker-end="url(#arrowClear)"></path>
+            <rect x="694" y="348" width="192" height="30" rx="999" fill="#eff6ff" stroke="#bfdbfe"></rect>
+            <text x="718" y="368" fill="#1d4ed8" font-size="13" font-weight="850">澄清 + 拆小 + 设验收</text>
+
+            <rect x="180" y="636" width="740" height="40" rx="14" fill="#172033"></rect>
+            <text x="224" y="661" fill="#ffffff" font-size="16" font-weight="850">一句话：</text>
+            <text x="306" y="661" fill="rgba(255,255,255,0.84)" font-size="14">不是所有任务都交给 AI，而是先把任务变清楚，再把可执行部分交给 Agent。</text>
+          </svg>
+        </div>
+        <div class="compare" style="margin-top: 14px;">
+          <div class="card">
+            <h3>能力不足时：人被迫补位</h3>
+            <ul>
+              <li>上下文与步骤补充成本上升</li>
+              <li>过程盯防和纠偏成本上升</li>
+              <li>耗时增加但修改效果有限</li>
+              <li>甚至引入新的问题</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>能力足够时：Agent 可以闭环</h3>
+            <ul>
+              <li>能理解目标和场景</li>
+              <li>能自己检索相关代码</li>
+              <li>能按设计实现和调试</li>
+              <li>能在短周期内产出有效修改</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="tools">
+        <div class="section-head">
+          <h2>工具体系：感知系统 + 反馈系统</h2>
+          <p>模型是大脑，但工程 Agent 还需要眼睛、地图和仪表盘。否则它只能在有限上下文里逐文件摸索。</p>
+        </div>
+        <div class="diagram" aria-label="Agent 工具增强闭环图">
+          <svg viewBox="0 0 1100 520" role="img">
+            <defs>
+              <marker id="arrow2" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+                <path d="M0,0 L0,6 L8,3 z" fill="#0891b2"></path>
+              </marker>
+            </defs>
+            <rect width="1100" height="520" fill="#fbfcff"></rect>
+            <text x="50" y="54" class="svg-title">Agent 的工程闭环：输入、感知、执行、反馈、修复</text>
+            <text x="50" y="82" class="svg-muted">工具不是装饰，而是让 Agent 稳定闭环的关键。</text>
+
+            <rect x="65" y="190" width="190" height="100" rx="16" fill="#e9f0ff" stroke="#bfdbfe"></rect>
+            <text x="105" y="230" fill="#1d4ed8" font-size="16" font-weight="850">愿景 / 设计</text>
+            <text x="95" y="258" class="svg-text">需求、边界、验收</text>
+
+            <rect x="330" y="170" width="220" height="140" rx="18" fill="#172033"></rect>
+            <text x="386" y="225" fill="#ffffff" font-size="20" font-weight="850">Agent</text>
+            <text x="365" y="258" fill="rgba(255,255,255,0.78)" font-size="14">理解目标并执行</text>
+
+            <rect x="625" y="190" width="190" height="100" rx="16" fill="#eaf8ee" stroke="#bbf7d0"></rect>
+            <text x="675" y="230" fill="#15803d" font-size="16" font-weight="850">代码实现</text>
+            <text x="658" y="258" class="svg-text">功能、页面、接口</text>
+
+            <rect x="875" y="190" width="180" height="100" rx="16" fill="#fff4df" stroke="#fed7aa"></rect>
+            <text x="923" y="230" fill="#b45309" font-size="16" font-weight="850">检查反馈</text>
+            <text x="905" y="258" class="svg-text">code check / test</text>
+
+            <rect x="300" y="365" width="250" height="86" rx="16" fill="#e6f7fb" stroke="#a5f3fc"></rect>
+            <text x="342" y="398" fill="#0e7490" font-size="16" font-weight="850">感知工具</text>
+            <text x="330" y="425" class="svg-text">代码关系、影响面、调用图</text>
+
+            <rect x="625" y="365" width="250" height="86" rx="16" fill="#f2edff" stroke="#ddd6fe"></rect>
+            <text x="670" y="398" fill="#6d28d9" font-size="16" font-weight="850">复盘工具</text>
+            <text x="655" y="425" class="svg-text">失败模式、规则沉淀、交接</text>
+
+            <path d="M255 240 L320 240" stroke="#0891b2" stroke-width="3" marker-end="url(#arrow2)"></path>
+            <path d="M550 240 L615 240" stroke="#0891b2" stroke-width="3" marker-end="url(#arrow2)"></path>
+            <path d="M815 240 L865 240" stroke="#0891b2" stroke-width="3" marker-end="url(#arrow2)"></path>
+            <path d="M965 290 C940 350, 780 352, 748 315" fill="none" stroke="#0891b2" stroke-width="3" marker-end="url(#arrow2)"></path>
+            <path d="M425 365 L425 320" stroke="#0891b2" stroke-width="3" marker-end="url(#arrow2)"></path>
+            <path d="M750 365 L750 300" stroke="#0891b2" stroke-width="3" marker-end="url(#arrow2)"></path>
+
+            <text x="90" y="126" fill="#172033" font-size="17" font-weight="850">没有工具时</text>
+            <text x="90" y="152" class="svg-text">Agent 只能逐文件读，容易吃进无关上下文，注意力被稀释。</text>
+            <text x="640" y="126" fill="#172033" font-size="17" font-weight="850">有工具时</text>
+            <text x="640" y="152" class="svg-text">Agent 可以先看影响面和反馈，再有目标地修改和验证。</text>
+          </svg>
+        </div>
+        <div class="grid-2" style="margin-top: 14px;">
+          <div class="card">
+            <h3>感知工具</h3>
+            <p>例如 GitNexus、代码图谱、调用关系、影响分析。它们帮 Agent 快速知道当前问题和哪些代码真的相关。</p>
+            <div class="tag-row">
+              <span class="tag">调用链</span>
+              <span class="tag">影响面</span>
+              <span class="tag">代码地图</span>
+              <span class="tag">上下文节省</span>
+            </div>
+          </div>
+          <div class="card">
+            <h3>反馈工具</h3>
+            <p>例如 code check、typecheck、test、截图验证。它们把主观判断转化为可验证证据：不是“看起来改好了”，而是“检查证明有效”。</p>
+            <div class="tag-row">
+              <span class="tag">lint</span>
+              <span class="tag">test</span>
+              <span class="tag">typecheck</span>
+              <span class="tag">截图</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="break">
+        <div class="section-head">
+          <h2>不破不立：生产力关系变了，流程也要重建</h2>
+          <p>关键不是放弃工程质量，而是避免把旧流程原封不动搬到 AI 时代：先做减法，再按真实问题把必要环节加回来。</p>
+        </div>
+        <div class="grid-2">
+          <div class="card">
+            <h3>为什么要破</h3>
+            <p>AI 提升的是执行力。就像从马车到汽车，变化不只是速度，而是道路、枢纽、城市和商业生态都会重新分布。执行力变了，协作方式和质量控制也要重新设计。</p>
+          </div>
+          <div class="card">
+            <h3>破的代价是什么</h3>
+            <p>如果设计没做好，问题会反复出现；让 Agent 修，它可能修一个地方又破坏另一个地方。最后一两成的稳定性并不天然保证，需要新的收敛机制。</p>
+          </div>
+        </div>
+        <div class="diagram" style="margin-top: 14px;" aria-label="不破不立双阶段图">
+          <svg viewBox="0 0 1100 360" role="img">
+            <defs>
+              <marker id="arrow3" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+                <path d="M0,0 L0,6 L8,3 z" fill="#172033"></path>
+              </marker>
+            </defs>
+            <rect width="1100" height="360" fill="#fbfcff"></rect>
+            <text x="50" y="54" class="svg-title">实践路径：先压缩旧流程，再从真实失败点补回关键机制</text>
+
+            <rect x="80" y="115" width="420" height="150" rx="18" fill="#fff0f0" stroke="#fecaca"></rect>
+            <text x="120" y="155" fill="#b91c1c" font-size="20" font-weight="850">破：先做减法</text>
+            <text x="120" y="190" class="svg-text">不把传统流程完整照搬进 AI 编码。</text>
+            <text x="120" y="222" class="svg-text">先让 Agent 跑起来，看哪些地方真的会出问题。</text>
+
+            <rect x="600" y="115" width="420" height="150" rx="18" fill="#eaf8ee" stroke="#bbf7d0"></rect>
+            <text x="640" y="155" fill="#15803d" font-size="20" font-weight="850">立：再加回来</text>
+            <text x="640" y="190" class="svg-text">把设计、检查、测试、重构、复盘逐步补上。</text>
+            <text x="640" y="222" class="svg-text">规则来自真实失败，而不是流程惯性。</text>
+
+            <path d="M500 190 L590 190" stroke="#172033" stroke-width="4" marker-end="url(#arrow3)"></path>
+            <text x="520" y="238" fill="#172033" font-size="14" font-weight="850">真实问题驱动</text>
+          </svg>
+        </div>
+      </section>
+
+      <section class="section" id="talk">
+        <div class="section-head">
+          <h2>分享主线</h2>
+          <p>整套叙事可概括为十一步：信心来源、需求触发、产品定形、功能落地、实际效果、边界收敛、路线试错、执行方式变化、SDD 形成、质量闭环、模型阈值和工程重建。</p>
+        </div>
+        <div class="script">
+          <div class="script-step">
+            <div>
+              <h3>先讲为什么敢这么做</h3>
+              <p>指挥式纯 AI 编码不是盲目放手。前置实践已经证明 AI 能在高保真、原型、功能骨架和调试修复上形成有效产出；同时，代码质量问题也可以通过检查工具、代码关系工具、更多 Agent 和复盘机制继续看护和收敛。</p>
+            </div>
+          </div>
+          <div class="script-step">
+            <div>
+              <h3>需求触发</h3>
+              <p>团队需要一个 AI DevOps Agent 方向的能力；我们已有 AgentCenter 的参考资料和 Demo 积累；Codex 5 分钟生成黑色高保真，让团队快速看到这个方向的可行性。</p>
+            </div>
+          </div>
+          <div class="script-step">
+            <div>
+              <h3>产品形态先行</h3>
+              <p>正式开始时，仍然从高保真和信息架构入手。因为这类系统信息密度高，所以选择多栏工作台，而不是普通聊天窗口。</p>
+            </div>
+          </div>
+          <div class="script-step">
+            <div>
+              <h3>边界收敛后再执行</h3>
+              <p>第一版范围先被收住：明确要做什么、不做什么、有哪些模块和流程节点；边界清楚后，才进入具体执行路径探索。</p>
+            </div>
+          </div>
+          <div class="script-step">
+            <div>
+              <h3>功能落地后开始产生实际效果</h3>
+              <p>核心功能点开发出来后，系统已经能支撑其他成员接入业务相关 Skill 做测试、调整和联调。它仍有明显问题需要继续收敛，但已经把最初设想推进到了可操作验证阶段。</p>
+            </div>
+          </div>
+          <div class="script-step">
+            <div>
+              <h3>路线试错后切换执行路径</h3>
+              <p>中间并不是一路顺滑。内部适配路线出现方向走偏和演进困难后，重新判断了执行路径，转而用外部强模型快速演进一版，把系统先拉到可运行状态。</p>
+            </div>
+          </div>
+          <div class="script-step">
+            <div>
+              <h3>执行方式从开发变成指挥</h3>
+              <p>人的工作不再主要是逐行写代码，而是把产品判断、架构边界、任务拆分和验收标准讲清楚；Agent 承担查代码、改代码、跑检查和修问题。</p>
+            </div>
+          </div>
+          <div class="script-step">
+            <div>
+              <h3>SDD 来自失败复盘</h3>
+              <p>真实报错、跑偏和上下文丢失推动了规则沉淀。SDD 的目的不是重流程，而是让 AI 不跑偏、能并行、能放手。</p>
+            </div>
+          </div>
+          <div class="script-step">
+            <div>
+              <h3>质量问题进入闭环</h3>
+              <p>传统代码问题没有被绕过去，而是通过 code check、测试、截图、影响分析和复盘进入 Agent 的修复循环。核心不是相信 AI，而是让 AI 的每一轮执行都留下可验证证据。</p>
+            </div>
+          </div>
+          <div class="script-step">
+            <div>
+              <h3>模型能力决定协作模式</h3>
+              <p>Codex + GPT-5.5 能在 10-30 分钟内形成有效闭环；OpenCode + GLM-5 不只是慢，还可能改不出效果甚至越改越错。指挥式编码需要跨过模型能力阈值，也需要把任务控制在“清楚、可拆、可验收”的区间里。</p>
+            </div>
+          </div>
+          <div class="script-step">
+            <div>
+              <h3>AI Native 开发需要重建工程规则</h3>
+              <p>旧的默认流程先被压缩，让系统跑起来；再根据真实问题加回设计、检查、测试、代码图谱和复盘。AI Native 开发的关键，是用最少但必要的规则放大 Agent 的可用区间。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <h2>关键表达</h2>
+          <p>以下判断概括了本次实践的核心经验：原型、SDD、质量闭环、模型能力和工具系统共同决定指挥式纯 AI 编码的上限。</p>
+        </div>
+        <div class="grid-2">
+          <div class="quote">
+            <strong>关于信心</strong>
+            <p>采用指挥式纯 AI 编码不是因为相信 AI 不会犯错，而是因为前置实践证明它有可用区间，并且质量问题可以通过工具和更多 Agent 持续收敛。</p>
+          </div>
+          <div class="quote">
+            <strong>关于原型</strong>
+            <p>AI 的价值不是等需求完全清楚后才写代码，它可以在非常早期把一个模糊想法变成可被看见、可被讨论、可推动决策的东西。</p>
+          </div>
+          <div class="quote">
+            <strong>关于 SDD</strong>
+            <p>这套 SDD 不是学院派方法论，而是由社区实践和真实失败经验共同沉淀出的工作协议，使 AI 能持续执行、验证和交接。</p>
+          </div>
+          <div class="quote">
+            <strong>关于质量</strong>
+            <p>质量不是靠相信 AI，而是靠把 AI 放进可验证的工程闭环里：检查发现问题，影响分析定位问题，测试和截图证明问题被修掉。</p>
+          </div>
+          <div class="quote">
+            <strong>关于模型</strong>
+            <p>强模型让人进入指挥状态，是因为它已经覆盖大量清晰编码任务；弱模型或模糊复杂任务，会把人拉回陪跑和看护。</p>
+          </div>
+          <div class="quote">
+            <strong>关于工具</strong>
+            <p>Agent 不是只靠模型就行，它也需要眼睛和仪表盘：代码关系工具帮它看清影响面，检查工具帮它知道自己有没有做对。</p>
+          </div>
+        </div>
+      </section>
+
+      <p class="footer-note">
+        AgentCenter 指挥式纯 AI 编码实践复盘 · 2026-05
+      </p>
+    </main>
+  </div>
+</body>
+</html>
