@@ -1,0 +1,817 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AgentCenter 目标作业空间与分层记忆设计</title>
+  <style>
+    :root {
+      --bg: #f6f7f4;
+      --surface: #ffffff;
+      --ink: #17211f;
+      --muted: #5d6b66;
+      --line: #d7dfda;
+      --blue: #235f86;
+      --green: #2e7356;
+      --amber: #9b6125;
+      --red: #9f4545;
+      --violet: #655d9b;
+      --soft-blue: #e9f3f8;
+      --soft-green: #e8f4ed;
+      --soft-amber: #fff1df;
+      --soft-red: #f8e7e7;
+      --soft-violet: #efedf8;
+      --dark: #17231f;
+      --shadow: 0 16px 48px rgba(23, 35, 31, 0.08);
+      --radius: 8px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+      line-height: 1.62;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      background: #fbfcfb;
+      border-right: 1px solid var(--line);
+      height: 100vh;
+      overflow-y: auto;
+      padding: 28px 20px;
+      position: sticky;
+      top: 0;
+    }
+
+    .brand {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 26px;
+    }
+
+    .eyebrow {
+      color: var(--green);
+      font-size: 12px;
+      font-weight: 780;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
+    }
+
+    .brand h1 {
+      font-size: 22px;
+      line-height: 1.2;
+      margin-bottom: 0;
+    }
+
+    .brand p,
+    .sidebar-note {
+      color: var(--muted);
+      font-size: 13px;
+      margin: 0;
+    }
+
+    .nav {
+      display: grid;
+      gap: 6px;
+      margin-bottom: 24px;
+    }
+
+    .nav a {
+      border-radius: 6px;
+      color: #33423e;
+      font-size: 14px;
+      padding: 9px 10px;
+    }
+
+    .nav a:hover,
+    .nav a:focus-visible {
+      background: #eef3ef;
+      outline: none;
+    }
+
+    .sidebar-note {
+      border-top: 1px solid var(--line);
+      padding-top: 18px;
+    }
+
+    main {
+      padding: 36px 48px 72px;
+    }
+
+    .report {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .hero,
+    .panel,
+    .visual-panel,
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      display: grid;
+      gap: 18px;
+      padding: 36px;
+    }
+
+    .hero h2 {
+      font-size: 42px;
+      line-height: 1.12;
+      margin-bottom: 0;
+      max-width: 940px;
+    }
+
+    .hero p {
+      color: var(--muted);
+      font-size: 17px;
+      max-width: 900px;
+    }
+
+    .summary-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .summary {
+      background: #f7faf8;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 14px;
+    }
+
+    .summary b {
+      display: block;
+      font-size: 15px;
+      margin-bottom: 4px;
+    }
+
+    .summary span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    section {
+      margin-top: 34px;
+    }
+
+    .section-head {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .section-head h2 {
+      font-size: 28px;
+      line-height: 1.2;
+      margin-bottom: 0;
+    }
+
+    .section-head p {
+      color: var(--muted);
+      max-width: 920px;
+    }
+
+    .visual-panel {
+      margin: 16px 0;
+      overflow: hidden;
+    }
+
+    .visual-panel svg {
+      display: block;
+      height: auto;
+      width: 100%;
+    }
+
+    .visual-panel figcaption {
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 13px;
+      padding: 12px 16px;
+    }
+
+    .visual-title {
+      fill: var(--ink);
+      font-size: 22px;
+      font-weight: 800;
+    }
+
+    .visual-label {
+      fill: #23302d;
+      font-size: 16px;
+      font-weight: 760;
+    }
+
+    .visual-small {
+      fill: var(--muted);
+      font-size: 12px;
+    }
+
+    .visual-note {
+      fill: #43534e;
+      font-size: 13px;
+    }
+
+    .box-blue {
+      fill: var(--soft-blue);
+      stroke: #8fb8cc;
+    }
+
+    .box-green {
+      fill: var(--soft-green);
+      stroke: #8bc2a6;
+    }
+
+    .box-amber {
+      fill: var(--soft-amber);
+      stroke: #d8aa70;
+    }
+
+    .box-red {
+      fill: var(--soft-red);
+      stroke: #d79696;
+    }
+
+    .box-violet {
+      fill: var(--soft-violet);
+      stroke: #aaa3d4;
+    }
+
+    .box-dark {
+      fill: var(--dark);
+      stroke: #2d403b;
+    }
+
+    .dark-text {
+      fill: #f6fbf8;
+      font-size: 14px;
+      font-weight: 760;
+    }
+
+    .arrow {
+      fill: none;
+      marker-end: url(#arrow);
+      stroke: var(--blue);
+      stroke-linecap: round;
+      stroke-width: 3;
+    }
+
+    .arrow-soft {
+      fill: none;
+      marker-end: url(#arrowSoft);
+      stroke: #667670;
+      stroke-dasharray: 7 6;
+      stroke-linecap: round;
+      stroke-width: 2.2;
+    }
+
+    .grid-2,
+    .grid-3,
+    .grid-4 {
+      display: grid;
+      gap: 16px;
+    }
+
+    .grid-2 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .grid-3 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .grid-4 {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .card,
+    .panel {
+      padding: 18px;
+    }
+
+    .card h3,
+    .panel h3 {
+      font-size: 18px;
+      line-height: 1.3;
+      margin-bottom: 8px;
+    }
+
+    .card p,
+    .card li,
+    .panel p,
+    .panel li {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .card p,
+    .panel p {
+      margin-bottom: 0;
+    }
+
+    .card ul,
+    .panel ul {
+      display: grid;
+      gap: 7px;
+      margin: 10px 0 0;
+      padding-left: 18px;
+    }
+
+    .tag {
+      border-radius: 999px;
+      display: inline-flex;
+      font-size: 12px;
+      font-weight: 740;
+      margin-bottom: 10px;
+      padding: 5px 9px;
+    }
+
+    .tag.blue {
+      background: var(--soft-blue);
+      color: var(--blue);
+    }
+
+    .tag.green {
+      background: var(--soft-green);
+      color: var(--green);
+    }
+
+    .tag.amber {
+      background: var(--soft-amber);
+      color: var(--amber);
+    }
+
+    .tag.red {
+      background: var(--soft-red);
+      color: var(--red);
+    }
+
+    .tag.violet {
+      background: var(--soft-violet);
+      color: var(--violet);
+    }
+
+    .rules {
+      display: grid;
+      gap: 10px;
+    }
+
+    .rule {
+      align-items: start;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      display: grid;
+      gap: 12px;
+      grid-template-columns: 34px minmax(0, 1fr);
+      padding: 14px;
+    }
+
+    .rule span {
+      align-items: center;
+      background: var(--soft-blue);
+      border-radius: 50%;
+      color: var(--blue);
+      display: inline-grid;
+      font-weight: 820;
+      height: 34px;
+      justify-content: center;
+      width: 34px;
+    }
+
+    .rule p {
+      color: var(--muted);
+      margin: 0;
+    }
+
+    .footer {
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 44px;
+      padding-top: 18px;
+    }
+
+    @media (max-width: 1040px) {
+      .layout {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .sidebar {
+        height: auto;
+        position: static;
+      }
+
+      .nav {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      main {
+        padding: 24px;
+      }
+
+      .summary-grid,
+      .grid-2,
+      .grid-3,
+      .grid-4 {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    @media (max-width: 640px) {
+      main {
+        padding: 18px 14px 44px;
+      }
+
+      .hero,
+      .panel,
+      .card {
+        padding: 20px;
+      }
+
+      .hero h2 {
+        font-size: 30px;
+      }
+
+      .section-head h2 {
+        font-size: 24px;
+      }
+
+      .visual-title {
+        font-size: 19px;
+      }
+
+      .visual-label {
+        font-size: 14px;
+      }
+
+      .visual-small,
+      .visual-note {
+        font-size: 11px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <svg aria-hidden="true" focusable="false" height="0" style="position:absolute; width:0; height:0; overflow:hidden" width="0">
+    <defs>
+      <marker id="arrow" markerHeight="8" markerWidth="8" orient="auto" refX="7" refY="4">
+        <path d="M0,0 L8,4 L0,8 Z" fill="#235f86"></path>
+      </marker>
+      <marker id="arrowSoft" markerHeight="8" markerWidth="8" orient="auto" refX="7" refY="4">
+        <path d="M0,0 L8,4 L0,8 Z" fill="#667670"></path>
+      </marker>
+    </defs>
+  </svg>
+
+  <div class="layout">
+    <aside class="sidebar" aria-label="目标架构报告目录">
+      <div class="brand">
+        <div class="eyebrow">AgentCenter Target</div>
+        <h1>目标作业空间与分层记忆</h1>
+        <p>MVP 映射内核不变，目标态补上隔离、共享和记忆治理。</p>
+      </div>
+      <nav class="nav">
+        <a href="#premise">01 设计前提</a>
+        <a href="#target">02 目标架构图</a>
+        <a href="#dimensions">03 四个维度</a>
+        <a href="#memory">04 分层记忆</a>
+        <a href="#governance">05 记忆治理</a>
+        <a href="#roadmap">06 演进路线</a>
+      </nav>
+      <p class="sidebar-note">这份报告是目标态设计，和 MVP 抽象报告分开阅读。它不暴露内部编号、字段、接口或真实路径。</p>
+    </aside>
+
+    <main>
+      <article class="report">
+        <header class="hero" id="premise">
+          <div class="eyebrow">Target Premise</div>
+          <h2>目标态不是推翻 MVP，而是把“工作项作业空间”放进多层边界和分层记忆里。</h2>
+          <p>MVP 的内核已经确定：任务列表承载多个工作项，每个工作项拥有独立作业空间。目标架构要做的是把这个内核放进多人协作场景里：不同用户默认隔离，确认为共享的产物和记忆再进入项目共享层。</p>
+          <div class="summary-grid">
+            <div class="summary">
+              <b>空间内核</b>
+              <span>任务列表、工作项、独立作业空间。</span>
+            </div>
+            <div class="summary">
+              <b>默认隔离</b>
+              <span>用户、工作项、个人记忆先各自独立。</span>
+            </div>
+            <div class="summary">
+              <b>确认共享</b>
+              <span>产物和记忆确认后进入项目共享层。</span>
+            </div>
+            <div class="summary">
+              <b>治理闭环</b>
+              <span>确认、复审、淘汰、替代。</span>
+            </div>
+          </div>
+        </header>
+
+        <section id="target">
+          <div class="section-head">
+            <div class="eyebrow">02 Target Architecture</div>
+            <h2>目标架构图：同项目多人协作，默认隔离，确认后共享。</h2>
+            <p>目标态和 MVP 的区别不只是多套一层企业边界，而是要回答“不同用户在同一个项目里处理不同工作项时，什么彼此隔离，什么可以共享”。答案是：工作项作业空间和个人记忆默认隔离；被确认的产物、规则和记忆进入项目共享层，再按权限给其他用户复用。</p>
+          </div>
+
+          <figure class="visual-panel" aria-label="目标作业空间隔离共享图">
+            <svg viewBox="0 0 1180 820" role="img" aria-labelledby="targetTitle targetDesc">
+              <title id="targetTitle">目标作业空间隔离共享图</title>
+              <desc id="targetDesc">同一个项目中，用户 A 和用户 B 分别处理不同工作项，各自拥有独立作业空间和个人记忆；确认后才能共享到项目共享层。</desc>
+              <rect x="0" y="0" width="1180" height="820" fill="#fbfcfb"></rect>
+              <text class="visual-title" x="40" y="52">目标态：同项目多人协作，默认隔离，确认后共享</text>
+              <text class="visual-note" x="40" y="82">MVP 可以先把共享做简单；目标态要把“谁能看、谁能用、什么能沉淀为项目记忆”画成清楚边界。</text>
+
+              <rect class="box-red" x="40" y="118" width="1100" height="650" rx="16"></rect>
+              <text class="visual-label" x="76" y="156">企业 / 租户边界</text>
+              <text class="visual-small" x="76" y="180">组织级隔离、审计、合规、跨项目共享策略</text>
+
+              <rect class="box-amber" x="82" y="206" width="1016" height="492" rx="14"></rect>
+              <text class="visual-label" x="118" y="244">同一个工作空间 / 项目</text>
+              <text class="visual-small" x="118" y="268">项目资料、团队规则、任务列表、可共享产物都在这个边界内治理</text>
+
+              <rect class="box-violet" x="330" y="292" width="520" height="116" rx="12"></rect>
+              <text class="visual-label" x="382" y="330">项目共享层</text>
+              <text class="visual-small" x="382" y="356">确认后的共享产物、团队规则、项目记忆</text>
+              <text class="visual-small" x="382" y="380">其他用户只能按权限复用这里的内容</text>
+
+              <rect class="box-blue" x="120" y="454" width="430" height="192" rx="12"></rect>
+              <text class="visual-label" x="154" y="492">用户 A 的作业视角</text>
+              <text class="visual-small" x="154" y="516">处理需求列表中的工作项 A</text>
+              <rect fill="#ffffff" stroke="#8bc2a6" x="154" y="548" width="150" height="56" rx="8"></rect>
+              <text class="visual-label" x="190" y="582">工作项 A</text>
+              <rect class="box-green" x="342" y="548" width="168" height="56" rx="8"></rect>
+              <text class="visual-label" x="374" y="582">A 的作业空间</text>
+              <rect fill="#ffffff" stroke="#8fb8cc" x="154" y="618" width="150" height="42" rx="8"></rect>
+              <text class="visual-small" x="188" y="644">A 的个人记忆</text>
+              <rect fill="#ffffff" stroke="#8bc2a6" x="342" y="618" width="168" height="42" rx="8"></rect>
+              <text class="visual-small" x="374" y="644">A 的工作项记忆</text>
+
+              <rect class="box-blue" x="630" y="454" width="430" height="192" rx="12"></rect>
+              <text class="visual-label" x="664" y="492">用户 B 的作业视角</text>
+              <text class="visual-small" x="664" y="516">处理需求列表中的工作项 B</text>
+              <rect fill="#ffffff" stroke="#8bc2a6" x="664" y="548" width="150" height="56" rx="8"></rect>
+              <text class="visual-label" x="700" y="582">工作项 B</text>
+              <rect class="box-green" x="852" y="548" width="168" height="56" rx="8"></rect>
+              <text class="visual-label" x="884" y="582">B 的作业空间</text>
+              <rect fill="#ffffff" stroke="#8fb8cc" x="664" y="618" width="150" height="42" rx="8"></rect>
+              <text class="visual-small" x="698" y="644">B 的个人记忆</text>
+              <rect fill="#ffffff" stroke="#8bc2a6" x="852" y="618" width="168" height="42" rx="8"></rect>
+              <text class="visual-small" x="884" y="644">B 的工作项记忆</text>
+
+              <line x1="590" y1="438" x2="590" y2="668" stroke="#8d9a95" stroke-dasharray="8 8" stroke-width="2"></line>
+              <text class="visual-note" x="548" y="690">默认隔离边界</text>
+
+              <path class="arrow-soft" d="M426 548 C426 486 462 430 520 410"></path>
+              <path class="arrow-soft" d="M936 548 C936 486 856 430 706 410"></path>
+              <text class="visual-small" x="448" y="456">确认共享</text>
+              <text class="visual-small" x="782" y="456">确认共享</text>
+
+              <path class="arrow" d="M480 408 C418 430 372 466 336 536"></path>
+              <path class="arrow" d="M700 408 C778 430 824 466 844 536"></path>
+              <text class="visual-small" x="250" y="440">按权限复用</text>
+              <text class="visual-small" x="856" y="440">按权限复用</text>
+
+              <rect class="box-dark" x="154" y="724" width="872" height="42" rx="8"></rect>
+              <text class="dark-text" x="194" y="751">目标态核心：A/B 作业空间和个人记忆不互通；确认共享后，内容进入项目共享层，再按权限复用。</text>
+            </svg>
+            <figcaption>这张图表达的是目标态最关键的差异：同项目里的多人协作不是天然全共享，而是默认隔离；共享必须经过确认并进入项目共享层。</figcaption>
+          </figure>
+        </section>
+
+        <section id="dimensions">
+          <div class="section-head">
+            <div class="eyebrow">03 Dimensions</div>
+            <h2>目标态不是单一层级，而是四个维度叠加。</h2>
+            <p>如果只画成一棵树，很容易误解。目标架构更像四个维度一起定位一次作业：它属于哪个空间、由谁操作、什么可以共享、能使用哪些记忆。</p>
+          </div>
+
+          <div class="grid-4">
+            <div class="card">
+              <span class="tag green">空间维度</span>
+              <h3>它在哪里</h3>
+              <p>企业、工作空间、项目、任务列表、工作项作业空间，决定作业归属边界。</p>
+            </div>
+            <div class="card">
+              <span class="tag blue">身份维度</span>
+              <h3>谁在操作</h3>
+              <p>同项目下的不同用户先按自己的可见范围工作，个人上下文默认不暴露给其他人。</p>
+            </div>
+            <div class="card">
+              <span class="tag amber">共享维度</span>
+              <h3>什么能共享</h3>
+              <p>只有被确认共享的阶段产物、结论、规则和记忆，才进入项目共享层。</p>
+            </div>
+            <div class="card">
+              <span class="tag violet">记忆维度</span>
+              <h3>能想起什么</h3>
+              <p>当前作业、个人、项目、组织的记忆按边界召回；个人记忆隔离，项目记忆共享。</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="memory">
+          <div class="section-head">
+            <div class="eyebrow">04 Layered Memory</div>
+            <h2>分层记忆：工作项记忆归工作项空间，不归处理它的个人。</h2>
+            <p>用户 A 在项目里处理工作项 A 时，会产生两类不同记忆：个人偏好、表达习惯、私人上下文归用户 A；需求理解、阶段结论、执行证据、待确认事项归工作项 A 的作业空间。工作项记忆可以被有权限的同工作项协作者复用，但不会自动跨工作项共享；要跨工作项复用，必须确认后进入项目记忆。</p>
+          </div>
+
+          <figure class="visual-panel" aria-label="分层记忆隔离共享图">
+            <svg viewBox="0 0 1180 760" role="img" aria-labelledby="memoryTitle memoryDesc">
+              <title id="memoryTitle">分层记忆隔离共享图</title>
+              <desc id="memoryDesc">个人记忆归用户，工作项记忆归工作项作业空间，项目记忆来自确认共享，组织记忆来自治理提升。</desc>
+              <rect x="0" y="0" width="1180" height="760" fill="#fbfcfb"></rect>
+              <text class="visual-title" x="40" y="52">记忆归属先分清：个人归用户，作业归工作项，共享归项目</text>
+              <text class="visual-note" x="40" y="82">A 处理工作项产生的工作记忆，不等于 A 的个人记忆；它先归属工作项作业空间。</text>
+
+              <rect class="box-red" x="410" y="110" width="360" height="76" rx="12"></rect>
+              <text class="visual-label" x="462" y="150">组织记忆</text>
+              <text class="visual-small" x="462" y="174">跨项目规范、企业共识、长期知识</text>
+
+              <rect class="box-amber" x="330" y="224" width="520" height="112" rx="12"></rect>
+              <text class="visual-label" x="384" y="264">项目记忆 / 项目共享层</text>
+              <text class="visual-small" x="384" y="292">经过确认共享的项目结论、规则、可复用产物</text>
+              <text class="visual-small" x="384" y="316">跨工作项复用只从这里走，不直接读对方工作项空间</text>
+
+              <rect class="box-green" x="82" y="404" width="1016" height="178" rx="14"></rect>
+              <text class="visual-label" x="122" y="440">项目内的工作项记忆区</text>
+              <text class="visual-small" x="122" y="464">归属工作项作业空间；同工作项协作者和工作流节点可复用；不跨工作项自动共享</text>
+
+              <rect fill="#ffffff" stroke="#8bc2a6" x="142" y="492" width="380" height="62" rx="8"></rect>
+              <text class="visual-label" x="180" y="522">工作项 A 记忆</text>
+              <text class="visual-small" x="180" y="544">需求、阶段结论、证据、待确认事项</text>
+
+              <rect fill="#ffffff" stroke="#8bc2a6" x="658" y="492" width="380" height="62" rx="8"></rect>
+              <text class="visual-label" x="696" y="522">工作项 B 记忆</text>
+              <text class="visual-small" x="696" y="544">需求、阶段结论、证据、待确认事项</text>
+
+              <rect class="box-blue" x="142" y="626" width="380" height="66" rx="12"></rect>
+              <text class="visual-label" x="180" y="658">用户 A 个人记忆</text>
+              <text class="visual-small" x="180" y="680">偏好、习惯、私人上下文，默认不共享</text>
+
+              <rect class="box-blue" x="658" y="626" width="380" height="66" rx="12"></rect>
+              <text class="visual-label" x="696" y="658">用户 B 个人记忆</text>
+              <text class="visual-small" x="696" y="680">偏好、习惯、私人上下文，默认不共享</text>
+
+              <line x1="590" y1="604" x2="590" y2="710" stroke="#8d9a95" stroke-dasharray="8 8" stroke-width="2"></line>
+              <text class="visual-note" x="538" y="724">个人记忆隔离</text>
+
+              <path class="arrow-soft" d="M332 492 C374 420 462 360 538 338"></path>
+              <path class="arrow-soft" d="M848 492 C806 420 718 360 642 338"></path>
+              <text class="visual-small" x="382" y="384">确认共享</text>
+              <text class="visual-small" x="754" y="384">确认共享</text>
+
+              <path class="arrow" d="M542 336 C486 372 428 420 366 486"></path>
+              <path class="arrow" d="M638 336 C696 372 758 420 816 486"></path>
+              <text class="visual-small" x="222" y="384">按权限复用项目记忆</text>
+              <text class="visual-small" x="838" y="384">按权限复用项目记忆</text>
+
+              <path class="arrow-soft" d="M590 224 L590 190"></path>
+              <text class="visual-small" x="616" y="208">治理后提升</text>
+
+              <rect class="box-dark" x="170" y="706" width="840" height="42" rx="8"></rect>
+              <text class="dark-text" x="210" y="733">判断规则：个人记忆归人；工作项记忆归工作项空间；项目记忆来自确认共享。</text>
+            </svg>
+            <figcaption>工作项记忆不是用户私有记忆，也不是项目全局记忆。它是项目下某个工作项作业空间的局部记忆，只有确认后才上升为项目记忆。</figcaption>
+          </figure>
+
+          <div class="grid-4">
+            <div class="card">
+              <span class="tag green">当前作业记忆</span>
+              <h3>归属工作项</h3>
+              <p>保存当前工作项的需求、阶段结果、临时判断和待确认事项，可被同工作项协作者和工作流节点复用。</p>
+            </div>
+            <div class="card">
+              <span class="tag blue">个人记忆</span>
+              <h3>归属用户</h3>
+              <p>保存个人偏好、写作方式、工具习惯和私人上下文，不因为同项目协作而自动暴露。</p>
+            </div>
+            <div class="card">
+              <span class="tag amber">项目记忆</span>
+              <h3>跨工作项共享</h3>
+              <p>保存项目约定、领域结论、被确认的设计和团队可复用产物，来自工作项记忆的确认共享。</p>
+            </div>
+            <div class="card">
+              <span class="tag red">组织记忆</span>
+              <h3>治理后提升</h3>
+              <p>保存跨项目规范、合规要求、通用流程和长期知识资产，需要更严格的复审和淘汰机制。</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="governance">
+          <div class="section-head">
+            <div class="eyebrow">05 Memory Governance</div>
+            <h2>记忆治理：先留在原空间，确认后再共享，之后持续复审。</h2>
+            <p>分层记忆如果没有治理，会污染上下文。目标态里，工作项记忆和个人记忆都可能产生候选内容，但它们的原始归属不同：工作项记忆先留在工作项作业空间，个人记忆先留在用户个人空间。只有经过确认共享，才进入项目共享层，并且必须能被复审、淘汰或替代。</p>
+          </div>
+
+          <figure class="visual-panel" aria-label="记忆治理流程图">
+            <svg viewBox="0 0 1180 420" role="img" aria-labelledby="governanceTitle">
+              <title id="governanceTitle">记忆治理流程图</title>
+              <rect x="0" y="0" width="1180" height="420" fill="#fbfcfb"></rect>
+              <text class="visual-title" x="40" y="52">记忆不能只增加：共享前要确认，共享后要治理</text>
+
+              <rect class="box-green" x="72" y="142" width="190" height="96" rx="10"></rect>
+              <text class="visual-label" x="112" y="178">候选记忆</text>
+              <text class="visual-small" x="112" y="204">先留在原归属空间</text>
+
+              <rect class="box-blue" x="330" y="142" width="190" height="96" rx="10"></rect>
+              <text class="visual-label" x="370" y="178">确认共享</text>
+              <text class="visual-small" x="370" y="204">有人或规则认可</text>
+
+              <rect class="box-amber" x="588" y="142" width="190" height="96" rx="10"></rect>
+              <text class="visual-label" x="628" y="178">项目记忆</text>
+              <text class="visual-small" x="628" y="204">进入项目共享层</text>
+
+              <rect class="box-red" x="846" y="100" width="214" height="78" rx="10"></rect>
+              <text class="visual-label" x="892" y="134">淘汰</text>
+              <text class="visual-small" x="892" y="156">不再进入召回</text>
+
+              <rect class="box-violet" x="846" y="220" width="214" height="78" rx="10"></rect>
+              <text class="visual-label" x="892" y="254">替代</text>
+              <text class="visual-small" x="892" y="276">被新结论覆盖</text>
+
+              <path class="arrow" d="M262 190 L326 190"></path>
+              <path class="arrow" d="M520 190 L584 190"></path>
+              <path class="arrow" d="M778 174 C812 150 820 140 842 139"></path>
+              <path class="arrow" d="M778 206 C812 230 820 254 842 254"></path>
+              <text class="visual-small" x="610" y="276">持续复审：看是否过期、冲突、污染上下文</text>
+            </svg>
+            <figcaption>治理目标是避免“记忆越多，上下文越脏”。不确认就不进入共享层；共享范围越大，越需要更强复审和淘汰机制。</figcaption>
+          </figure>
+        </section>
+
+        <section id="roadmap">
+          <div class="section-head">
+            <div class="eyebrow">06 Roadmap</div>
+            <h2>演进路线：先稳空间内核，再加身份和记忆，最后加企业治理。</h2>
+            <p>目标态很完整，但实施仍应该分阶段，避免第一版被复杂组织和记忆系统拖住。</p>
+          </div>
+
+          <div class="grid-4">
+            <div class="card">
+              <span class="tag green">MVP</span>
+              <h3>工作项空间内核</h3>
+              <p>任务列表包含工作项，工作项拥有独立作业空间，第一版可以先采用较轻的共享策略。</p>
+            </div>
+            <div class="card">
+              <span class="tag blue">V1</span>
+              <h3>用户与默认隔离</h3>
+              <p>加入用户视角、个人记忆隔离、工作项可见范围和当前作业记忆沉淀。</p>
+            </div>
+            <div class="card">
+              <span class="tag amber">V2</span>
+              <h3>项目共享层</h3>
+              <p>加入确认共享、项目记忆、共享产物复用和跨工作项协作规则。</p>
+            </div>
+            <div class="card">
+              <span class="tag red">V3</span>
+              <h3>租户与组织治理</h3>
+              <p>加入组织级记忆、跨团队隔离、审计、复审、淘汰和替代机制。</p>
+            </div>
+          </div>
+        </section>
+
+        <footer class="footer">
+          生成日期：2026-05-26。当前文件为目标态抽象设计，和 MVP 抽象报告独立阅读。
+        </footer>
+      </article>
+    </main>
+  </div>
+</body>
+</html>

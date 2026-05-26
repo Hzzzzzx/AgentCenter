@@ -3,23 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AgentCenter 空间模型、沙盒和记忆治理报告</title>
+  <title>AgentCenter 作业空间抽象设计</title>
   <style>
     :root {
       --bg: #f6f7f4;
       --surface: #ffffff;
-      --surface-soft: #eef3ef;
-      --surface-blue: #edf4f8;
-      --ink: #18211f;
-      --muted: #64716c;
+      --ink: #17211f;
+      --muted: #5f6c67;
       --line: #d8dfda;
-      --line-strong: #aebbb5;
-      --blue: #236b8e;
+      --blue: #235f86;
       --green: #2e7356;
-      --amber: #a45f22;
-      --red: #a64040;
-      --code: #26332f;
-      --shadow: 0 20px 60px rgba(28, 42, 38, 0.08);
+      --amber: #9b6125;
+      --red: #9f4545;
+      --soft-blue: #e9f3f8;
+      --soft-green: #e8f4ed;
+      --soft-amber: #fff1df;
+      --soft-red: #f8e7e7;
+      --dark: #17231f;
+      --shadow: 0 16px 48px rgba(23, 35, 31, 0.08);
       --radius: 8px;
     }
 
@@ -36,8 +37,7 @@
       background: var(--bg);
       color: var(--ink);
       font-family: Inter, "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
-      line-height: 1.58;
-      overflow-x: hidden;
+      line-height: 1.62;
     }
 
     a {
@@ -47,65 +47,58 @@
 
     .layout {
       display: grid;
-      grid-template-columns: 280px minmax(0, 1fr);
+      grid-template-columns: 250px minmax(0, 1fr);
       min-height: 100vh;
     }
 
-    main,
-    .report,
-    .sidebar,
-    .hero,
-    .hero > *,
-    .verdict,
-    .card,
-    .step,
-    .rule,
-    .callout,
-    .diagram {
-      min-width: 0;
-    }
-
     .sidebar {
+      background: #fbfcfb;
+      border-right: 1px solid var(--line);
+      height: 100vh;
+      overflow-y: auto;
+      padding: 28px 20px;
       position: sticky;
       top: 0;
-      height: 100vh;
-      border-right: 1px solid var(--line);
-      background: #fbfcfa;
-      padding: 28px 22px;
-      overflow-y: auto;
     }
 
     .brand {
       display: grid;
       gap: 8px;
-      margin-bottom: 28px;
+      margin-bottom: 26px;
     }
 
     .eyebrow {
       color: var(--green);
       font-size: 12px;
-      font-weight: 760;
+      font-weight: 780;
       letter-spacing: 0;
       text-transform: uppercase;
     }
 
-    .brand h1 {
-      margin: 0;
-      font-size: 22px;
-      line-height: 1.18;
-      letter-spacing: 0;
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
     }
 
-    .brand p {
-      margin: 0;
+    .brand h1 {
+      font-size: 22px;
+      line-height: 1.2;
+      margin-bottom: 0;
+    }
+
+    .brand p,
+    .sidebar-note {
       color: var(--muted);
       font-size: 13px;
+      margin: 0;
     }
 
     .nav {
       display: grid;
       gap: 6px;
-      margin-bottom: 28px;
+      margin-bottom: 24px;
     }
 
     .nav a {
@@ -117,103 +110,75 @@
 
     .nav a:hover,
     .nav a:focus-visible {
-      background: var(--surface-soft);
-      color: var(--ink);
+      background: #eef3ef;
       outline: none;
     }
 
     .sidebar-note {
       border-top: 1px solid var(--line);
-      color: var(--muted);
-      font-size: 12px;
       padding-top: 18px;
     }
 
     main {
-      padding: 36px clamp(24px, 4vw, 64px) 72px;
+      padding: 36px 48px 72px;
     }
 
     .report {
-      max-width: 1220px;
+      max-width: 1180px;
       margin: 0 auto;
     }
 
-    .hero {
+    .hero,
+    .panel,
+    .visual-panel,
+    .card {
       background: var(--surface);
       border: 1px solid var(--line);
       border-radius: var(--radius);
       box-shadow: var(--shadow);
+    }
+
+    .hero {
       display: grid;
-      gap: 24px;
-      grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
-      padding: clamp(24px, 4vw, 44px);
+      gap: 18px;
+      padding: 36px;
     }
 
     .hero h2 {
-      font-size: clamp(30px, 4vw, 54px);
-      line-height: 1.05;
-      letter-spacing: 0;
-      margin: 8px 0 18px;
-      max-width: 780px;
-      overflow-wrap: anywhere;
+      font-size: 42px;
+      line-height: 1.12;
+      margin-bottom: 0;
+      max-width: 940px;
     }
 
     .hero p {
       color: var(--muted);
       font-size: 17px;
-      margin: 0;
-      max-width: 760px;
+      max-width: 880px;
     }
 
-    .verdict {
-      align-self: stretch;
-      background: #17231f;
-      border-radius: var(--radius);
-      color: #f7fbf8;
-      display: grid;
-      gap: 18px;
-      padding: 22px;
-    }
-
-    .verdict .label {
-      color: #9fd3b9;
-      font-size: 12px;
-      font-weight: 760;
-      text-transform: uppercase;
-    }
-
-    .verdict strong {
-      display: block;
-      font-size: 24px;
-      line-height: 1.2;
-    }
-
-    .verdict p {
-      color: #cbd8d1;
-      font-size: 14px;
-    }
-
-    .metrics {
+    .principle-bar {
       display: grid;
       gap: 12px;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 
-    .metric {
-      border: 1px solid rgba(255,255,255,0.18);
-      border-radius: 6px;
-      padding: 12px;
+    .principle {
+      background: #f7faf8;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 14px;
     }
 
-    .metric b {
+    .principle b {
       display: block;
-      font-size: 21px;
-      line-height: 1.2;
+      font-size: 15px;
+      margin-bottom: 4px;
     }
 
-    .metric span {
-      color: #bed0c8;
-      font-size: 12px;
+    .principle span {
+      color: var(--muted);
+      font-size: 13px;
     }
 
     section {
@@ -228,120 +193,23 @@
 
     .section-head h2 {
       font-size: 28px;
-      line-height: 1.18;
-      margin: 0;
+      line-height: 1.2;
+      margin-bottom: 0;
     }
 
     .section-head p {
       color: var(--muted);
-      margin: 0;
-      max-width: 850px;
-    }
-
-    .grid-4,
-    .grid-3,
-    .grid-2 {
-      display: grid;
-      gap: 16px;
-    }
-
-    .grid-4 {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-
-    .grid-3 {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-
-    .grid-2 {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      padding: 18px;
-    }
-
-    .card h3 {
-      font-size: 18px;
-      line-height: 1.24;
-      margin: 0 0 8px;
-    }
-
-    .card p,
-    .card li {
-      color: var(--muted);
-      font-size: 14px;
-    }
-
-    .card p {
-      margin: 0;
-    }
-
-    .card ul {
-      display: grid;
-      gap: 7px;
-      margin: 12px 0 0;
-      padding-left: 18px;
-    }
-
-    .badge {
-      align-items: center;
-      border-radius: 999px;
-      display: inline-flex;
-      font-size: 12px;
-      font-weight: 720;
-      gap: 6px;
-      margin-bottom: 12px;
-      padding: 5px 9px;
-      width: fit-content;
-    }
-
-    .badge.blue {
-      background: #dfeef5;
-      color: var(--blue);
-    }
-
-    .badge.green {
-      background: #e1f0e8;
-      color: var(--green);
-    }
-
-    .badge.amber {
-      background: #f6eadb;
-      color: var(--amber);
-    }
-
-    .badge.red {
-      background: #f4e2e2;
-      color: var(--red);
-    }
-
-    .diagram {
-      background: #111b18;
-      border-radius: var(--radius);
-      color: #f2f7f4;
-      display: grid;
-      gap: 14px;
-      padding: 22px;
-    }
-
-    .diagram-title {
-      color: #a8d3be;
-      font-size: 13px;
-      font-weight: 780;
+      max-width: 900px;
     }
 
     .visual-panel {
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-      margin: 18px 0;
-      max-width: 100%;
+      margin: 16px 0;
       overflow: hidden;
+    }
+
+    .visual-panel svg {
+      display: block;
+      height: auto;
       width: 100%;
     }
 
@@ -352,258 +220,149 @@
       padding: 12px 16px;
     }
 
-    .visual-panel svg {
-      display: block;
-      height: auto;
-      max-width: 100%;
-      min-width: 0;
-      width: 100%;
-    }
-
     .visual-title {
-      fill: #1c2a26;
+      fill: var(--ink);
       font-size: 22px;
       font-weight: 800;
     }
 
     .visual-label {
-      fill: #26332f;
+      fill: #23302d;
       font-size: 16px;
       font-weight: 760;
     }
 
     .visual-small {
-      fill: #64716c;
+      fill: var(--muted);
       font-size: 12px;
     }
 
     .visual-note {
-      fill: #4c5b56;
+      fill: #43534e;
       font-size: 13px;
     }
 
-    .visual-code {
-      fill: #26332f;
-      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-      font-size: 12px;
+    .box-blue {
+      fill: var(--soft-blue);
+      stroke: #8fb8cc;
     }
 
-    .visual-chip {
-      fill: #eef3ef;
-      stroke: #d8dfda;
+    .box-green {
+      fill: var(--soft-green);
+      stroke: #8bc2a6;
     }
 
-    .visual-chip-text {
-      fill: #33423e;
-      font-size: 12px;
-      font-weight: 720;
+    .box-amber {
+      fill: var(--soft-amber);
+      stroke: #d8aa70;
     }
 
-    .visual-blue {
-      fill: #edf4f8;
-      stroke: #8fb9cc;
+    .box-red {
+      fill: var(--soft-red);
+      stroke: #d79696;
     }
 
-    .visual-green {
-      fill: #eaf5ef;
-      stroke: #8fc5aa;
+    .box-dark {
+      fill: var(--dark);
+      stroke: #2d403b;
     }
 
-    .visual-amber {
-      fill: #fff3e4;
-      stroke: #ddb178;
-    }
-
-    .visual-red {
-      fill: #f9e7e7;
-      stroke: #d89999;
-    }
-
-    .visual-dark {
-      fill: #17231f;
-      stroke: #2b3e38;
-    }
-
-    .visual-dark-text {
-      fill: #f7fbf8;
+    .dark-text {
+      fill: #f6fbf8;
       font-size: 14px;
       font-weight: 760;
     }
 
-    .visual-arrow {
+    .arrow {
       fill: none;
       marker-end: url(#arrow);
-      stroke: #5e7069;
-      stroke-linecap: round;
-      stroke-width: 2.2;
-    }
-
-    .visual-arrow-strong {
-      fill: none;
-      marker-end: url(#arrowStrong);
-      stroke: #236b8e;
+      stroke: var(--blue);
       stroke-linecap: round;
       stroke-width: 3;
     }
 
-    .visual-dashed {
+    .arrow-soft {
+      fill: none;
+      marker-end: url(#arrowSoft);
+      stroke: #667670;
       stroke-dasharray: 7 6;
+      stroke-linecap: round;
+      stroke-width: 2.2;
     }
 
-    .image-strip {
+    .grid-2,
+    .grid-3 {
       display: grid;
       gap: 16px;
+    }
+
+    .grid-2 {
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      margin-top: 16px;
     }
 
-    .tree {
-      display: grid;
-      gap: 8px;
-      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-      font-size: 14px;
-      overflow-x: auto;
-      white-space: pre;
+    .grid-3 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
-    .flow {
-      display: grid;
-      gap: 12px;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+    .card,
+    .panel {
+      padding: 18px;
     }
 
-    .step {
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-top: 4px solid var(--blue);
-      border-radius: var(--radius);
-      min-height: 140px;
-      padding: 16px;
+    .card h3 {
+      font-size: 18px;
+      line-height: 1.3;
+      margin-bottom: 8px;
     }
 
-    .step h3 {
-      font-size: 17px;
-      margin: 0 0 8px;
-    }
-
-    .step p {
-      color: var(--muted);
-      font-size: 14px;
-      margin: 0;
-    }
-
-    .step:nth-child(2) {
-      border-top-color: var(--green);
-    }
-
-    .step:nth-child(3) {
-      border-top-color: var(--amber);
-    }
-
-    .step:nth-child(4) {
-      border-top-color: #6a6f8e;
-    }
-
-    .step:nth-child(5) {
-      border-top-color: var(--red);
-    }
-
-    .matrix {
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      max-width: 100%;
-      min-width: 0;
-      overflow-x: auto;
-    }
-
-    table {
-      border-collapse: collapse;
-      min-width: 760px;
-      width: 100%;
-    }
-
-    th,
-    td {
-      border-bottom: 1px solid var(--line);
-      padding: 13px 14px;
-      text-align: left;
-      vertical-align: top;
-    }
-
-    th {
-      background: #eef3ef;
-      color: #2b3834;
-      font-size: 13px;
-      font-weight: 760;
-    }
-
-    td {
+    .card p,
+    .card li,
+    .panel p,
+    .panel li {
       color: var(--muted);
       font-size: 14px;
     }
 
-    tr:last-child td {
-      border-bottom: 0;
+    .card p,
+    .panel p {
+      margin-bottom: 0;
     }
 
-    code,
-    pre {
-      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-    }
-
-    code {
-      background: #edf2ee;
-      border: 1px solid #dbe3de;
-      border-radius: 5px;
-      color: var(--code);
-      font-size: 0.92em;
-      padding: 1px 5px;
-      overflow-wrap: anywhere;
-      word-break: break-word;
-    }
-
-    .sidebar-note code {
-      overflow-wrap: anywhere;
-      word-break: break-all;
-    }
-
-    .code-block {
-      background: #111b18;
-      border-radius: var(--radius);
-      color: #e7f0eb;
-      max-width: 100%;
-      min-width: 0;
-      overflow-x: auto;
-      padding: 18px;
-    }
-
-    .code-block pre {
-      margin: 0;
-      min-width: 720px;
-    }
-
-    .split {
+    .card ul,
+    .panel ul {
       display: grid;
-      gap: 16px;
-      grid-template-columns: 0.9fr 1.1fr;
+      gap: 7px;
+      margin: 10px 0 0;
+      padding-left: 18px;
     }
 
-    .callout {
-      background: #fff7e9;
-      border: 1px solid #ead5b5;
-      border-left: 5px solid var(--amber);
-      border-radius: var(--radius);
-      padding: 18px;
+    .tag {
+      border-radius: 999px;
+      display: inline-flex;
+      font-size: 12px;
+      font-weight: 740;
+      margin-bottom: 10px;
+      padding: 5px 9px;
     }
 
-    .callout h3 {
-      margin: 0 0 8px;
+    .tag.blue {
+      background: var(--soft-blue);
+      color: var(--blue);
     }
 
-    .callout p {
-      color: #6d5840;
-      margin: 0;
+    .tag.green {
+      background: var(--soft-green);
+      color: var(--green);
+    }
+
+    .tag.amber {
+      background: var(--soft-amber);
+      color: var(--amber);
+    }
+
+    .tag.red {
+      background: var(--soft-red);
+      color: var(--red);
     }
 
     .rules {
@@ -617,21 +376,21 @@
       border: 1px solid var(--line);
       border-radius: var(--radius);
       display: grid;
-      gap: 10px;
-      grid-template-columns: 32px minmax(0, 1fr);
+      gap: 12px;
+      grid-template-columns: 34px minmax(0, 1fr);
       padding: 14px;
     }
 
     .rule span {
       align-items: center;
-      background: var(--surface-blue);
+      background: var(--soft-blue);
       border-radius: 50%;
       color: var(--blue);
       display: inline-grid;
-      font-weight: 800;
-      height: 32px;
+      font-weight: 820;
+      height: 34px;
       justify-content: center;
-      width: 32px;
+      width: 34px;
     }
 
     .rule p {
@@ -643,11 +402,11 @@
       border-top: 1px solid var(--line);
       color: var(--muted);
       font-size: 13px;
-      margin-top: 48px;
-      padding-top: 20px;
+      margin-top: 44px;
+      padding-top: 18px;
     }
 
-    @media (max-width: 1100px) {
+    @media (max-width: 980px) {
       .layout {
         grid-template-columns: minmax(0, 1fr);
       }
@@ -655,70 +414,40 @@
       .sidebar {
         height: auto;
         position: static;
-        width: 100%;
       }
 
       .nav {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
-      .hero,
-      .split {
-        grid-template-columns: minmax(0, 1fr);
+      main {
+        padding: 24px;
       }
 
-      .grid-4,
-      .image-strip,
-      .flow {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+      .principle-bar,
+      .grid-2,
+      .grid-3 {
+        grid-template-columns: minmax(0, 1fr);
       }
     }
 
-    @media (max-width: 720px) {
-      * {
-        max-width: 100%;
-      }
-
+    @media (max-width: 640px) {
       main {
-        padding: 20px 14px 48px;
-        width: 100vw;
+        padding: 18px 14px 44px;
       }
 
-      .sidebar {
-        padding: 20px 14px;
-      }
-
-      .nav,
-      .grid-4,
-      .grid-3,
-      .grid-2,
-      .image-strip,
-      .flow,
-      .metrics {
-        grid-template-columns: minmax(0, 1fr);
-      }
-
-      .hero {
-        padding: 22px;
-        width: 100%;
+      .hero,
+      .panel,
+      .card {
+        padding: 20px;
       }
 
       .hero h2 {
-        font-size: 28px;
-        line-height: 1.14;
-        word-break: break-all;
+        font-size: 30px;
       }
 
-      .verdict strong {
-        font-size: 21px;
-        overflow-wrap: anywhere;
-        word-break: break-all;
-      }
-
-      .verdict p,
-      .metric span {
-        overflow-wrap: anywhere;
-        word-break: break-word;
+      .section-head h2 {
+        font-size: 24px;
       }
 
       .visual-title {
@@ -730,27 +459,8 @@
       }
 
       .visual-small,
-      .visual-note,
-      .visual-code,
-      .visual-chip-text {
+      .visual-note {
         font-size: 11px;
-      }
-
-      table,
-      .code-block pre {
-        max-width: none;
-      }
-
-      .tree {
-        max-width: none;
-      }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      *,
-      *::before,
-      *::after {
-        scroll-behavior: auto !important;
       }
     }
   </style>
@@ -759,859 +469,294 @@
   <svg aria-hidden="true" focusable="false" height="0" style="position:absolute; width:0; height:0; overflow:hidden" width="0">
     <defs>
       <marker id="arrow" markerHeight="8" markerWidth="8" orient="auto" refX="7" refY="4">
-        <path d="M0,0 L8,4 L0,8 Z" fill="#5e7069"></path>
+        <path d="M0,0 L8,4 L0,8 Z" fill="#235f86"></path>
       </marker>
-      <marker id="arrowStrong" markerHeight="8" markerWidth="8" orient="auto" refX="7" refY="4">
-        <path d="M0,0 L8,4 L0,8 Z" fill="#236b8e"></path>
+      <marker id="arrowSoft" markerHeight="8" markerWidth="8" orient="auto" refX="7" refY="4">
+        <path d="M0,0 L8,4 L0,8 Z" fill="#667670"></path>
       </marker>
     </defs>
   </svg>
+
   <div class="layout">
     <aside class="sidebar" aria-label="报告目录">
       <div class="brand">
-        <div class="eyebrow">AgentCenter Architecture</div>
-        <h1>空间模型、沙盒和记忆治理</h1>
-        <p>面向企业多用户、多项目和 Agent Runtime 的分期架构报告</p>
+        <div class="eyebrow">AgentCenter</div>
+        <h1>作业空间抽象设计</h1>
+        <p>先讲产品空间，再讲后续边界。</p>
       </div>
       <nav class="nav">
-        <a href="#verdict">01 结论</a>
-        <a href="#branch-1026">02 1026 对齐</a>
-        <a href="#spaces">03 四类空间</a>
-        <a href="#model">04 终局骨架</a>
-        <a href="#roadmap">05 演进路线</a>
-        <a href="#sandbox">06 沙盒适配</a>
-        <a href="#memory">07 记忆适配</a>
-        <a href="#governance">08 治理淘汰</a>
-        <a href="#harness">09 自我改进</a>
+        <a href="#idea">01 核心抽象</a>
+        <a href="#mvp">02 MVP 图</a>
+        <a href="#experience">03 用户视角</a>
+        <a href="#layers">04 目标架构</a>
+        <a href="#workflow">05 工作流演进</a>
       </nav>
-      <div class="sidebar-note">
-        基于 <code>SPACE-MODEL-MEMORY-SANDBOX-DESIGN.md</code> 生成。适合评审时先讲结论，再展开设计细节。
-      </div>
+      <p class="sidebar-note">这不是技术方案，不暴露内部编号、字段或实现目录。它只回答空间如何被理解。</p>
     </aside>
 
     <main>
       <article class="report">
-        <header class="hero" id="verdict">
-          <div>
-            <div class="eyebrow">Executive Verdict</div>
-            <h2>空间模型按终局设计，能力实现按 MVP 分期。</h2>
-            <p>AgentCenter 第一阶段不要做完整企业权限平台，但必须从第一天固定正确的空间语义：每次 Agent 工作都绑定用户、项目、任务和运行；所有沙盒、产物、记忆和召回都在这个身份边界内发生。</p>
-            <figure class="visual-panel" aria-label="一次 Agent 运行的空间护照">
-              <svg viewBox="0 0 760 320" role="img" aria-labelledby="heroScopeTitle heroScopeDesc">
-                <title id="heroScopeTitle">一次 Agent 运行的空间护照</title>
-                <desc id="heroScopeDesc">Agent 每次运行绑定用户、项目、任务和运行 ID，并默认进入本次运行沙盒。</desc>
-                <defs>
-                  <marker id="arrowHero" markerHeight="8" markerWidth="8" orient="auto" refX="7" refY="4">
-                    <path d="M0,0 L8,4 L0,8 Z" fill="#236b8e"></path>
-                  </marker>
-                </defs>
-                <rect x="0" y="0" width="760" height="320" fill="#fbfcfa"></rect>
-                <text class="visual-title" x="32" y="42">一次 Agent 运行必须带着这张“空间护照”</text>
-
-                <rect class="visual-chip" x="32" y="68" width="150" height="38" rx="6"></rect>
-                <text class="visual-chip-text" x="58" y="92">user_id</text>
-                <rect class="visual-chip" x="198" y="68" width="150" height="38" rx="6"></rect>
-                <text class="visual-chip-text" x="220" y="92">project_id</text>
-                <rect class="visual-chip" x="364" y="68" width="150" height="38" rx="6"></rect>
-                <text class="visual-chip-text" x="382" y="92">work_item_id</text>
-                <rect class="visual-chip" x="530" y="68" width="150" height="38" rx="6"></rect>
-                <text class="visual-chip-text" x="560" y="92">run_id</text>
-
-                <rect class="visual-blue" x="32" y="140" width="190" height="118" rx="8"></rect>
-                <text class="visual-label" x="58" y="174">Project Shared</text>
-                <text class="visual-small" x="58" y="199">项目共享材料</text>
-                <text class="visual-small" x="58" y="220">默认可读</text>
-                <text class="visual-small" x="58" y="241">写入需确认提升</text>
-
-                <rect class="visual-green" x="284" y="140" width="190" height="118" rx="8"></rect>
-                <text class="visual-label" x="308" y="174">User Workspace</text>
-                <text class="visual-small" x="308" y="199">用户项目作业区</text>
-                <text class="visual-small" x="308" y="220">当前用户可读写</text>
-                <text class="visual-small" x="308" y="241">默认不共享给他人</text>
-
-                <rect class="visual-amber" x="536" y="140" width="190" height="118" rx="8"></rect>
-                <text class="visual-label" x="564" y="174">Run Sandbox</text>
-                <text class="visual-small" x="564" y="199">本次执行目录</text>
-                <text class="visual-small" x="564" y="220">cwd = run_root</text>
-                <text class="visual-small" x="564" y="241">默认唯一可写</text>
-
-                <path d="M476 199 C500 199 509 199 532 199" fill="none" marker-end="url(#arrowHero)" stroke="#236b8e" stroke-linecap="round" stroke-width="3"></path>
-                <path d="M222 199 C246 199 256 199 280 199" fill="none" marker-end="url(#arrowHero)" stroke="#236b8e" stroke-dasharray="7 6" stroke-linecap="round" stroke-width="2.4"></path>
-                <text class="visual-note" x="302" y="292">Agent 默认落在 Run Sandbox；读共享材料可以，写共享区必须走确认提升。</text>
-              </svg>
-              <figcaption>这张图把 MVP 的关键语义压成一句话：Agent 不是“在项目里随便跑”，而是在某个用户、某个任务、某次 run 的沙盒里工作。</figcaption>
-            </figure>
-          </div>
-          <div class="verdict" aria-label="关键指标">
-            <div>
-              <div class="label">Recommended MVP</div>
-              <strong>单租户默认工作区，多项目、多用户、每次运行独立沙盒。</strong>
+        <header class="hero" id="idea">
+          <div class="eyebrow">Abstract Model</div>
+          <h2>第一版先把 AgentCenter 理解成“任务列表里的多个独立工作项空间”。</h2>
+          <p>用户不是在理解目录，也不是在理解内部编号。用户先看到一个任务列表，列表里有多个工作项；每个工作项都有自己的独立作业空间。Agent 在某个工作项空间里按阶段推进，过程留在这个空间里，产物也沉淀回这个空间。</p>
+          <div class="principle-bar">
+            <div class="principle">
+              <b>任务列表</b>
+              <span>承载多个工作项。</span>
             </div>
-            <p>MVP 支持 <code>run</code>、<code>private</code>、<code>project</code> 三类记忆可见性，并用 <code>candidate -> confirmed -> archived / superseded</code> 管住记忆生命周期。</p>
-            <div class="metrics">
-              <div class="metric">
-                <b>4</b>
-                <span>核心空间类型</span>
-              </div>
-              <div class="metric">
-                <b>3</b>
-                <span>MVP 沙盒层级</span>
-              </div>
-              <div class="metric">
-                <b>3</b>
-                <span>MVP 记忆可见性</span>
-              </div>
-              <div class="metric">
-                <b>1</b>
-                <span>统一身份上下文</span>
-              </div>
+            <div class="principle">
+              <b>工作项</b>
+              <span>最小作业对象。</span>
+            </div>
+            <div class="principle">
+              <b>作业空间</b>
+              <span>每个工作项独立拥有。</span>
+            </div>
+            <div class="principle">
+              <b>工作流阶段</b>
+              <span>只在所属空间推进。</span>
             </div>
           </div>
         </header>
 
-        <section id="branch-1026">
+        <section id="mvp">
           <div class="section-head">
-            <div class="eyebrow">1026 Branch Alignment</div>
-            <h2>基于 1026 分支继续，不另起一套状态模型。</h2>
-            <p>空间、沙盒和记忆设计应该接到 1026 的 workflow state、runtime_operation、artifact、confirmation 和 notification 闭环上。它是下层作用域和证据底座，不是替代 1026 的新主线。</p>
+            <div class="eyebrow">02 MVP Picture</div>
+            <h2>MVP 图：一个需求列表，多个工作项，每个工作项一个独立作业空间。</h2>
+            <p>第一版先讲清楚映射关系：任务列表不是作业空间，列表里的每个工作项才对应一个独立作业空间。用户选中某个工作项后，这个工作项的工作流阶段在它自己的作业空间里连续推进。</p>
           </div>
 
-          <div class="diagram">
-            <div class="diagram-title">1026 主线与空间/记忆落点</div>
-            <div class="tree">Bridge DB 权威状态
-  -> WorkflowStateSnapshotService
-  -> RuntimeOperation(skill.run)
-  -> Runtime Event Listener
-  -> Workflow Engine
-  -> Notification / Confirmation / Artifact Projection
+          <figure class="visual-panel" aria-label="MVP 工作项作业空间图">
+            <svg viewBox="0 0 1180 610" role="img" aria-labelledby="mvpTitle mvpDesc">
+              <title id="mvpTitle">MVP 工作项作业空间图</title>
+              <desc id="mvpDesc">需求列表包含多个工作项，每个工作项映射到独立作业空间，工作流阶段在对应空间内推进。</desc>
+              <rect x="0" y="0" width="1180" height="610" fill="#fbfcfb"></rect>
+              <text class="visual-title" x="40" y="52">MVP：需求列表 -> 工作项 -> 独立作业空间 -> 工作流阶段</text>
+              <text class="visual-note" x="40" y="82">抽象映射规则：列表承载工作项，工作项拥有空间，阶段归属到该工作项空间。</text>
 
-Space / Sandbox / Memory
-  -> 为以上对象提供 user/project/run scope、文件边界和 evidence 规则</div>
-          </div>
+              <rect class="box-blue" x="48" y="126" width="292" height="360" rx="12"></rect>
+              <text class="visual-label" x="82" y="164">需求列表</text>
+              <text class="visual-small" x="82" y="190">列表本身只是集合，不是作业空间</text>
 
-          <figure class="visual-panel" aria-label="1026 主线中的空间落点">
-            <svg viewBox="0 0 1180 360" role="img" aria-labelledby="branchFlowTitle">
-              <title id="branchFlowTitle">1026 主线中的空间落点</title>
-              <rect x="0" y="0" width="1180" height="360" fill="#fbfcfa"></rect>
-              <text class="visual-title" x="36" y="46">空间/沙盒是 1026 主线的运行底座，不是另一条状态主线</text>
+              <rect fill="#ffffff" stroke="#8fb8cc" x="82" y="224" width="224" height="58" rx="8"></rect>
+              <text class="visual-label" x="110" y="256">工作项 A</text>
+              <text class="visual-small" x="110" y="274">一个需求条目</text>
 
-              <rect class="visual-blue" x="36" y="106" width="160" height="70" rx="8"></rect>
-              <text class="visual-label" x="72" y="136">Bridge DB</text>
-              <text class="visual-small" x="70" y="158">权威状态</text>
+              <rect fill="#ffffff" stroke="#235f86" stroke-width="3" x="82" y="318" width="224" height="58" rx="8"></rect>
+              <text class="visual-label" x="110" y="350">工作项 B</text>
+              <text class="visual-small" x="110" y="368">当前正在处理</text>
 
-              <rect class="visual-green" x="238" y="106" width="180" height="70" rx="8"></rect>
-              <text class="visual-label" x="266" y="136">State Snapshot</text>
-              <text class="visual-small" x="266" y="158">恢复上下文</text>
+              <rect fill="#ffffff" stroke="#8fb8cc" x="82" y="412" width="224" height="58" rx="8"></rect>
+              <text class="visual-label" x="110" y="444">工作项 C</text>
+              <text class="visual-small" x="110" y="462">另一个需求条目</text>
 
-              <rect class="visual-amber" x="460" y="106" width="190" height="70" rx="8"></rect>
-              <text class="visual-label" x="495" y="136">RuntimeOperation</text>
-              <text class="visual-small" x="500" y="158">run 派发账本</text>
+              <rect class="box-green" x="438" y="148" width="282" height="84" rx="10"></rect>
+              <text class="visual-label" x="478" y="184">工作项 A 的作业空间</text>
+              <text class="visual-small" x="478" y="208">独立上下文和产物</text>
 
-              <rect class="visual-chip" x="692" y="106" width="174" height="70" rx="8"></rect>
-              <text class="visual-label" x="726" y="136">Runtime Event</text>
-              <text class="visual-small" x="730" y="158">过程证据</text>
+              <rect class="box-green" x="438" y="276" width="282" height="116" rx="10"></rect>
+              <text class="visual-label" x="478" y="312">工作项 B 的作业空间</text>
+              <text class="visual-small" x="478" y="338">当前连续会话</text>
+              <text class="visual-small" x="478" y="362">过程、证据、产物都归属这里</text>
 
-              <rect class="visual-red" x="908" y="106" width="220" height="70" rx="8"></rect>
-              <text class="visual-label" x="942" y="136">Confirmation / Artifact</text>
-              <text class="visual-small" x="963" y="158">确认、产物和通知</text>
+              <rect class="box-green" x="438" y="436" width="282" height="84" rx="10"></rect>
+              <text class="visual-label" x="478" y="472">工作项 C 的作业空间</text>
+              <text class="visual-small" x="478" y="496">独立上下文和产物</text>
 
-              <path class="visual-arrow-strong" d="M196 141 L234 141"></path>
-              <path class="visual-arrow-strong" d="M418 141 L456 141"></path>
-              <path class="visual-arrow-strong" d="M650 141 L688 141"></path>
-              <path class="visual-arrow-strong" d="M866 141 L904 141"></path>
+              <rect class="box-amber" x="842" y="128" width="244" height="62" rx="8"></rect>
+              <text class="visual-label" x="880" y="158">阶段一：理解</text>
+              <text class="visual-small" x="880" y="176">只读取工作项 B 的上下文</text>
 
-              <rect x="460" y="236" width="408" height="72" rx="8" fill="#fff3e4" stroke="#ddb178" stroke-width="2"></rect>
-              <text class="visual-label" x="494" y="267">SandboxBinding</text>
-              <text class="visual-small" x="494" y="290">project_shared_root / user_project_root / run_root / readable_roots / writable_roots</text>
-              <path class="visual-arrow visual-dashed" d="M555 176 L555 232"></path>
-              <path class="visual-arrow visual-dashed" d="M779 176 L779 232"></path>
+              <rect class="box-amber" x="842" y="234" width="244" height="62" rx="8"></rect>
+              <text class="visual-label" x="880" y="264">阶段二：设计</text>
+              <text class="visual-small" x="880" y="282">方案沉淀到工作项 B</text>
+
+              <rect class="box-amber" x="842" y="340" width="244" height="62" rx="8"></rect>
+              <text class="visual-label" x="880" y="370">阶段三：执行</text>
+              <text class="visual-small" x="880" y="388">结果归属到工作项 B</text>
+
+              <rect class="box-amber" x="842" y="446" width="244" height="62" rx="8"></rect>
+              <text class="visual-label" x="880" y="476">阶段四：验证</text>
+              <text class="visual-small" x="880" y="494">结论留在工作项 B</text>
+
+              <path class="arrow-soft" d="M306 253 C366 253 374 190 434 190"></path>
+              <path class="arrow" d="M306 347 C366 347 374 334 434 334"></path>
+              <path class="arrow-soft" d="M306 441 C366 441 374 478 434 478"></path>
+              <path class="arrow" d="M720 334 C780 334 786 159 838 159"></path>
+              <path class="arrow" d="M720 334 C780 334 786 265 838 265"></path>
+              <path class="arrow" d="M720 334 C780 334 786 371 838 371"></path>
+              <path class="arrow" d="M720 334 C780 334 786 477 838 477"></path>
+
+              <rect class="box-dark" x="172" y="540" width="836" height="52" rx="8"></rect>
+              <text class="dark-text" x="216" y="572">MVP 的核心：列表有多个工作项；每个工作项有自己的作业空间；阶段不跨工作项空间运行。</text>
             </svg>
-            <figcaption>`runtime_operation` 是最自然的接入点：它知道这次 run 的业务身份，也应该记录本次 run 使用的沙盒绑定摘要。</figcaption>
+            <figcaption>这张图表达映射关系：任务列表是集合；工作项是最小作业单位；每个工作项都有独立作业空间；工作流阶段只在所属工作项空间内推进。</figcaption>
           </figure>
+        </section>
 
-          <div class="matrix" style="margin-top:16px">
-            <table>
-              <thead>
-                <tr>
-                  <th>1026 现有对象</th>
-                  <th>本设计承接方式</th>
-                  <th>实施含义</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><code>workflow_node_instance</code></td>
-                  <td>属于 <code>Project + WorkItem + Run</code> 下的执行状态</td>
-                  <td>不新建另一套工作流状态源。</td>
-                </tr>
-                <tr>
-                  <td><code>runtime_operation</code></td>
-                  <td>MVP 的 run 派发账本</td>
-                  <td><code>skill.run</code> 应带 sandbox 和 memory query context。</td>
-                </tr>
-                <tr>
-                  <td><code>runtime_event</code></td>
-                  <td>raw evidence</td>
-                  <td>只作为候选记忆来源，不直接进入长期记忆。</td>
-                </tr>
-                <tr>
-                  <td><code>artifact</code></td>
-                  <td>source_ref 和报告证据</td>
-                  <td>confirmed memory 必须能追溯到 artifact、message、event 或文档。</td>
-                </tr>
-                <tr>
-                  <td><code>confirmation_request</code></td>
-                  <td>确认、提升、审批动作真源</td>
-                  <td>candidate memory 和 artifact promotion 都通过确认闭环。</td>
-                </tr>
-              </tbody>
-            </table>
+        <section id="experience">
+          <div class="section-head">
+            <div class="eyebrow">03 Experience Model</div>
+            <h2>第一版用户应该理解什么。</h2>
+            <p>MVP 的空间设计不是让用户选择目录，而是让用户知道“我正在处理列表里的某个工作项，这个工作项有自己的作业空间”。</p>
+          </div>
+
+          <div class="grid-2">
+            <div class="panel">
+              <h3>用户看到</h3>
+              <ul>
+                <li>一个需求列表，里面有多个工作项。</li>
+                <li>点开某个工作项后，进入这个工作项自己的作业空间。</li>
+                <li>一条持续会话，展示这个工作项每个阶段的进度。</li>
+                <li>需要确认的关键决策。</li>
+                <li>最终沉淀到这个工作项空间里的文档、变更、验证结果。</li>
+              </ul>
+            </div>
+            <div class="panel">
+              <h3>系统保证</h3>
+              <ul>
+                <li>不同工作项的上下文不会互相混淆。</li>
+                <li>同一工作项的上下文不会在阶段之间断掉。</li>
+                <li>每个阶段产生的内容能追溯到所属工作项。</li>
+                <li>产物属于当前工作项作业空间，而不是散落在对话外。</li>
+                <li>后续可以把个人、团队、企业边界加进来。</li>
+              </ul>
+            </div>
           </div>
         </section>
 
-        <section id="spaces">
+        <section id="layers">
           <div class="section-head">
-            <div class="eyebrow">Space Taxonomy</div>
-            <h2>四类空间先分清，不要让一个 Workspace 承担所有含义。</h2>
-            <p>协作空间、运行空间、记忆空间和治理空间分别回答不同问题。MVP 可以简单，但语义不能混。</p>
+            <div class="eyebrow">04 Target Architecture</div>
+            <h2>目标态：把同一套映射关系放进更大的边界里。</h2>
+            <p>后续不是推翻 MVP，而是在它外面一层层套边界。最里面仍然是“任务列表包含多个工作项，每个工作项有独立作业空间”；外面再加用户视角、工作空间/项目边界、企业/租户边界。</p>
           </div>
 
-          <figure class="visual-panel" aria-label="作业空间范围地图">
-            <svg viewBox="0 0 1180 620" role="img" aria-labelledby="scopeMapTitle scopeMapDesc">
-              <title id="scopeMapTitle">AgentCenter 作业空间范围地图</title>
-              <desc id="scopeMapDesc">从企业租户到默认工作区、项目、共享区、用户作业区和运行沙盒的包含关系。</desc>
-              <rect x="0" y="0" width="1180" height="620" fill="#fbfcfa"></rect>
-              <text class="visual-title" x="40" y="52">作业空间不是一个目录，而是一组逐层收窄的范围</text>
-              <text class="visual-note" x="40" y="82">终局骨架完整保留；MVP 只把 Tenant / Workspace 固定为 default。</text>
+          <figure class="visual-panel" aria-label="目标态嵌套空间图">
+            <svg viewBox="0 0 1180 690" role="img" aria-labelledby="layersTitle layersDesc">
+              <title id="layersTitle">目标态嵌套空间图</title>
+              <desc id="layersDesc">企业租户边界包含工作空间，工作空间包含用户视角，用户视角进入任务列表，任务列表包含多个工作项，每个工作项映射独立作业空间。</desc>
+              <rect x="0" y="0" width="1180" height="540" fill="#fbfcfb"></rect>
+              <rect x="0" y="540" width="1180" height="150" fill="#fbfcfb"></rect>
+              <text class="visual-title" x="40" y="52">目标态是一层层包起来：企业 -> 工作空间 -> 用户视角 -> 任务列表 -> 工作项空间</text>
+              <text class="visual-note" x="40" y="82">越往外越像治理边界，越往内越接近具体作业。</text>
 
-              <rect x="40" y="112" width="1100" height="460" rx="10" fill="#f4f8f5" stroke="#cfd9d3" stroke-width="2"></rect>
-              <text class="visual-label" x="66" y="148">Tenant / Organization</text>
-              <text class="visual-small" x="66" y="171">企业边界，MVP = default</text>
+              <rect class="box-red" x="56" y="118" width="1068" height="500" rx="16"></rect>
+              <text class="visual-label" x="90" y="154">企业 / 租户边界</text>
+              <text class="visual-small" x="90" y="178">组织级隔离、审计、合规策略</text>
 
-              <rect x="88" y="190" width="1004" height="336" rx="10" fill="#edf4f8" stroke="#8fb9cc" stroke-width="2"></rect>
-              <text class="visual-label" x="116" y="226">Workspace</text>
-              <text class="visual-small" x="116" y="249">团队、业务域或项目群，MVP = default</text>
+              <rect class="box-amber" x="122" y="202" width="936" height="354" rx="14"></rect>
+              <text class="visual-label" x="156" y="238">工作空间 / 项目边界</text>
+              <text class="visual-small" x="156" y="262">团队资料、项目上下文、共享产物和流程模板</text>
 
-              <rect x="138" y="272" width="904" height="206" rx="10" fill="#eaf5ef" stroke="#8fc5aa" stroke-width="2"></rect>
-              <text class="visual-label" x="166" y="309">Project</text>
-              <text class="visual-small" x="166" y="332">第一隔离单元：代码、文档、流程、事项和运行都落在这里</text>
+              <rect class="box-blue" x="194" y="286" width="792" height="210" rx="12"></rect>
+              <text class="visual-label" x="228" y="322">用户视角</text>
+              <text class="visual-small" x="228" y="346">当前用户能看到什么、操作什么、保留什么个人上下文</text>
 
-              <rect class="visual-blue" x="214" y="365" width="220" height="76" rx="8"></rect>
-              <text class="visual-label" x="240" y="397">shared/</text>
-              <text class="visual-small" x="240" y="421">项目共享区，默认只读</text>
+              <rect fill="#ffffff" stroke="#8fb8cc" x="254" y="382" width="202" height="76" rx="8"></rect>
+              <text class="visual-label" x="286" y="414">需求列表</text>
+              <text class="visual-small" x="286" y="438">多个工作项集合</text>
 
-              <rect class="visual-green" x="480" y="365" width="220" height="76" rx="8"></rect>
-              <text class="visual-label" x="506" y="397">users/{user_id}/</text>
-              <text class="visual-small" x="506" y="421">用户项目作业区</text>
+              <rect fill="#ffffff" stroke="#8bc2a6" x="514" y="344" width="190" height="58" rx="8"></rect>
+              <text class="visual-label" x="548" y="376">工作项 A</text>
+              <rect fill="#ffffff" stroke="#2e7356" stroke-width="3" x="514" y="430" width="190" height="58" rx="8"></rect>
+              <text class="visual-label" x="548" y="462">工作项 B</text>
 
-              <rect class="visual-amber" x="746" y="365" width="220" height="76" rx="8"></rect>
-              <text class="visual-label" x="772" y="397">runs/{run_id}/</text>
-              <text class="visual-small" x="772" y="421">单次运行沙盒</text>
+              <rect class="box-green" x="762" y="342" width="176" height="62" rx="8"></rect>
+              <text class="visual-label" x="794" y="374">A 的作业空间</text>
+              <rect class="box-green" x="762" y="426" width="176" height="66" rx="8"></rect>
+              <text class="visual-label" x="794" y="458">B 的作业空间</text>
+              <text class="visual-small" x="794" y="478">当前运行流程</text>
 
-              <rect class="visual-dark" x="214" y="500" width="752" height="52" rx="8"></rect>
-              <text class="visual-dark-text" x="248" y="532">一次执行 = user_id + project_id + work_item_id + run_id + sandbox binding</text>
+              <path class="arrow" d="M456 420 L510 373"></path>
+              <path class="arrow" d="M456 420 L510 459"></path>
+              <path class="arrow" d="M704 373 L758 373"></path>
+              <path class="arrow" d="M704 459 L758 459"></path>
+
+              <rect class="box-dark" x="200" y="642" width="780" height="36" rx="8"></rect>
+              <text class="dark-text" x="242" y="666">目标态只是给 MVP 内核套上边界：内核仍是列表、工作项、独立作业空间的映射。</text>
             </svg>
-            <figcaption>读图顺序是从外到内：企业/团队决定“谁在同一个协作边界”，项目决定“哪份业务材料可见”，用户区和 run 沙盒决定“谁能写、写到哪里”。</figcaption>
-          </figure>
-
-          <div class="grid-4">
-            <div class="card">
-              <span class="badge blue">Collaboration</span>
-              <h3>协作空间</h3>
-              <p>定义企业、团队、项目、任务和用户关系。它是业务逻辑边界，不是磁盘目录。</p>
-              <ul>
-                <li><code>Tenant</code> 企业边界</li>
-                <li><code>Workspace</code> 团队或业务域</li>
-                <li><code>Project</code> 第一隔离单元</li>
-              </ul>
-            </div>
-            <div class="card">
-              <span class="badge green">Runtime</span>
-              <h3>运行空间</h3>
-              <p>定义 Agent 在哪里读写文件、跑命令和生成产物。所有路径必须由服务端解析。</p>
-              <ul>
-                <li>项目共享区</li>
-                <li>用户项目区</li>
-                <li>单次运行沙盒</li>
-              </ul>
-            </div>
-            <div class="card">
-              <span class="badge amber">Memory</span>
-              <h3>记忆空间</h3>
-              <p>定义记忆属于谁、谁能看、何时召回。它不是单个向量库或单个 collection。</p>
-              <ul>
-                <li><code>run</code> 工作记忆</li>
-                <li><code>private</code> 私人记忆</li>
-                <li><code>project</code> 项目记忆</li>
-              </ul>
-            </div>
-            <div class="card">
-              <span class="badge red">Governance</span>
-              <h3>治理空间</h3>
-              <p>负责确认、淘汰、复审、审计和自我改进，避免记忆越多上下文越脏。</p>
-              <ul>
-                <li>候选到确认</li>
-                <li>过期和替代</li>
-                <li>召回审计</li>
-              </ul>
-            </div>
-          </div>
-        </section>
-
-        <section id="model">
-          <div class="section-head">
-            <div class="eyebrow">Target Skeleton</div>
-            <h2>终局骨架现在固定，复杂能力以后再开。</h2>
-            <p>第一期可以只有默认 tenant 和 workspace，但字段、路径、事件和记忆 scope 都要保留它们。</p>
-          </div>
-
-          <div class="image-strip">
-            <figure class="visual-panel" aria-label="终局空间骨架">
-              <svg viewBox="0 0 560 430" role="img" aria-labelledby="targetSkeletonTitle">
-                <title id="targetSkeletonTitle">终局空间骨架</title>
-                <rect x="0" y="0" width="560" height="430" fill="#fbfcfa"></rect>
-                <text class="visual-title" x="28" y="42">终局骨架</text>
-                <text class="visual-note" x="28" y="68">对象语义完整，不等于第一期全部实现。</text>
-                <rect class="visual-blue" x="70" y="98" width="180" height="44" rx="8"></rect>
-                <text class="visual-label" x="118" y="126">Tenant</text>
-                <rect class="visual-blue" x="70" y="158" width="180" height="44" rx="8"></rect>
-                <text class="visual-label" x="101" y="186">Workspace</text>
-                <rect class="visual-green" x="70" y="218" width="180" height="44" rx="8"></rect>
-                <text class="visual-label" x="118" y="246">Project</text>
-                <rect class="visual-green" x="70" y="278" width="180" height="44" rx="8"></rect>
-                <text class="visual-label" x="112" y="306">WorkItem</text>
-                <rect class="visual-amber" x="70" y="338" width="180" height="44" rx="8"></rect>
-                <text class="visual-label" x="133" y="366">Run</text>
-
-                <rect class="visual-amber" x="316" y="338" width="184" height="44" rx="8"></rect>
-                <text class="visual-label" x="354" y="366">RunSandbox</text>
-                <rect class="visual-green" x="316" y="218" width="184" height="44" rx="8"></rect>
-                <text class="visual-label" x="340" y="246">UserProject</text>
-                <rect class="visual-chip" x="316" y="158" width="184" height="44" rx="8"></rect>
-                <text class="visual-label" x="386" y="186">User</text>
-
-                <path class="visual-arrow-strong" d="M160 142 L160 156"></path>
-                <path class="visual-arrow-strong" d="M160 202 L160 216"></path>
-                <path class="visual-arrow-strong" d="M160 262 L160 276"></path>
-                <path class="visual-arrow-strong" d="M160 322 L160 336"></path>
-                <path class="visual-arrow visual-dashed" d="M250 360 L312 360"></path>
-                <path class="visual-arrow visual-dashed" d="M408 202 L408 216"></path>
-              </svg>
-              <figcaption>终局模型先固定对象层级，后续加租户、团队、项目群和更多权限能力时不会推倒重来。</figcaption>
-            </figure>
-
-            <figure class="visual-panel" aria-label="MVP 空间投影">
-              <svg viewBox="0 0 560 430" role="img" aria-labelledby="mvpProjectionTitle">
-                <title id="mvpProjectionTitle">MVP 空间投影</title>
-                <rect x="0" y="0" width="560" height="430" fill="#fbfcfa"></rect>
-                <text class="visual-title" x="28" y="42">MVP 投影</text>
-                <text class="visual-note" x="28" y="68">复杂对象用默认值，核心运行边界必须真实存在。</text>
-
-                <rect class="visual-chip" x="42" y="104" width="208" height="50" rx="8"></rect>
-                <text class="visual-label" x="72" y="134">Tenant = default</text>
-                <rect class="visual-chip" x="42" y="174" width="208" height="50" rx="8"></rect>
-                <text class="visual-label" x="60" y="204">Workspace = default</text>
-                <rect class="visual-green" x="42" y="244" width="208" height="50" rx="8"></rect>
-                <text class="visual-label" x="75" y="274">existing project_id</text>
-                <rect class="visual-green" x="42" y="314" width="208" height="50" rx="8"></rect>
-                <text class="visual-label" x="92" y="344">work_item</text>
-
-                <rect class="visual-amber" x="310" y="104" width="208" height="72" rx="8"></rect>
-                <text class="visual-label" x="348" y="134">runtime_operation</text>
-                <text class="visual-small" x="348" y="156">一次 run 派发账本</text>
-                <rect class="visual-amber" x="310" y="214" width="208" height="72" rx="8"></rect>
-                <text class="visual-label" x="356" y="244">runtime_session</text>
-                <text class="visual-small" x="356" y="266">Runtime 会话，不等于业务进度</text>
-                <rect class="visual-red" x="310" y="324" width="208" height="52" rx="8"></rect>
-                <text class="visual-label" x="356" y="356">run_root 可写</text>
-
-                <path class="visual-arrow-strong" d="M250 269 C280 269 280 140 306 140"></path>
-                <path class="visual-arrow-strong" d="M414 176 L414 210"></path>
-                <path class="visual-arrow-strong" d="M414 286 L414 320"></path>
-              </svg>
-              <figcaption>MVP 不需要完整企业权限平台，但必须把 `runtime_operation -> run_root` 这条运行账本和沙盒绑定打通。</figcaption>
-            </figure>
-          </div>
-
-          <div class="split">
-            <div class="diagram">
-              <div class="diagram-title">长期对象层级</div>
-              <div class="tree">Tenant
-  -> Workspace
-    -> Project
-      -> WorkItem
-        -> Run
-          -> RunSandbox
-
-User
-  -> UserProjectWorkspace
-  -> UserPrivateMemory</div>
-            </div>
-            <div class="rules">
-              <div class="rule">
-                <span>1</span>
-                <p>Agent 每次工作必须绑定 <code>user_id + project_id + work_item_id + run_id</code>，不存在游离运行。</p>
-              </div>
-              <div class="rule">
-                <span>2</span>
-                <p>前端只传业务 ID，服务端通过 Resolver 解析路径、权限和运行上下文。</p>
-              </div>
-              <div class="rule">
-                <span>3</span>
-                <p>Agent 默认只写 <code>RunSandbox</code>，共享产物和项目记忆必须经过提升或确认。</p>
-              </div>
-              <div class="rule">
-                <span>4</span>
-                <p>外部记忆框架只能作为 backend adapter，不能拥有权限、生命周期和确认语义。</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section id="roadmap">
-          <div class="section-head">
-            <div class="eyebrow">Evolution</div>
-            <h2>MVP 到企业完整态：先把骨架跑通，再逐步增强治理。</h2>
-            <p>这条路线避免两种风险：MVP 变成临时玩具，或者一开始就被完整企业权限系统拖死。</p>
-          </div>
-
-          <div class="flow">
-            <div class="step">
-              <h3>MVP</h3>
-              <p>默认 tenant/workspace，多项目、多用户、每次 run 独立沙盒，三类记忆可见性。</p>
-            </div>
-            <div class="step">
-              <h3>V1 项目协作</h3>
-              <p>加入项目角色、RecallTrace、用户反馈、复审队列和 supersede 关系。</p>
-            </div>
-            <div class="step">
-              <h3>V2 组织知识</h3>
-              <p>加入 workspace memory、tenant memory、跨项目受控引用和保留策略。</p>
-            </div>
-            <div class="step">
-              <h3>V3 企业治理</h3>
-              <p>加入 RBAC/ABAC、DLP、query-as-user、secret scope 和治理看板。</p>
-            </div>
-            <div class="step">
-              <h3>多后端编排</h3>
-              <p>按记忆类型路由到 Cognee、Graphiti、pgvector、全文检索或内部事实库。</p>
-            </div>
-          </div>
-        </section>
-
-        <section id="sandbox">
-          <div class="section-head">
-            <div class="eyebrow">Sandbox Contract</div>
-            <h2>沙盒是运行边界：默认隔离，显式提升。</h2>
-            <p>OpenCode 或未来 Runtime 都不能直接拿前端路径执行，必须走统一的 <code>SandboxResolver</code>。</p>
-          </div>
-
-          <div class="code-block" aria-label="沙盒路径结构">
-            <pre>runtime-workspace/
-  tenants/{tenant_id}/
-    workspaces/{workspace_id}/
-      projects/{project_id}/
-        shared/
-        users/{user_id}/
-        runs/{run_id}/</pre>
-          </div>
-
-          <div class="image-strip">
-            <figure class="visual-panel" aria-label="运行沙盒读写边界">
-              <svg viewBox="0 0 560 460" role="img" aria-labelledby="rwBoundaryTitle">
-                <title id="rwBoundaryTitle">运行沙盒读写边界</title>
-                <rect x="0" y="0" width="560" height="460" fill="#fbfcfa"></rect>
-                <text class="visual-title" x="28" y="42">运行时读写边界</text>
-                <text class="visual-note" x="28" y="68">读可以跨层，写默认只落在本次 run。</text>
-
-                <rect class="visual-blue" x="42" y="104" width="168" height="108" rx="8"></rect>
-                <text class="visual-label" x="72" y="136">shared/</text>
-                <text class="visual-small" x="72" y="162">项目共享材料</text>
-                <text class="visual-small" x="72" y="184">Run 可读</text>
-
-                <rect class="visual-green" x="42" y="254" width="168" height="108" rx="8"></rect>
-                <text class="visual-label" x="70" y="286">users/{user}</text>
-                <text class="visual-small" x="70" y="312">用户作业材料</text>
-                <text class="visual-small" x="70" y="334">当前用户可读</text>
-
-                <rect class="visual-dark" x="288" y="164" width="220" height="132" rx="10"></rect>
-                <text class="visual-dark-text" x="340" y="203">Agent Runtime</text>
-                <text fill="#cbd8d1" font-size="13" x="332" y="230">cwd = runs/{run_id}/</text>
-                <text fill="#cbd8d1" font-size="13" x="326" y="254">writable_roots = [run_root]</text>
-
-                <path class="visual-arrow-strong" d="M210 158 C252 158 252 205 284 205"></path>
-                <path class="visual-arrow-strong" d="M210 308 C252 308 252 252 284 252"></path>
-
-                <rect class="visual-amber" x="306" y="340" width="184" height="62" rx="8"></rect>
-                <text class="visual-label" x="346" y="375">runs/{run}</text>
-                <text class="visual-small" x="346" y="393">唯一默认可写</text>
-                <path class="visual-arrow-strong" d="M398 296 L398 336"></path>
-              </svg>
-              <figcaption>OpenCode 或其他 Runtime 看到的是 Bridge 给出的 `SandboxBinding`，不是前端传来的裸路径。</figcaption>
-            </figure>
-
-            <figure class="visual-panel" aria-label="产物提升流程">
-              <svg viewBox="0 0 560 460" role="img" aria-labelledby="promotionTitle">
-                <title id="promotionTitle">产物提升流程</title>
-                <rect x="0" y="0" width="560" height="460" fill="#fbfcfa"></rect>
-                <text class="visual-title" x="28" y="42">产物从沙盒进入共享区</text>
-                <text class="visual-note" x="28" y="68">移动文件不是 Agent 私自完成，而是 Bridge 根据确认事件执行。</text>
-
-                <rect class="visual-amber" x="44" y="118" width="142" height="72" rx="8"></rect>
-                <text class="visual-label" x="74" y="150">RunSandbox</text>
-                <text class="visual-small" x="76" y="172">hld.md</text>
-
-                <rect class="visual-chip" x="218" y="118" width="142" height="72" rx="8"></rect>
-                <text class="visual-label" x="236" y="150">Artifact</text>
-                <text class="visual-small" x="238" y="172">source_ref</text>
-
-                <rect class="visual-red" x="392" y="118" width="126" height="72" rx="8"></rect>
-                <text class="visual-label" x="414" y="150">Confirm</text>
-                <text class="visual-small" x="415" y="172">用户确认</text>
-
-                <path class="visual-arrow-strong" d="M186 154 L214 154"></path>
-                <path class="visual-arrow-strong" d="M360 154 L388 154"></path>
-
-                <rect class="visual-green" x="132" y="272" width="156" height="76" rx="8"></rect>
-                <text class="visual-label" x="158" y="305">users/{user}</text>
-                <text class="visual-small" x="158" y="328">个人保留</text>
-
-                <rect class="visual-blue" x="332" y="272" width="156" height="76" rx="8"></rect>
-                <text class="visual-label" x="364" y="305">shared/</text>
-                <text class="visual-small" x="364" y="328">项目共享</text>
-
-                <path class="visual-arrow visual-dashed" d="M455 190 C455 232 410 232 410 268"></path>
-                <path class="visual-arrow visual-dashed" d="M455 190 C455 232 210 232 210 268"></path>
-                <text class="visual-note" x="82" y="410">MVP 可先只做：RunSandbox -> Artifact -> Confirmation -> ProjectSharedWorkspace。</text>
-              </svg>
-              <figcaption>产物提升是一个可审计流程：原始 run 路径、目标路径、确认人、关联事项和 runtime_operation 都要留下。</figcaption>
-            </figure>
-          </div>
-
-          <div class="matrix" style="margin-top:16px">
-            <table>
-              <thead>
-                <tr>
-                  <th>适配要求</th>
-                  <th>设计含义</th>
-                  <th>MVP 策略</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Server-side resolve</td>
-                  <td>路径只由服务端解析，前端不传裸绝对路径。</td>
-                  <td><code>project_id / work_item_id / run_id</code> 入参。</td>
-                </tr>
-                <tr>
-                  <td>Default write isolation</td>
-                  <td>Agent 默认只能写本次运行沙盒。</td>
-                  <td><code>writable_roots = [run_root]</code>。</td>
-                </tr>
-                <tr>
-                  <td>Explicit promotion</td>
-                  <td>进入用户空间或项目共享空间必须有确认事件。</td>
-                  <td>生成 ArtifactCandidate，用户确认后提升。</td>
-                </tr>
-                <tr>
-                  <td>Path containment</td>
-                  <td>所有文件操作必须留在 runtime workspace 根下。</td>
-                  <td>路径规范化、前缀检查、符号链接防逃逸。</td>
-                </tr>
-                <tr>
-                  <td>Artifact snapshot</td>
-                  <td>run 结束后扫描新增或修改文件，变成证据。</td>
-                  <td>记录 artifact、source_ref、run_id。</td>
-                </tr>
-                <tr>
-                  <td>Cleanup policy</td>
-                  <td>成功、失败、取消需要不同保留策略。</td>
-                  <td>成功可清理，失败保留到 TTL，取消保留日志。</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section id="memory">
-          <div class="section-head">
-            <div class="eyebrow">Memory Contract</div>
-            <h2>记忆空间是 AgentCenter 自己拥有的合同，不是外部框架的 schema。</h2>
-            <p>记忆后端负责索引和检索，AgentCenter 负责权限、生命周期、确认、淘汰、审计和召回解释。</p>
-          </div>
-
-          <figure class="visual-panel" aria-label="记忆可见性与空间边界">
-            <svg viewBox="0 0 1180 420" role="img" aria-labelledby="memoryScopeTitle">
-              <title id="memoryScopeTitle">记忆可见性与空间边界</title>
-              <rect x="0" y="0" width="1180" height="420" fill="#fbfcfa"></rect>
-              <text class="visual-title" x="40" y="50">记忆不能脱离空间边界召回</text>
-              <text class="visual-note" x="40" y="80">同一条记忆进入上下文前，必须先判断当前 run 是谁、在哪个项目、以什么权限工作。</text>
-
-              <rect class="visual-amber" x="76" y="138" width="250" height="150" rx="10"></rect>
-              <text class="visual-label" x="116" y="174">Run Working Memory</text>
-              <text class="visual-small" x="116" y="202">只影响当前 run</text>
-              <text class="visual-small" x="116" y="226">可沉淀为 candidate</text>
-              <text class="visual-code" x="116" y="254">visibility = run</text>
-
-              <rect class="visual-green" x="464" y="116" width="250" height="194" rx="10"></rect>
-              <text class="visual-label" x="502" y="154">User Private Memory</text>
-              <text class="visual-small" x="502" y="182">只跟随当前用户</text>
-              <text class="visual-small" x="502" y="206">不泄露给同项目其他人</text>
-              <text class="visual-code" x="502" y="236">visibility = private</text>
-              <text class="visual-code" x="502" y="260">scope: user + project</text>
-
-              <rect class="visual-blue" x="852" y="116" width="250" height="194" rx="10"></rect>
-              <text class="visual-label" x="890" y="154">Project Memory</text>
-              <text class="visual-small" x="890" y="182">项目团队可共享</text>
-              <text class="visual-small" x="890" y="206">必须确认后进入</text>
-              <text class="visual-code" x="890" y="236">visibility = project</text>
-              <text class="visual-code" x="890" y="260">status = confirmed</text>
-
-              <path class="visual-arrow visual-dashed" d="M326 212 C380 212 402 212 460 212"></path>
-              <path class="visual-arrow visual-dashed" d="M714 212 C770 212 792 212 848 212"></path>
-              <rect class="visual-dark" x="400" y="344" width="380" height="42" rx="8"></rect>
-              <text class="visual-dark-text" x="428" y="371">MemoryQueryContext = tenant + workspace + project + user + run</text>
-            </svg>
-            <figcaption>这张图表达的是治理边界：private 不是“小号 project”，project 也不是“自动共享”；每一次召回都要按当前空间身份做过滤。</figcaption>
+            <figcaption>这张图把目标态说成“套层”：企业/租户包住工作空间，工作空间包住用户视角，用户视角进入任务列表，列表里的工作项再映射到各自作业空间。</figcaption>
           </figure>
 
           <div class="grid-3">
             <div class="card">
-              <span class="badge green">run</span>
-              <h3>Run Working Memory</h3>
-              <p>当前 run 的临时发现、草稿、工具结果。默认只影响本次运行，结束后可提炼为候选记忆。</p>
+              <span class="tag green">MVP</span>
+              <h3>列表到工作项空间</h3>
+              <p>先跑通最核心的映射：列表包含工作项，工作项拥有独立作业空间。</p>
             </div>
             <div class="card">
-              <span class="badge blue">private</span>
-              <h3>User Private Memory</h3>
-              <p>用户偏好、沟通习惯、个人工作上下文。可影响 Agent 协作方式，但不能泄露给其他用户。</p>
+              <span class="tag blue">下一层</span>
+              <h3>加入用户视角</h3>
+              <p>用户不改变工作项归属，只影响可见范围、个人上下文和操作身份。</p>
             </div>
             <div class="card">
-              <span class="badge amber">project</span>
-              <h3>Project Shared Memory</h3>
-              <p>项目架构决策、约束、历史坑和共识。必须从 candidate 经确认后进入共享层。</p>
+              <span class="tag amber">再下一层</span>
+              <h3>加入工作空间和租户</h3>
+              <p>工作空间管理项目资料和共享规则，租户管理组织级隔离和审计。</p>
             </div>
-          </div>
-
-          <div class="matrix" style="margin-top:16px">
-            <table>
-              <thead>
-                <tr>
-                  <th>对象</th>
-                  <th>关键字段</th>
-                  <th>为什么必须有</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><code>MemoryItem</code></td>
-                  <td><code>visibility</code>、<code>kind</code>、<code>status</code>、<code>source_ref</code></td>
-                  <td>决定谁能看、是什么类型、是否可信、证据在哪里。</td>
-                </tr>
-                <tr>
-                  <td><code>MemoryQueryContext</code></td>
-                  <td><code>tenant_id</code>、<code>workspace_id</code>、<code>project_id</code>、<code>user_id</code>、<code>run_id</code></td>
-                  <td>召回前必须知道当前 Agent 是以谁的身份、在哪个项目工作。</td>
-                </tr>
-                <tr>
-                  <td><code>MemoryHit</code></td>
-                  <td><code>backend_name</code>、<code>score</code>、<code>reason</code>、<code>access_decision</code></td>
-                  <td>让前端和审计知道命中来自哪里，为什么命中，是否被过滤。</td>
-                </tr>
-                <tr>
-                  <td><code>RecallTrace</code></td>
-                  <td>命中记忆、过滤原因、注入上下文、使用结果</td>
-                  <td>企业场景下必须能解释 Agent 看了什么、为什么用了这些上下文。</td>
-                </tr>
-              </tbody>
-            </table>
           </div>
         </section>
 
-        <section id="governance">
+        <section id="workflow">
           <div class="section-head">
-            <div class="eyebrow">Memory Governance</div>
-            <h2>没有淘汰和复审，记忆越多，回答越脏。</h2>
-            <p>共享需要审批只是第一步。真正能长期运行的记忆系统还需要候选、确认、过期、替代、反馈和召回排序。</p>
+            <div class="eyebrow">05 Workflow Evolution</div>
+            <h2>工作流拆分也要后置。</h2>
+            <p>MVP 中，工作流阶段只是同一工作项作业空间里的过程。后续只有在并行、回滚、权限差异、长任务恢复变成真实需求时，才把阶段拆成更独立的运行空间。</p>
           </div>
 
-          <figure class="visual-panel" aria-label="记忆生命周期治理图">
-            <svg viewBox="0 0 1180 390" role="img" aria-labelledby="memoryLifecycleTitle">
-              <title id="memoryLifecycleTitle">记忆生命周期治理图</title>
-              <rect x="0" y="0" width="1180" height="390" fill="#fbfcfa"></rect>
-              <text class="visual-title" x="38" y="48">共享记忆不是写进去就永久生效</text>
-              <text class="visual-note" x="38" y="78">每条记忆都有状态机，旧结论可审计，但不会默认污染新上下文。</text>
+          <div class="grid-3">
+            <div class="card">
+              <span class="tag green">第一版</span>
+              <h3>阶段在同一空间</h3>
+              <p>理解、设计、执行、验证都在同一个工作项作业空间里展开，用户不切空间。</p>
+            </div>
+            <div class="card">
+              <span class="tag amber">增强版</span>
+              <h3>阶段有独立证据</h3>
+              <p>每个阶段有自己的过程记录和产物来源，但仍聚合给用户看。</p>
+            </div>
+            <div class="card">
+              <span class="tag red">完整态</span>
+              <h3>阶段可独立运行</h3>
+              <p>当需要并行、回滚或隔离时，阶段才拥有更独立的运行边界。</p>
+            </div>
+          </div>
 
-              <rect class="visual-chip" x="58" y="138" width="150" height="68" rx="8"></rect>
-              <text class="visual-label" x="86" y="168">Evidence</text>
-              <text class="visual-small" x="86" y="190">artifact / event</text>
+          <figure class="visual-panel" aria-label="工作流拆分抽象图">
+            <svg viewBox="0 0 1180 410" role="img" aria-labelledby="workflowTitle">
+              <title id="workflowTitle">工作流拆分抽象图</title>
+              <rect x="0" y="0" width="1180" height="410" fill="#fbfcfb"></rect>
+              <text class="visual-title" x="40" y="52">从同一工作项作业空间，逐步演进到阶段可独立运行</text>
 
-              <rect class="visual-amber" x="268" y="138" width="150" height="68" rx="8"></rect>
-              <text class="visual-label" x="298" y="168">Candidate</text>
-              <text class="visual-small" x="300" y="190">待确认</text>
+              <rect class="box-green" x="74" y="128" width="286" height="148" rx="10"></rect>
+              <text class="visual-label" x="112" y="166">MVP</text>
+              <text class="visual-small" x="112" y="196">一个工作项作业空间</text>
+              <text class="visual-small" x="112" y="222">多个连续阶段</text>
+              <text class="visual-small" x="112" y="248">最容易理解和落地</text>
 
-              <rect class="visual-green" x="478" y="138" width="150" height="68" rx="8"></rect>
-              <text class="visual-label" x="508" y="168">Confirmed</text>
-              <text class="visual-small" x="510" y="190">可召回</text>
+              <rect class="box-amber" x="446" y="128" width="286" height="148" rx="10"></rect>
+              <text class="visual-label" x="484" y="166">中期</text>
+              <text class="visual-small" x="484" y="196">阶段有证据</text>
+              <text class="visual-small" x="484" y="222">产物能追溯</text>
+              <text class="visual-small" x="484" y="248">用户仍看统一会话</text>
 
-              <rect class="visual-blue" x="688" y="80" width="150" height="68" rx="8"></rect>
-              <text class="visual-label" x="720" y="110">Superseded</text>
-              <text class="visual-small" x="724" y="132">被新结论替代</text>
+              <rect class="box-red" x="818" y="128" width="286" height="148" rx="10"></rect>
+              <text class="visual-label" x="856" y="166">完整态</text>
+              <text class="visual-small" x="856" y="196">阶段可独立运行</text>
+              <text class="visual-small" x="856" y="222">支持并行、回滚、隔离</text>
+              <text class="visual-small" x="856" y="248">仍聚合回工作项空间</text>
 
-              <rect class="visual-red" x="688" y="218" width="150" height="68" rx="8"></rect>
-              <text class="visual-label" x="724" y="248">Archived</text>
-              <text class="visual-small" x="722" y="270">过期或归档</text>
-
-              <rect class="visual-red" x="268" y="278" width="150" height="68" rx="8"></rect>
-              <text class="visual-label" x="310" y="308">Rejected</text>
-              <text class="visual-small" x="306" y="330">拒绝沉淀</text>
-
-              <rect class="visual-dark" x="900" y="138" width="218" height="88" rx="10"></rect>
-              <text class="visual-dark-text" x="940" y="174">ContextRanker</text>
-              <text fill="#cbd8d1" font-size="13" x="932" y="199">相关性 + 权限 + 新鲜度 + 反馈</text>
-
-              <path class="visual-arrow-strong" d="M208 172 L264 172"></path>
-              <path class="visual-arrow-strong" d="M418 172 L474 172"></path>
-              <path class="visual-arrow" d="M628 159 C660 138 660 114 684 114"></path>
-              <path class="visual-arrow" d="M628 187 C660 210 660 252 684 252"></path>
-              <path class="visual-arrow visual-dashed" d="M343 206 L343 274"></path>
-              <path class="visual-arrow-strong" d="M628 172 L896 172"></path>
+              <path class="arrow" d="M360 202 L442 202"></path>
+              <path class="arrow" d="M732 202 L814 202"></path>
             </svg>
-            <figcaption>淘汰机制的重点不是删除历史，而是把“默认可召回”的集合控制住：confirmed 才能进入排序，archived / superseded 默认退出上下文。</figcaption>
+            <figcaption>拆分不是第一版的目标。第一版先把“同一工作项作业空间中的连续工作”讲清楚。</figcaption>
           </figure>
-
-          <div class="split">
-            <div class="diagram">
-              <div class="diagram-title">MVP 生命周期</div>
-              <div class="tree">raw_evidence
-  -> run_working
-    -> candidate
-      -> confirmed
-        -> archived
-        -> superseded
-
-candidate
-  -> rejected</div>
-            </div>
-            <div class="callout">
-              <h3>召回排序不只看相似度</h3>
-              <p>最终 ContextRanker 应综合相关性、权限匹配、来源质量、确认状态、新鲜度、使用反馈、过期状态和 superseded 状态。这样旧记忆仍可审计，但不会默认污染上下文。</p>
-            </div>
-          </div>
-
-          <div class="matrix" style="margin-top:16px">
-            <table>
-              <thead>
-                <tr>
-                  <th>治理规则</th>
-                  <th>系统动作</th>
-                  <th>价值</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>没有 <code>source_ref</code></td>
-                  <td>不能升级为 <code>confirmed</code></td>
-                  <td>防止无证据推测进入正式上下文。</td>
-                </tr>
-                <tr>
-                  <td>candidate 超过 TTL 无人确认</td>
-                  <td>自动 <code>archived</code></td>
-                  <td>控制候选记忆堆积。</td>
-                </tr>
-                <tr>
-                  <td>新记忆覆盖旧记忆</td>
-                  <td>旧记忆 <code>superseded</code></td>
-                  <td>保留历史，同时默认不召回旧结论。</td>
-                </tr>
-                <tr>
-                  <td>用户反馈不准确</td>
-                  <td>增加负反馈并进入复审</td>
-                  <td>让系统学习哪些记忆会误导。</td>
-                </tr>
-                <tr>
-                  <td>到达 <code>review_due_at</code></td>
-                  <td>进入项目复审队列</td>
-                  <td>项目约束和规则不会永久僵化。</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section id="harness">
-          <div class="section-head">
-            <div class="eyebrow">Harness Memory</div>
-            <h2>Agent 也要记住怎么把自己做得更好，但不能自动全局生效。</h2>
-            <p>Harness Memory 记录的是做事方法、工具经验、失败模式和协作偏好。它和项目事实、用户私人信息、企业规则必须隔离治理。</p>
-          </div>
-
-          <div class="grid-2">
-            <div class="card">
-              <span class="badge blue">What it stores</span>
-              <h3>自我改进记忆存什么</h3>
-              <ul>
-                <li>什么任务适合先问澄清问题。</li>
-                <li>什么报告结构用户更容易理解。</li>
-                <li>哪些工具组合在某项目里有效。</li>
-                <li>某个 Runtime Adapter 的常见失败模式。</li>
-                <li>用户不认可 benchmark 时，先解释测试场景和期望召回。</li>
-              </ul>
-            </div>
-            <div class="card">
-              <span class="badge red">Hard boundary</span>
-              <h3>不能自动全局生效</h3>
-              <ul>
-                <li>影响 prompt、skill、workflow 前必须有确认或评测证据。</li>
-                <li>用户私人协作偏好不能泄露为项目共享 harness。</li>
-                <li>项目级 harness 只在该项目或 workspace 下影响 Agent 行为。</li>
-                <li>Harness 记忆不是项目事实，也不是企业规范。</li>
-              </ul>
-            </div>
-          </div>
-        </section>
-
-        <section>
-          <div class="section-head">
-            <div class="eyebrow">Decision Record</div>
-            <h2>本轮应确认的设计决策</h2>
-          </div>
-          <div class="matrix">
-            <table>
-              <thead>
-                <tr>
-                  <th>问题</th>
-                  <th>建议决策</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>是否直接做最终完整版</td>
-                  <td>否。最终骨架现在固定，复杂能力按 MVP、V1、V2、V3 演进。</td>
-                </tr>
-                <tr>
-                  <td>MVP tenant/workspace 怎么处理</td>
-                  <td>固定默认值，但所有核心字段、路径和查询上下文保留。</td>
-                </tr>
-                <tr>
-                  <td>Agent 默认写哪里</td>
-                  <td>只写 <code>RunSandbox</code>，进入用户或项目空间必须提升。</td>
-                </tr>
-                <tr>
-                  <td>项目共享记忆怎么产生</td>
-                  <td>必须从 candidate 经过确认进入，不能自动把推测写成团队共识。</td>
-                </tr>
-                <tr>
-                  <td>外部记忆框架的位置</td>
-                  <td>只能是 backend adapter，不能拥有 AgentCenter 的权限、生命周期和治理语义。</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
         </section>
 
         <footer class="footer">
-          生成日期：2026-05-25。源设计文档：docs/architecture/SPACE-MODEL-MEMORY-SANDBOX-DESIGN.md。
+          生成日期：2026-05-26。当前版本为抽象设计报告，不包含内部实现字段、编号和目录方案。
         </footer>
       </article>
     </main>
