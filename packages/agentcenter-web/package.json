@@ -1,0 +1,15 @@
+{
+  "name": "@agentcenter/web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "../app/node_modules/.bin/vite --host 127.0.0.1",
+    "build": "../app/node_modules/.bin/vite build",
+    "typecheck": "tsgo -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@typescript/native-preview": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

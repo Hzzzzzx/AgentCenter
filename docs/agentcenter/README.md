@@ -20,3 +20,16 @@ implementation base.
   durability, and workflow continuity.
 - `workspace-isolation-design.md`: lower-level design for mapping product
   workspaces to controlled OpenCode worktree directories.
+- `controlled-runtime-project-resources-design.md`: focused design for the
+  controlled runtime root, project-level Skill/MCP registries, and work item
+  runtime workspace projection.
+
+## Current Frontend Boundary
+
+- `packages/app` is OpenCode's own Web application and should stay upstream
+  shaped.
+- AgentCenter display work belongs in `packages/agentcenter-web/`.
+- `packages/agentcenter-web` now contains the first standalone 1026-style
+  display shell. It uses demo work item data only.
+- The next frontend target is to tighten visual parity and then integrate
+  OpenCode capabilities through explicit boundaries.
