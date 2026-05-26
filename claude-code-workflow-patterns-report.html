@@ -1,0 +1,1356 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Claude Code Workflow 协作模式解读</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f6f2;
+      --panel: #fffdf8;
+      --ink: #202124;
+      --muted: #6f736f;
+      --faint: #969b96;
+      --line: #e4dfd4;
+      --line-strong: #d3cab9;
+      --blue: #0f8aa2;
+      --blue-soft: #e7f5f8;
+      --orange: #d98239;
+      --orange-soft: #fff1e6;
+      --purple: #935fba;
+      --purple-soft: #f4ecfa;
+      --green: #177a56;
+      --green-soft: #e8f5ee;
+      --warn: #9a4f11;
+      --warn-soft: #fff4e8;
+      --shadow: 0 12px 32px rgba(58, 50, 38, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at top left, rgba(15, 138, 162, 0.08), transparent 36rem),
+        linear-gradient(180deg, #fbfaf7 0%, var(--bg) 36rem);
+      color: var(--ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      line-height: 1.62;
+      overflow-x: hidden;
+    }
+
+    .page-header {
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 48px 28px 28px;
+    }
+
+    .kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+      color: var(--blue);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .dot {
+      display: inline-block;
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      background: var(--blue);
+    }
+
+    h1, h2, h3, p { margin-top: 0; }
+
+    h1 {
+      max-width: 900px;
+      margin-bottom: 16px;
+      font-family: Georgia, "Times New Roman", "Songti SC", serif;
+      font-size: clamp(36px, 6vw, 72px);
+      line-height: 1.05;
+      letter-spacing: 0;
+      overflow-wrap: anywhere;
+    }
+
+    h2 {
+      margin-bottom: 14px;
+      font-family: Georgia, "Times New Roman", "Songti SC", serif;
+      font-size: clamp(24px, 3vw, 36px);
+      line-height: 1.18;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin-bottom: 8px;
+      font-size: 17px;
+      line-height: 1.25;
+    }
+
+    p, li, td, th, .caption, .speaker-line {
+      overflow-wrap: anywhere;
+    }
+
+    p { margin-bottom: 12px; }
+
+    a { color: var(--blue); }
+
+    code {
+      border: 1px solid rgba(15, 138, 162, 0.16);
+      border-radius: 5px;
+      background: #eef7f8;
+      padding: 1px 5px;
+      color: #146a79;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+
+    .subtitle {
+      max-width: 880px;
+      color: var(--muted);
+      font-size: 18px;
+      overflow-wrap: anywhere;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 22px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.74);
+      padding: 6px 11px;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .page-main {
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 0 28px 56px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 300px;
+      gap: 22px;
+      align-items: start;
+    }
+
+    .content {
+      display: grid;
+      gap: 22px;
+      min-width: 0;
+    }
+
+    .side {
+      position: sticky;
+      top: 18px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 253, 248, 0.94);
+      box-shadow: var(--shadow);
+      padding: clamp(18px, 3vw, 28px);
+    }
+
+    .panel.tight { padding: 18px; }
+
+    .lead-card {
+      border-left: 5px solid var(--blue);
+      background: linear-gradient(135deg, var(--blue-soft), #fffdf8 62%);
+    }
+
+    .warn-card {
+      border-left: 5px solid var(--warn);
+      background: linear-gradient(135deg, var(--warn-soft), #fffdf8 64%);
+    }
+
+    .good-card {
+      border-left: 5px solid var(--green);
+      background: linear-gradient(135deg, var(--green-soft), #fffdf8 64%);
+    }
+
+    .section-note {
+      max-width: 760px;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .quote {
+      border-left: 4px solid var(--blue);
+      margin: 16px 0 4px;
+      padding: 8px 0 8px 16px;
+      color: #25525b;
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.45;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .source-strip {
+      display: grid;
+      gap: 12px;
+    }
+
+    .source-row {
+      display: grid;
+      grid-template-columns: 108px minmax(0, 1fr);
+      gap: 12px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 12px;
+    }
+
+    .source-row:last-child {
+      border-bottom: 0;
+      padding-bottom: 0;
+    }
+
+    .label {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--faint);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .label i {
+      display: inline-block;
+      width: 9px;
+      height: 9px;
+      border-radius: 3px;
+      background: currentColor;
+    }
+
+    .big-line {
+      margin-bottom: 8px;
+      font-family: Georgia, "Times New Roman", "Songti SC", serif;
+      font-size: clamp(28px, 4vw, 48px);
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    .orange { color: var(--orange); }
+    .purple { color: var(--purple); }
+    .blue { color: var(--blue); }
+
+    .caption {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .mini {
+      color: var(--faint);
+      font-size: 12px;
+    }
+
+    .rebuild-card {
+      display: grid;
+      grid-template-rows: auto auto auto minmax(190px, 1fr) auto;
+      min-height: 500px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fffefa;
+      padding: 20px;
+      box-shadow: 0 8px 20px rgba(60, 50, 36, 0.06);
+    }
+
+    .rebuild-card .big-line {
+      font-size: clamp(28px, 2.8vw, 40px);
+    }
+
+    .diagram-box {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 230px;
+      margin: 20px 0 18px;
+      border: 1px solid #eee7dc;
+      border-radius: 8px;
+      background: #fffaf2;
+      overflow: hidden;
+    }
+
+    .rebuild-card .diagram-box {
+      min-height: 200px;
+      margin: 14px 0 14px;
+    }
+
+    .svg-wrap {
+      width: 100%;
+      height: 100%;
+      min-height: 230px;
+    }
+
+    svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .pattern-card {
+      display: grid;
+      grid-template-rows: auto auto minmax(190px, 1fr) auto;
+      min-height: 480px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fffefa;
+      padding: 22px;
+      box-shadow: 0 8px 20px rgba(60, 50, 36, 0.05);
+    }
+
+    .gap-card {
+      min-height: 430px;
+      grid-template-rows: auto auto minmax(160px, 1fr) auto;
+    }
+
+    .gap-card .diagram-box {
+      min-height: 180px;
+      margin: 14px 0;
+    }
+
+    .insight-band {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin: 16px 0 20px;
+    }
+
+    .insight-chip {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #faf7ef;
+      padding: 12px;
+    }
+
+    .insight-chip strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--blue);
+    }
+
+    .pattern-title {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .num {
+      display: inline-grid;
+      place-items: center;
+      width: 42px;
+      height: 32px;
+      border-radius: 6px;
+      background: #dceff4;
+      color: #5b9bac;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 15px;
+      font-weight: 800;
+    }
+
+    .pattern-title strong {
+      font-family: Georgia, "Times New Roman", "Songti SC", serif;
+      font-size: clamp(22px, 2.6vw, 32px);
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    .pattern-title em {
+      color: var(--blue);
+      font-style: normal;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      overflow-wrap: anywhere;
+      font-size: 14px;
+    }
+
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 11px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #faf7ef;
+      color: #4a4f4b;
+      font-size: 13px;
+    }
+
+    ul, ol {
+      margin: 8px 0;
+      padding-left: 22px;
+    }
+
+    li { margin: 6px 0; }
+
+    .callout {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #faf7ef;
+      padding: 14px;
+    }
+
+    .toc a {
+      display: block;
+      border-bottom: 1px solid var(--line);
+      padding: 9px 0;
+      color: var(--ink);
+      text-decoration: none;
+      font-size: 14px;
+    }
+
+    .toc a:last-child { border-bottom: 0; }
+
+    .toc a:hover { color: var(--blue); }
+
+    .speaker {
+      display: grid;
+      gap: 10px;
+    }
+
+    .speaker-line {
+      border-left: 3px solid var(--line-strong);
+      padding-left: 12px;
+      color: #323633;
+    }
+
+    .one-liner {
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .footnotes {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .title-line {
+      display: block;
+    }
+
+    @media (max-width: 1060px) {
+      .layout { grid-template-columns: 1fr; }
+      .side { position: static; }
+      .grid-3 { grid-template-columns: 1fr; }
+      .grid-2 { grid-template-columns: 1fr; }
+      .insight-band { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .rebuild-card, .pattern-card { min-height: auto; }
+    }
+
+    @media (max-width: 620px) {
+      .page-header {
+        padding: 32px 18px 22px;
+      }
+
+      .page-main {
+        padding: 0 18px 40px;
+      }
+
+      h1 {
+        font-size: 31px;
+        line-height: 1.12;
+      }
+
+      h2 {
+        font-size: 24px;
+      }
+
+      .subtitle {
+        font-size: 16px;
+      }
+
+      .panel {
+        padding: 18px;
+      }
+
+      .pill {
+        white-space: normal;
+      }
+
+      .rebuild-card,
+      .pattern-card {
+        padding: 18px;
+      }
+
+      .big-line,
+      .rebuild-card .big-line {
+        font-size: 32px;
+      }
+
+      .source-row {
+        grid-template-columns: 1fr;
+      }
+
+      .insight-band {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media print {
+      body { background: #fff; }
+      .panel, .rebuild-card, .pattern-card { box-shadow: none; break-inside: avoid; }
+      .side { position: static; }
+      a { color: #064f5e; }
+    }
+  </style>
+</head>
+<body>
+  <header class="page-header">
+    <div class="kicker"><span class="dot"></span>分享稿 · Agent Workflow Design</div>
+    <h1><span class="title-line">从 Subagents 到</span><span class="title-line">Workflow：多 Agent</span><span class="title-line">协作到底在设计什么？</span></h1>
+    <p class="subtitle">这份报告基于原始视频截图材料，提炼多 Agent 协作的关键结构：三种协作范式、六种 workflow 编排模式，以及背后的工程设计取舍。</p>
+    <div class="meta">
+      <span class="pill">状态：分享版初稿</span>
+      <span class="pill">生成日期：2026-05-25</span>
+      <span class="pill">可信度：中等</span>
+      <span class="pill">口径：官方文档 + 截图转译</span>
+    </div>
+  </header>
+
+  <main class="page-main">
+    <div class="layout">
+      <div class="content">
+        <section id="opening" class="panel lead-card">
+          <h2>开场结论</h2>
+          <p class="one-liner">Agent 是执行者，Workflow 是协作协议。</p>
+          <p>这组材料真正有价值的地方，不是强调“多开几个 Agent”，而是在讨论一个更工程化的问题：当多个 Agent 同时工作时，谁负责拆任务？谁负责并行？谁负责验证？谁负责把结果收拢成可交付产物？</p>
+          <div class="quote">从“让一个智能体临场发挥”，升级为“用可声明、可复跑、可观察的协作图来组织智能体”。</div>
+        </section>
+
+        <section id="scope" class="panel warn-card">
+          <h2>阅读边界</h2>
+          <p>这份报告把原始材料当作“设计思路素材”来分析，不把所有画面文案都视作已经稳定发布的官方功能。根据当前能确认的 Claude Code 文档，Subagents、Agent Teams、Agent loop、Ultraplan 都有官方材料；更脚本化的 Workflow 形态，更适合先理解为一种实验方向或设计范式。</p>
+          <p class="section-note">换句话说：重点是理解这套协作架构，而不是立即断言某个命令、环境变量或文件格式已经是稳定接口。</p>
+        </section>
+
+        <section id="source-rebuild" class="panel">
+          <h2>基础框架：三种协作范式</h2>
+          <p class="section-note">第一组材料的核心是三张卡片：Subagents、Agent Teams、Workflow。它们的差异不在“谁更聪明”，而在控制权、通信方式和复跑能力。</p>
+          <div class="grid-3">
+            <article class="rebuild-card">
+              <div class="label orange"><i></i>SUBAGENTS · 信使</div>
+              <div class="big-line"><span class="orange">临时派遣，</span><br>结果回汇</div>
+              <p class="caption">主 agent 临时 fork 出子 agent 去办单件事。编排逻辑藏在自然语言 prompt 里。</p>
+              <div class="diagram-box">
+                <svg class="svg-wrap" viewBox="0 0 420 260" role="img" aria-label="Subagents diagram">
+                  <line x1="210" y1="130" x2="70" y2="52" stroke="#e5a471" stroke-width="2" stroke-dasharray="6 6"/>
+                  <line x1="210" y1="130" x2="350" y2="52" stroke="#e5a471" stroke-width="2" stroke-dasharray="6 6"/>
+                  <line x1="210" y1="130" x2="70" y2="208" stroke="#e5a471" stroke-width="2" stroke-dasharray="6 6"/>
+                  <line x1="210" y1="130" x2="350" y2="208" stroke="#e5a471" stroke-width="2" stroke-dasharray="6 6"/>
+                  <circle cx="210" cy="130" r="28" fill="#171512"/>
+                  <text x="210" y="137" text-anchor="middle" fill="#fff" font-size="18">U</text>
+                  <g fill="#fffaf2" stroke="#d98239" stroke-width="3">
+                    <circle cx="70" cy="52" r="20"/><circle cx="350" cy="52" r="20"/>
+                    <circle cx="70" cy="208" r="20"/><circle cx="350" cy="208" r="20"/>
+                  </g>
+                  <g fill="#d98239" font-size="15" text-anchor="middle">
+                    <text x="70" y="58">a</text><text x="350" y="58">b</text>
+                    <text x="70" y="214">c</text><text x="350" y="214">d</text>
+                  </g>
+                  <g fill="#a39a8d" font-size="11" text-anchor="middle" letter-spacing="3">
+                    <text x="70" y="88">SCOUT</text><text x="350" y="88">SCOUT</text>
+                    <text x="70" y="244">SCOUT</text><text x="350" y="244">SCOUT</text>
+                  </g>
+                </svg>
+              </div>
+              <p>启动成本低、自然、灵活。但多个 subagent 之间没有强契约：输出格式、调用顺序、聚合方式基本靠主 agent 当场决定，难以复跑。</p>
+            </article>
+
+            <article class="rebuild-card">
+              <div class="label purple"><i></i>AGENT TEAMS · 工作室</div>
+              <div class="big-line"><span class="purple">长期共事，</span><br>人在中间调度</div>
+              <p class="caption">多个角色在并行会话里协作，例如 Planner / Reviewer / Implementer / Docs。</p>
+              <div class="diagram-box">
+                <svg class="svg-wrap" viewBox="0 0 420 260" role="img" aria-label="Agent teams diagram">
+                  <rect x="42" y="32" width="336" height="196" rx="20" fill="#f8f0fb" stroke="#cda9df" stroke-width="2" stroke-dasharray="7 5"/>
+                  <circle cx="210" cy="130" r="28" fill="#171512"/>
+                  <circle cx="220" cy="138" r="20" fill="#a973c8" opacity="0.42"/>
+                  <text x="210" y="137" text-anchor="middle" fill="#fff" font-size="18">U</text>
+                  <g fill="#fffaf2" stroke="#935fba" stroke-width="3">
+                    <circle cx="120" cy="72" r="20"/><circle cx="300" cy="72" r="20"/>
+                    <circle cx="120" cy="188" r="20"/><circle cx="300" cy="188" r="20"/>
+                  </g>
+                  <g fill="#935fba" font-size="15" text-anchor="middle">
+                    <text x="120" y="78">P</text><text x="300" y="78">R</text>
+                    <text x="120" y="194">I</text><text x="300" y="194">D</text>
+                  </g>
+                  <g fill="#8d7d93" font-size="13" text-anchor="middle">
+                    <text x="120" y="108">planner</text><text x="300" y="108">reviewer</text>
+                    <text x="120" y="222">impl.</text><text x="300" y="222">docs</text>
+                  </g>
+                </svg>
+              </div>
+              <p>适合人和多个 agent 共同坐班：操作者可以在不同会话里观察每位 agent 各自推进。控制感强，但难以一键复跑，更像 IDE + 多个长期 chat。</p>
+            </article>
+
+            <article class="rebuild-card">
+              <div class="label blue"><i></i>WORKFLOW · 流水线</div>
+              <div class="big-line"><span class="blue">脚本编排，</span><br>阶段 · 并行 · schema</div>
+              <p class="caption">用一段 JavaScript 显式声明阶段、fan-out、聚合与结构化输出契约。</p>
+              <div class="diagram-box">
+                <svg class="svg-wrap" viewBox="0 0 460 260" role="img" aria-label="Workflow diagram">
+                  <g stroke="#e7ddd0" stroke-width="1.5" stroke-dasharray="5 5">
+                    <line x1="125" y1="28" x2="125" y2="232"/><line x1="286" y1="28" x2="286" y2="232"/>
+                  </g>
+                  <g fill="#8f9a9d" font-size="10" letter-spacing="3">
+                    <text x="28" y="52">PHASE · PRODUCE</text>
+                    <text x="150" y="52">PHASE · FANOUT</text>
+                    <text x="316" y="52">PHASE · AGGREGATE</text>
+                  </g>
+                  <g stroke="#0f8aa2" stroke-width="3" fill="none">
+                    <line x1="42" y1="142" x2="170" y2="84"/>
+                    <line x1="42" y1="142" x2="170" y2="142"/>
+                    <line x1="42" y1="142" x2="170" y2="200"/>
+                    <line x1="170" y1="84" x2="300" y2="142"/>
+                    <line x1="170" y1="142" x2="300" y2="142"/>
+                    <line x1="170" y1="200" x2="300" y2="142"/>
+                    <line x1="322" y1="142" x2="402" y2="142"/>
+                  </g>
+                  <g fill="#fffaf2" stroke="#0f8aa2" stroke-width="3">
+                    <circle cx="42" cy="142" r="23"/><circle cx="170" cy="84" r="23"/>
+                    <circle cx="170" cy="142" r="23"/><circle cx="170" cy="200" r="23"/>
+                    <circle cx="300" cy="142" r="24"/>
+                  </g>
+                  <circle cx="402" cy="142" r="25" fill="#171512"/>
+                  <circle cx="346" cy="142" r="5" fill="#0f8aa2"/>
+                  <g fill="#0f8aa2" font-size="15" text-anchor="middle">
+                    <text x="42" y="148">P</text><text x="170" y="90">α</text>
+                    <text x="170" y="148">β</text><text x="170" y="206">γ</text>
+                    <text x="300" y="148">Σ</text>
+                  </g>
+                  <text x="402" y="147" text-anchor="middle" fill="#fff" font-size="17">↪</text>
+                  <g fill="#8d8477" font-size="12" text-anchor="middle">
+                    <text x="42" y="180">producer</text><text x="300" y="180">aggregator</text>
+                    <text x="402" y="180">artifact</text>
+                  </g>
+                  <rect x="154" y="221" width="160" height="24" rx="12" fill="#fff" stroke="#e6ddd0"/>
+                  <text x="234" y="237" text-anchor="middle" fill="#6f736f" font-size="12">schema: {ok, findings[]}</text>
+                </svg>
+              </div>
+              <p>每个 <code>agent()</code> 都有 schema、phase、label：能复跑、能追踪、能做质量门禁。代价是要写脚本，也要审脚本。</p>
+            </article>
+          </div>
+        </section>
+
+        <section id="three-types" class="panel">
+          <h2>三种范式怎么选？</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>范式</th>
+                <th>控制权在哪里</th>
+                <th>适合什么</th>
+                <th>主要代价</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Subagents</strong><br><span class="mini">信使 / scout</span></td>
+                <td>主 Agent 的自然语言调度</td>
+                <td>一次性调研、读大量上下文、代码搜索、日志分析</td>
+                <td>协作契约弱，输出和聚合容易漂移</td>
+              </tr>
+              <tr>
+                <td><strong>Agent Teams</strong><br><span class="mini">工作室 / team</span></td>
+                <td>人 + team lead + shared task list</td>
+                <td>长期任务、多人视角、跨层协作、竞争性假设调试</td>
+                <td>协作开销和 token 成本高，不适合强依赖串行任务</td>
+              </tr>
+              <tr>
+                <td><strong>Workflow</strong><br><span class="mini">流水线 / runtime</span></td>
+                <td>脚本、DAG、阶段、schema、gate</td>
+                <td>可复跑的批量流程、质量门禁、结构化产物生成</td>
+                <td>要提前建模流程，调试成本更像工程系统</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section id="patterns" class="panel">
+          <h2>基础模式：六种 Workflow 编排模式</h2>
+          <p class="section-note">第二组材料更关键。它不是在展示 UI，而是在展示多 Agent 编排的六种基本“拓扑”。这些拓扑决定信息怎么流、控制权怎么收束、错误怎么被发现。</p>
+          <div class="grid-2">
+            <article class="pattern-card">
+              <div class="pattern-title"><span class="num">01</span><strong>Pipeline · <em>流水线</em></strong></div>
+              <p>每个条目独立走 2-N 个串行阶段。慢条目不阻塞快条目，是批量处理任务的首选形状。</p>
+              <div class="diagram-box">
+                <svg class="svg-wrap" viewBox="0 0 500 230" role="img" aria-label="Pipeline pattern">
+                  <g fill="#a29b8f" font-size="13" text-anchor="middle">
+                    <text x="105" y="38">stage 1</text><text x="250" y="38">stage 2</text><text x="395" y="38">stage 3</text>
+                  </g>
+                  <g stroke="#e7ddd0" stroke-width="1.5" stroke-dasharray="5 5">
+                    <line x1="175" y1="50" x2="175" y2="190"/><line x1="325" y1="50" x2="325" y2="190"/>
+                  </g>
+                  <g stroke="#0f8aa2" stroke-width="3">
+                    <line x1="80" y1="78" x2="420" y2="78"/><line x1="80" y1="120" x2="420" y2="120"/><line x1="80" y1="162" x2="420" y2="162"/>
+                  </g>
+                  <g fill="#fffaf2" stroke="#0f8aa2" stroke-width="3">
+                    <circle cx="80" cy="78" r="20"/><circle cx="250" cy="78" r="20"/><circle cx="420" cy="78" r="20"/>
+                    <circle cx="80" cy="120" r="20"/><circle cx="250" cy="120" r="20"/><circle cx="420" cy="120" r="20"/>
+                    <circle cx="80" cy="162" r="20"/><circle cx="250" cy="162" r="20"/><circle cx="420" cy="162" r="20"/>
+                  </g>
+                  <g fill="#0f8aa2" font-size="15" text-anchor="middle">
+                    <text x="80" y="84">a</text><text x="250" y="84">a</text><text x="420" y="84">a</text>
+                    <text x="80" y="126">b</text><text x="250" y="126">b</text><text x="420" y="126">b</text>
+                    <text x="80" y="168">c</text><text x="250" y="168">c</text><text x="420" y="168">c</text>
+                  </g>
+                </svg>
+              </div>
+              <p class="mini">例：为 N 个 endpoint 生成 OpenAPI：extract → fragment → validate。</p>
+            </article>
+
+            <article class="pattern-card">
+              <div class="pattern-title"><span class="num">02</span><strong>Parallel + Barrier · <em>同步聚合</em></strong></div>
+              <p>下一阶段必须等待上一阶段全部结果，用 barrier 去重、交叉验证、避免零结果过早进入结论。</p>
+              <div class="diagram-box">
+                <svg class="svg-wrap" viewBox="0 0 500 230" role="img" aria-label="Parallel barrier pattern">
+                  <g stroke="#0f8aa2" stroke-width="3" fill="none">
+                    <line x1="65" y1="116" x2="210" y2="48"/>
+                    <line x1="65" y1="116" x2="210" y2="90"/>
+                    <line x1="65" y1="116" x2="210" y2="132"/>
+                    <line x1="65" y1="116" x2="210" y2="174"/>
+                    <line x1="230" y1="48" x2="305" y2="116"/>
+                    <line x1="230" y1="90" x2="305" y2="116"/>
+                    <line x1="230" y1="132" x2="305" y2="116"/>
+                    <line x1="230" y1="174" x2="305" y2="116"/>
+                    <line x1="326" y1="116" x2="425" y2="116"/>
+                  </g>
+                  <circle cx="65" cy="116" r="27" fill="#0f8aa2"/>
+                  <text x="65" y="122" text-anchor="middle" fill="#fff" font-size="15">in</text>
+                  <g fill="#fffaf2" stroke="#0f8aa2" stroke-width="3">
+                    <circle cx="220" cy="48" r="20"/><circle cx="220" cy="90" r="20"/>
+                    <circle cx="220" cy="132" r="20"/><circle cx="220" cy="174" r="20"/>
+                    <circle cx="425" cy="116" r="22"/>
+                  </g>
+                  <rect x="305" y="34" width="15" height="164" rx="3" fill="#0f8aa2"/>
+                  <text x="312" y="26" text-anchor="middle" fill="#0f8aa2" font-size="14">barrier</text>
+                  <text x="370" y="109" text-anchor="middle" fill="#9a9488" font-size="12">dedup · cross-ref</text>
+                  <g fill="#0f8aa2" font-size="16" text-anchor="middle">
+                    <text x="220" y="54">·</text><text x="220" y="96">·</text><text x="220" y="138">·</text><text x="220" y="180">·</text><text x="425" y="122">Σ</text>
+                  </g>
+                </svg>
+              </div>
+              <p class="mini">提醒：不要为“代码更整洁”滥用 barrier，等待所有分支是有成本的。</p>
+            </article>
+
+            <article class="pattern-card">
+              <div class="pattern-title"><span class="num">03</span><strong>Adversarial Verify · <em>对抗验证</em></strong></div>
+              <p>发现要触发行动的结论时，不马上相信。让多个验证者独立投票，默认拒绝，除非多数票确认。</p>
+              <div class="diagram-box">
+                <svg class="svg-wrap" viewBox="0 0 500 230" role="img" aria-label="Adversarial verify pattern">
+                  <g stroke="#0f8aa2" stroke-width="3" fill="none">
+                    <line x1="80" y1="116" x2="245" y2="52" stroke-dasharray="5 5"/>
+                    <line x1="80" y1="116" x2="245" y2="116" stroke-dasharray="5 5"/>
+                    <line x1="80" y1="116" x2="245" y2="180" stroke-dasharray="5 5"/>
+                    <line x1="265" y1="52" x2="365" y2="116"/>
+                    <line x1="265" y1="116" x2="365" y2="116"/>
+                    <line x1="265" y1="180" x2="365" y2="116"/>
+                    <line x1="405" y1="116" x2="455" y2="116"/>
+                  </g>
+                  <rect x="48" y="94" width="64" height="44" rx="8" fill="#fffaf2" stroke="#0f8aa2" stroke-width="3"/>
+                  <text x="80" y="121" text-anchor="middle" fill="#0f8aa2" font-size="17">⚑</text>
+                  <g fill="#fffaf2" stroke="#0f8aa2" stroke-width="3">
+                    <circle cx="255" cy="52" r="21"/><circle cx="255" cy="116" r="21"/><circle cx="255" cy="180" r="21"/>
+                  </g>
+                  <text x="255" y="59" text-anchor="middle" fill="#177a56" font-size="18">✓</text>
+                  <text x="255" y="123" text-anchor="middle" fill="#b44a49" font-size="18">×</text>
+                  <text x="255" y="187" text-anchor="middle" fill="#177a56" font-size="18">✓</text>
+                  <polygon points="385,90 415,116 385,142 355,116" fill="#e7f5f8" stroke="#0f8aa2" stroke-width="3"/>
+                  <text x="385" y="122" text-anchor="middle" fill="#0f8aa2" font-size="14">≥2</text>
+                  <circle cx="455" cy="116" r="24" fill="#0f8aa2"/>
+                  <text x="455" y="123" text-anchor="middle" fill="#fff" font-size="18">!</text>
+                </svg>
+              </div>
+              <p class="mini">适合：改代码、发报告、报风险。原则：幻觉先被判假，除非证据足够。</p>
+            </article>
+
+            <article class="pattern-card">
+              <div class="pattern-title"><span class="num">04</span><strong>Judge Panel · <em>评委制</em></strong></div>
+              <p>面对开放问题，让不同角度的评委打分，再由 synthesizer 汇总成结论和折中方案。</p>
+              <div class="diagram-box">
+                <svg class="svg-wrap" viewBox="0 0 500 230" role="img" aria-label="Judge panel pattern">
+                  <text x="250" y="34" text-anchor="middle" fill="#9a9488" font-size="13">4 angles → scored → winner + grafts</text>
+                  <g fill="#fffaf2" stroke="#0f8aa2" stroke-width="3">
+                    <rect x="36" y="58" width="92" height="38" rx="8"/><rect x="148" y="58" width="92" height="38" rx="8"/>
+                    <rect x="260" y="58" width="92" height="38" rx="8"/><rect x="372" y="58" width="92" height="38" rx="8"/>
+                  </g>
+                  <g fill="#0f8aa2" font-size="14" text-anchor="middle">
+                    <text x="82" y="82">mvp</text><text x="194" y="82">risk</text><text x="306" y="82">user</text><text x="418" y="82">arch</text>
+                  </g>
+                  <g stroke="#0f8aa2" stroke-width="2">
+                    <line x1="82" y1="96" x2="82" y2="132"/><line x1="194" y1="96" x2="194" y2="132"/>
+                    <line x1="306" y1="96" x2="306" y2="132"/><line x1="418" y1="96" x2="418" y2="132"/>
+                  </g>
+                  <g fill="#7a776f" font-size="18" text-anchor="middle">
+                    <text x="82" y="154">28</text><text x="194" y="154" fill="#0f8aa2" font-weight="700">34</text>
+                    <text x="306" y="154">26</text><text x="418" y="154">22</text>
+                  </g>
+                  <g stroke="#e1d7c8" stroke-width="2" stroke-dasharray="5 5">
+                    <line x1="82" y1="160" x2="250" y2="190"/><line x1="194" y1="160" x2="250" y2="190"/>
+                    <line x1="306" y1="160" x2="250" y2="190"/><line x1="418" y1="160" x2="250" y2="190"/>
+                  </g>
+                  <rect x="190" y="176" width="120" height="38" rx="8" fill="#0f8aa2"/>
+                  <text x="250" y="200" text-anchor="middle" fill="#fff" font-size="14">synthesize</text>
+                </svg>
+              </div>
+              <p class="mini">适合：架构选型、命名、设计方案、文案。它解决的是“没有唯一正确答案”的问题。</p>
+            </article>
+
+            <article class="pattern-card">
+              <div class="pattern-title"><span class="num">05</span><strong>Loop-until-X · <em>累积式</em></strong></div>
+              <p>不知道要跑几轮，就用数量、预算、连续无新增等停止条件收敛。重点不是循环，而是 guard。</p>
+              <div class="diagram-box">
+                <svg class="svg-wrap" viewBox="0 0 500 230" role="img" aria-label="Loop until X pattern">
+                  <g fill="#fffaf2" stroke="#0f8aa2" stroke-width="2.5">
+                    <rect x="58" y="48" width="112" height="32" rx="16"/><rect x="58" y="98" width="112" height="32" rx="16"/>
+                    <rect x="58" y="148" width="112" height="32" rx="16"/>
+                  </g>
+                  <g fill="#0f8aa2" font-size="13" text-anchor="middle">
+                    <text x="114" y="68">count = N</text><text x="114" y="118">budget &lt; ε</text><text x="114" y="168">dry × K</text>
+                  </g>
+                  <circle cx="292" cy="116" r="66" fill="none" stroke="#0f8aa2" stroke-width="3" stroke-dasharray="7 5"/>
+                  <circle cx="292" cy="116" r="25" fill="#fffaf2" stroke="#0f8aa2" stroke-width="3"/>
+                  <path d="M292 91 C338 91 352 132 313 158" fill="none" stroke="#0f8aa2" stroke-width="4"/>
+                  <polygon points="313,158 333,155 320,143" fill="#0f8aa2"/>
+                  <text x="292" y="122" text-anchor="middle" fill="#0f8aa2" font-size="14">agent</text>
+                  <path d="M317 116 L392 116" stroke="#0f8aa2" stroke-width="4"/>
+                  <polygon points="392,116 374,106 374,126" fill="#0f8aa2"/>
+                  <text x="372" y="102" text-anchor="middle" fill="#9a9488" font-size="13">exit</text>
+                </svg>
+              </div>
+              <p class="mini">风险：如果没有预算和停止条件，很容易从 10 个 agent 膨胀到 1000 个 agent。</p>
+            </article>
+
+            <article class="pattern-card">
+              <div class="pattern-title"><span class="num">06</span><strong>Nested Workflow · <em>分层正交</em></strong></div>
+              <p>父任务的每个条目，本身又是一整套 multi-step workflow。适合批量且每个子任务都复杂的场景。</p>
+              <div class="diagram-box">
+                <svg class="svg-wrap" viewBox="0 0 500 230" role="img" aria-label="Nested workflow pattern">
+                  <rect x="32" y="30" width="436" height="174" rx="18" fill="#e7f5f8" stroke="#0f8aa2" stroke-width="3" stroke-dasharray="7 5"/>
+                  <text x="74" y="58" fill="#0f8aa2" font-size="13">parent · pipeline(prs)</text>
+                  <g fill="#8d9a9d" font-size="12" text-anchor="middle">
+                    <text x="120" y="88">pr · 1</text><text x="250" y="88">pr · 2</text><text x="380" y="88">pr · …</text>
+                  </g>
+                  <g fill="#fffaf2" stroke="#0f8aa2" stroke-width="2.5" stroke-dasharray="5 4">
+                    <rect x="66" y="96" width="110" height="82" rx="10"/><rect x="196" y="96" width="110" height="82" rx="10"/><rect x="326" y="96" width="110" height="82" rx="10"/>
+                  </g>
+                  <g stroke="#0f8aa2" stroke-width="3">
+                    <line x1="88" y1="132" x2="154" y2="132"/><line x1="218" y1="132" x2="284" y2="132"/><line x1="348" y1="132" x2="414" y2="132"/>
+                  </g>
+                  <g fill="#0f8aa2">
+                    <circle cx="88" cy="132" r="9"/><circle cx="218" cy="132" r="9"/><circle cx="348" cy="132" r="9"/>
+                  </g>
+                  <g fill="#fffaf2" stroke="#0f8aa2" stroke-width="2.5">
+                    <circle cx="121" cy="132" r="10"/><circle cx="154" cy="132" r="10"/>
+                    <circle cx="251" cy="132" r="10"/><circle cx="284" cy="132" r="10"/>
+                    <circle cx="381" cy="132" r="10"/><circle cx="414" cy="132" r="10"/>
+                  </g>
+                  <g fill="#0f8aa2" font-size="12" text-anchor="middle">
+                    <text x="121" y="164">child workflow</text><text x="251" y="164">child workflow</text><text x="381" y="164">child workflow</text>
+                  </g>
+                </svg>
+              </div>
+              <p class="mini">例：审查 10 个 PR，每个 PR 都跑“读 diff → 查风险 → 验证 → 写评论 → 汇总”。</p>
+            </article>
+          </div>
+        </section>
+
+        <section id="missing-patterns" class="panel">
+          <h2>工程补充：八种容易遗漏的编排模式</h2>
+          <p class="section-note">原始材料中的六种模式很适合入门，因为它们讲清楚了“多个 Agent 怎么跑”。但放到真实产品或工程系统里，还需要进一步回答四类问题：任务如何分流、失败如何恢复、状态如何共享、高风险动作如何确认。下面八种模式补足的是工程落地层面的协作边界。</p>
+
+          <div class="insight-band">
+            <div class="insight-chip">
+              <strong>分支</strong>
+              <span>不是所有请求都该进入同一条流水线。</span>
+            </div>
+            <div class="insight-chip">
+              <strong>状态</strong>
+              <span>多 Agent 需要共享事实、决策和证据。</span>
+            </div>
+            <div class="insight-chip">
+              <strong>失败</strong>
+              <span>真实 workflow 必须设计重试、降级和退出。</span>
+            </div>
+            <div class="insight-chip">
+              <strong>人类</strong>
+              <span>高风险动作不能只靠模型自己放行。</span>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <article class="pattern-card gap-card">
+              <div class="pattern-title"><span class="num">07</span><strong>Router · <em>条件路由</em></strong></div>
+              <p>先判断任务类型，再进入不同路径。它解决的是“不要让所有问题都套同一条流程”。</p>
+              <div class="diagram-box">
+                <svg class="svg-wrap" viewBox="0 0 500 210" role="img" aria-label="Router pattern">
+                  <defs>
+                    <marker id="arrow-router" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+                      <path d="M0,0 L0,6 L9,3 z" fill="#0f8aa2"/>
+                    </marker>
+                  </defs>
+                  <rect x="42" y="86" width="88" height="42" rx="8" fill="#fffaf2" stroke="#0f8aa2" stroke-width="3"/>
+                  <text x="86" y="112" text-anchor="middle" fill="#0f8aa2" font-size="14">请求</text>
+                  <polygon points="238,60 286,106 238,152 190,106" fill="#e7f5f8" stroke="#0f8aa2" stroke-width="3"/>
+                  <text x="238" y="111" text-anchor="middle" fill="#0f8aa2" font-size="13">route?</text>
+                  <g fill="#fffaf2" stroke="#0f8aa2" stroke-width="2.5">
+                    <rect x="350" y="24" width="105" height="34" rx="8"/>
+                    <rect x="350" y="82" width="105" height="34" rx="8"/>
+                    <rect x="350" y="140" width="105" height="34" rx="8"/>
+                  </g>
+                  <g stroke="#0f8aa2" stroke-width="3" fill="none" marker-end="url(#arrow-router)">
+                    <path d="M130 107 L190 107"/>
+                    <path d="M286 106 L350 42"/>
+                    <path d="M286 106 L350 99"/>
+                    <path d="M286 106 L350 157"/>
+                  </g>
+                  <g fill="#202124" font-size="13" text-anchor="middle">
+                    <text x="402" y="46">代码 Agent</text>
+                    <text x="402" y="104">研究 Agent</text>
+                    <text x="402" y="162">人工确认</text>
+                  </g>
+                </svg>
+              </div>
+              <p class="mini">适合：客服分流、代码/产品/资料三类请求、权限敏感任务。关键词：先分类，再执行。</p>
+            </article>
+
+            <article class="pattern-card gap-card">
+              <div class="pattern-title"><span class="num">08</span><strong>Supervisor-Worker · <em>主管派工</em></strong></div>
+              <p>一个主控 Agent 动态派活、看进度、收结果，不够就追加 worker。它比固定并行更灵活。</p>
+              <div class="diagram-box">
+                <svg class="svg-wrap" viewBox="0 0 500 210" role="img" aria-label="Supervisor worker pattern">
+                  <g stroke="#0f8aa2" stroke-width="3" fill="none">
+                    <line x1="250" y1="72" x2="126" y2="138"/>
+                    <line x1="250" y1="72" x2="250" y2="138"/>
+                    <line x1="250" y1="72" x2="374" y2="138"/>
+                    <path d="M126 138 C142 92 206 86 232 78" stroke-dasharray="5 5"/>
+                    <path d="M374 138 C352 92 294 86 268 78" stroke-dasharray="5 5"/>
+                  </g>
+                  <rect x="178" y="34" width="144" height="52" rx="12" fill="#0f8aa2"/>
+                  <text x="250" y="58" text-anchor="middle" fill="#fff" font-size="14">Supervisor</text>
+                  <text x="250" y="75" text-anchor="middle" fill="#fff" font-size="11">派工 / 追踪 / 收敛</text>
+                  <g fill="#fffaf2" stroke="#0f8aa2" stroke-width="2.5">
+                    <circle cx="126" cy="150" r="28"/><circle cx="250" cy="150" r="28"/><circle cx="374" cy="150" r="28"/>
+                  </g>
+                  <g fill="#0f8aa2" font-size="13" text-anchor="middle">
+                    <text x="126" y="155">W1</text><text x="250" y="155">W2</text><text x="374" y="155">W3</text>
+                  </g>
+                </svg>
+              </div>
+              <p class="mini">适合：复杂调研、批量修复、未知工作量。关键是 supervisor 要有预算和停止条件。</p>
+            </article>
+
+            <article class="pattern-card gap-card">
+              <div class="pattern-title"><span class="num">09</span><strong>Evaluator-Optimizer · <em>评估改进</em></strong></div>
+              <p>一个 Agent 生成，另一个 Agent 评价，失败就带着反馈回去改。它是最常见的“越做越好”闭环。</p>
+              <div class="diagram-box">
+                <svg class="svg-wrap" viewBox="0 0 500 210" role="img" aria-label="Evaluator optimizer pattern">
+                  <defs>
+                    <marker id="arrow-eval" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+                      <path d="M0,0 L0,6 L9,3 z" fill="#0f8aa2"/>
+                    </marker>
+                  </defs>
+                  <g fill="#fffaf2" stroke="#0f8aa2" stroke-width="2.5">
+                    <rect x="42" y="82" width="96" height="46" rx="9"/>
+                    <rect x="198" y="82" width="96" height="46" rx="9"/>
+                    <rect x="354" y="82" width="104" height="46" rx="9"/>
+                  </g>
+                  <g fill="#202124" font-size="13" text-anchor="middle">
+                    <text x="90" y="109">生成者</text>
+                    <text x="246" y="109">产物</text>
+                    <text x="406" y="109">评估者</text>
+                  </g>
+                  <g stroke="#0f8aa2" stroke-width="3" fill="none" marker-end="url(#arrow-eval)">
+                    <path d="M138 105 L198 105"/>
+                    <path d="M294 105 L354 105"/>
+                    <path d="M406 128 C376 174 104 176 90 128"/>
+                  </g>
+                  <text x="248" y="178" text-anchor="middle" fill="#9a9488" font-size="12">feedback: fail → revise</text>
+                  <circle cx="454" cy="38" r="20" fill="#0f8aa2"/>
+                  <text x="454" y="44" text-anchor="middle" fill="#fff" font-size="15">✓</text>
+                  <path d="M424 82 C436 64 444 54 454 58" fill="none" stroke="#0f8aa2" stroke-width="3"/>
+                </svg>
+              </div>
+              <p class="mini">适合：写代码、写报告、生成 UI、方案迭代。它比普通 loop 更强调“带反馈修正”。</p>
+            </article>
+
+            <article class="pattern-card gap-card">
+              <div class="pattern-title"><span class="num">10</span><strong>Human Gate · <em>人工门禁</em></strong></div>
+              <p>当动作有风险，workflow 不应该自动放行，而是停下来让人确认。</p>
+              <div class="diagram-box">
+                <svg class="svg-wrap" viewBox="0 0 500 210" role="img" aria-label="Human gate pattern">
+                  <defs>
+                    <marker id="arrow-human" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+                      <path d="M0,0 L0,6 L9,3 z" fill="#0f8aa2"/>
+                    </marker>
+                  </defs>
+                  <rect x="36" y="84" width="92" height="44" rx="8" fill="#fffaf2" stroke="#0f8aa2" stroke-width="3"/>
+                  <polygon points="238,58 286,105 238,152 190,105" fill="#fff4e8" stroke="#9a4f11" stroke-width="3"/>
+                  <rect x="348" y="36" width="106" height="40" rx="8" fill="#fffaf2" stroke="#0f8aa2" stroke-width="2.5"/>
+                  <rect x="348" y="136" width="106" height="40" rx="8" fill="#fffaf2" stroke="#9a4f11" stroke-width="2.5"/>
+                  <g stroke="#0f8aa2" stroke-width="3" fill="none" marker-end="url(#arrow-human)">
+                    <path d="M128 106 L190 106"/>
+                    <path d="M286 105 L348 56"/>
+                  </g>
+                  <path d="M286 105 L348 156" stroke="#9a4f11" stroke-width="3" fill="none" marker-end="url(#arrow-human)"/>
+                  <g fill="#202124" font-size="13" text-anchor="middle">
+                    <text x="82" y="111">候选动作</text>
+                    <text x="238" y="109">高风险?</text>
+                    <text x="401" y="61">批准执行</text>
+                    <text x="401" y="161">拒绝 / 重做</text>
+                  </g>
+                </svg>
+              </div>
+              <p class="mini">适合：删文件、发邮件、改生产配置、花钱、公开发布。原则是：高风险动作先停住。</p>
+            </article>
+
+            <article class="pattern-card gap-card">
+              <div class="pattern-title"><span class="num">11</span><strong>Retry / Fallback · <em>失败恢复</em></strong></div>
+              <p>基础模式更像成功路径，但真实系统一定会失败。失败恢复决定 workflow 能不能稳定运行。</p>
+              <div class="diagram-box">
+                <svg class="svg-wrap" viewBox="0 0 500 210" role="img" aria-label="Retry fallback pattern">
+                  <defs>
+                    <marker id="arrow-retry" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+                      <path d="M0,0 L0,6 L9,3 z" fill="#0f8aa2"/>
+                    </marker>
+                  </defs>
+                  <g fill="#fffaf2" stroke="#0f8aa2" stroke-width="2.5">
+                    <rect x="34" y="84" width="78" height="40" rx="8"/>
+                    <rect x="158" y="84" width="78" height="40" rx="8"/>
+                    <rect x="282" y="36" width="90" height="40" rx="8"/>
+                    <rect x="282" y="134" width="90" height="40" rx="8"/>
+                    <rect x="410" y="84" width="64" height="40" rx="8"/>
+                  </g>
+                  <g stroke="#0f8aa2" stroke-width="3" fill="none" marker-end="url(#arrow-retry)">
+                    <path d="M112 104 L158 104"/>
+                    <path d="M236 104 L282 56"/>
+                    <path d="M236 104 L282 154"/>
+                    <path d="M372 56 L410 104"/>
+                    <path d="M372 154 L410 104"/>
+                  </g>
+                  <path d="M197 84 C206 48 150 46 158 84" stroke="#9a4f11" stroke-width="2.5" fill="none" stroke-dasharray="5 5"/>
+                  <g fill="#202124" font-size="12" text-anchor="middle">
+                    <text x="73" y="108">任务</text><text x="197" y="108">尝试</text>
+                    <text x="327" y="60">重试</text><text x="327" y="158">降级方案</text><text x="442" y="108">输出</text>
+                  </g>
+                </svg>
+              </div>
+              <p class="mini">适合：工具不稳定、schema 不合格、网络失败。要设计 retry 上限、fallback 和失败说明。</p>
+            </article>
+
+            <article class="pattern-card gap-card">
+              <div class="pattern-title"><span class="num">12</span><strong>Blackboard · <em>共享工作台</em></strong></div>
+              <p>多个 Agent 不只是把结果交给主控，也可以共同维护一个事实板：证据、待办、决策、风险都写在同一个地方。</p>
+              <div class="diagram-box">
+                <svg class="svg-wrap" viewBox="0 0 500 210" role="img" aria-label="Blackboard pattern">
+                  <rect x="168" y="52" width="164" height="106" rx="12" fill="#e7f5f8" stroke="#0f8aa2" stroke-width="3"/>
+                  <text x="250" y="82" text-anchor="middle" fill="#0f8aa2" font-size="14">共享工作台</text>
+                  <text x="250" y="106" text-anchor="middle" fill="#617073" font-size="11">facts · todos · evidence</text>
+                  <text x="250" y="130" text-anchor="middle" fill="#617073" font-size="11">decisions · risks</text>
+                  <g fill="#fffaf2" stroke="#0f8aa2" stroke-width="2.5">
+                    <circle cx="72" cy="66" r="25"/><circle cx="72" cy="146" r="25"/>
+                    <circle cx="428" cy="66" r="25"/><circle cx="428" cy="146" r="25"/>
+                  </g>
+                  <g stroke="#0f8aa2" stroke-width="2.5" fill="none">
+                    <line x1="97" y1="66" x2="168" y2="86"/><line x1="97" y1="146" x2="168" y2="124"/>
+                    <line x1="332" y1="86" x2="403" y2="66"/><line x1="332" y1="124" x2="403" y2="146"/>
+                  </g>
+                  <g fill="#0f8aa2" font-size="12" text-anchor="middle">
+                    <text x="72" y="70">研究</text><text x="72" y="150">代码</text>
+                    <text x="428" y="70">审查</text><text x="428" y="150">汇总</text>
+                  </g>
+                </svg>
+              </div>
+              <p class="mini">适合：长任务、复杂调研、多轮设计。它解决的是“大家到底共享什么事实”。</p>
+            </article>
+
+            <article class="pattern-card gap-card">
+              <div class="pattern-title"><span class="num">13</span><strong>Speculative Race · <em>竞速择优</em></strong></div>
+              <p>让多个 Agent 同时尝试不同路径，最后选最快、最稳、证据最好的结果。</p>
+              <div class="diagram-box">
+                <svg class="svg-wrap" viewBox="0 0 500 210" role="img" aria-label="Speculative race pattern">
+                  <g stroke="#0f8aa2" stroke-width="3" fill="none">
+                    <line x1="72" y1="106" x2="204" y2="50"/>
+                    <line x1="72" y1="106" x2="204" y2="106"/>
+                    <line x1="72" y1="106" x2="204" y2="162"/>
+                    <line x1="296" y1="50" x2="406" y2="106"/>
+                    <line x1="296" y1="106" x2="406" y2="106"/>
+                    <line x1="296" y1="162" x2="406" y2="106"/>
+                  </g>
+                  <circle cx="72" cy="106" r="28" fill="#0f8aa2"/>
+                  <text x="72" y="112" text-anchor="middle" fill="#fff" font-size="13">Task</text>
+                  <g fill="#fffaf2" stroke="#0f8aa2" stroke-width="2.5">
+                    <rect x="204" y="32" width="92" height="36" rx="8"/>
+                    <rect x="204" y="88" width="92" height="36" rx="8"/>
+                    <rect x="204" y="144" width="92" height="36" rx="8"/>
+                  </g>
+                  <polygon points="426,78 462,106 426,134 390,106" fill="#e7f5f8" stroke="#0f8aa2" stroke-width="3"/>
+                  <g fill="#202124" font-size="12" text-anchor="middle">
+                    <text x="250" y="55">方案 A</text><text x="250" y="111">方案 B</text><text x="250" y="167">方案 C</text>
+                    <text x="426" y="111">择优</text>
+                  </g>
+                </svg>
+              </div>
+              <p class="mini">适合：修 bug、性能优化、命名、方案探索。和评委制不同，它不是只评价，而是真的并行试做。</p>
+            </article>
+
+            <article class="pattern-card gap-card">
+              <div class="pattern-title"><span class="num">14</span><strong>Event-driven · <em>事件触发</em></strong></div>
+              <p>不等用户主动发起，而是由事件触发 workflow。Agent 从聊天助手变成持续工作的后台系统。</p>
+              <div class="diagram-box">
+                <svg class="svg-wrap" viewBox="0 0 500 210" role="img" aria-label="Event driven pattern">
+                  <defs>
+                    <marker id="arrow-event" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+                      <path d="M0,0 L0,6 L9,3 z" fill="#0f8aa2"/>
+                    </marker>
+                  </defs>
+                  <g fill="#fffaf2" stroke="#0f8aa2" stroke-width="2.5">
+                    <rect x="36" y="44" width="110" height="34" rx="8"/>
+                    <rect x="36" y="92" width="110" height="34" rx="8"/>
+                    <rect x="36" y="140" width="110" height="34" rx="8"/>
+                    <rect x="214" y="82" width="110" height="48" rx="10"/>
+                    <rect x="384" y="82" width="82" height="48" rx="10"/>
+                  </g>
+                  <g stroke="#0f8aa2" stroke-width="3" fill="none" marker-end="url(#arrow-event)">
+                    <path d="M146 61 L214 106"/>
+                    <path d="M146 109 L214 106"/>
+                    <path d="M146 157 L214 106"/>
+                    <path d="M324 106 L384 106"/>
+                  </g>
+                  <g fill="#202124" font-size="12" text-anchor="middle">
+                    <text x="91" y="66">PR 更新</text><text x="91" y="114">测试失败</text><text x="91" y="162">文档过期</text>
+                    <text x="269" y="111">Workflow</text><text x="425" y="111">通知/行动</text>
+                  </g>
+                </svg>
+              </div>
+              <p class="mini">适合：CI 失败分析、PR 自动审查、周期性巡检。它把 Agent 从“问答”推向“运维”。</p>
+            </article>
+          </div>
+
+          <p class="quote">如果说六种基础模式解决“怎么跑”，这八个补充模式解决“怎么分流、怎么失败、怎么记住、怎么让人接管”。</p>
+        </section>
+
+        <section id="architecture" class="panel good-card">
+          <h2>抽象成一套设计方案</h2>
+          <p>把这套材料里的思路抽成系统架构，大概可以表示为：</p>
+          <div class="diagram-box">
+            <svg class="svg-wrap" viewBox="0 0 980 330" role="img" aria-label="Workflow architecture">
+              <defs>
+                <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+                  <path d="M0,0 L0,6 L9,3 z" fill="#0f8aa2"/>
+                </marker>
+              </defs>
+              <g fill="#fffaf2" stroke="#0f8aa2" stroke-width="2.5">
+                <rect x="36" y="118" width="150" height="62" rx="10"/>
+                <rect x="246" y="70" width="164" height="64" rx="10"/>
+                <rect x="246" y="196" width="164" height="64" rx="10"/>
+                <rect x="476" y="52" width="142" height="54" rx="10"/>
+                <rect x="476" y="138" width="142" height="54" rx="10"/>
+                <rect x="476" y="224" width="142" height="54" rx="10"/>
+                <rect x="680" y="118" width="138" height="62" rx="10"/>
+                <rect x="858" y="118" width="92" height="62" rx="10"/>
+              </g>
+              <g stroke="#0f8aa2" stroke-width="3" fill="none" marker-end="url(#arrow)">
+                <path d="M186 149 L246 102"/>
+                <path d="M186 149 L246 228"/>
+                <path d="M410 102 L476 79"/>
+                <path d="M410 102 L476 165"/>
+                <path d="M410 228 L476 165"/>
+                <path d="M410 228 L476 251"/>
+                <path d="M618 79 L680 149"/>
+                <path d="M618 165 L680 149"/>
+                <path d="M618 251 L680 149"/>
+                <path d="M818 149 L858 149"/>
+              </g>
+              <g fill="#202124" font-size="15" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif">
+                <text x="111" y="144">自然语言目标</text><text x="111" y="166">user intent</text>
+                <text x="328" y="98">Planner</text><text x="328" y="120">拆任务 / 选模式</text>
+                <text x="328" y="224">Workflow Spec</text><text x="328" y="246">phase / schema / budget</text>
+                <text x="547" y="84">Agent A</text><text x="547" y="170">Agent B</text><text x="547" y="256">Agent C</text>
+                <text x="749" y="144">Gate / Barrier</text><text x="749" y="166">验证 / 聚合</text>
+                <text x="904" y="144">Artifact</text><text x="904" y="166">产物</text>
+              </g>
+            </svg>
+          </div>
+          <p>这套设计的本质是：<strong>控制流交给确定性结构，语义判断交给 Agent，质量收束交给 gate。</strong></p>
+        </section>
+
+        <section id="talk-track" class="panel">
+          <h2>解读框架：从概念到落地</h2>
+          <div class="speaker">
+            <div class="speaker-line">第一层，先不要被“多 Agent”这个词吸引。多 Agent 如果没有协作协议，只是多个聊天窗口。真正的设计问题是：这些 Agent 之间是什么关系。</div>
+            <div class="speaker-line">第二层，Subagents 像临时派出去的信使，适合一次性侦察；Agent Teams 像一个工作室，适合长期共事；Workflow 则像流水线，把协作方式固化成可复跑的工程结构。</div>
+            <div class="speaker-line">第三层，原始材料里的六种模式主要覆盖正常执行路径：流水线、并行屏障、对抗验证、评委制、循环直到条件满足、嵌套工作流。它们分别解决吞吐、聚合、幻觉、主观判断、收敛和复杂批量任务。</div>
+            <div class="speaker-line">第四层，真正落到产品里还要补分支、失败、状态和人类介入：Router 负责分流，Blackboard 负责共享事实，Retry / Fallback 负责失败恢复，Human Gate 负责高风险动作的刹车。</div>
+            <div class="speaker-line">最后的判断是：未来的 Agent 应用不会只靠一个大模型“想明白”，而会越来越像一个有调度、有契约、有状态、有质量门禁的执行系统。</div>
+          </div>
+        </section>
+
+        <section id="how-to-use" class="panel">
+          <h2>如何迁移到 Agent 系统？</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>任务形态</th>
+                <th>优先选择</th>
+                <th>设计要点</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>一次性查资料、读代码、读日志</td>
+                <td>Subagent</td>
+                <td>限制工具权限，要求只返回摘要、证据和不确定性</td>
+              </tr>
+              <tr>
+                <td>多角色长期协作，例如新功能设计与评审</td>
+                <td>Agent Team</td>
+                <td>明确 lead、角色、任务看板、冲突处理方式</td>
+              </tr>
+              <tr>
+                <td>批量生成、批量审查、需要稳定复跑</td>
+                <td>Workflow</td>
+                <td>声明 phase、schema、parallel、barrier、预算和停止条件</td>
+              </tr>
+              <tr>
+                <td>高风险结论会触发真实行动</td>
+                <td>Adversarial Verify</td>
+                <td>默认拒绝，至少两个独立验证者确认后放行</td>
+              </tr>
+              <tr>
+                <td>开放式方案评估，没有唯一答案</td>
+                <td>Judge Panel</td>
+                <td>让不同角度独立评分，再合成 winner + grafts</td>
+              </tr>
+              <tr>
+                <td>请求类型差异很大，不应该走同一套链路</td>
+                <td>Router</td>
+                <td>先判断任务类型、风险等级和所需工具，再进入对应 workflow</td>
+              </tr>
+              <tr>
+                <td>生成物需要反复打磨，例如方案、代码、报告</td>
+                <td>Evaluator-Optimizer</td>
+                <td>把“生成”和“评价”拆开，让反馈驱动下一轮改进</td>
+              </tr>
+              <tr>
+                <td>多个 Agent 需要长期共享事实和证据</td>
+                <td>Blackboard</td>
+                <td>建立共享工作台，记录 facts、todos、evidence、decisions</td>
+              </tr>
+              <tr>
+                <td>动作可能造成真实世界影响</td>
+                <td>Human Gate</td>
+                <td>把人工确认设计成流程节点，而不是最后临时问一句</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section id="takeaway" class="panel">
+          <h2>核心结论：七句话</h2>
+          <ol>
+            <li>Subagent 解决的是“别污染主上下文”。</li>
+            <li>Agent Team 解决的是“复杂任务需要多个独立视角互相协作”。</li>
+            <li>Workflow 解决的是“多 Agent 协作要可复跑、可观察、可验证”。</li>
+            <li>Schema、phase、budget、gate 是把 LLM 不确定性纳入工程系统的关键。</li>
+            <li>六种基础模式覆盖了基础执行拓扑，但还不覆盖所有工程边界。</li>
+            <li>真实 Agent 系统还要补分流、共享状态、失败恢复和人工门禁。</li>
+            <li>多 Agent 的核心不是数量，而是拓扑：谁并行、谁等待、谁验证、谁合成、谁兜底。</li>
+          </ol>
+        </section>
+
+        <section id="sources" class="panel">
+          <h2>资料来源与可信度</h2>
+          <div class="source-strip">
+            <div class="source-row">
+              <strong>官方文档</strong>
+              <span><a href="https://code.claude.com/docs/en/sub-agents">Claude Code Subagents</a>：确认 subagent 的独立上下文、工具权限、自动委派和常见模式。</span>
+            </div>
+            <div class="source-row">
+              <strong>官方文档</strong>
+              <span><a href="https://code.claude.com/docs/en/agent-teams">Claude Code Agent Teams</a>：确认 team lead、共享任务、成员间直接通信，以及与 subagents 的差异。</span>
+            </div>
+            <div class="source-row">
+              <strong>官方文档</strong>
+              <span><a href="https://code.claude.com/docs/en/agent-sdk/agent-loop">Claude Code Agent Loop</a>：确认“prompt → tool call → result → repeat”的基本执行循环。</span>
+            </div>
+            <div class="source-row">
+              <strong>官方文档</strong>
+              <span><a href="https://code.claude.com/docs/en/ultraplan">Claude Code Ultraplan</a>：确认云端计划、评论反馈、选择执行位置的 planning 流程。</span>
+            </div>
+            <div class="source-row">
+              <strong>材料转译</strong>
+              <span>本报告的“三种范式”和“六种 workflow 模式”来自原始视频截图材料，已剔除字幕和画面噪音后重绘。后续“工程补充”章节是基于架构设计视角的补充分析，不是截图原文。脚本化 Workflow 部分按设计范式理解，不作为稳定 API 断言。</span>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <aside class="side">
+        <section class="panel tight toc">
+          <h3>目录</h3>
+          <a href="#opening">开场结论</a>
+          <a href="#scope">阅读边界</a>
+          <a href="#source-rebuild">基础框架</a>
+          <a href="#patterns">基础模式</a>
+          <a href="#missing-patterns">工程补充模式</a>
+          <a href="#architecture">抽象设计方案</a>
+          <a href="#talk-track">解读框架</a>
+          <a href="#how-to-use">迁移方法</a>
+          <a href="#takeaway">核心 takeaway</a>
+        </section>
+
+        <section class="panel tight">
+          <h3>一句话版本</h3>
+          <p>多 Agent 的价值不在数量，而在协作拓扑：并行、同步、验证、投票、循环、嵌套、分流、兜底。</p>
+        </section>
+
+        <section class="panel tight">
+          <h3>可信度提示</h3>
+          <p class="footnotes">Subagents、Agent Teams、Agent loop、Ultraplan 有官方文档支撑；Workflow 六模式来自材料转译和架构推断，适合学习设计思想。</p>
+        </section>
+      </aside>
+    </div>
+  </main>
+</body>
+</html>
