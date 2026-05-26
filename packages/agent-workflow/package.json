@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@agentcenter/agent-workflow",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "test": "bun test",
+    "install:opencode": "bun run scripts/install.ts",
+    "uninstall:opencode": "bun run scripts/uninstall.ts",
+    "pack:local": "bun run scripts/pack.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./opencode": "./src/opencode/plugin.ts"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "workspace:*"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  }
+}

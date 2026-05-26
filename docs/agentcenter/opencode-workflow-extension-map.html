@@ -1,0 +1,865 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenCode Workflow Extension Map</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f3ec;
+        --paper: #fffdf7;
+        --paper-2: #fdf7ec;
+        --ink: #1d1f23;
+        --muted: #5f6874;
+        --line: #d7c8af;
+        --line-strong: #a98e63;
+        --blue: #1f6feb;
+        --blue-soft: #dcecff;
+        --teal: #0f766e;
+        --teal-soft: #d9f3ef;
+        --amber: #b7791f;
+        --amber-soft: #fff0c2;
+        --rose: #b4235a;
+        --rose-soft: #fde1eb;
+        --green: #2f7d32;
+        --green-soft: #e3f3df;
+        --shadow: 0 18px 50px rgba(76, 55, 25, 0.13);
+        --radius: 8px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Microsoft YaHei", sans-serif;
+        color: var(--ink);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0) 360px),
+          var(--bg);
+      }
+
+      main {
+        max-width: 1220px;
+        margin: 0 auto;
+        padding: 42px 24px 80px;
+      }
+
+      header {
+        display: grid;
+        grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+        gap: 22px;
+        align-items: stretch;
+        margin-bottom: 20px;
+      }
+
+      .hero,
+      .brief,
+      .panel,
+      .note {
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+      }
+
+      .hero {
+        padding: 32px;
+      }
+
+      .brief {
+        padding: 24px;
+      }
+
+      .kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 14px;
+        color: var(--teal);
+        font-size: 13px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 999px;
+        background: var(--teal);
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        max-width: 850px;
+        font-size: clamp(34px, 6vw, 70px);
+        line-height: 0.98;
+        letter-spacing: 0;
+      }
+
+      h2 {
+        font-size: clamp(24px, 3vw, 36px);
+        line-height: 1.15;
+        margin-bottom: 10px;
+      }
+
+      h3 {
+        font-size: 18px;
+        line-height: 1.35;
+        margin-bottom: 8px;
+      }
+
+      .subtitle {
+        margin-top: 20px;
+        color: var(--muted);
+        font-size: 18px;
+        line-height: 1.72;
+        max-width: 860px;
+      }
+
+      .brief-list {
+        display: grid;
+        gap: 12px;
+      }
+
+      .brief-item {
+        padding: 14px;
+        border-radius: 6px;
+        border: 1px solid var(--line);
+        background: var(--paper-2);
+      }
+
+      .brief-item strong {
+        display: block;
+        margin-bottom: 4px;
+      }
+
+      .brief-item span {
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .panel {
+        margin-top: 22px;
+        padding: 26px;
+      }
+
+      .section-head {
+        display: flex;
+        align-items: start;
+        justify-content: space-between;
+        gap: 18px;
+        margin-bottom: 18px;
+      }
+
+      .section-head p {
+        max-width: 760px;
+        color: var(--muted);
+        line-height: 1.7;
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 30px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 14px 0 0;
+      }
+
+      .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 9px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: #fff;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .swatch {
+        width: 11px;
+        height: 11px;
+        border-radius: 3px;
+        border: 1px solid rgba(0, 0, 0, 0.18);
+      }
+
+      .diagram {
+        overflow: auto;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: #fffaf1;
+      }
+
+      svg {
+        display: block;
+        width: 100%;
+        min-width: 900px;
+        height: auto;
+      }
+
+      .card-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .card {
+        min-height: 164px;
+        padding: 16px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: var(--paper-2);
+      }
+
+      .card .num {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        margin-bottom: 12px;
+        border-radius: 999px;
+        color: #fff;
+        background: var(--teal);
+        font-size: 13px;
+        font-weight: 900;
+      }
+
+      .card p {
+        color: var(--muted);
+        line-height: 1.6;
+        font-size: 14px;
+      }
+
+      .impact-table {
+        width: 100%;
+        border-collapse: collapse;
+        overflow: hidden;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: #fff;
+      }
+
+      .impact-table th,
+      .impact-table td {
+        padding: 13px 14px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+        line-height: 1.55;
+      }
+
+      .impact-table th {
+        color: #3f3527;
+        background: #f6ead7;
+        font-size: 14px;
+      }
+
+      .impact-table td {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .impact-table tr:last-child td {
+        border-bottom: 0;
+      }
+
+      code {
+        padding: 2px 5px;
+        border-radius: 5px;
+        background: rgba(15, 118, 110, 0.1);
+        color: #075e57;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 0.92em;
+      }
+
+      .note {
+        margin-top: 22px;
+        padding: 20px 22px;
+        border-color: #d7b56b;
+        background: #fff7d8;
+        box-shadow: none;
+      }
+
+      .note p {
+        color: #594313;
+        line-height: 1.7;
+      }
+
+      .two-col {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 14px;
+      }
+
+      .mini-flow {
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .mini-flow ol {
+        margin: 10px 0 0;
+        padding-left: 22px;
+        color: var(--muted);
+        line-height: 1.7;
+      }
+
+      .foot {
+        margin-top: 24px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.7;
+      }
+
+      @media (max-width: 920px) {
+        main {
+          padding: 24px 14px 54px;
+        }
+
+        header,
+        .two-col {
+          grid-template-columns: 1fr;
+        }
+
+        .hero,
+        .brief,
+        .panel {
+          padding: 20px;
+        }
+
+        .section-head {
+          display: block;
+        }
+
+        .section-head .tag {
+          margin-top: 10px;
+        }
+
+        .card-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .impact-table {
+          display: block;
+          overflow-x: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <section class="hero">
+          <div class="kicker"><span class="dot"></span>AgentCenter Architecture Note</div>
+          <h1>OpenCode Workflow 扩展点地图</h1>
+          <p class="subtitle">
+            这份图解说明 OpenCode 现有的插件、命令、Agent、Tool、Hook、Session 扩展点，以及 Agent Workflow
+            插件应当接入哪些位置。目标是做外挂式集成：不改 OpenCode 主链路，通过插件和工具把 workflow
+            能力挂进去。
+          </p>
+        </section>
+
+        <aside class="brief">
+          <div class="brief-list">
+            <div class="brief-item">
+              <strong>核心判断</strong>
+              <span>OpenCode 已经有真实子 Agent 机制：<code>task</code> tool 会创建 child session。</span>
+            </div>
+            <div class="brief-item">
+              <strong>最佳接入</strong>
+              <span>Workflow 应做成 OpenCode plugin：注册 commands、tools、agents 和 hooks。</span>
+            </div>
+            <div class="brief-item">
+              <strong>不建议</strong>
+              <span>第一版不要改 LLM loop、message schema、tool registry 源码，也不要先做复杂 UI。</span>
+            </div>
+          </div>
+        </aside>
+      </header>
+
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <h2>1. OpenCode 原有扩展点总览</h2>
+            <p>
+              OpenCode 的可插入点主要分四层：人类入口层、Agent 上下文层、工具执行层、运行时事件层。
+              Workflow 插件要尽量接这些现成点，而不是改内部主循环。
+            </p>
+            <div class="legend">
+              <span><i class="swatch" style="background: var(--blue-soft)"></i>用户入口</span>
+              <span><i class="swatch" style="background: var(--teal-soft)"></i>Agent 上下文</span>
+              <span><i class="swatch" style="background: var(--amber-soft)"></i>Tool / MCP</span>
+              <span><i class="swatch" style="background: var(--rose-soft)"></i>Plugin Hook</span>
+            </div>
+          </div>
+          <span class="tag">扩展点地图</span>
+        </div>
+
+        <div class="diagram">
+          <svg viewBox="0 0 1240 720" role="img" aria-label="OpenCode extension point overview">
+            <defs>
+              <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#6f604b"></path>
+              </marker>
+              <style>
+                .box { stroke: #a98e63; stroke-width: 1.6; rx: 8; }
+                .entry { fill: #dcecff; }
+                .ctx { fill: #d9f3ef; }
+                .tool { fill: #fff0c2; }
+                .hook { fill: #fde1eb; }
+                .core { fill: #fffdf7; }
+                .text { font: 700 17px ui-sans-serif, system-ui, sans-serif; fill: #1d1f23; }
+                .small { font: 500 13px ui-sans-serif, system-ui, sans-serif; fill: #5f6874; }
+                .line { stroke: #6f604b; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+                .dash { stroke: #b4235a; stroke-width: 2.2; stroke-dasharray: 7 6; fill: none; marker-end: url(#arrow); }
+              </style>
+            </defs>
+
+            <rect x="40" y="54" width="180" height="76" class="box entry"></rect>
+            <text x="130" y="84" text-anchor="middle" class="text">用户输入</text>
+            <text x="130" y="108" text-anchor="middle" class="small">chat / slash command</text>
+
+            <rect x="300" y="36" width="190" height="92" class="box entry"></rect>
+            <text x="395" y="68" text-anchor="middle" class="text">Command 系统</text>
+            <text x="395" y="92" text-anchor="middle" class="small">command/*.md</text>
+            <text x="395" y="112" text-anchor="middle" class="small">内置 init / review</text>
+
+            <rect x="300" y="166" width="190" height="92" class="box hook"></rect>
+            <text x="395" y="198" text-anchor="middle" class="text">Command Hook</text>
+            <text x="395" y="222" text-anchor="middle" class="small">command.execute.before</text>
+
+            <rect x="570" y="98" width="210" height="92" class="box core"></rect>
+            <text x="675" y="130" text-anchor="middle" class="text">SessionPrompt</text>
+            <text x="675" y="154" text-anchor="middle" class="small">组装消息 / 启动 loop</text>
+
+            <rect x="855" y="36" width="190" height="84" class="box ctx"></rect>
+            <text x="950" y="68" text-anchor="middle" class="text">System Prompt</text>
+            <text x="950" y="92" text-anchor="middle" class="small">环境 / skills / rules</text>
+
+            <rect x="855" y="148" width="190" height="84" class="box ctx"></rect>
+            <text x="950" y="180" text-anchor="middle" class="text">Agent 配置</text>
+            <text x="950" y="204" text-anchor="middle" class="small">agents/*.md / config hook</text>
+
+            <rect x="855" y="260" width="190" height="84" class="box ctx"></rect>
+            <text x="950" y="292" text-anchor="middle" class="text">Skill 系统</text>
+            <text x="950" y="316" text-anchor="middle" class="small">skills/SKILL.md / skill tool</text>
+
+            <rect x="570" y="300" width="210" height="86" class="box core"></rect>
+            <text x="675" y="332" text-anchor="middle" class="text">LLM Loop</text>
+            <text x="675" y="356" text-anchor="middle" class="small">模型判断下一步</text>
+
+            <rect x="300" y="426" width="190" height="88" class="box tool"></rect>
+            <text x="395" y="458" text-anchor="middle" class="text">Tool Registry</text>
+            <text x="395" y="482" text-anchor="middle" class="small">内置工具 + plugin tools</text>
+
+            <rect x="40" y="420" width="180" height="88" class="box hook"></rect>
+            <text x="130" y="452" text-anchor="middle" class="text">Tool Hook</text>
+            <text x="130" y="476" text-anchor="middle" class="small">before / after</text>
+
+            <rect x="300" y="570" width="190" height="88" class="box tool"></rect>
+            <text x="395" y="602" text-anchor="middle" class="text">task tool</text>
+            <text x="395" y="626" text-anchor="middle" class="small">启动 subagent</text>
+
+            <rect x="570" y="570" width="210" height="88" class="box core"></rect>
+            <text x="675" y="602" text-anchor="middle" class="text">Child Session</text>
+            <text x="675" y="626" text-anchor="middle" class="small">parentID -> child</text>
+
+            <rect x="855" y="570" width="190" height="88" class="box ctx"></rect>
+            <text x="950" y="602" text-anchor="middle" class="text">Subagent</text>
+            <text x="950" y="626" text-anchor="middle" class="small">独立上下文 / 权限</text>
+
+            <rect x="1060" y="410" width="150" height="92" class="box hook"></rect>
+            <text x="1135" y="442" text-anchor="middle" class="text">Plugin</text>
+            <text x="1135" y="466" text-anchor="middle" class="small">tools / hooks</text>
+            <text x="1135" y="486" text-anchor="middle" class="small">config / events</text>
+
+            <path d="M220 92 L300 82" class="line"></path>
+            <path d="M220 100 C260 128 260 180 300 202" class="line"></path>
+            <path d="M490 82 C530 84 540 116 570 136" class="line"></path>
+            <path d="M490 212 C535 210 540 166 570 154" class="dash"></path>
+            <path d="M780 130 C820 96 820 78 855 78" class="line"></path>
+            <path d="M780 146 C820 164 820 188 855 190" class="line"></path>
+            <path d="M780 164 C820 220 820 286 855 302" class="line"></path>
+            <path d="M675 190 L675 300" class="line"></path>
+            <path d="M570 342 C500 350 480 426 490 462" class="line"></path>
+            <path d="M300 468 L220 464" class="dash"></path>
+            <path d="M395 514 L395 570" class="line"></path>
+            <path d="M490 614 L570 614" class="line"></path>
+            <path d="M780 614 L855 614" class="line"></path>
+            <path d="M1060 456 L490 456" class="dash"></path>
+            <path d="M1060 440 C980 390 930 350 950 344" class="dash"></path>
+          </svg>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <h2>2. Workflow 插件准备插入哪些点</h2>
+            <p>
+              插件不是替换 OpenCode，而是在现有扩展点旁边加一个 workflow runtime。命令负责用户入口，
+              plugin tools 负责让 Agent 操作 workflow，hooks 负责状态注入、证据记录和高风险门禁。
+            </p>
+          </div>
+          <span class="tag">建议接入</span>
+        </div>
+
+        <div class="diagram">
+          <svg viewBox="0 0 1240 680" role="img" aria-label="Agent workflow plugin insertion points">
+            <defs>
+              <marker id="arrow2" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#3f554f"></path>
+              </marker>
+              <style>
+                .b { stroke: #a98e63; stroke-width: 1.6; rx: 8; }
+                .wf { fill: #e3f3df; stroke: #2f7d32; }
+                .oc { fill: #dcecff; }
+                .hook2 { fill: #fde1eb; }
+                .tool2 { fill: #fff0c2; }
+                .text2 { font: 800 17px ui-sans-serif, system-ui, sans-serif; fill: #1d1f23; }
+                .small2 { font: 500 13px ui-sans-serif, system-ui, sans-serif; fill: #5f6874; }
+                .l { stroke: #3f554f; stroke-width: 2; fill: none; marker-end: url(#arrow2); }
+                .ld { stroke: #2f7d32; stroke-width: 2.4; stroke-dasharray: 8 6; fill: none; marker-end: url(#arrow2); }
+              </style>
+            </defs>
+
+            <rect x="470" y="36" width="300" height="96" class="b wf"></rect>
+            <text x="620" y="70" text-anchor="middle" class="text2">agent-workflow plugin</text>
+            <text x="620" y="96" text-anchor="middle" class="small2">外挂式接入，不改 OpenCode core</text>
+
+            <rect x="65" y="188" width="210" height="88" class="b hook2"></rect>
+            <text x="170" y="220" text-anchor="middle" class="text2">config hook</text>
+            <text x="170" y="244" text-anchor="middle" class="small2">注册 agents / commands</text>
+
+            <rect x="345" y="188" width="210" height="88" class="b tool2"></rect>
+            <text x="450" y="220" text-anchor="middle" class="text2">plugin tools</text>
+            <text x="450" y="244" text-anchor="middle" class="small2">workflow_create / run / gate</text>
+
+            <rect x="625" y="188" width="210" height="88" class="b hook2"></rect>
+            <text x="730" y="220" text-anchor="middle" class="text2">tool hooks</text>
+            <text x="730" y="244" text-anchor="middle" class="small2">before / after</text>
+
+            <rect x="905" y="188" width="245" height="88" class="b hook2"></rect>
+            <text x="1028" y="220" text-anchor="middle" class="text2">system / compaction hooks</text>
+            <text x="1028" y="244" text-anchor="middle" class="small2">注入 workflow capsule</text>
+
+            <rect x="65" y="356" width="210" height="96" class="b oc"></rect>
+            <text x="170" y="390" text-anchor="middle" class="text2">/workflow-create</text>
+            <text x="170" y="416" text-anchor="middle" class="small2">自然语言生成流程</text>
+
+            <rect x="345" y="356" width="210" height="96" class="b wf"></rect>
+            <text x="450" y="390" text-anchor="middle" class="text2">Workflow Core</text>
+            <text x="450" y="416" text-anchor="middle" class="small2">spec / run / state / gate</text>
+
+            <rect x="625" y="356" width="210" height="96" class="b oc"></rect>
+            <text x="730" y="390" text-anchor="middle" class="text2">OpenCode task tool</text>
+            <text x="730" y="416" text-anchor="middle" class="small2">启动 subagent session</text>
+
+            <rect x="905" y="356" width="245" height="96" class="b oc"></rect>
+            <text x="1028" y="390" text-anchor="middle" class="text2">OpenCode Session UI</text>
+            <text x="1028" y="416" text-anchor="middle" class="small2">复用消息、工具卡、diff</text>
+
+            <rect x="170" y="540" width="180" height="80" class="b oc"></rect>
+            <text x="260" y="572" text-anchor="middle" class="text2">workflow agents</text>
+            <text x="260" y="596" text-anchor="middle" class="small2">planner / reviewer</text>
+
+            <rect x="475" y="540" width="180" height="80" class="b wf"></rect>
+            <text x="565" y="572" text-anchor="middle" class="text2">Blackboard</text>
+            <text x="565" y="596" text-anchor="middle" class="small2">facts / evidence</text>
+
+            <rect x="780" y="540" width="180" height="80" class="b wf"></rect>
+            <text x="870" y="572" text-anchor="middle" class="text2">Artifacts</text>
+            <text x="870" y="596" text-anchor="middle" class="small2">report / diff / logs</text>
+
+            <path d="M560 132 L210 188" class="ld"></path>
+            <path d="M610 132 L450 188" class="ld"></path>
+            <path d="M650 132 L730 188" class="ld"></path>
+            <path d="M710 132 L1028 188" class="ld"></path>
+            <path d="M170 276 L170 356" class="l"></path>
+            <path d="M450 276 L450 356" class="l"></path>
+            <path d="M730 276 L730 356" class="l"></path>
+            <path d="M1028 276 L1028 356" class="l"></path>
+            <path d="M275 404 L345 404" class="l"></path>
+            <path d="M555 404 L625 404" class="l"></path>
+            <path d="M835 404 L905 404" class="l"></path>
+            <path d="M450 452 L565 540" class="ld"></path>
+            <path d="M730 452 L870 540" class="ld"></path>
+            <path d="M170 452 L260 540" class="ld"></path>
+          </svg>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <h2>3. 多子 Agent 的真实运行方式</h2>
+            <p>
+              Workflow 不是让主 Agent 在一段 prompt 里扮演多个角色。OpenCode 侧可以用原生 <code>task</code>
+              工具创建 child session。每个 Agent 节点都会变成一个真实子会话，带独立上下文、权限和返回结果。
+            </p>
+          </div>
+          <span class="tag">执行链路</span>
+        </div>
+
+        <div class="diagram">
+          <svg viewBox="0 0 1240 760" role="img" aria-label="Workflow run with OpenCode subagents">
+            <defs>
+              <marker id="arrow3" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#554836"></path>
+              </marker>
+              <style>
+                .box3 { stroke: #a98e63; stroke-width: 1.6; rx: 8; }
+                .primary { fill: #dcecff; }
+                .workflow { fill: #e3f3df; stroke: #2f7d32; }
+                .agent { fill: #fff0c2; }
+                .gate { fill: #fde1eb; }
+                .t3 { font: 800 17px ui-sans-serif, system-ui, sans-serif; fill: #1d1f23; }
+                .s3 { font: 500 13px ui-sans-serif, system-ui, sans-serif; fill: #5f6874; }
+                .line3 { stroke: #554836; stroke-width: 2; fill: none; marker-end: url(#arrow3); }
+                .ret { stroke: #b4235a; stroke-width: 2.4; fill: none; marker-end: url(#arrow3); }
+              </style>
+            </defs>
+
+            <rect x="50" y="52" width="210" height="84" class="box3 primary"></rect>
+            <text x="155" y="84" text-anchor="middle" class="t3">主会话</text>
+            <text x="155" y="108" text-anchor="middle" class="s3">用户目标 / 当前上下文</text>
+
+            <rect x="340" y="52" width="230" height="84" class="box3 workflow"></rect>
+            <text x="455" y="84" text-anchor="middle" class="t3">workflow_run</text>
+            <text x="455" y="108" text-anchor="middle" class="s3">选择 spec + 创建 run</text>
+
+            <rect x="650" y="52" width="230" height="84" class="box3 workflow"></rect>
+            <text x="765" y="84" text-anchor="middle" class="t3">Router</text>
+            <text x="765" y="108" text-anchor="middle" class="s3">决定任务路径和节点组</text>
+
+            <rect x="220" y="230" width="210" height="96" class="box3 agent"></rect>
+            <text x="325" y="264" text-anchor="middle" class="t3">Research Agent</text>
+            <text x="325" y="290" text-anchor="middle" class="s3">task subagent: explore</text>
+
+            <rect x="515" y="230" width="210" height="96" class="box3 agent"></rect>
+            <text x="620" y="264" text-anchor="middle" class="t3">Design Agent</text>
+            <text x="620" y="290" text-anchor="middle" class="s3">task subagent: planner</text>
+
+            <rect x="810" y="230" width="210" height="96" class="box3 agent"></rect>
+            <text x="915" y="264" text-anchor="middle" class="t3">Risk Agent</text>
+            <text x="915" y="290" text-anchor="middle" class="s3">task subagent: reviewer</text>
+
+            <rect x="515" y="404" width="210" height="90" class="box3 workflow"></rect>
+            <text x="620" y="438" text-anchor="middle" class="t3">Barrier</text>
+            <text x="620" y="464" text-anchor="middle" class="s3">等待并聚合结果</text>
+
+            <rect x="515" y="560" width="210" height="90" class="box3 gate"></rect>
+            <text x="620" y="594" text-anchor="middle" class="t3">Gate</text>
+            <text x="620" y="620" text-anchor="middle" class="s3">schema + evidence + risk</text>
+
+            <rect x="850" y="560" width="210" height="90" class="box3 agent"></rect>
+            <text x="955" y="594" text-anchor="middle" class="t3">Coder Agent</text>
+            <text x="955" y="620" text-anchor="middle" class="s3">通过后进入实现</text>
+
+            <rect x="180" y="560" width="210" height="90" class="box3 gate"></rect>
+            <text x="285" y="594" text-anchor="middle" class="t3">Human Gate</text>
+            <text x="285" y="620" text-anchor="middle" class="s3">阻塞或人工确认</text>
+
+            <path d="M260 94 L340 94" class="line3"></path>
+            <path d="M570 94 L650 94" class="line3"></path>
+            <path d="M765 136 C700 188 430 170 325 230" class="line3"></path>
+            <path d="M765 136 C720 190 650 180 620 230" class="line3"></path>
+            <path d="M765 136 C830 188 900 180 915 230" class="line3"></path>
+            <path d="M325 326 C380 382 500 390 550 404" class="line3"></path>
+            <path d="M620 326 L620 404" class="line3"></path>
+            <path d="M915 326 C860 382 740 390 690 404" class="line3"></path>
+            <path d="M620 494 L620 560" class="line3"></path>
+            <path d="M725 605 L850 605" class="line3"></path>
+            <path d="M515 605 L390 605" class="ret"></path>
+          </svg>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <h2>4. Hook 和 Tool 分工</h2>
+            <p>
+              Hook 不做主编排，Tool 不做长期状态源。Workflow core 才是 run 状态源。
+              Hook 只在关键时刻做拦截、注入、记录和恢复。
+            </p>
+          </div>
+          <span class="tag">责任边界</span>
+        </div>
+
+        <div class="card-grid">
+          <article class="card">
+            <span class="num">1</span>
+            <h3>Command</h3>
+            <p>给人入口。比如 <code>/workflow-create</code> 把自然语言流程变成可确认 spec。</p>
+          </article>
+          <article class="card">
+            <span class="num">2</span>
+            <h3>Plugin Tool</h3>
+            <p>给 Agent 的手。比如 <code>workflow_run</code>、<code>workflow_gate_decide</code>。</p>
+          </article>
+          <article class="card">
+            <span class="num">3</span>
+            <h3>OpenCode task</h3>
+            <p>真正创建子 Agent。每个 agent node 映射为一个 child session。</p>
+          </article>
+          <article class="card">
+            <span class="num">4</span>
+            <h3>Hooks</h3>
+            <p>做门禁和记录。工具前拦截，工具后记录 evidence，compaction 时补状态。</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <h2>5. 影响面矩阵</h2>
+            <p>
+              下面是插件接入后会影响的 OpenCode 点。第一版优先走可逆、外挂式改动，避免进入 OpenCode core。
+            </p>
+          </div>
+          <span class="tag">Impact</span>
+        </div>
+
+        <table class="impact-table">
+          <thead>
+            <tr>
+              <th>OpenCode 点位</th>
+              <th>Workflow 参与方式</th>
+              <th>影响</th>
+              <th>是否改 core</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>config hook</code></td>
+              <td>动态注册 workflow agents、commands、默认配置。</td>
+              <td>Agent 列表和命令列表多出 workflow 入口。</td>
+              <td>否</td>
+            </tr>
+            <tr>
+              <td><code>plugin tool</code></td>
+              <td>注册 <code>workflow_create</code>、<code>workflow_run</code>、<code>workflow_state_get</code>。</td>
+              <td>主 Agent 可以通过工具操作 workflow runtime。</td>
+              <td>否</td>
+            </tr>
+            <tr>
+              <td><code>command.execute.before</code></td>
+              <td>识别 workflow 命令，补 workflow 上下文和目标。</td>
+              <td>只影响 workflow 命令路径。</td>
+              <td>否</td>
+            </tr>
+            <tr>
+              <td><code>tool.execute.before</code></td>
+              <td>节点执行前做 gate、权限、风险检查。</td>
+              <td>可拦截高风险工具或要求人工确认。</td>
+              <td>否</td>
+            </tr>
+            <tr>
+              <td><code>tool.execute.after</code></td>
+              <td>记录 node result、evidence、artifact 引用。</td>
+              <td>Workflow 状态可从事件和 checkpoint 恢复。</td>
+              <td>否</td>
+            </tr>
+            <tr>
+              <td><code>task tool</code></td>
+              <td>每个 agent node 启动一个 OpenCode subagent。</td>
+              <td>实现真实多 Agent，而不是 prompt 扮演。</td>
+              <td>否，复用现有工具</td>
+            </tr>
+            <tr>
+              <td><code>system / compaction hooks</code></td>
+              <td>注入 workflow state capsule，保护长流程恢复。</td>
+              <td>长任务不依赖完整聊天历史。</td>
+              <td>否</td>
+            </tr>
+            <tr>
+              <td>Session UI / Tool cards</td>
+              <td>第一版只复用，不重写。</td>
+              <td>用户仍看 OpenCode 原生消息和工具卡。</td>
+              <td>否</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <h2>6. 第一版落地顺序</h2>
+            <p>
+              先让 workflow 在 OpenCode 里跑通，再考虑可视化编辑器。第一版重点是自然语言生成 spec、真实子 Agent
+              执行、状态可恢复。
+            </p>
+          </div>
+          <span class="tag">V1 Plan</span>
+        </div>
+
+        <div class="two-col">
+          <div class="mini-flow">
+            <h3>用户入口</h3>
+            <ol>
+              <li>安装或启用 <code>agent-workflow</code> OpenCode plugin。</li>
+              <li>用户输入 <code>/workflow-create</code> 加自然语言流程描述。</li>
+              <li>插件生成 workflow spec，要求用户确认。</li>
+              <li>用户输入 <code>/workflow-run</code> 执行一个目标任务。</li>
+            </ol>
+          </div>
+          <div class="mini-flow">
+            <h3>运行时链路</h3>
+            <ol>
+              <li><code>workflow_run</code> 创建 run 和 checkpoint。</li>
+              <li>Agent node 调 OpenCode <code>task</code> tool 创建子会话。</li>
+              <li>Hook 记录工具结果和 evidence。</li>
+              <li>Gate 判断继续、返工、阻塞或结束。</li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="note">
+          <p>
+            设计原则：Workflow Core 管状态和秩序，OpenCode task 管子 Agent 执行，Hooks 管拦截和证据。
+            这样既能做出 Claude Code workflow 类似的效果，又不把 AgentCenter 绑死在 OpenCode 内核里。
+          </p>
+        </div>
+      </section>
+
+      <p class="foot">
+        Source notes: OpenCode plugin hooks 来自 <code>packages/plugin/src/index.ts</code>；
+        command 加载来自 <code>packages/opencode/src/command/index.ts</code>；
+        子 Agent 机制来自 <code>packages/opencode/src/tool/task.ts</code>；
+        workflow 目标边界参考 <code>docs/agentcenter/target-capability-architecture.md</code>。
+      </p>
+    </main>
+  </body>
+</html>

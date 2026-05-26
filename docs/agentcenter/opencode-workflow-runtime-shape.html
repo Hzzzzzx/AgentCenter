@@ -1,0 +1,1000 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OpenCode Workflow 运行态图解</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #15202b;
+      --muted: #66727f;
+      --line: #d8e1ea;
+      --page: #f6f8fb;
+      --panel: #ffffff;
+      --green: #1f8a5b;
+      --green-bg: #e9f7ef;
+      --blue: #2563eb;
+      --blue-bg: #eaf1ff;
+      --amber: #b7791f;
+      --amber-bg: #fff4dc;
+      --red: #c2412d;
+      --red-bg: #fff0ec;
+      --violet: #6d4aff;
+      --violet-bg: #f1edff;
+      --cyan: #0e7490;
+      --cyan-bg: #e8f7fb;
+      --shadow: 0 18px 44px rgba(35, 48, 66, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--page);
+      color: var(--ink);
+      line-height: 1.55;
+    }
+
+    main {
+      width: min(1180px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 38px 0 72px;
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.8fr);
+      gap: 24px;
+      align-items: stretch;
+      margin-bottom: 26px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(30px, 4vw, 52px);
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 24px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 0 0 8px;
+      font-size: 16px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    code {
+      padding: 2px 6px;
+      border-radius: 6px;
+      background: #eef3f8;
+      color: #234;
+      font-size: 0.92em;
+    }
+
+    .hero,
+    .panel,
+    .brief,
+    .note,
+    .mock-app {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      padding: 30px;
+      min-height: 246px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 22px;
+    }
+
+    .hero p {
+      max-width: 760px;
+      font-size: 17px;
+    }
+
+    .brief {
+      padding: 22px;
+      display: grid;
+      gap: 14px;
+      align-content: start;
+    }
+
+    .brief-row {
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      gap: 12px;
+      align-items: start;
+    }
+
+    .num {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      font-weight: 800;
+      color: var(--blue);
+      background: var(--blue-bg);
+    }
+
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 13px;
+      color: #264055;
+      background: #eef3f8;
+      border: 1px solid #dde8f1;
+      white-space: nowrap;
+    }
+
+    .section {
+      margin-top: 24px;
+    }
+
+    .panel {
+      padding: 24px;
+      overflow: hidden;
+    }
+
+    .lead {
+      max-width: 920px;
+      margin-bottom: 20px;
+      font-size: 16px;
+    }
+
+    .canvas {
+      width: 100%;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+
+    svg {
+      display: block;
+      min-width: 960px;
+      width: 100%;
+      height: auto;
+    }
+
+    .mock-app {
+      overflow: hidden;
+      background: #fbfdff;
+    }
+
+    .mock-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 54px;
+      padding: 0 18px;
+      border-bottom: 1px solid var(--line);
+      background: #ffffff;
+    }
+
+    .mock-title {
+      font-weight: 800;
+      color: #243447;
+    }
+
+    .mock-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(360px, 0.95fr);
+      gap: 0;
+      min-height: 600px;
+    }
+
+    .chat {
+      padding: 20px;
+      border-right: 1px solid var(--line);
+      display: grid;
+      gap: 14px;
+      align-content: start;
+    }
+
+    .run-panel {
+      padding: 20px;
+      background: #f8fbff;
+      display: grid;
+      gap: 16px;
+      align-content: start;
+    }
+
+    .bubble {
+      max-width: 88%;
+      padding: 13px 15px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: #ffffff;
+    }
+
+    .bubble.user {
+      justify-self: end;
+      color: #123;
+      background: #edf5ff;
+      border-color: #cfe2ff;
+    }
+
+    .bubble.system {
+      border-color: #dbe6f0;
+      background: #ffffff;
+    }
+
+    .ask-card {
+      border: 1px solid #f0c36d;
+      background: #fff8e8;
+      border-radius: 8px;
+      padding: 16px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .ask-card strong {
+      color: #724900;
+    }
+
+    .choice-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .choice {
+      min-height: 34px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid #dba84d;
+      background: #ffffff;
+      color: #694100;
+      font-weight: 700;
+      font-size: 13px;
+    }
+
+    .run-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .run-id {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .s-running {
+      color: var(--blue);
+      background: var(--blue-bg);
+    }
+
+    .s-waiting {
+      color: var(--amber);
+      background: var(--amber-bg);
+    }
+
+    .s-done {
+      color: var(--green);
+      background: var(--green-bg);
+    }
+
+    .s-pending {
+      color: #586678;
+      background: #eef3f8;
+    }
+
+    .s-failed {
+      color: var(--red);
+      background: var(--red-bg);
+    }
+
+    .node-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .node-row {
+      display: grid;
+      grid-template-columns: 28px 1fr auto;
+      gap: 10px;
+      align-items: center;
+      min-height: 58px;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: #ffffff;
+    }
+
+    .dot {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      font-size: 13px;
+      font-weight: 900;
+      color: #ffffff;
+    }
+
+    .dot.done { background: var(--green); }
+    .dot.running { background: var(--blue); }
+    .dot.waiting { background: var(--amber); }
+    .dot.pending { background: #8b98a8; }
+
+    .node-row p {
+      font-size: 13px;
+    }
+
+    .event-log {
+      display: grid;
+      gap: 8px;
+      padding: 14px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: #ffffff;
+    }
+
+    .event {
+      display: grid;
+      grid-template-columns: 72px 1fr;
+      gap: 10px;
+      font-size: 13px;
+      color: #34495e;
+    }
+
+    .event time {
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .note {
+      padding: 18px;
+      box-shadow: none;
+    }
+
+    .note ul {
+      margin: 10px 0 0;
+      padding-left: 18px;
+      color: var(--muted);
+    }
+
+    .state-table {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+      border-radius: 8px;
+      background: #ffffff;
+      border: 1px solid var(--line);
+    }
+
+    .state-table th,
+    .state-table td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .state-table th {
+      font-size: 13px;
+      color: #405166;
+      background: #f0f5fa;
+    }
+
+    .state-table tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .state-table td {
+      color: var(--muted);
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .legend-item {
+      display: inline-grid;
+      grid-template-columns: 14px auto;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .swatch {
+      width: 14px;
+      height: 14px;
+      border-radius: 4px;
+    }
+
+    .footer {
+      margin-top: 26px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    @media (max-width: 900px) {
+      main {
+        width: min(100vw - 22px, 1180px);
+        padding-top: 22px;
+      }
+
+      header,
+      .mock-body,
+      .grid-2 {
+        grid-template-columns: 1fr;
+      }
+
+      .chat {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .hero,
+      .panel {
+        padding: 18px;
+      }
+
+      .mock-body {
+        min-height: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <section class="hero">
+        <div>
+          <h1>OpenCode Workflow 运行态应该长什么样</h1>
+          <p>
+            这里画的是一次真实运行，不是插件扩展点。用户用自然语言发起 workflow 后，系统把它变成 DAG，
+            节点按依赖执行；每个 Agent 节点可以完成、失败、等待用户、等待授权或等待审查。
+          </p>
+        </div>
+        <div class="tag-row">
+          <span class="tag">顺序</span>
+          <span class="tag">DAG</span>
+          <span class="tag">并行</span>
+          <span class="tag">等待用户</span>
+          <span class="tag">断点恢复</span>
+          <span class="tag">子 Agent</span>
+        </div>
+      </section>
+
+      <aside class="brief">
+        <div class="brief-row">
+          <div class="num">1</div>
+          <div>
+            <h3>用户看到的是运行卡片</h3>
+            <p>主对话不被子 Agent 刷屏，而是展示当前 run、节点状态、等待问题和可操作按钮。</p>
+          </div>
+        </div>
+        <div class="brief-row">
+          <div class="num">2</div>
+          <div>
+            <h3>Runtime 管秩序</h3>
+            <p>Agent 只做任务；能不能继续、要不要暂停、哪个节点可跑，由 Workflow Runtime 判断。</p>
+          </div>
+        </div>
+        <div class="brief-row">
+          <div class="num">3</div>
+          <div>
+            <h3>交互是状态，不是插曲</h3>
+            <p>Agent 要问用户时，节点进入 <code>WAITING_FOR_USER</code>，回答后从 checkpoint 继续。</p>
+          </div>
+        </div>
+      </aside>
+    </header>
+
+    <section class="section panel">
+      <h2>1. 主对话里的运行界面</h2>
+      <p class="lead">
+        第一版最建议做成这种形态：左边还是用户和主 Agent 的对话，右边是 workflow run 面板。
+        子 Agent 的细节可以展开看，但默认收敛成节点状态和证据。
+      </p>
+
+      <div class="mock-app">
+        <div class="mock-top">
+          <div class="mock-title">OpenCode Session</div>
+          <div class="tag-row">
+            <span class="tag">workflow: implement-login-check</span>
+            <span class="tag">run: wf-20260526-1438</span>
+          </div>
+        </div>
+
+        <div class="mock-body">
+          <div class="chat">
+            <div class="bubble user">
+              我想实现一个登录检查流程：先理解现有鉴权，再改代码，再补测试，风险高的话先问我。
+            </div>
+            <div class="bubble system">
+              已把你的描述固化成一个 workflow。当前会先跑需求分析和代码侦察，之后按结果进入实现节点。
+            </div>
+            <div class="ask-card">
+              <strong>Risk Review Agent 需要你确认</strong>
+              <p>它发现登录态失败时可能影响已有演示账号。是否允许修改 seed data 和测试夹具？</p>
+              <div class="choice-row">
+                <button class="choice">允许修改</button>
+                <button class="choice">只改实现</button>
+                <button class="choice">先暂停</button>
+              </div>
+            </div>
+            <div class="bubble system">
+              当前 workflow 暂停在 <code>risk_review</code>。不依赖该节点的文档整理节点仍可继续运行。
+            </div>
+          </div>
+
+          <div class="run-panel">
+            <div class="run-head">
+              <div>
+                <h3>Workflow Run</h3>
+                <div class="run-id">wf-20260526-1438 / v1 / login-check</div>
+              </div>
+              <span class="status-pill s-waiting">WAITING_FOR_USER</span>
+            </div>
+
+            <div class="node-list">
+              <div class="node-row">
+                <div class="dot done">1</div>
+                <div>
+                  <h3>planner</h3>
+                  <p>自然语言转 DAG，生成节点契约。</p>
+                </div>
+                <span class="status-pill s-done">DONE</span>
+              </div>
+
+              <div class="node-row">
+                <div class="dot done">2</div>
+                <div>
+                  <h3>code_scout</h3>
+                  <p>子 Agent 已读现有鉴权入口，输出影响面。</p>
+                </div>
+                <span class="status-pill s-done">DONE</span>
+              </div>
+
+              <div class="node-row">
+                <div class="dot waiting">3</div>
+                <div>
+                  <h3>risk_review</h3>
+                  <p>等待用户决定是否允许改测试夹具。</p>
+                </div>
+                <span class="status-pill s-waiting">WAITING</span>
+              </div>
+
+              <div class="node-row">
+                <div class="dot pending">4</div>
+                <div>
+                  <h3>coder</h3>
+                  <p>依赖 risk_review 的决策，还不能开始。</p>
+                </div>
+                <span class="status-pill s-pending">BLOCKED</span>
+              </div>
+
+              <div class="node-row">
+                <div class="dot running">5</div>
+                <div>
+                  <h3>notes_writer</h3>
+                  <p>不依赖 risk_review，正在整理运行记录。</p>
+                </div>
+                <span class="status-pill s-running">RUNNING</span>
+              </div>
+            </div>
+
+            <div class="event-log">
+              <div class="event"><time>14:38:05</time><span>workflow_run created</span></div>
+              <div class="event"><time>14:38:16</time><span>planner succeeded, 5 nodes emitted</span></div>
+              <div class="event"><time>14:39:03</time><span>code_scout succeeded with evidence</span></div>
+              <div class="event"><time>14:39:28</time><span>risk_review requested user input</span></div>
+              <div class="event"><time>14:39:30</time><span>coder blocked by risk_review</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section panel">
+      <h2>2. 它不是并行列表，而是 DAG 状态图</h2>
+      <p class="lead">
+        顺序、并行、分支和汇聚都可以用同一个 DAG 表达。每个节点有自己的完成契约；
+        下游只有在依赖节点满足契约以后才会启动。
+      </p>
+
+      <div class="canvas">
+        <svg viewBox="0 0 1120 520" role="img" aria-label="Workflow DAG runtime state graph">
+          <defs>
+            <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+              <path d="M2,2 L10,6 L2,10 Z" fill="#7b8ca0"></path>
+            </marker>
+            <style>
+              .box { fill: #fff; stroke: #d8e1ea; stroke-width: 2; rx: 8; }
+              .done { fill: #e9f7ef; stroke: #1f8a5b; }
+              .run { fill: #eaf1ff; stroke: #2563eb; }
+              .wait { fill: #fff4dc; stroke: #b7791f; }
+              .blocked { fill: #f3f6fa; stroke: #8b98a8; }
+              .fail { fill: #fff0ec; stroke: #c2412d; }
+              .text { font: 700 18px Inter, system-ui, sans-serif; fill: #1e2b37; }
+              .sub { font: 13px Inter, system-ui, sans-serif; fill: #66727f; }
+              .tiny { font: 12px Inter, system-ui, sans-serif; fill: #66727f; }
+              .edge { stroke: #7b8ca0; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+              .edge-wait { stroke: #b7791f; stroke-width: 2.5; fill: none; marker-end: url(#arrow); stroke-dasharray: 7 7; }
+            </style>
+          </defs>
+
+          <rect x="20" y="24" width="1080" height="472" rx="8" fill="#fbfdff" stroke="#d8e1ea"></rect>
+
+          <rect x="58" y="202" width="150" height="86" rx="8" class="box done"></rect>
+          <text x="133" y="232" text-anchor="middle" class="text">Planner</text>
+          <text x="133" y="256" text-anchor="middle" class="sub">自然语言转 DAG</text>
+          <text x="133" y="276" text-anchor="middle" class="tiny">SUCCEEDED</text>
+
+          <path d="M208 245 C238 245, 244 148, 278 148" class="edge"></path>
+          <path d="M208 245 C238 245, 244 246, 278 246" class="edge"></path>
+          <path d="M208 245 C238 245, 244 344, 278 344" class="edge"></path>
+
+          <rect x="278" y="105" width="174" height="86" rx="8" class="box done"></rect>
+          <text x="365" y="135" text-anchor="middle" class="text">Code Scout</text>
+          <text x="365" y="159" text-anchor="middle" class="sub">读代码 / 影响面</text>
+          <text x="365" y="179" text-anchor="middle" class="tiny">SUCCEEDED</text>
+
+          <rect x="278" y="203" width="174" height="86" rx="8" class="box wait"></rect>
+          <text x="365" y="233" text-anchor="middle" class="text">Risk Review</text>
+          <text x="365" y="257" text-anchor="middle" class="sub">发现需要用户决策</text>
+          <text x="365" y="277" text-anchor="middle" class="tiny">WAITING_FOR_USER</text>
+
+          <rect x="278" y="301" width="174" height="86" rx="8" class="box run"></rect>
+          <text x="365" y="331" text-anchor="middle" class="text">Notes Writer</text>
+          <text x="365" y="355" text-anchor="middle" class="sub">不依赖风险节点</text>
+          <text x="365" y="375" text-anchor="middle" class="tiny">RUNNING</text>
+
+          <path d="M452 148 C500 148, 514 246, 558 246" class="edge"></path>
+          <path d="M452 246 C500 246, 514 246, 558 246" class="edge-wait"></path>
+
+          <rect x="558" y="203" width="174" height="86" rx="8" class="box blocked"></rect>
+          <text x="645" y="233" text-anchor="middle" class="text">Coder</text>
+          <text x="645" y="257" text-anchor="middle" class="sub">等待 risk_review</text>
+          <text x="645" y="277" text-anchor="middle" class="tiny">BLOCKED</text>
+
+          <path d="M732 246 C776 246, 792 158, 834 158" class="edge"></path>
+          <path d="M732 246 C776 246, 792 334, 834 334" class="edge"></path>
+
+          <rect x="834" y="115" width="174" height="86" rx="8" class="box blocked"></rect>
+          <text x="921" y="145" text-anchor="middle" class="text">Tests</text>
+          <text x="921" y="169" text-anchor="middle" class="sub">实现后才启动</text>
+          <text x="921" y="189" text-anchor="middle" class="tiny">PENDING</text>
+
+          <rect x="834" y="291" width="174" height="86" rx="8" class="box blocked"></rect>
+          <text x="921" y="321" text-anchor="middle" class="text">Review</text>
+          <text x="921" y="345" text-anchor="middle" class="sub">测试后才启动</text>
+          <text x="921" y="365" text-anchor="middle" class="tiny">PENDING</text>
+
+          <path d="M452 344 C566 420, 770 418, 834 356" class="edge"></path>
+
+          <rect x="540" y="36" width="332" height="48" rx="8" fill="#fff8e8" stroke="#f0c36d"></rect>
+          <text x="706" y="66" text-anchor="middle" class="sub">
+            黄色虚线依赖卡住以后，只阻塞它的下游；无依赖分支仍可继续
+          </text>
+
+          <rect x="58" y="420" width="984" height="48" rx="8" fill="#ffffff" stroke="#d8e1ea"></rect>
+          <text x="86" y="451" class="sub">继续条件：</text>
+          <text x="166" y="451" class="sub">依赖节点 SUCCEEDED + 输出契约通过 + gate 允许 + 没有等待中的用户/权限/审查事项</text>
+        </svg>
+      </div>
+
+      <div class="legend">
+        <span class="legend-item"><span class="swatch" style="background:#e9f7ef;border:1px solid #1f8a5b"></span>已完成</span>
+        <span class="legend-item"><span class="swatch" style="background:#eaf1ff;border:1px solid #2563eb"></span>运行中</span>
+        <span class="legend-item"><span class="swatch" style="background:#fff4dc;border:1px solid #b7791f"></span>等待用户</span>
+        <span class="legend-item"><span class="swatch" style="background:#f3f6fa;border:1px solid #8b98a8"></span>被依赖阻塞</span>
+      </div>
+    </section>
+
+    <section class="section panel">
+      <h2>3. 子 Agent 中途要交互时，运行链路怎么走</h2>
+      <p class="lead">
+        子 Agent 不应该直接把用户拖进自己的子会话。它应该把问题结构化交给 Workflow Runtime，
+        Runtime 在主会话展示问题、记录 checkpoint，用户回答后再把答案喂回原节点继续执行。
+      </p>
+
+      <div class="canvas">
+        <svg viewBox="0 0 1120 620" role="img" aria-label="User interaction and workflow resume sequence">
+          <defs>
+            <marker id="arrow2" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+              <path d="M2,2 L10,6 L2,10 Z" fill="#6e7d8f"></path>
+            </marker>
+            <style>
+              .lane { fill: #ffffff; stroke: #d8e1ea; stroke-width: 2; }
+              .lane-title { font: 800 17px Inter, system-ui, sans-serif; fill: #1e2b37; }
+              .step { fill: #fbfdff; stroke: #d8e1ea; stroke-width: 2; rx: 8; }
+              .step-blue { fill: #eaf1ff; stroke: #2563eb; }
+              .step-amber { fill: #fff4dc; stroke: #b7791f; }
+              .step-green { fill: #e9f7ef; stroke: #1f8a5b; }
+              .step-violet { fill: #f1edff; stroke: #6d4aff; }
+              .label { font: 700 15px Inter, system-ui, sans-serif; fill: #1e2b37; }
+              .muted { font: 12.5px Inter, system-ui, sans-serif; fill: #66727f; }
+              .flow { stroke: #6e7d8f; stroke-width: 2; fill: none; marker-end: url(#arrow2); }
+              .flow-wait { stroke: #b7791f; stroke-width: 2.5; fill: none; marker-end: url(#arrow2); stroke-dasharray: 7 7; }
+            </style>
+          </defs>
+
+          <rect x="20" y="22" width="1080" height="568" rx="8" fill="#fbfdff" stroke="#d8e1ea"></rect>
+
+          <rect x="56" y="62" width="220" height="476" rx="8" class="lane"></rect>
+          <rect x="326" y="62" width="220" height="476" rx="8" class="lane"></rect>
+          <rect x="596" y="62" width="220" height="476" rx="8" class="lane"></rect>
+          <rect x="866" y="62" width="178" height="476" rx="8" class="lane"></rect>
+
+          <text x="166" y="96" text-anchor="middle" class="lane-title">用户 / 主对话</text>
+          <text x="436" y="96" text-anchor="middle" class="lane-title">主 Agent</text>
+          <text x="706" y="96" text-anchor="middle" class="lane-title">Workflow Runtime</text>
+          <text x="955" y="96" text-anchor="middle" class="lane-title">子 Agent</text>
+
+          <rect x="86" y="134" width="160" height="58" rx="8" class="step-blue"></rect>
+          <text x="166" y="158" text-anchor="middle" class="label">自然语言发起</text>
+          <text x="166" y="177" text-anchor="middle" class="muted">我要实现登录检查流程</text>
+
+          <path d="M246 163 H326" class="flow"></path>
+
+          <rect x="356" y="134" width="160" height="58" rx="8" class="step-violet"></rect>
+          <text x="436" y="158" text-anchor="middle" class="label">调用 workflow_run</text>
+          <text x="436" y="177" text-anchor="middle" class="muted">把目标交给 Runtime</text>
+
+          <path d="M516 163 H596" class="flow"></path>
+
+          <rect x="626" y="134" width="160" height="58" rx="8" class="step-violet"></rect>
+          <text x="706" y="158" text-anchor="middle" class="label">创建 run + DAG</text>
+          <text x="706" y="177" text-anchor="middle" class="muted">写 checkpoint / 状态</text>
+
+          <path d="M786 163 H866" class="flow"></path>
+
+          <rect x="884" y="134" width="142" height="58" rx="8" class="step-blue"></rect>
+          <text x="955" y="158" text-anchor="middle" class="label">task child</text>
+          <text x="955" y="177" text-anchor="middle" class="muted">risk_review 运行</text>
+
+          <path d="M955 192 V250" class="flow"></path>
+
+          <rect x="884" y="250" width="142" height="74" rx="8" class="step-amber"></rect>
+          <text x="955" y="276" text-anchor="middle" class="label">需要用户决策</text>
+          <text x="955" y="295" text-anchor="middle" class="muted">返回 needs_input</text>
+          <text x="955" y="312" text-anchor="middle" class="muted">不直接追问用户</text>
+
+          <path d="M884 287 H816" class="flow-wait"></path>
+
+          <rect x="626" y="250" width="160" height="74" rx="8" class="step-amber"></rect>
+          <text x="706" y="276" text-anchor="middle" class="label">节点进入等待</text>
+          <text x="706" y="295" text-anchor="middle" class="muted">WAITING_FOR_USER</text>
+          <text x="706" y="312" text-anchor="middle" class="muted">保存问题和 checkpoint</text>
+
+          <path d="M626 287 H546" class="flow-wait"></path>
+
+          <rect x="356" y="250" width="160" height="74" rx="8" class="step-amber"></rect>
+          <text x="436" y="276" text-anchor="middle" class="label">主会话展示卡片</text>
+          <text x="436" y="295" text-anchor="middle" class="muted">问题 / 选项 / 影响</text>
+          <text x="436" y="312" text-anchor="middle" class="muted">可暂停或回答</text>
+
+          <path d="M356 287 H246" class="flow-wait"></path>
+
+          <rect x="86" y="250" width="160" height="74" rx="8" class="step-amber"></rect>
+          <text x="166" y="276" text-anchor="middle" class="label">用户回答</text>
+          <text x="166" y="295" text-anchor="middle" class="muted">允许修改测试夹具</text>
+          <text x="166" y="312" text-anchor="middle" class="muted">或选择先暂停</text>
+
+          <path d="M166 324 V382" class="flow"></path>
+
+          <rect x="86" y="382" width="160" height="58" rx="8" class="step-green"></rect>
+          <text x="166" y="406" text-anchor="middle" class="label">提交答案</text>
+          <text x="166" y="425" text-anchor="middle" class="muted">resume input</text>
+
+          <path d="M246 411 H596" class="flow"></path>
+
+          <rect x="626" y="382" width="160" height="58" rx="8" class="step-green"></rect>
+          <text x="706" y="406" text-anchor="middle" class="label">workflow_resume</text>
+          <text x="706" y="425" text-anchor="middle" class="muted">解除等待，继续节点</text>
+
+          <path d="M786 411 H866" class="flow"></path>
+
+          <rect x="884" y="382" width="142" height="58" rx="8" class="step-green"></rect>
+          <text x="955" y="406" text-anchor="middle" class="label">子 Agent 继续</text>
+          <text x="955" y="425" text-anchor="middle" class="muted">带上用户答案</text>
+
+          <path d="M955 440 V492" class="flow"></path>
+
+          <rect x="884" y="492" width="142" height="58" rx="8" class="step-green"></rect>
+          <text x="955" y="516" text-anchor="middle" class="label">节点完成</text>
+          <text x="955" y="535" text-anchor="middle" class="muted">输出 evidence</text>
+
+          <path d="M884 521 H786" class="flow"></path>
+
+          <rect x="626" y="492" width="160" height="58" rx="8" class="step-green"></rect>
+          <text x="706" y="516" text-anchor="middle" class="label">依赖解锁</text>
+          <text x="706" y="535" text-anchor="middle" class="muted">下游 coder 可启动</text>
+        </svg>
+      </div>
+    </section>
+
+    <section class="section panel">
+      <h2>4. Runtime 需要保存的状态</h2>
+      <p class="lead">
+        只要状态保存清楚，顺序、并行、暂停、失败重试和恢复都不会互相打架。
+        这也是它以后能被 Codex 或其他 Agent 复用的基础。
+      </p>
+
+      <div class="grid-2">
+        <div class="note">
+          <h3>Run 级别</h3>
+          <ul>
+            <li><code>runId</code>：一次 workflow 运行。</li>
+            <li><code>workflowVersion</code>：用户固化出来的流程版本。</li>
+            <li><code>dag</code>：节点、依赖、分支和 gate。</li>
+            <li><code>globalStatus</code>：running、waiting、failed、succeeded。</li>
+            <li><code>checkpoint</code>：恢复所需上下文，不依赖聊天历史。</li>
+          </ul>
+        </div>
+
+        <div class="note">
+          <h3>Node 级别</h3>
+          <ul>
+            <li><code>nodeId</code>：当前节点。</li>
+            <li><code>agent</code>：要调用的 Agent 类型。</li>
+            <li><code>status</code>：pending、running、waiting、succeeded、failed。</li>
+            <li><code>input/output</code>：结构化输入输出。</li>
+            <li><code>waitReason</code>：用户、权限、审查或外部资源。</li>
+          </ul>
+        </div>
+      </div>
+
+      <table class="state-table" style="margin-top:16px">
+        <thead>
+          <tr>
+            <th>状态</th>
+            <th>界面表现</th>
+            <th>Runtime 行为</th>
+            <th>下游能否继续</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="status-pill s-running">RUNNING</span></td>
+            <td>节点显示运行中，可展开看子 Agent 日志。</td>
+            <td>持续接收事件、更新 evidence、监听取消。</td>
+            <td>依赖它的节点不能启动。</td>
+          </tr>
+          <tr>
+            <td><span class="status-pill s-waiting">WAITING_FOR_USER</span></td>
+            <td>主对话展示问题卡片和选项。</td>
+            <td>保存 checkpoint，暂停该节点，等待 resume。</td>
+            <td>只阻塞依赖它的下游。</td>
+          </tr>
+          <tr>
+            <td><span class="status-pill s-done">SUCCEEDED</span></td>
+            <td>节点变绿，展示输出摘要和证据。</td>
+            <td>校验 output schema 和 gate，解锁下游。</td>
+            <td>通过 gate 后可以继续。</td>
+          </tr>
+          <tr>
+            <td><span class="status-pill s-failed">FAILED</span></td>
+            <td>节点变红，展示失败原因、重试或跳过按钮。</td>
+            <td>按策略 retry、fallback、ask_user 或终止 run。</td>
+            <td>默认阻塞下游，除非 DAG 有 fallback 边。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section panel">
+      <h2>5. 我对第一版的落地判断</h2>
+      <p class="lead">
+        第一版不要急着做复杂画布编辑器。先把运行态做稳：自然语言生成 workflow、运行卡片、节点状态、
+        等待用户、恢复执行、证据归档。等这个链路跑通，再加可视化编辑。
+      </p>
+
+      <div class="canvas">
+        <svg viewBox="0 0 1120 300" role="img" aria-label="First version runtime scope">
+          <defs>
+            <marker id="arrow3" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+              <path d="M2,2 L10,6 L2,10 Z" fill="#6e7d8f"></path>
+            </marker>
+            <style>
+              .card { fill:#fff; stroke:#d8e1ea; stroke-width:2; rx:8; }
+              .focus { fill:#eaf1ff; stroke:#2563eb; }
+              .waitc { fill:#fff4dc; stroke:#b7791f; }
+              .okc { fill:#e9f7ef; stroke:#1f8a5b; }
+              .t { font: 800 17px Inter, system-ui, sans-serif; fill:#1e2b37; }
+              .s { font: 13px Inter, system-ui, sans-serif; fill:#66727f; }
+              .a { stroke:#6e7d8f; stroke-width:2; fill:none; marker-end:url(#arrow3); }
+            </style>
+          </defs>
+
+          <rect x="20" y="24" width="1080" height="234" rx="8" fill="#fbfdff" stroke="#d8e1ea"></rect>
+
+          <rect x="58" y="94" width="164" height="86" rx="8" class="card focus"></rect>
+          <text x="140" y="126" text-anchor="middle" class="t">自然语言</text>
+          <text x="140" y="150" text-anchor="middle" class="s">用户描述流程目标</text>
+
+          <path d="M222 137 H286" class="a"></path>
+
+          <rect x="286" y="94" width="164" height="86" rx="8" class="card focus"></rect>
+          <text x="368" y="126" text-anchor="middle" class="t">生成 DAG</text>
+          <text x="368" y="150" text-anchor="middle" class="s">节点 + 依赖 + 契约</text>
+
+          <path d="M450 137 H514" class="a"></path>
+
+          <rect x="514" y="94" width="164" height="86" rx="8" class="card okc"></rect>
+          <text x="596" y="126" text-anchor="middle" class="t">执行节点</text>
+          <text x="596" y="150" text-anchor="middle" class="s">OpenCode task 子 Agent</text>
+
+          <path d="M678 137 H742" class="a"></path>
+
+          <rect x="742" y="60" width="164" height="86" rx="8" class="card waitc"></rect>
+          <text x="824" y="92" text-anchor="middle" class="t">等待交互</text>
+          <text x="824" y="116" text-anchor="middle" class="s">ask_user / permission</text>
+
+          <path d="M824 146 V198" class="a"></path>
+
+          <rect x="742" y="198" width="164" height="46" rx="8" class="card focus"></rect>
+          <text x="824" y="226" text-anchor="middle" class="s">用户回答后 resume</text>
+
+          <path d="M906 137 H970" class="a"></path>
+
+          <rect x="970" y="94" width="92" height="86" rx="8" class="card okc"></rect>
+          <text x="1016" y="126" text-anchor="middle" class="t">证据</text>
+          <text x="1016" y="150" text-anchor="middle" class="s">结果归档</text>
+        </svg>
+      </div>
+    </section>
+
+    <p class="footer">
+      这张图的重点：Workflow 的运行态不是聊天记录拼接，而是 run / node / checkpoint / evidence
+      共同组成的状态机。OpenCode 负责执行子 Agent，Workflow Runtime 负责秩序和恢复。
+    </p>
+  </main>
+</body>
+</html>
