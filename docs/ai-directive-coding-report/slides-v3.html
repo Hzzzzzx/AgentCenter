@@ -1,0 +1,681 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI DevOps 指挥式纯 AI 编码实践 V3</title>
+  <style>
+    :root {
+      --bg: #f6f8fb;
+      --paper: #ffffff;
+      --ink: #162033;
+      --muted: #627086;
+      --line: #dfe5ef;
+      --blue: #2563eb;
+      --cyan: #0891b2;
+      --green: #16a34a;
+      --amber: #d97706;
+      --red: #dc2626;
+      --violet: #7c3aed;
+      --soft-blue: #e9f0ff;
+      --soft-cyan: #e6f7fb;
+      --soft-green: #eaf8ee;
+      --soft-amber: #fff4df;
+      --soft-red: #fff0f0;
+      --soft-violet: #f2edff;
+      --shadow: 0 18px 48px rgba(22, 32, 51, 0.09);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: linear-gradient(180deg, #ffffff 0, var(--bg) 520px), var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      letter-spacing: 0;
+    }
+
+    a { color: inherit; text-decoration: none; }
+
+    .deck {
+      display: grid;
+      gap: 22px;
+      max-width: 1220px;
+      margin: 0 auto;
+      padding: 28px;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 12px;
+      z-index: 10;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.88);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(14px);
+      padding: 12px 14px;
+    }
+
+    .topbar strong { font-size: 14px; }
+
+    .nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .nav a {
+      border-radius: 999px;
+      background: #eef3fb;
+      color: #334155;
+      font-size: 12px;
+      font-weight: 750;
+      padding: 7px 10px;
+    }
+
+    .slide {
+      scroll-margin-top: 92px;
+      display: grid;
+      gap: 22px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: var(--paper);
+      box-shadow: var(--shadow);
+      padding: 36px;
+      overflow: hidden;
+    }
+
+    .hero {
+      min-height: 460px;
+      align-content: center;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      width: fit-content;
+      border-radius: 999px;
+      background: var(--soft-cyan);
+      color: #155e75;
+      font-size: 12px;
+      font-weight: 850;
+      padding: 7px 11px;
+    }
+
+    h1, h2, h3, p { margin: 0; }
+
+    h1 {
+      max-width: 960px;
+      font-size: 54px;
+      line-height: 1.08;
+      font-weight: 900;
+    }
+
+    h2 {
+      font-size: 32px;
+      line-height: 1.18;
+      font-weight: 900;
+    }
+
+    h3 {
+      font-size: 17px;
+      line-height: 1.35;
+      font-weight: 850;
+    }
+
+    .lead {
+      max-width: 900px;
+      color: var(--muted);
+      font-size: 20px;
+      line-height: 1.65;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    .section-head p {
+      max-width: 500px;
+      color: var(--muted);
+      text-align: right;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .grid-2, .grid-3, .grid-4 {
+      display: grid;
+      gap: 14px;
+    }
+
+    .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+    .card {
+      display: grid;
+      gap: 10px;
+      align-content: start;
+      min-height: 128px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #ffffff;
+      padding: 16px;
+    }
+
+    .card p {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .dark {
+      background: #172033;
+      color: #ffffff;
+    }
+
+    .dark p { color: rgba(255, 255, 255, 0.78); }
+
+    .pill {
+      display: inline-flex;
+      width: fit-content;
+      align-items: center;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 850;
+      padding: 6px 10px;
+    }
+
+    .blue { background: var(--soft-blue); color: #1d4ed8; }
+    .green { background: var(--soft-green); color: #15803d; }
+    .amber { background: var(--soft-amber); color: #b45309; }
+    .red { background: var(--soft-red); color: #b91c1c; }
+    .violet { background: var(--soft-violet); color: #6d28d9; }
+    .cyan { background: var(--soft-cyan); color: #0e7490; }
+
+    .quote {
+      border-left: 4px solid var(--blue);
+      border-radius: 12px;
+      background: var(--soft-blue);
+      padding: 16px 18px;
+    }
+
+    .quote strong {
+      display: block;
+      color: #1d4ed8;
+      font-size: 13px;
+      margin-bottom: 6px;
+    }
+
+    .quote p {
+      color: #1e293b;
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .step {
+      display: grid;
+      gap: 10px;
+      min-height: 146px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #ffffff;
+      padding: 14px;
+    }
+
+    .step-num {
+      display: grid;
+      place-items: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 999px;
+      color: #ffffff;
+      background: var(--blue);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .model-mark {
+      display: inline-block;
+      border-radius: 8px;
+      background: var(--soft-blue);
+      color: #1d4ed8;
+      font-weight: 900;
+      padding: 1px 6px;
+    }
+
+    .diagram {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #fbfcff;
+      overflow: hidden;
+    }
+
+    svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .svg-title {
+      fill: #172033;
+      font-size: 20px;
+      font-weight: 850;
+    }
+
+    .svg-text {
+      fill: #334155;
+      font-size: 14px;
+    }
+
+    .svg-muted {
+      fill: #647084;
+      font-size: 12px;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .metric {
+      display: grid;
+      gap: 8px;
+      min-height: 118px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #ffffff;
+      padding: 16px;
+    }
+
+    .metric strong {
+      font-size: 34px;
+      line-height: 1;
+      font-weight: 900;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .code-split {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fbfcff;
+      padding: 14px;
+    }
+
+    .split-item {
+      display: grid;
+      gap: 6px;
+      border-radius: 10px;
+      background: #ffffff;
+      padding: 13px 14px;
+    }
+
+    .split-item span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .split-item strong {
+      font-size: 24px;
+      line-height: 1;
+      font-weight: 900;
+    }
+
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .tag {
+      border-radius: 999px;
+      background: #eef3fb;
+      color: #334155;
+      font-size: 13px;
+      font-weight: 800;
+      padding: 9px 12px;
+    }
+
+    .video-panel {
+      display: grid;
+      gap: 14px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: linear-gradient(180deg, #fcfdff 0%, #f5f8ff 100%);
+      padding: 18px;
+    }
+
+    .video-panel video {
+      display: block;
+      width: 100%;
+      border: 1px solid #cfd9ea;
+      border-radius: 14px;
+      background: #0f172a;
+      box-shadow: 0 16px 36px rgba(15, 23, 42, 0.16);
+    }
+
+    .footer {
+      color: var(--muted);
+      text-align: center;
+      font-size: 12px;
+      padding: 10px 0 24px;
+    }
+
+    @media (max-width: 900px) {
+      .deck { padding: 14px; }
+      .slide { padding: 22px; }
+      .hero { min-height: auto; }
+      h1 { font-size: 36px; }
+      h2 { font-size: 25px; }
+      .section-head { display: grid; }
+      .section-head p { text-align: left; }
+      .grid-2, .grid-3, .grid-4, .flow, .metric-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="deck">
+    <header class="topbar">
+      <strong>AI DevOps 指挥式纯 AI 编码实践 V3</strong>
+      <nav class="nav" aria-label="页面导航">
+        <a href="#background">背景</a>
+        <a href="#result">结果</a>
+        <a href="#command">指挥</a>
+        <a href="#model">模型</a>
+        <a href="#workmodel">作业模型</a>
+        <a href="#takeaway">体会</a>
+      </nav>
+    </header>
+
+    <section class="slide hero" id="cover">
+      <span class="eyebrow">AI DevOps 开发复盘</span>
+      <h1>指挥式纯 AI 编码实践</h1>
+      <p class="lead">从 AI DevOps 想法到可运行系统的一次快跑实践。</p>
+      <div class="quote">
+        <strong>核心主张</strong>
+        <p>人负责方向、架构、规则和验收；Agent 负责实现、检查、修复和交接。</p>
+      </div>
+    </section>
+
+    <section class="slide" id="background">
+      <div class="section-head">
+        <h2>背景：AI DevOps，时间紧</h2>
+        <p>传统节奏太慢，先用 AI 指挥式编码验证方向。</p>
+      </div>
+      <div class="flow">
+        <div class="step">
+          <span class="step-num">1</span>
+          <h3>接到任务</h3>
+          <p>AI DevOps Agent</p>
+        </div>
+        <div class="step">
+          <span class="step-num">2</span>
+          <h3>传统模式</h3>
+          <p>1-2 个月周期</p>
+        </div>
+        <div class="step">
+          <span class="step-num">3</span>
+          <h3>选择 AI</h3>
+          <p>快速验证</p>
+        </div>
+        <div class="step">
+          <span class="step-num">4</span>
+          <h3>表达意图</h3>
+          <p>愿景 / 架构 / 规则</p>
+        </div>
+        <div class="step">
+          <span class="step-num">5</span>
+          <h3>执行快跑</h3>
+          <p><span class="model-mark">Codex + GPT-5.5</span></p>
+        </div>
+        <div class="step">
+          <span class="step-num">6</span>
+          <h3>测试闭环</h3>
+          <p>3 位同学验证</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" id="result">
+      <div class="section-head">
+        <h2>结果：一个人，7 天</h2>
+        <p>从高保真推进到可运行工作台。</p>
+      </div>
+      <div class="metric-grid">
+        <div class="metric">
+          <strong>7 天</strong>
+          <span>密集编码窗口</span>
+        </div>
+        <div class="metric">
+          <strong>169</strong>
+          <span>提交</span>
+        </div>
+        <div class="metric">
+          <strong>72,225</strong>
+          <span>总代码行：产品 48,890 / 测试 23,335</span>
+        </div>
+        <div class="metric">
+          <strong>32</strong>
+          <span>可识别能力</span>
+        </div>
+        <div class="metric">
+          <strong>809</strong>
+          <span>测试入口</span>
+        </div>
+      </div>
+      <div class="code-split">
+        <div class="split-item">
+          <span>前端代码</span>
+          <strong>25,078 行</strong>
+        </div>
+        <div class="split-item">
+          <span>后端代码</span>
+          <strong>23,812 行</strong>
+        </div>
+        <div class="split-item">
+          <span>测试代码</span>
+          <strong>23,335 行</strong>
+        </div>
+      </div>
+      <div class="grid-3">
+        <div class="card">
+          <span class="pill green">功能可用</span>
+          <h3>工作台跑起来</h3>
+          <p>对话 / 看板 / 工作流 / Runtime Bridge</p>
+        </div>
+        <div class="card">
+          <span class="pill blue">内部验证</span>
+          <h3>3 位同学测试</h3>
+          <p>业务 Skill 放进系统试起来</p>
+        </div>
+        <div class="card">
+          <span class="pill amber">继续收敛</span>
+          <h3>问题进入闭环</h3>
+          <p>检查 / 复盘 / 重构</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" id="command">
+      <div class="section-head">
+        <h2>我是怎么指挥的</h2>
+        <p>先让意图可见，再让 Agent 执行。</p>
+      </div>
+      <div class="grid-4">
+        <div class="card">
+          <span class="pill blue">愿景</span>
+          <h3>要做什么</h3>
+          <p>AI DevOps Agent</p>
+        </div>
+        <div class="card">
+          <span class="pill cyan">设计</span>
+          <h3>长什么样</h3>
+          <p>高保真 / 多栏工作台 / 标注评论</p>
+        </div>
+        <div class="card">
+          <span class="pill green">边界</span>
+          <h3>第一版做什么</h3>
+          <p>模块 / 流程 / 验收</p>
+        </div>
+        <div class="card">
+          <span class="pill amber">执行</span>
+          <h3>交给谁做</h3>
+          <p>Agent 实现 + 工具反馈</p>
+        </div>
+      </div>
+      <div class="quote">
+        <strong>设计 = 指挥语言</strong>
+        <p>高保真、标注评论、业务规则、验收标准，都是为了让 Agent 不跑偏。</p>
+      </div>
+      <div class="video-panel">
+        <video controls playsinline preload="metadata">
+          <source src="media/comment-review.mp4" type="video/mp4" />
+          <source src="media/comment-review.mov" type="video/quicktime" />
+        </video>
+        <div class="tag-row">
+          <span class="tag">页面标注</span>
+          <span class="tag">评论回改</span>
+          <span class="tag">元素级修改</span>
+          <span class="tag">所见即所得</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" id="model">
+      <div class="section-head">
+        <h2>模型能力决定能否放手</h2>
+        <p>不是所有模型都能支撑指挥式快跑。</p>
+      </div>
+      <div class="diagram" aria-label="模型能力阈值对比">
+        <svg viewBox="0 0 1100 430" role="img">
+          <rect width="1100" height="430" fill="#fbfcff"></rect>
+          <line x1="105" y1="340" x2="1000" y2="340" stroke="#94a3b8" stroke-width="2"></line>
+          <line x1="105" y1="80" x2="105" y2="340" stroke="#94a3b8" stroke-width="2"></line>
+          <text x="862" y="374" class="svg-muted">任务复杂度</text>
+          <text x="48" y="88" class="svg-muted" transform="rotate(-90 48 88)">闭环能力</text>
+          <rect x="105" y="185" width="895" height="54" rx="10" fill="#eaf8ee"></rect>
+          <text x="130" y="218" fill="#15803d" font-size="16" font-weight="900">可放手区间：目标清楚、边界清楚、可验证</text>
+          <path d="M130 305 C330 275, 540 245, 735 160 C830 118, 925 96, 985 88" fill="none" stroke="#2563eb" stroke-width="5"></path>
+          <path d="M130 318 C350 310, 580 294, 760 255 C875 232, 950 220, 985 210" fill="none" stroke="#dc2626" stroke-width="4" stroke-dasharray="12 10"></path>
+          <circle cx="730" cy="162" r="8" fill="#2563eb"></circle>
+          <rect x="755" y="104" width="180" height="44" rx="10" fill="#e9f0ff" stroke="#bfdbfe"></rect>
+          <text x="775" y="130" fill="#1d4ed8" font-size="15" font-weight="900">Codex + GPT-5.5</text>
+          <text x="775" y="168" class="svg-muted">能进入快跑闭环</text>
+          <circle cx="755" cy="257" r="8" fill="#dc2626"></circle>
+          <rect x="785" y="236" width="185" height="38" rx="10" fill="#fff0f0" stroke="#fecaca"></rect>
+          <text x="805" y="260" fill="#b91c1c" font-size="15" font-weight="900">opencode + GLM-5</text>
+          <text x="805" y="292" class="svg-muted">需要更多陪跑看护</text>
+        </svg>
+      </div>
+    </section>
+
+    <section class="slide" id="workmodel">
+      <div class="section-head">
+        <h2>AI 时代的作业模型</h2>
+        <p>模型是大脑，工具是眼睛和仪表盘，人工测试是最终验收。</p>
+      </div>
+      <div class="diagram" aria-label="AI 时代作业模型">
+        <svg viewBox="0 0 1100 420" role="img">
+          <defs>
+            <marker id="arrow3" markerWidth="12" markerHeight="12" refX="9" refY="4" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L0,8 L10,4 z" fill="#2563eb"></path>
+            </marker>
+          </defs>
+          <rect width="1100" height="420" fill="#fbfcff"></rect>
+          <rect x="58" y="120" width="160" height="86" rx="16" fill="#e9f0ff" stroke="#bfdbfe"></rect>
+          <text x="102" y="154" fill="#1d4ed8" font-size="18" font-weight="900">意图输入</text>
+          <text x="86" y="182" class="svg-muted">愿景 / 架构 / 规则</text>
+          <rect x="275" y="105" width="170" height="116" rx="20" fill="#172033"></rect>
+          <text x="326" y="152" fill="#ffffff" font-size="20" font-weight="900">Agent</text>
+          <text x="314" y="184" fill="rgba(255,255,255,0.78)" font-size="13">理解并执行</text>
+          <rect x="502" y="120" width="160" height="86" rx="16" fill="#eaf8ee" stroke="#bbf7d0"></rect>
+          <text x="548" y="154" fill="#15803d" font-size="18" font-weight="900">代码实现</text>
+          <text x="538" y="182" class="svg-muted">功能 / 页面 / 接口</text>
+          <rect x="718" y="120" width="160" height="86" rx="16" fill="#fff4df" stroke="#fed7aa"></rect>
+          <text x="764" y="154" fill="#b45309" font-size="18" font-weight="900">检查反馈</text>
+          <text x="752" y="182" class="svg-muted">code check / test</text>
+          <rect x="930" y="120" width="130" height="86" rx="16" fill="#f2edff" stroke="#ddd6fe"></rect>
+          <text x="966" y="154" fill="#6d28d9" font-size="18" font-weight="900">人工验收</text>
+          <text x="962" y="182" class="svg-muted">3 位同学测试</text>
+          <path d="M218 163 L265 163" stroke="#2563eb" stroke-width="4" marker-end="url(#arrow3)"></path>
+          <path d="M445 163 L492 163" stroke="#2563eb" stroke-width="4" marker-end="url(#arrow3)"></path>
+          <path d="M662 163 L708 163" stroke="#2563eb" stroke-width="4" marker-end="url(#arrow3)"></path>
+          <path d="M878 163 L920 163" stroke="#2563eb" stroke-width="4" marker-end="url(#arrow3)"></path>
+          <rect x="250" y="275" width="210" height="70" rx="16" fill="#e6f7fb" stroke="#a5f3fc"></rect>
+          <text x="310" y="304" fill="#0e7490" font-size="17" font-weight="900">感知工具</text>
+          <text x="290" y="328" class="svg-muted">代码关系 / 影响面 / 上下文</text>
+          <rect x="620" y="275" width="210" height="70" rx="16" fill="#fff0f0" stroke="#fecaca"></rect>
+          <text x="680" y="304" fill="#b91c1c" font-size="17" font-weight="900">反馈工具</text>
+          <text x="662" y="328" class="svg-muted">测试 / 截图 / 日志 / 复盘</text>
+          <path d="M355 275 L355 224" stroke="#0891b2" stroke-width="4" marker-end="url(#arrow3)"></path>
+          <path d="M725 275 C725 232, 610 230, 455 202" fill="none" stroke="#dc2626" stroke-width="4" marker-end="url(#arrow3)"></path>
+          <path d="M995 206 C985 372, 590 374, 430 222" fill="none" stroke="#7c3aed" stroke-width="4" marker-end="url(#arrow3)"></path>
+        </svg>
+      </div>
+      <div class="tag-row">
+        <span class="tag">感知系统</span>
+        <span class="tag">反馈系统</span>
+        <span class="tag">Agent 修复</span>
+        <span class="tag">人工测试验收</span>
+      </div>
+    </section>
+
+    <section class="slide" id="takeaway">
+      <div class="section-head">
+        <h2>实践体会：生产力变了</h2>
+        <p>以往作业流程需要围绕 AI 重新组织。</p>
+      </div>
+      <div class="grid-4">
+        <div class="card dark">
+          <h3>意图表达</h3>
+          <p>愿景、规则、边界先讲清</p>
+        </div>
+        <div class="card">
+          <h3>设计环节</h3>
+          <p>高保真、标注评论、交互预期</p>
+        </div>
+        <div class="card">
+          <h3>测试环节</h3>
+          <p>code check、截图、人工验收</p>
+        </div>
+        <div class="card">
+          <h3>作业重构</h3>
+          <p>围绕 AI 发挥和自动闭环来组织</p>
+        </div>
+      </div>
+      <div class="quote">
+        <strong>核心体会</strong>
+        <p>AI 时代最重要的环节，不再只是写代码，而是意图表达、设计清楚，以及把测试和验收前置成 Agent 的反馈系统。</p>
+      </div>
+    </section>
+
+    <p class="footer">AgentCenter AI DevOps 指挥式纯 AI 编码实践 · V3</p>
+  </div>
+</body>
+</html>
