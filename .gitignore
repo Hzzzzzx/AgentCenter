@@ -33,3 +33,4 @@ tsconfig.tsbuildinfo
 
 # Agent Workflow local run state
 .opencode/agent-workflow/
+packages/opencode/runtime-workspaces/

@@ -1,16 +1,33 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
+    "target": "ES2023",
     "useDefineForClassFields": true,
     "module": "ESNext",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js",
     "isolatedModules": true,
     "moduleDetection": "force",
     "noEmit": true,
-    "strict": true
+    "strict": true,
+    "paths": {
+      "@tanstack/solid-query": ["../app/node_modules/@tanstack/solid-query/build/index.d.ts"],
+      "@/*": ["../app/src/*"]
+    }
   },
-  "include": ["src"]
+  "include": [
+    "src",
+    "../app/src/components/prompt-input.tsx",
+    "../app/src/components/prompt-input/**/*",
+    "../app/src/context/**/*",
+    "../app/src/hooks/use-providers.ts",
+    "../app/src/pages/directory-layout.tsx",
+    "../app/src/pages/session/session-layout.ts",
+    "../app/src/pages/session/helpers.ts",
+    "../app/src/utils/**/*"
+  ],
+  "exclude": ["../app/src/**/*.test.ts", "../app/src/**/*.test.tsx"]
 }

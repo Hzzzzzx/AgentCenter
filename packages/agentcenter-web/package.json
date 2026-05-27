@@ -7,9 +7,17 @@
     "build": "../app/node_modules/.bin/vite build",
     "typecheck": "tsgo -p tsconfig.json"
   },
+  "dependencies": {
+    "@opencode-ai/sdk": "workspace:*",
+    "@opencode-ai/ui": "workspace:*",
+    "@solidjs/router": "catalog:",
+    "solid-js": "catalog:"
+  },
   "devDependencies": {
+    "@tailwindcss/vite": "catalog:",
     "@typescript/native-preview": "catalog:",
     "typescript": "catalog:",
-    "vite": "catalog:"
+    "vite": "catalog:",
+    "vite-plugin-solid": "catalog:"
   }
 }

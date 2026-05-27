@@ -4,9 +4,12 @@ Status: discussion draft
 Last updated: 2026-05-25
 
 This document records the current AgentCenter direction for controlled OpenCode
-runtime directories and project-level Skill/MCP management. It is more specific
-than the earlier workspace isolation notes: it defines what F7 Skill Management
-and F8 MCP Management should mean in the OpenCode-native branch.
+runtime directories and project-level Skill/MCP management. The runtime control
+module is named `workspace-control`; see `workspace-control-design.md` for the
+identity, collaboration, execution lease, and agent access boundary model.
+
+This document is more specific than the earlier workspace isolation notes for
+F7 Skill Management and F8 MCP Management.
 
 ## Decision Summary
 
@@ -53,6 +56,8 @@ AgentCenter needs:
 
 - server-owned runtime roots;
 - tenant, project, user, and work item boundaries;
+- a `workspace-control` module that maps product ids to OpenCode runtime
+  directories;
 - project-level Skill and MCP registries;
 - work-item runtime directories created from product state;
 - resource snapshots so workflows continue after refresh, resume, and context
@@ -117,6 +122,7 @@ Rules:
 | Project MCP Registry | AgentCenter registry plus secret references | Source of truth for available project MCP servers. |
 | Work Item | AgentCenter registry | Product task or workflow unit. |
 | Work Item Runtime Workspace | AgentCenter resolver | Filesystem directory where OpenCode runs for a work item. |
+| Runtime Scope | `workspace-control` | The allowed root and identity metadata attached to one OpenCode session. |
 | OpenCode Session | OpenCode native runtime | Conversation and message source of truth. |
 | Workflow Run | AgentCenter registry/tool state | Durable product state, not stored only in chat. |
 | Runtime Resource Snapshot | AgentCenter registry | Captures Skill/MCP versions used by a work item run. |

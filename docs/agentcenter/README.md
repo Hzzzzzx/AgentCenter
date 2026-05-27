@@ -23,13 +23,32 @@ implementation base.
 - `controlled-runtime-project-resources-design.md`: focused design for the
   controlled runtime root, project-level Skill/MCP registries, and work item
   runtime workspace projection.
+- `workspace-control-design.md`: names the control-plane module
+  `workspace-control` and defines its responsibility for identity, project and
+  work item registry, runtime directory resolution, execution lease, session
+  binding, collaboration, and agent access boundaries.
 
 ## Current Frontend Boundary
 
 - `packages/app` is OpenCode's own Web application and should stay upstream
   shaped.
 - AgentCenter display work belongs in `packages/agentcenter-web/`.
-- `packages/agentcenter-web` now contains the first standalone 1026-style
-  display shell. It uses demo work item data only.
-- The next frontend target is to tighten visual parity and then integrate
-  OpenCode capabilities through explicit boundaries.
+- `packages/agentcenter-web` now contains the standalone AgentCenter shell. It
+  uses seeded local project/work item data, opens sessions through
+  `workspace-control`, and renders OpenCode conversations with native OpenCode
+  UI components.
+- The next frontend target is to keep moving native OpenCode interaction
+  surfaces into the AgentCenter shell without letting the browser choose raw
+  directories.
+
+## Current Runtime Boundary
+
+- The runtime control module is named `workspace-control`.
+- `workspace-control` maps `{ tenantId, projectId, workItemId, userId }` to a
+  controlled OpenCode runtime directory.
+- Shared collaboration state lives at the work item level.
+- OpenCode execution runs in per-user work item workspaces.
+- Agents must only access the current runtime scope's allowed root unless a
+  later reviewed sharing or promotion flow grants access.
+- Controlled AgentCenter routes now cover session open/bootstrap/message/file,
+  question/permission docks, abort/revert/unrevert, fork, and compact.
