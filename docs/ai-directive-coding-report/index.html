@@ -321,6 +321,55 @@
       background: linear-gradient(90deg, var(--cyan), var(--blue));
     }
 
+    .commit-day-grid {
+      display: grid;
+      grid-template-columns: repeat(8, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .commit-day {
+      display: grid;
+      gap: 4px;
+      place-items: center;
+      min-height: 58px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 8px 6px;
+      text-align: center;
+    }
+
+    .commit-day span {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.2;
+      font-weight: 750;
+    }
+
+    .commit-day strong {
+      color: var(--blue);
+      font-size: 19px;
+      line-height: 1;
+      font-weight: 900;
+    }
+
+    .commit-day.zero strong {
+      color: #94a3b8;
+    }
+
+    .commit-day.warm strong {
+      color: var(--amber);
+    }
+
+    .commit-day.hot strong {
+      color: var(--red);
+    }
+
+    .commit-day.done strong {
+      color: var(--green);
+    }
+
     .feature-matrix {
       display: grid;
       grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -830,6 +879,7 @@
         <a href="#confidence"><span class="dot"></span>信心来源</a>
         <a href="#first-prototype"><span class="dot"></span>第一版高保真</a>
         <a href="#numbers"><span class="dot"></span>量化背景</a>
+        <a href="#cadence"><span class="dot"></span>提交节奏</a>
         <a href="#surface"><span class="dot"></span>功能面</a>
         <a href="#effect"><span class="dot"></span>实际效果</a>
         <a href="#timeline"><span class="dot"></span>发展时间线</a>
@@ -902,7 +952,7 @@
         </div>
         <div class="prototype-showcase">
           <figure class="prototype-frame">
-            <img src="prototype/first-highfi-a-version-2026-04-29.png" alt="AgentCenter 第一版黑色高保真原型截图" />
+            <img src="first-highfi-a-version-2026-04-29.png" alt="AgentCenter 第一版黑色高保真原型截图" />
           </figure>
           <div class="prototype-caption">
             <span class="pill blue">早期原型</span>
@@ -916,12 +966,12 @@
       <section class="section" id="numbers">
         <div class="section-head">
           <h2>量化背景：2026-04-29 到 2026-05-14</h2>
-          <p>一组可复查数字展示了这轮实践的密度：短周期、多会话、高提交量，并伴随持续验证和收敛。</p>
+          <p>先用一组可复查数字建立背景：这里按开发日期看，已扣除 2026-04-30 到 2026-05-03 的假期窗口。</p>
         </div>
         <div class="metrics-grid">
           <div class="metric">
-            <strong>15 天</strong>
-            <span>2026-04-29 11:33 到 2026-05-14 10:26，约 15 天自然跨度，12 个活跃提交日。</span>
+            <strong>12 天</strong>
+            <span>开发日期为 2026-04-29、2026-05-04 到 2026-05-14；真正密集编码集中在 2026-05-07 之后。</span>
           </div>
           <div class="metric">
             <strong>169</strong>
@@ -980,8 +1030,149 @@
           </div>
         </div>
         <p class="scope-note">
-          统计口径：起点取 2026-04-29 11:33 的实际开发 commit `7707fab1`，终点取 2026-05-14 10:26 的 1026 节点 commit `6f2e0416`。代码量、文档量、测试量按 `6f2e0416` 的 tracked 文件统计；Codex 会话按日志中 `cwd=/Users/hzz/workspace/AgentCenter` 且处于 2026-04-29 00:00 到 2026-05-14 10:26 区间统计。
+          统计口径：起点取 2026-04-29 的实际开发 commit `7707fab1`，终点取 2026-05-14 的 1026 节点 commit `6f2e0416`。代码量、文档量、测试量按 `6f2e0416` 的 tracked 文件统计；Codex 会话按日志中 `cwd=/Users/hzz/workspace/AgentCenter` 且处于 2026-04-29 到 2026-05-14 区间统计。
         </p>
+      </section>
+
+      <section class="section" id="cadence">
+        <div class="section-head">
+          <h2>提交节奏：不是半个月连续堆代码</h2>
+          <p>每日提交数把节奏讲清楚：前期主要是高保真、讨论和路线准备，密集工程实现集中在 5 月 7 日之后。</p>
+        </div>
+        <div class="diagram" aria-label="2026-04-29 到 2026-05-14 每日提交数柱状图">
+          <svg viewBox="0 0 1100 520" role="img">
+            <rect width="1100" height="520" fill="#fbfcff"></rect>
+            <text x="46" y="50" class="svg-title">每日提交数：密集编码窗口集中在 5.7 - 5.14</text>
+            <text x="46" y="78" class="svg-muted">统计范围：7707fab1 到 6f2e0416，共 169 次提交；0 提交日也保留在图中。</text>
+
+            <rect x="82" y="102" width="928" height="260" rx="14" fill="#ffffff" stroke="#dfe4ee"></rect>
+            <line x1="82" y1="362" x2="1010" y2="362" stroke="#94a3b8" stroke-width="2"></line>
+            <line x1="82" y1="102" x2="82" y2="362" stroke="#94a3b8" stroke-width="2"></line>
+            <text x="46" y="120" class="svg-muted">提交数</text>
+            <text x="76" y="366" class="svg-muted" text-anchor="end">0</text>
+            <text x="76" y="260" class="svg-muted" text-anchor="end">25</text>
+            <text x="76" y="110" class="svg-muted" text-anchor="end">52</text>
+            <line x1="82" y1="237" x2="1010" y2="237" stroke="#edf2f7" stroke-width="1"></line>
+            <line x1="82" y1="112" x2="1010" y2="112" stroke="#edf2f7" stroke-width="1"></line>
+
+            <rect x="105" y="357" width="34" height="5" rx="4" fill="#d97706"></rect>
+            <text x="122" y="348" class="svg-text" text-anchor="middle">1</text>
+            <text x="122" y="390" class="svg-muted" text-anchor="middle">4/29</text>
+
+            <rect x="163" y="362" width="34" height="0" rx="4" fill="#cbd5e1"></rect>
+            <circle cx="180" cy="362" r="4" fill="#cbd5e1"></circle>
+            <text x="180" y="348" fill="#647084" font-size="12" font-weight="850" text-anchor="middle">0</text>
+            <text x="180" y="390" class="svg-muted" text-anchor="middle">4/30</text>
+
+            <rect x="221" y="362" width="34" height="0" rx="4" fill="#cbd5e1"></rect>
+            <circle cx="238" cy="362" r="4" fill="#cbd5e1"></circle>
+            <text x="238" y="348" fill="#647084" font-size="12" font-weight="850" text-anchor="middle">0</text>
+            <text x="238" y="390" class="svg-muted" text-anchor="middle">5/1</text>
+
+            <rect x="279" y="362" width="34" height="0" rx="4" fill="#cbd5e1"></rect>
+            <circle cx="296" cy="362" r="4" fill="#cbd5e1"></circle>
+            <text x="296" y="348" fill="#647084" font-size="12" font-weight="850" text-anchor="middle">0</text>
+            <text x="296" y="390" class="svg-muted" text-anchor="middle">5/2</text>
+
+            <rect x="337" y="362" width="34" height="0" rx="4" fill="#cbd5e1"></rect>
+            <circle cx="354" cy="362" r="4" fill="#cbd5e1"></circle>
+            <text x="354" y="348" fill="#647084" font-size="12" font-weight="850" text-anchor="middle">0</text>
+            <text x="354" y="390" class="svg-muted" text-anchor="middle">5/3</text>
+
+            <rect x="395" y="342" width="34" height="20" rx="4" fill="#d97706"></rect>
+            <text x="412" y="333" class="svg-text" text-anchor="middle">4</text>
+            <text x="412" y="390" class="svg-muted" text-anchor="middle">5/4</text>
+
+            <rect x="453" y="357" width="34" height="5" rx="4" fill="#d97706"></rect>
+            <text x="470" y="348" class="svg-text" text-anchor="middle">1</text>
+            <text x="470" y="390" class="svg-muted" text-anchor="middle">5/5</text>
+
+            <rect x="511" y="347" width="34" height="15" rx="4" fill="#0891b2"></rect>
+            <text x="528" y="338" class="svg-text" text-anchor="middle">3</text>
+            <text x="528" y="390" class="svg-muted" text-anchor="middle">5/6</text>
+
+            <rect x="569" y="277" width="34" height="85" rx="4" fill="#2563eb"></rect>
+            <text x="586" y="268" class="svg-text" text-anchor="middle">17</text>
+            <text x="586" y="390" class="svg-muted" text-anchor="middle">5/7</text>
+
+            <rect x="627" y="237" width="34" height="125" rx="4" fill="#2563eb"></rect>
+            <text x="644" y="228" class="svg-text" text-anchor="middle">25</text>
+            <text x="644" y="390" class="svg-muted" text-anchor="middle">5/8</text>
+
+            <rect x="685" y="302" width="34" height="60" rx="4" fill="#2563eb"></rect>
+            <text x="702" y="293" class="svg-text" text-anchor="middle">12</text>
+            <text x="702" y="390" class="svg-muted" text-anchor="middle">5/9</text>
+
+            <rect x="743" y="327" width="34" height="35" rx="4" fill="#2563eb"></rect>
+            <text x="760" y="318" class="svg-text" text-anchor="middle">7</text>
+            <text x="760" y="390" class="svg-muted" text-anchor="middle">5/10</text>
+
+            <rect x="801" y="102" width="34" height="260" rx="4" fill="#dc2626"></rect>
+            <text x="818" y="94" fill="#b91c1c" font-size="13" font-weight="850" text-anchor="middle">52</text>
+            <text x="818" y="390" class="svg-muted" text-anchor="middle">5/11</text>
+
+            <rect x="859" y="222" width="34" height="140" rx="4" fill="#2563eb"></rect>
+            <text x="876" y="213" class="svg-text" text-anchor="middle">28</text>
+            <text x="876" y="390" class="svg-muted" text-anchor="middle">5/12</text>
+
+            <rect x="917" y="287" width="34" height="75" rx="4" fill="#2563eb"></rect>
+            <text x="934" y="278" class="svg-text" text-anchor="middle">15</text>
+            <text x="934" y="390" class="svg-muted" text-anchor="middle">5/13</text>
+
+            <rect x="975" y="342" width="34" height="20" rx="4" fill="#16a34a"></rect>
+            <text x="992" y="333" class="svg-text" text-anchor="middle">4</text>
+            <text x="992" y="390" class="svg-muted" text-anchor="middle">5/14</text>
+
+            <rect x="102" y="416" width="170" height="30" rx="999" fill="#fff4df" stroke="#fed7aa"></rect>
+            <text x="128" y="436" fill="#b45309" font-size="12" font-weight="850">原型 / 方案准备</text>
+            <rect x="294" y="416" width="152" height="30" rx="999" fill="#f8fafc" stroke="#cbd5e1"></rect>
+            <text x="332" y="436" fill="#647084" font-size="12" font-weight="850">假期 / 0 提交</text>
+            <rect x="468" y="416" width="170" height="30" rx="999" fill="#e6f7fb" stroke="#a5f3fc"></rect>
+            <text x="496" y="436" fill="#0e7490" font-size="12" font-weight="850">工程启动</text>
+            <rect x="660" y="416" width="240" height="30" rx="999" fill="#e9f0ff" stroke="#bfdbfe"></rect>
+            <text x="696" y="436" fill="#1d4ed8" font-size="12" font-weight="850">密集工程实现 / 修复收敛</text>
+
+            <rect x="170" y="468" width="760" height="34" rx="12" fill="#172033"></rect>
+            <text x="212" y="490" fill="#ffffff" font-size="14" font-weight="850">关键判断：</text>
+            <text x="318" y="490" fill="rgba(255,255,255,0.84)" font-size="13">扣除假期后共有 12 个开发日期；5.7 - 5.14 贡献 160 / 169 次提交，约 95%。</text>
+          </svg>
+        </div>
+        <div class="commit-day-grid" aria-label="每日提交量明细">
+          <div class="commit-day warm"><span>4/29</span><strong>1</strong></div>
+          <div class="commit-day zero"><span>4/30</span><strong>0</strong></div>
+          <div class="commit-day zero"><span>5/1</span><strong>0</strong></div>
+          <div class="commit-day zero"><span>5/2</span><strong>0</strong></div>
+          <div class="commit-day zero"><span>5/3</span><strong>0</strong></div>
+          <div class="commit-day warm"><span>5/4</span><strong>4</strong></div>
+          <div class="commit-day warm"><span>5/5</span><strong>1</strong></div>
+          <div class="commit-day"><span>5/6</span><strong>3</strong></div>
+          <div class="commit-day"><span>5/7</span><strong>17</strong></div>
+          <div class="commit-day"><span>5/8</span><strong>25</strong></div>
+          <div class="commit-day"><span>5/9</span><strong>12</strong></div>
+          <div class="commit-day"><span>5/10</span><strong>7</strong></div>
+          <div class="commit-day hot"><span>5/11</span><strong>52</strong></div>
+          <div class="commit-day"><span>5/12</span><strong>28</strong></div>
+          <div class="commit-day"><span>5/13</span><strong>15</strong></div>
+          <div class="commit-day done"><span>5/14</span><strong>4</strong></div>
+        </div>
+        <div class="grid-4" style="margin-top: 14px;">
+          <div class="card">
+            <h3>4.29</h3>
+            <p>更接近高保真、资料整理和方向可视化，不是大规模工程编码。</p>
+          </div>
+          <div class="card">
+            <h3>4.30 - 5.3</h3>
+            <p>假期窗口，0 提交，说明自然跨度不等于连续开发时间。</p>
+          </div>
+          <div class="card">
+            <h3>5.4 - 5.6</h3>
+            <p>原型、SDD 和 Bridge 起步，开始把方向转成工程入口。</p>
+          </div>
+          <div class="card">
+            <h3>5.7 - 5.14</h3>
+            <p>密集编码和收敛窗口，峰值在 5.11，单日 52 次提交。</p>
+          </div>
+        </div>
       </section>
 
       <section class="section" id="surface">
@@ -1603,7 +1794,7 @@
       <section class="section" id="talk">
         <div class="section-head">
           <h2>分享主线</h2>
-          <p>整套叙事可概括为十一步：信心来源、需求触发、产品定形、功能落地、实际效果、边界收敛、路线试错、执行方式变化、SDD 形成、质量闭环、模型阈值和工程重建。</p>
+          <p>整套叙事先校正时间感，再讲从原型、边界、路线试错到密集编码和实际验证的推进过程。</p>
         </div>
         <div class="script">
           <div class="script-step">
@@ -1626,20 +1817,26 @@
           </div>
           <div class="script-step">
             <div>
+              <h3>先校正时间感</h3>
+              <p>4.29 和 5.4-5.5 更偏高保真、原型和规则准备，中间 4.30-5.3 是假期窗口、0 提交。真正密集编码集中在 5.7-5.14，这 8 天贡献了 160/169 次提交，约 95%。</p>
+            </div>
+          </div>
+          <div class="script-step">
+            <div>
               <h3>边界收敛后再执行</h3>
               <p>第一版范围先被收住：明确要做什么、不做什么、有哪些模块和流程节点；边界清楚后，才进入具体执行路径探索。</p>
             </div>
           </div>
           <div class="script-step">
             <div>
-              <h3>功能落地后开始产生实际效果</h3>
-              <p>核心功能点开发出来后，系统已经能支撑其他成员接入业务相关 Skill 做测试、调整和联调。它仍有明显问题需要继续收敛，但已经把最初设想推进到了可操作验证阶段。</p>
+              <h3>路线试错后切换执行路径</h3>
+              <p>中间并不是一路顺滑。内部适配路线出现方向走偏和演进困难后，重新判断了执行路径，转而用外部强模型快速演进一版，把系统先拉到可运行状态。</p>
             </div>
           </div>
           <div class="script-step">
             <div>
-              <h3>路线试错后切换执行路径</h3>
-              <p>中间并不是一路顺滑。内部适配路线出现方向走偏和演进困难后，重新判断了执行路径，转而用外部强模型快速演进一版，把系统先拉到可运行状态。</p>
+              <h3>功能落地后开始产生实际效果</h3>
+              <p>核心功能点开发出来后，系统已经能支撑其他成员接入业务相关 Skill 做测试、调整和联调。它仍有明显问题需要继续收敛，但已经把最初设想推进到了可操作验证阶段。</p>
             </div>
           </div>
           <div class="script-step">
