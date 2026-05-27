@@ -47,9 +47,6 @@
     }
 
     .topbar {
-      position: sticky;
-      top: 12px;
-      z-index: 10;
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
@@ -151,7 +148,7 @@
       line-height: 1.6;
     }
 
-    .grid-2, .grid-3, .grid-4 {
+    .grid-2, .grid-3, .grid-4, .grid-5 {
       display: grid;
       gap: 14px;
     }
@@ -159,6 +156,7 @@
     .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .grid-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 
     .card {
       display: grid;
@@ -393,7 +391,7 @@
       h2 { font-size: 25px; }
       .section-head { display: grid; }
       .section-head p { text-align: left; }
-      .grid-2, .grid-3, .grid-4, .flow, .metric-grid {
+      .grid-2, .grid-3, .grid-4, .grid-5, .flow, .metric-grid {
         grid-template-columns: 1fr;
       }
     }
@@ -527,11 +525,16 @@
         <h2>我是怎么指挥的</h2>
         <p>先让意图可见，再让 Agent 执行。</p>
       </div>
-      <div class="grid-4">
+      <div class="grid-5">
         <div class="card">
           <span class="pill blue">愿景</span>
           <h3>要做什么</h3>
           <p>AI DevOps Agent</p>
+        </div>
+        <div class="card">
+          <span class="pill violet">引导</span>
+          <h3>怎么起步</h3>
+          <p>AI 根据诉求给出引导选择</p>
         </div>
         <div class="card">
           <span class="pill cyan">设计</span>
