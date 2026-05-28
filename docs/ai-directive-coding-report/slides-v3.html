@@ -367,6 +367,11 @@
       padding: 18px;
     }
 
+    .video-stack {
+      display: grid;
+      gap: 16px;
+    }
+
     .video-panel video {
       display: block;
       width: 100%;
@@ -497,10 +502,16 @@
         <p>高保真、标注评论、业务规则、验收标准，都是为了让 Agent 不跑偏。</p>
       </div>
       <div class="video-panel">
-        <video controls playsinline preload="metadata">
-          <source src="media/comment-review.mp4" type="video/mp4" />
-          <source src="media/comment-review.mov" type="video/quicktime" />
-        </video>
+        <div class="video-stack">
+          <video controls playsinline preload="metadata">
+            <source src="media/comment-review-2.mp4" type="video/mp4" />
+            <source src="media/comment-review-2.mov" type="video/quicktime" />
+          </video>
+          <video controls playsinline preload="metadata">
+            <source src="media/comment-review.mp4" type="video/mp4" />
+            <source src="media/comment-review.mov" type="video/quicktime" />
+          </video>
+        </div>
         <div class="tag-row">
           <span class="tag">页面标注</span>
           <span class="tag">评论回改</span>
