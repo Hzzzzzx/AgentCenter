@@ -9,6 +9,7 @@ import {
   HttpServerResponse,
 } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
+import * as Log from "@opencode-ai/core/util/log"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Account } from "@/account/account"
 import { Agent } from "@/agent/agent"
@@ -57,6 +58,7 @@ import { Workspace } from "@/control-plane/workspace"
 import { CorsConfig, isAllowedCorsOrigin, type CorsOptions } from "@/server/cors"
 import { serveUIEffect } from "@/server/shared/ui"
 import { ServerAuth } from "@/server/auth"
+import { errorMessage } from "@/util/error"
 import { InstanceHttpApi, RootHttpApi } from "./api"
 import { PublicApi } from "./public"
 import { authorizationLayer, authorizationRouterMiddleware, v2AuthorizationLayer } from "./middleware/authorization"
@@ -92,6 +94,10 @@ import { schemaErrorLayer } from "./middleware/schema-error"
 
 export const context = Context.makeUnsafe<unknown>(new Map())
 
+const log = Log.create({ service: "server" })
+const OPTIONAL_SSO_AUTH_MIDDLEWARE_SPECIFIER = "@/server/middleware/sso-auth"
+const OPTIONAL_SSO_AUTH_ROUTES_SPECIFIER = "@/server/routes/auth"
+
 const cors = (corsOptions?: CorsOptions) =>
   HttpRouter.middleware(
     HttpMiddleware.cors({
@@ -100,6 +106,50 @@ const cors = (corsOptions?: CorsOptions) =>
     }),
     { global: true },
   )
+
+type RouteRequirements =
+  | HttpRouter.HttpRouter
+  | HttpRouter.Request<"Error", unknown>
+  | HttpRouter.Request<"GlobalError", unknown>
+  | HttpRouter.Request<"Requires", unknown>
+  | HttpRouter.Request<"GlobalRequires", never>
+
+type OptionalSSOAuthMiddlewareModule = {
+  readonly ssoAuthLayer?: Layer.Layer<RouteRequirements, EffectConfig.ConfigError>
+}
+
+type OptionalSSOAuthRoutesModule = {
+  readonly authRoutes?: Layer.Layer<never, EffectConfig.ConfigError, RouteRequirements>
+}
+
+async function optionalSSOAuthLayers() {
+  try {
+    const [middleware, routes] = await Promise.all([
+      import(OPTIONAL_SSO_AUTH_MIDDLEWARE_SPECIFIER) as Promise<OptionalSSOAuthMiddlewareModule>,
+      import(OPTIONAL_SSO_AUTH_ROUTES_SPECIFIER) as Promise<OptionalSSOAuthRoutesModule>,
+    ])
+    return {
+      routes: routes.authRoutes ? [routes.authRoutes] : [],
+      providers: middleware.ssoAuthLayer ? [middleware.ssoAuthLayer] : [],
+    }
+  } catch (error) {
+    if (
+      isMissingOptionalModuleError(error, OPTIONAL_SSO_AUTH_MIDDLEWARE_SPECIFIER) ||
+      isMissingOptionalModuleError(error, OPTIONAL_SSO_AUTH_ROUTES_SPECIFIER)
+    )
+      return { routes: [], providers: [] }
+    log.warn("optional sso auth import failed", { error })
+    return { routes: [], providers: [] }
+  }
+}
+
+function isMissingOptionalModuleError(error: unknown, specifier: string) {
+  const message = errorMessage(error)
+  const code = error && typeof error === "object" && "code" in error ? String(error.code) : ""
+  const missingModule =
+    code === "ERR_MODULE_NOT_FOUND" || message.includes("Cannot find module") || message.includes("Could not resolve")
+  return missingModule && message.includes(specifier)
+}
 
 // Route tree:
 // - rootApiRoutes: typed /global/* and control routes; auth is declared by RootHttpApi.
@@ -175,71 +225,70 @@ const uiRoute = HttpRouter.use((router) =>
   }),
 ).pipe(Layer.provide(authOnlyRouterLayer))
 
-type RouteRequirements =
-  | HttpRouter.HttpRouter
-  | HttpRouter.Request<"Error", unknown>
-  | HttpRouter.Request<"GlobalError", unknown>
-  | HttpRouter.Request<"Requires", unknown>
-  | HttpRouter.Request<"GlobalRequires", never>
-
 export function createRoutes(
   corsOptions?: CorsOptions,
 ): Layer.Layer<never, EffectConfig.ConfigError, RouteRequirements> {
-  return Layer.mergeAll(rootApiRoutes, eventApiRoutes, instanceRoutes, docRoute, uiRoute).pipe(
-    Layer.provide([
-      errorLayer,
-      compressionLayer,
-      corsVaryFix,
-      fenceLayer,
-      cors(corsOptions),
-      Account.defaultLayer,
-      Agent.defaultLayer,
-      Auth.defaultLayer,
-      Command.defaultLayer,
-      Config.defaultLayer,
-      File.defaultLayer,
-      FileWatcher.defaultLayer,
-      Format.defaultLayer,
-      LSP.defaultLayer,
-      Installation.defaultLayer,
-      MCP.defaultLayer,
-      ModelsDev.defaultLayer,
-      Permission.defaultLayer,
-      Plugin.defaultLayer,
-      Project.defaultLayer,
-      ProviderAuth.defaultLayer,
-      Provider.defaultLayer,
-      Pty.defaultLayer,
-      PtyTicket.defaultLayer,
-      Question.defaultLayer,
-      Ripgrep.defaultLayer,
-      RuntimeFlags.defaultLayer,
-      Session.defaultLayer,
-      SessionCompaction.defaultLayer,
-      SessionPrompt.defaultLayer,
-      SessionRevert.defaultLayer,
-      SessionShare.defaultLayer,
-      SessionRunState.defaultLayer,
-      SessionStatus.defaultLayer,
-      SessionSummary.defaultLayer,
-      ShareNext.defaultLayer,
-      Snapshot.defaultLayer,
-      SyncEvent.defaultLayer,
-      EventV2Bridge.defaultLayer,
-      Skill.defaultLayer,
-      Todo.defaultLayer,
-      ToolRegistry.defaultLayer,
-      Vcs.defaultLayer,
-      Workspace.defaultLayer,
-      Worktree.appLayer,
-      Bus.layer,
-      AppFileSystem.defaultLayer,
-      FetchHttpClient.layer,
-      HttpServer.layerServices,
-    ]),
-    Layer.provide(Layer.succeed(CorsConfig)(corsOptions)),
-    Layer.provide(InstanceLayer.layer),
-    Layer.provide(Observability.layer),
+  return Layer.unwrap(
+    Effect.gen(function* () {
+      const optionalSSO = yield* Effect.promise(() => optionalSSOAuthLayers())
+      return Layer.mergeAll(rootApiRoutes, eventApiRoutes, instanceRoutes, docRoute, uiRoute, ...optionalSSO.routes).pipe(
+        Layer.provide([
+          errorLayer,
+          compressionLayer,
+          corsVaryFix,
+          fenceLayer,
+          ...optionalSSO.providers,
+          cors(corsOptions),
+          Account.defaultLayer,
+          Agent.defaultLayer,
+          Auth.defaultLayer,
+          Command.defaultLayer,
+          Config.defaultLayer,
+          File.defaultLayer,
+          FileWatcher.defaultLayer,
+          Format.defaultLayer,
+          LSP.defaultLayer,
+          Installation.defaultLayer,
+          MCP.defaultLayer,
+          ModelsDev.defaultLayer,
+          Permission.defaultLayer,
+          Plugin.defaultLayer,
+          Project.defaultLayer,
+          ProviderAuth.defaultLayer,
+          Provider.defaultLayer,
+          Pty.defaultLayer,
+          PtyTicket.defaultLayer,
+          Question.defaultLayer,
+          Ripgrep.defaultLayer,
+          RuntimeFlags.defaultLayer,
+          Session.defaultLayer,
+          SessionCompaction.defaultLayer,
+          SessionPrompt.defaultLayer,
+          SessionRevert.defaultLayer,
+          SessionShare.defaultLayer,
+          SessionRunState.defaultLayer,
+          SessionStatus.defaultLayer,
+          SessionSummary.defaultLayer,
+          ShareNext.defaultLayer,
+          Snapshot.defaultLayer,
+          SyncEvent.defaultLayer,
+          EventV2Bridge.defaultLayer,
+          Skill.defaultLayer,
+          Todo.defaultLayer,
+          ToolRegistry.defaultLayer,
+          Vcs.defaultLayer,
+          Workspace.defaultLayer,
+          Worktree.appLayer,
+          Bus.layer,
+          AppFileSystem.defaultLayer,
+          FetchHttpClient.layer,
+          HttpServer.layerServices,
+        ]),
+        Layer.provide(Layer.succeed(CorsConfig)(corsOptions)),
+        Layer.provide(InstanceLayer.layer),
+        Layer.provide(Observability.layer),
+      )
+    }),
   )
 }
 

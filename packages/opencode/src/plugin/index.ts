@@ -31,6 +31,7 @@ import type { WorkspaceAdapter } from "@/control-plane/types"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const log = Log.create({ service: "plugin" })
+const OPTIONAL_SSO_PLUGIN_SPECIFIER = "./sso"
 
 type State = {
   hooks: Hooks[]
@@ -96,6 +97,32 @@ function getLegacyPlugins(mod: Record<string, unknown>) {
   return result
 }
 
+async function optionalSSOPlugin() {
+  try {
+    const mod = (await import(OPTIONAL_SSO_PLUGIN_SPECIFIER)) as { SSOAuthPlugin?: unknown }
+    if (!mod.SSOAuthPlugin) {
+      log.warn("optional sso plugin missing SSOAuthPlugin export")
+      return
+    }
+    if (!isServerPlugin(mod.SSOAuthPlugin)) {
+      log.warn("optional sso plugin export is not a function")
+      return
+    }
+    return mod.SSOAuthPlugin
+  } catch (error) {
+    if (isMissingOptionalModuleError(error, OPTIONAL_SSO_PLUGIN_SPECIFIER)) return
+    log.warn("optional sso plugin import failed", { error })
+  }
+}
+
+function isMissingOptionalModuleError(error: unknown, specifier: string) {
+  const message = errorMessage(error)
+  const code = error && typeof error === "object" && "code" in error ? String(error.code) : ""
+  const missingModule =
+    code === "ERR_MODULE_NOT_FOUND" || message.includes("Cannot find module") || message.includes("Could not resolve")
+  return missingModule && message.includes(specifier)
+}
+
 async function applyPlugin(load: PluginLoader.Loaded, input: PluginInput, hooks: Hooks[]) {
   const plugin = readV1Plugin(load.mod, load.spec, "server", "detect")
   if (plugin) {
@@ -151,7 +178,12 @@ export const layer = Layer.effect(
           $: typeof Bun === "undefined" ? undefined : Bun.$,
         }
 
-        for (const plugin of flags.disableDefaultPlugins ? [] : INTERNAL_PLUGINS) {
+        const optionalSSO = flags.disableDefaultPlugins ? undefined : yield* Effect.promise(() => optionalSSOPlugin())
+        const internalPlugins = flags.disableDefaultPlugins
+          ? []
+          : [...INTERNAL_PLUGINS, ...(optionalSSO ? [optionalSSO] : [])]
+
+        for (const plugin of internalPlugins) {
           log.info("loading internal plugin", { name: plugin.name })
           const init = yield* Effect.tryPromise({
             try: () => plugin(input),

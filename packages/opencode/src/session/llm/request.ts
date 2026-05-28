@@ -7,6 +7,7 @@ import type { MessageV2 } from "../message-v2"
 import type { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { SystemPrompt } from "../system"
+import { SessionUserIdentityContext } from "../user-identity-context"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Effect, Record } from "effect"
 import { jsonSchema, tool as aiTool, type ModelMessage, type Tool } from "ai"
@@ -102,6 +103,8 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
           ...input.messages,
         ]
 
+  const userId = yield* SessionUserIdentityContext.getUserId
+
   const params = yield* input.plugin.trigger(
     "chat.params",
     {
@@ -110,6 +113,7 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
       model: input.model,
       provider: input.provider,
       message: input.user,
+      userId,
     },
     {
       temperature: input.model.capabilities.temperature
@@ -130,6 +134,7 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
       model: input.model,
       provider: input.provider,
       message: input.user,
+      userId,
     },
     {
       headers: {},

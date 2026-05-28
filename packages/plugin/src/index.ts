@@ -244,7 +244,14 @@ export interface Hooks {
    * Modify parameters sent to LLM
    */
   "chat.params"?: (
-    input: { sessionID: string; agent: string; model: Model; provider: ProviderContext; message: UserMessage },
+    input: {
+      sessionID: string
+      agent: string
+      model: Model
+      provider: ProviderContext
+      message: UserMessage
+      userId?: string
+    },
     output: {
       temperature: number
       topP: number
@@ -254,7 +261,14 @@ export interface Hooks {
     },
   ) => Promise<void>
   "chat.headers"?: (
-    input: { sessionID: string; agent: string; model: Model; provider: ProviderContext; message: UserMessage },
+    input: {
+      sessionID: string
+      agent: string
+      model: Model
+      provider: ProviderContext
+      message: UserMessage
+      userId?: string
+    },
     output: { headers: Record<string, string> },
   ) => Promise<void>
   "permission.ask"?: (input: Permission, output: { status: "ask" | "deny" | "allow" }) => Promise<void>
