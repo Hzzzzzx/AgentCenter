@@ -26,6 +26,7 @@ import * as OtelTracer from "@effect/opentelemetry/Tracer"
 import { LLMAISDK } from "./llm/ai-sdk"
 import { LLMNativeRuntime } from "./llm/native-runtime"
 import { LLMRequestPrep } from "./llm/request"
+import { SessionUserIdentityContext } from "./user-identity-context"
 
 const log = Log.create({ service: "llm" })
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
@@ -382,6 +383,7 @@ export const defaultLayer = Layer.suspend(() =>
       LLMClient.layer.pipe(Layer.provide(Layer.mergeAll(RequestExecutor.defaultLayer, WebSocketExecutor.layer))),
     ),
     Layer.provide(RuntimeFlags.defaultLayer),
+    Layer.provide(SessionUserIdentityContext.defaultLayer),
   ),
 )
 
