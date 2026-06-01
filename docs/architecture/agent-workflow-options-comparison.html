@@ -1,0 +1,2816 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AgentCenter Agent Workflow 方案对比报告</title>
+  <style>
+    :root {
+      --surface-0: #080b0f;
+      --surface-1: #10161d;
+      --surface-2: #151d26;
+      --surface-3: #1b2630;
+      --surface-4: #243240;
+      --text-primary: #eef4f7;
+      --text-secondary: #a8b5bf;
+      --text-muted: #6f7e89;
+      --border: #253340;
+      --teal: #20c7b3;
+      --amber: #f1a640;
+      --green: #57c785;
+      --blue: #5aa6e8;
+      --violet: #9d8cff;
+      --magenta: #d969a8;
+      --red: #ec6f72;
+      --ink-teal: rgba(32, 199, 179, 0.12);
+      --ink-amber: rgba(241, 166, 64, 0.13);
+      --ink-green: rgba(87, 199, 133, 0.12);
+      --ink-blue: rgba(90, 166, 232, 0.12);
+      --ink-violet: rgba(157, 140, 255, 0.13);
+      --ink-magenta: rgba(217, 105, 168, 0.12);
+      --shadow: 0 18px 54px rgba(0, 0, 0, 0.32);
+      --radius: 8px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      scrollbar-width: thin;
+      scrollbar-color: var(--surface-4) transparent;
+    }
+
+    body {
+      margin: 0;
+      background:
+        linear-gradient(180deg, rgba(8, 11, 15, 0.76), rgba(8, 11, 15, 1) 420px),
+        radial-gradient(circle at 18% 4%, rgba(32, 199, 179, 0.15), transparent 30%),
+        radial-gradient(circle at 88% 10%, rgba(241, 166, 64, 0.10), transparent 26%),
+        var(--surface-0);
+      color: var(--text-primary);
+      font-family: Inter, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+      line-height: 1.62;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+      background-size: 32px 32px;
+      mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.95), transparent 82%);
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    a.inline-link {
+      color: var(--teal);
+      border-bottom: 1px solid rgba(32, 199, 179, 0.42);
+    }
+
+    code,
+    .mono {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 268px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      background: rgba(10, 15, 20, 0.92);
+      border-right: 1px solid var(--border);
+      height: 100vh;
+      overflow-y: auto;
+      padding: 26px 18px;
+      position: sticky;
+      top: 0;
+      backdrop-filter: blur(18px);
+    }
+
+    .brand {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 24px;
+      padding: 0 8px;
+    }
+
+    .eyebrow {
+      color: var(--amber);
+      font-size: 12px;
+      font-weight: 760;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .brand h1 {
+      font-size: 22px;
+      line-height: 1.18;
+      margin-bottom: 0;
+    }
+
+    .brand p,
+    .sidebar-note {
+      color: var(--text-secondary);
+      font-size: 13px;
+      margin: 0;
+    }
+
+    .nav {
+      display: grid;
+      gap: 6px;
+      margin: 22px 0;
+    }
+
+    .nav a {
+      border: 1px solid transparent;
+      border-radius: 7px;
+      color: var(--text-secondary);
+      display: grid;
+      font-size: 14px;
+      padding: 9px 10px;
+    }
+
+    .nav a:hover,
+    .nav a:focus-visible,
+    .nav a.active {
+      background: rgba(255, 255, 255, 0.045);
+      border-color: rgba(32, 199, 179, 0.28);
+      color: var(--text-primary);
+      outline: none;
+    }
+
+    .sidebar-note {
+      border-top: 1px solid var(--border);
+      padding: 18px 8px 0;
+    }
+
+    .sidebar-note a {
+      color: var(--teal);
+      display: inline-block;
+      text-decoration: none;
+    }
+
+    .sidebar-note a:hover,
+    .sidebar-note a:focus-visible {
+      color: var(--text-primary);
+      outline: none;
+      text-decoration: underline;
+    }
+
+    .sidebar-note code {
+      color: inherit;
+      font-size: 12px;
+      word-break: break-all;
+    }
+
+    main {
+      padding: 38px 48px 84px;
+    }
+
+    .report {
+      max-width: 1220px;
+      margin: 0 auto;
+    }
+
+    .hero,
+    .panel,
+    .option-card,
+    .timeline-item,
+    .matrix-wrap,
+    .diagram {
+      background: linear-gradient(180deg, rgba(21, 29, 38, 0.96), rgba(13, 18, 24, 0.96));
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      min-height: 520px;
+      overflow: hidden;
+      padding: 42px;
+      position: relative;
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(135deg, rgba(32, 199, 179, 0.18), transparent 36%),
+        linear-gradient(315deg, rgba(90, 166, 232, 0.14), transparent 40%);
+      opacity: 0.8;
+      pointer-events: none;
+    }
+
+    .hero-inner {
+      display: grid;
+      gap: 26px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero h2 {
+      font-size: 52px;
+      line-height: 1.05;
+      margin-bottom: 0;
+      max-width: 960px;
+    }
+
+    .hero p {
+      color: var(--text-secondary);
+      font-size: 18px;
+      max-width: 900px;
+    }
+
+    .hero-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .hero-visual {
+      background: rgba(8, 11, 15, 0.34);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .hero-visual svg {
+      display: block;
+      height: auto;
+      width: 100%;
+    }
+
+    .metric {
+      background: rgba(8, 11, 15, 0.38);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+
+    .metric b {
+      display: block;
+      font-size: 19px;
+      line-height: 1.2;
+      margin-bottom: 6px;
+    }
+
+    .metric span {
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+
+    .hero-path {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: 1.1fr 0.9fr 1.1fr 1.1fr;
+      margin-top: 10px;
+    }
+
+    .path-node {
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius);
+      min-height: 92px;
+      padding: 15px;
+      position: relative;
+    }
+
+    .path-node::after {
+      color: var(--text-muted);
+      content: "->";
+      font-family: "SFMono-Regular", Consolas, monospace;
+      position: absolute;
+      right: -24px;
+      top: 34px;
+    }
+
+    .path-node:last-child::after {
+      content: "";
+    }
+
+    .path-node:nth-child(1) {
+      background: var(--ink-teal);
+    }
+
+    .path-node:nth-child(2) {
+      background: var(--ink-amber);
+    }
+
+    .path-node:nth-child(3) {
+      background: var(--ink-blue);
+    }
+
+    .path-node:nth-child(4) {
+      background: var(--ink-green);
+    }
+
+    .path-node b {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .path-node span {
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+
+    section {
+      scroll-margin-top: 26px;
+      margin-top: 38px;
+    }
+
+    .section-head {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .section-head h2 {
+      font-size: 30px;
+      line-height: 1.18;
+      margin-bottom: 0;
+    }
+
+    .section-head p {
+      color: var(--text-secondary);
+      max-width: 930px;
+    }
+
+    .panel {
+      padding: 24px;
+    }
+
+    .callout {
+      border-left: 4px solid var(--teal);
+      color: var(--text-secondary);
+      margin: 0;
+      padding: 4px 0 4px 16px;
+    }
+
+    .callout strong {
+      color: var(--text-primary);
+    }
+
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 18px;
+    }
+
+    .tag {
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 999px;
+      color: var(--text-secondary);
+      font-size: 12px;
+      padding: 6px 10px;
+    }
+
+    .requirement-grid,
+    .element-grid {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .requirement-grid.compact {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .requirement-card,
+    .element-card {
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius);
+      min-height: 148px;
+      padding: 16px;
+    }
+
+    .requirement-card b,
+    .element-card b {
+      display: block;
+      font-size: 16px;
+      margin-bottom: 7px;
+    }
+
+    .requirement-card p,
+    .element-card p {
+      color: var(--text-secondary);
+      font-size: 13px;
+      margin: 0;
+    }
+
+    .badge {
+      border-radius: 999px;
+      color: var(--badge-color);
+      display: inline-flex;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 12px;
+      margin-bottom: 10px;
+    }
+
+    .criteria-formula {
+      align-items: center;
+      background: rgba(8, 11, 15, 0.38);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius);
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      margin-top: 14px;
+      padding: 14px;
+    }
+
+    .formula-chip {
+      background: var(--chip-bg);
+      border: 1px solid var(--chip-border);
+      border-radius: 7px;
+      color: var(--text-primary);
+      font-size: 12px;
+      min-height: 54px;
+      padding: 10px;
+      text-align: center;
+    }
+
+    .visual-grid {
+      align-items: start;
+      display: grid;
+      gap: 14px;
+      grid-template-columns: 1.08fr 0.92fr;
+    }
+
+    .visual-card {
+      background: linear-gradient(180deg, rgba(21, 29, 38, 0.96), rgba(13, 18, 24, 0.96));
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      padding: 18px;
+    }
+
+    .visual-card.wide {
+      grid-column: 1 / -1;
+    }
+
+    .visual-card h3 {
+      font-size: 18px;
+      margin: 0 0 6px;
+    }
+
+    .visual-card p {
+      color: var(--text-secondary);
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+
+    .visual-card svg,
+    .visual-stamp svg,
+    .architecture-svg,
+    .detour-svg {
+      display: block;
+      height: auto;
+      width: 100%;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .legend span {
+      align-items: center;
+      color: var(--text-secondary);
+      display: inline-flex;
+      font-size: 12px;
+      gap: 6px;
+    }
+
+    .legend i {
+      background: var(--dot);
+      border-radius: 999px;
+      display: inline-block;
+      height: 9px;
+      width: 9px;
+    }
+
+    .visual-strip {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      margin-top: 14px;
+    }
+
+    .snapshot {
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius);
+      min-height: 126px;
+      padding: 13px;
+    }
+
+    .snapshot-mark {
+      align-items: center;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      display: inline-flex;
+      height: 34px;
+      justify-content: center;
+      margin-bottom: 10px;
+      width: 34px;
+    }
+
+    .snapshot-mark svg {
+      height: 20px;
+      width: 20px;
+    }
+
+    .snapshot b {
+      display: block;
+      font-size: 14px;
+      line-height: 1.25;
+      margin-bottom: 5px;
+    }
+
+    .snapshot span {
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+
+    .comparison-lanes {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .lane {
+      align-items: center;
+      display: grid;
+      gap: 10px;
+      grid-template-columns: 120px 1.2fr 1.45fr 1fr;
+    }
+
+    .lane b {
+      color: var(--text-primary);
+      font-size: 13px;
+    }
+
+    .lane-cell {
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 7px;
+      color: var(--text-secondary);
+      font-size: 12px;
+      min-height: 42px;
+      padding: 9px 10px;
+    }
+
+    .lane-cell.hot {
+      background: rgba(32, 199, 179, 0.12);
+      border-color: rgba(32, 199, 179, 0.36);
+      color: var(--text-primary);
+    }
+
+    .lane-cell.warn {
+      background: rgba(241, 166, 64, 0.12);
+      border-color: rgba(241, 166, 64, 0.34);
+      color: var(--text-primary);
+    }
+
+    .visual-stamp {
+      margin: 2px 0 12px;
+    }
+
+    .option-grid {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .option-card {
+      border-color: rgba(255, 255, 255, 0.08);
+      color: var(--text-primary);
+      cursor: pointer;
+      font: inherit;
+      min-height: 272px;
+      overflow: hidden;
+      padding: 18px;
+      position: relative;
+      text-align: left;
+      transition: border-color 180ms ease, transform 180ms ease, background 180ms ease;
+    }
+
+    .option-card:hover,
+    .option-card:focus-within,
+    .option-card.active {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+
+    .option-card::before {
+      background: var(--accent);
+      content: "";
+      height: 3px;
+      left: 0;
+      opacity: 0.92;
+      position: absolute;
+      right: 0;
+      top: 0;
+    }
+
+    .option-card h3 {
+      font-size: 18px;
+      line-height: 1.25;
+      margin-bottom: 8px;
+      min-height: 46px;
+    }
+
+    .option-card p {
+      color: var(--text-secondary);
+      font-size: 14px;
+      margin-bottom: 14px;
+    }
+
+    .score {
+      display: grid;
+      gap: 7px;
+      margin-top: 12px;
+    }
+
+    .score-row {
+      align-items: center;
+      display: grid;
+      gap: 8px;
+      grid-template-columns: 72px 1fr;
+    }
+
+    .score-row span {
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+    .score-bar {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      height: 7px;
+      overflow: hidden;
+    }
+
+    .score-bar i {
+      background: var(--accent);
+      display: block;
+      height: 100%;
+      width: var(--score);
+    }
+
+    .detail-panel {
+      background: rgba(8, 11, 15, 0.42);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: var(--radius);
+      display: none;
+      grid-column: 1 / -1;
+      padding: 22px;
+    }
+
+    .detail-panel.open {
+      display: grid;
+      gap: 14px;
+    }
+
+    .detail-grid {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .detail-block h4,
+    .decision h3,
+    .timeline-item h3 {
+      font-size: 16px;
+      margin: 0 0 8px;
+    }
+
+    .detail-block p,
+    .decision p,
+    .timeline-item p {
+      color: var(--text-secondary);
+      font-size: 14px;
+      margin-bottom: 0;
+    }
+
+    .runtime-layout {
+      display: grid;
+      gap: 14px;
+    }
+
+    .runtime-summary-table {
+      margin-top: 4px;
+    }
+
+    .runtime-summary-table table {
+      min-width: 980px;
+    }
+
+    .runtime-accordion {
+      display: grid;
+      gap: 12px;
+    }
+
+    .runtime-accordion details {
+      background: linear-gradient(180deg, rgba(21, 29, 38, 0.92), rgba(11, 17, 23, 0.92));
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .runtime-accordion details[open] {
+      border-color: rgba(32, 199, 179, 0.34);
+    }
+
+    .runtime-accordion summary {
+      align-items: center;
+      cursor: pointer;
+      display: grid;
+      gap: 10px;
+      grid-template-columns: 1fr auto;
+      list-style: none;
+      padding: 16px 18px;
+    }
+
+    .runtime-accordion summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .runtime-accordion summary::after {
+      color: var(--teal);
+      content: "+";
+      font-size: 22px;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .runtime-accordion details[open] summary::after {
+      content: "−";
+    }
+
+    .runtime-title {
+      display: grid;
+      gap: 6px;
+    }
+
+    .runtime-title b {
+      color: var(--text-primary);
+      font-size: 18px;
+    }
+
+    .runtime-title span {
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+
+    .runtime-body {
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      display: grid;
+      gap: 14px;
+      padding: 16px 18px 18px;
+    }
+
+    .runtime-flow {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .runtime-step {
+      background: rgba(32, 199, 179, 0.09);
+      border: 1px solid rgba(32, 199, 179, 0.28);
+      border-radius: 8px;
+      color: var(--text-secondary);
+      font-size: 13px;
+      min-height: 78px;
+      padding: 12px;
+    }
+
+    .runtime-step b {
+      color: var(--text-primary);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .runtime-dimensions {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .runtime-dimension {
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      padding: 13px;
+    }
+
+    .runtime-dimension h4 {
+      color: var(--text-primary);
+      font-size: 14px;
+      margin: 0 0 8px;
+    }
+
+    .runtime-dimension p {
+      color: var(--text-secondary);
+      font-size: 13px;
+      margin: 0;
+    }
+
+    .runtime-edge-list {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+    }
+
+    .runtime-edge-list li {
+      background: rgba(255, 255, 255, 0.03);
+      border-left: 3px solid var(--accent, var(--teal));
+      border-radius: 6px;
+      color: var(--text-secondary);
+      font-size: 13px;
+      list-style: none;
+      padding: 9px 10px;
+    }
+
+    .tradeoff-method {
+      background: linear-gradient(135deg, rgba(32, 199, 179, 0.10), rgba(90, 166, 232, 0.06));
+      border: 1px solid rgba(32, 199, 179, 0.24);
+      border-radius: var(--radius-lg);
+      display: grid;
+      gap: 18px;
+      grid-template-columns: 1.08fr 0.92fr;
+      padding: 20px;
+    }
+
+    .tradeoff-method h3,
+    .cc-focus h3,
+    .simple-version h3 {
+      color: var(--text-primary);
+      font-size: 19px;
+      margin: 0 0 8px;
+    }
+
+    .tradeoff-method p,
+    .cc-focus p,
+    .simple-version p {
+      color: var(--text-secondary);
+      font-size: 14px;
+      margin: 0;
+    }
+
+    .method-list {
+      display: grid;
+      gap: 9px;
+      margin: 0;
+      padding: 0;
+    }
+
+    .method-list li {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      color: var(--text-secondary);
+      font-size: 13px;
+      list-style: none;
+      padding: 10px 12px;
+    }
+
+    .method-list strong {
+      color: var(--text-primary);
+    }
+
+    .cc-focus {
+      border: 1px solid rgba(32, 199, 179, 0.22);
+      border-radius: var(--radius-lg);
+      display: grid;
+      gap: 16px;
+      margin-top: 14px;
+      padding: 20px;
+    }
+
+    .cc-focus-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .cc-focus-item {
+      background: rgba(32, 199, 179, 0.08);
+      border: 1px solid rgba(32, 199, 179, 0.22);
+      border-radius: 8px;
+      min-height: 124px;
+      padding: 14px;
+    }
+
+    .cc-focus-item b {
+      color: var(--text-primary);
+      display: block;
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+
+    .cc-focus-item span {
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+
+    .pros-cons-table {
+      margin-top: 14px;
+    }
+
+    .pros-cons-table table {
+      min-width: 1180px;
+    }
+
+    .pros-cons-table td:nth-child(2) {
+      color: #a9e7bb;
+    }
+
+    .pros-cons-table td:nth-child(3) {
+      color: #ffb1b3;
+    }
+
+    .takeaway {
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      color: var(--text-secondary);
+      display: block;
+      font-size: 13px;
+      margin-top: 8px;
+      padding: 9px 10px;
+    }
+
+    .simple-version {
+      background: linear-gradient(135deg, rgba(87, 199, 133, 0.09), rgba(241, 166, 64, 0.06));
+      border: 1px solid rgba(87, 199, 133, 0.24);
+      border-radius: var(--radius-lg);
+      display: grid;
+      gap: 16px;
+      margin-top: 14px;
+      padding: 20px;
+    }
+
+    .simple-version-grid {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+
+    .simple-step {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      color: var(--text-secondary);
+      font-size: 13px;
+      min-height: 108px;
+      padding: 13px;
+    }
+
+    .simple-step b {
+      color: var(--text-primary);
+      display: block;
+      font-size: 14px;
+      margin-bottom: 7px;
+    }
+
+    .matrix-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .filter-btn {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 999px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font: inherit;
+      font-size: 13px;
+      padding: 8px 12px;
+    }
+
+    .filter-btn.active,
+    .filter-btn:hover,
+    .filter-btn:focus-visible {
+      background: rgba(32, 199, 179, 0.12);
+      border-color: rgba(32, 199, 179, 0.42);
+      color: var(--text-primary);
+      outline: none;
+    }
+
+    .matrix-wrap {
+      overflow: auto;
+    }
+
+    table {
+      border-collapse: collapse;
+      min-width: 1220px;
+      width: 100%;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+      padding: 13px 14px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: rgba(255, 255, 255, 0.035);
+      color: var(--text-primary);
+      font-size: 13px;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    td {
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+
+    td strong {
+      color: var(--text-primary);
+    }
+
+    .rank {
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      color: var(--text-primary);
+      display: inline-grid;
+      font-size: 12px;
+      min-width: 34px;
+      padding: 2px 6px;
+      place-items: center;
+    }
+
+    .rank.high {
+      background: rgba(87, 199, 133, 0.14);
+      color: #8ce0aa;
+    }
+
+    .rank.mid {
+      background: rgba(241, 166, 64, 0.14);
+      color: #f6c47a;
+    }
+
+    .rank.low {
+      background: rgba(236, 111, 114, 0.14);
+      color: #ffa0a2;
+    }
+
+    .decision-grid {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+
+    .decision {
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+
+    .decision .num {
+      color: var(--amber);
+      display: block;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+
+    .diagram {
+      overflow: hidden;
+      padding: 20px;
+    }
+
+    .diagram.large {
+      padding: 0;
+    }
+
+    .diagram.large figure {
+      margin: 0;
+    }
+
+    .diagram-caption {
+      border-top: 1px solid rgba(255, 255, 255, 0.07);
+      color: var(--text-secondary);
+      font-size: 13px;
+      margin: 0;
+      padding: 13px 16px;
+    }
+
+    .flow-map {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: 1fr 1fr 1.1fr;
+    }
+
+    .flow-column {
+      display: grid;
+      gap: 10px;
+    }
+
+    .flow-box {
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius);
+      min-height: 78px;
+      padding: 14px;
+    }
+
+    .flow-box b {
+      display: block;
+      margin-bottom: 5px;
+    }
+
+    .flow-box span {
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+
+    .flow-arrow {
+      color: var(--text-muted);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      text-align: center;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .timeline-item {
+      padding: 18px;
+      position: relative;
+    }
+
+    .timeline-item::before {
+      background: var(--accent);
+      border-radius: 999px;
+      content: "";
+      height: 9px;
+      left: 18px;
+      position: absolute;
+      top: -5px;
+      width: 48px;
+    }
+
+    .timeline-item .phase {
+      color: var(--text-muted);
+      display: block;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 12px;
+      margin-bottom: 9px;
+    }
+
+    .source-list {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .source-list a {
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius);
+      color: var(--text-secondary);
+      display: grid;
+      gap: 4px;
+      padding: 13px 14px;
+    }
+
+    .source-list a:hover,
+    .source-list a:focus-visible {
+      border-color: rgba(32, 199, 179, 0.42);
+      color: var(--text-primary);
+      outline: none;
+    }
+
+    .source-list b {
+      color: var(--text-primary);
+      font-size: 14px;
+    }
+
+    .source-list span {
+      font-size: 12px;
+      word-break: break-all;
+    }
+
+    .footnote {
+      color: var(--text-muted);
+      font-size: 13px;
+      margin: 22px 0 0;
+    }
+
+    @media (max-width: 1180px) {
+      .option-grid,
+      .decision-grid,
+      .timeline {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .hero-grid,
+      .hero-path,
+      .visual-grid,
+      .visual-strip,
+      .requirement-grid,
+      .requirement-grid.compact,
+      .element-grid,
+      .criteria-formula,
+      .tradeoff-method,
+      .cc-focus-grid,
+      .simple-version-grid,
+      .flow-map,
+      .detail-grid,
+      .runtime-dimensions,
+      .runtime-flow {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .path-node::after {
+        content: "";
+      }
+    }
+
+    @media (max-width: 820px) {
+      .layout {
+        display: block;
+      }
+
+      .sidebar {
+        height: auto;
+        padding: 16px;
+        position: relative;
+      }
+
+      .brand {
+        margin-bottom: 12px;
+      }
+
+      .brand p,
+      .sidebar-note {
+        display: none;
+      }
+
+      .nav {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        margin: 12px 0 0;
+      }
+
+      .nav a {
+        font-size: 12px;
+        min-height: 44px;
+        place-items: center;
+        text-align: center;
+      }
+
+      main {
+        padding: 22px 16px 56px;
+      }
+
+      .hero {
+        min-height: auto;
+        padding: 26px;
+      }
+
+      .hero h2 {
+        font-size: 34px;
+      }
+
+      .hero-grid,
+      .hero-path,
+      .visual-grid,
+      .visual-strip,
+      .requirement-grid,
+      .requirement-grid.compact,
+      .element-grid,
+      .criteria-formula,
+      .option-grid,
+      .decision-grid,
+      .timeline,
+      .flow-map,
+      .detail-grid,
+      .tradeoff-method,
+      .cc-focus-grid,
+      .simple-version-grid,
+      .runtime-dimensions,
+      .runtime-flow,
+      .source-list {
+        grid-template-columns: 1fr;
+      }
+
+      .lane {
+        grid-template-columns: 1fr;
+      }
+
+      .option-card h3 {
+        min-height: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="eyebrow">AgentCenter SDD Report</span>
+        <h1>Agent Workflow 方案对比</h1>
+        <p>生成日期：2026-06-01。基于 AgentCenter 项目文档、近期 Codex 讨论摘要与官方资料。</p>
+      </div>
+      <nav class="nav" aria-label="报告导航">
+        <a href="#enterprise-target">目标态</a>
+        <a href="#agent-era-elements">Agent 要素</a>
+        <a href="#visual-overview">两问总览</a>
+        <a href="#tradeoffs">优缺点</a>
+        <a href="#runtime-logic">运行逻辑</a>
+        <a href="#options">六种路线</a>
+        <a href="#matrix">对比矩阵</a>
+        <a href="#decisions">关键决策</a>
+        <a href="#detours">1026 弯路</a>
+        <a href="#architecture">推荐架构</a>
+        <a href="#roadmap">落地路线</a>
+        <a href="#sources">资料来源</a>
+      </nav>
+      <p class="sidebar-note">仓内共享路径：<br><a href="./agent-workflow-options-comparison.html"><code>docs/architecture/agent-workflow-options-comparison.html</code></a></p>
+    </aside>
+
+    <main>
+      <article class="report">
+        <header class="hero" id="top">
+          <div class="hero-inner">
+            <span class="eyebrow">工作流负责控场，Agent 负责把事做成</span>
+            <h2>硬状态控流程，软判断交给 Agent。</h2>
+            <p>
+              六种路线的差别不是“界面长什么样”，而是任务先按什么规则定下来，跑起来又由谁一步步往前推。
+            </p>
+
+            <div class="hero-visual" aria-label="首屏工作流方案总览图">
+              <svg viewBox="0 0 1180 260" role="img" aria-labelledby="hero-visual-title hero-visual-desc">
+                <title id="hero-visual-title">Agent workflow 首屏总览图</title>
+              <desc id="hero-visual-desc">从左到右展示固定流程、单会话、持久状态图、脚本化工作流、AgentWeave 原型和 AgentCenter 混合目标。</desc>
+                <rect width="1180" height="260" rx="8" fill="#0b1117"></rect>
+                <g font-family="Inter, Arial, sans-serif">
+                  <line x1="92" y1="132" x2="1088" y2="132" stroke="rgba(255,255,255,0.12)" stroke-width="8" stroke-linecap="round"></line>
+                  <g>
+                    <circle cx="154" cy="132" r="30" fill="rgba(241,166,64,0.14)" stroke="#f1a640" stroke-width="2"></circle>
+                    <text x="154" y="137" text-anchor="middle" fill="#eef4f7" font-size="13" font-weight="800">Dify</text>
+                    <text x="154" y="186" text-anchor="middle" fill="#a8b5bf" font-size="12">固定流程</text>
+                    <path d="M126 70h56M126 92h56M154 92v24" stroke="#f1a640" stroke-width="2"></path>
+                  </g>
+                  <g>
+                    <circle cx="374" cy="132" r="30" fill="rgba(217,105,168,0.14)" stroke="#d969a8" stroke-width="2"></circle>
+                    <text x="374" y="137" text-anchor="middle" fill="#eef4f7" font-size="13" font-weight="800">1026</text>
+                    <text x="374" y="186" text-anchor="middle" fill="#a8b5bf" font-size="12">单会话连续</text>
+                    <path d="M330 76h88M330 92h88M330 108h88" stroke="#d969a8" stroke-width="2" stroke-linecap="round"></path>
+                  </g>
+                  <g>
+                    <circle cx="594" cy="132" r="30" fill="rgba(87,199,133,0.14)" stroke="#57c785" stroke-width="2"></circle>
+                    <text x="594" y="137" text-anchor="middle" fill="#eef4f7" font-size="13" font-weight="800">Graph</text>
+                    <text x="594" y="186" text-anchor="middle" fill="#a8b5bf" font-size="12">状态可恢复</text>
+                    <path d="M566 82h58M595 82v34M570 116h50" stroke="#57c785" stroke-width="2" stroke-linecap="round"></path>
+                  </g>
+                  <g>
+                    <circle cx="770" cy="132" r="30" fill="rgba(32,199,179,0.14)" stroke="#20c7b3" stroke-width="2"></circle>
+                    <text x="770" y="137" text-anchor="middle" fill="#eef4f7" font-size="13" font-weight="800">CC</text>
+                    <text x="770" y="186" text-anchor="middle" fill="#a8b5bf" font-size="12">脚本编排</text>
+                    <path d="M726 88h44M770 88h44M770 88v28M746 116h48" stroke="#20c7b3" stroke-width="2" stroke-linecap="round"></path>
+                  </g>
+                  <g>
+                    <circle cx="940" cy="132" r="30" fill="rgba(157,140,255,0.15)" stroke="#9d8cff" stroke-width="2"></circle>
+                    <text x="940" y="137" text-anchor="middle" fill="#eef4f7" font-size="12" font-weight="800">Weave</text>
+                    <text x="940" y="186" text-anchor="middle" fill="#a8b5bf" font-size="12">代码原型</text>
+                    <path d="M906 92c16-18 52-18 68 0M906 112c16 18 52 18 68 0M940 86v52" stroke="#9d8cff" stroke-width="2" fill="none" stroke-linecap="round"></path>
+                  </g>
+                  <g>
+                    <rect x="1010" y="88" width="122" height="88" rx="18" fill="rgba(90,166,232,0.16)" stroke="#5aa6e8" stroke-width="2"></rect>
+                    <text x="1071" y="123" text-anchor="middle" fill="#eef4f7" font-size="15" font-weight="900">AgentCenter</text>
+                    <text x="1071" y="148" text-anchor="middle" fill="#a8b5bf" font-size="12">混合目标态</text>
+                    <text x="1071" y="206" text-anchor="middle" fill="#5aa6e8" font-size="12">DB 状态 + Agent 判断 + Interaction</text>
+                  </g>
+                </g>
+              </svg>
+            </div>
+
+            <div class="hero-grid">
+              <div class="metric"><b>首选路线</b><span>中心服务负责记账和推进，Agent 负责把具体事情做成。</span></div>
+              <div class="metric"><b>不要单押</b><span>脚本、固定流程、单会话、状态机各有边界；AgentCenter 需要组合。</span></div>
+              <div class="metric"><b>最高风险</b><span>把企业任务进度寄托在聊天上下文里。</span></div>
+              <div class="metric"><b>产品机会</b><span>用户用白话说流程，系统整理成可复用的任务规则。</span></div>
+            </div>
+
+            <div class="hero-path" aria-label="推荐路径">
+              <div class="path-node"><b>Natural Language</b><span>用户描述业务流程、质量门禁和交互偏好。</span></div>
+              <div class="path-node"><b>Task Rules</b><span>Agent 把用户的白话流程整理成可审查的任务规则。</span></div>
+              <div class="path-node"><b>Run State</b><span>当前跑到哪一步、做过什么、等谁回复，都由中心服务记住。</span></div>
+              <div class="path-node"><b>Agent Execution</b><span>OpenCode/Codex/Claude Code 等运行时只负责节点内执行。</span></div>
+            </div>
+          </div>
+        </header>
+
+        <section id="enterprise-target">
+          <div class="section-head">
+            <h2>企业级 Agent 工作流目标态</h2>
+            <p>先从目标态说清楚：AgentCenter 不应该只是一个“多轮聊天入口”，也不应该只做一个固定流程工具。它要成为企业任务的 Agent 控制平面，把业务对象、流程实例、Agent 自主执行、人机协作、治理和证据链放在同一个可运营系统里。</p>
+          </div>
+
+          <div class="visual-grid">
+            <figure class="visual-card">
+              <h3>中心服务应该长什么样</h3>
+              <p>中心服务持有企业事实、流程边界和治理策略；Agent 只在被授权的节点内自主完成语义工作。</p>
+              <svg viewBox="0 0 760 470" role="img" aria-labelledby="enterprise-target-title enterprise-target-desc">
+                <title id="enterprise-target-title">企业级 Agent 工作流目标态</title>
+                <desc id="enterprise-target-desc">展示企业级 Agent 工作流以控制平面为中心，连接业务对象、工作流实例、Agent 执行、人机交互、证据和治理。</desc>
+                <defs>
+                  <marker id="arrowNeed" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+                    <path d="M0,0 L0,6 L9,3 z" fill="#20c7b3"></path>
+                  </marker>
+                </defs>
+                <rect width="760" height="470" rx="8" fill="#0b1117"></rect>
+                <circle cx="380" cy="238" r="88" fill="rgba(32,199,179,0.12)" stroke="#20c7b3" stroke-width="2"></circle>
+                <text x="380" y="226" text-anchor="middle" fill="#eef4f7" font-size="18" font-weight="800">工作流控制中心</text>
+                <text x="380" y="252" text-anchor="middle" fill="#a8b5bf" font-size="12">instance / node / policy / ledger</text>
+                <text x="380" y="274" text-anchor="middle" fill="#a8b5bf" font-size="12">企业事实源，不是聊天记忆</text>
+                <g fill="none" stroke="#20c7b3" stroke-width="2" marker-end="url(#arrowNeed)">
+                  <path d="M192 93 C284 36 370 58 380 148"></path>
+                  <path d="M570 93 C640 154 614 236 470 238"></path>
+                  <path d="M592 362 C506 438 390 386 398 326"></path>
+                  <path d="M170 362 C90 276 148 190 292 238"></path>
+                  <path d="M380 326 C378 390 284 430 208 404"></path>
+                  <path d="M380 148 C382 88 476 48 552 66"></path>
+                </g>
+                <g font-family="Inter, Arial, sans-serif">
+                  <rect x="50" y="48" width="178" height="72" rx="8" fill="rgba(241,166,64,0.12)" stroke="rgba(241,166,64,0.42)"></rect>
+                  <text x="139" y="78" text-anchor="middle" fill="#eef4f7" font-size="14" font-weight="700">Business Object</text>
+                  <text x="139" y="101" text-anchor="middle" fill="#a8b5bf" font-size="11">work item / project / request</text>
+                  <rect x="532" y="48" width="178" height="72" rx="8" fill="rgba(90,166,232,0.12)" stroke="rgba(90,166,232,0.42)"></rect>
+                  <text x="621" y="78" text-anchor="middle" fill="#eef4f7" font-size="14" font-weight="700">Agent 执行器</text>
+                  <text x="621" y="101" text-anchor="middle" fill="#a8b5bf" font-size="11">OpenCode / Codex / Claude</text>
+                  <rect x="534" y="326" width="176" height="72" rx="8" fill="rgba(87,199,133,0.12)" stroke="rgba(87,199,133,0.42)"></rect>
+                  <text x="622" y="356" text-anchor="middle" fill="#eef4f7" font-size="14" font-weight="700">Artifact & Evidence</text>
+                  <text x="622" y="379" text-anchor="middle" fill="#a8b5bf" font-size="11">结果、证据、审计材料</text>
+                  <rect x="50" y="326" width="180" height="72" rx="8" fill="rgba(217,105,168,0.12)" stroke="rgba(217,105,168,0.42)"></rect>
+                  <text x="140" y="356" text-anchor="middle" fill="#eef4f7" font-size="14" font-weight="700">Human Collaboration</text>
+                  <text x="140" y="379" text-anchor="middle" fill="#a8b5bf" font-size="11">ask / approve / review</text>
+                  <rect x="278" y="28" width="204" height="54" rx="8" fill="rgba(157,140,255,0.12)" stroke="rgba(157,140,255,0.42)"></rect>
+                  <text x="380" y="61" text-anchor="middle" fill="#eef4f7" font-size="13" font-weight="700">Policy / Permission / Budget</text>
+                  <rect x="274" y="388" width="212" height="54" rx="8" fill="rgba(236,111,114,0.10)" stroke="rgba(236,111,114,0.38)"></rect>
+                  <text x="380" y="421" text-anchor="middle" fill="#eef4f7" font-size="13" font-weight="700">Observe / Retry / Cancel / Recover</text>
+                </g>
+              </svg>
+            </figure>
+
+            <div class="visual-card">
+              <h3>八个目标态特性</h3>
+              <div class="requirement-grid compact">
+                <div class="requirement-card"><span class="badge" style="--badge-color: var(--amber);">01</span><b>业务对象驱动</b><p>入口是企业任务、项目、变更请求或工单；聊天只是交互界面，不是流程事实源。</p></div>
+                <div class="requirement-card"><span class="badge" style="--badge-color: var(--teal);">02</span><b>目标与验收契约</b><p>每个 workflow 和节点都有目标、输入输出、完成标准、质量门禁和停止条件。</p></div>
+                <div class="requirement-card"><span class="badge" style="--badge-color: var(--magenta);">03</span><b>可编排但不僵化</b><p>支持顺序、并行、barrier、router、loop、retry、fallback、nested task，但不把每个判断都画死。</p></div>
+                <div class="requirement-card"><span class="badge" style="--badge-color: var(--green);">04</span><b>Agent 节点自治</b><p>Agent 在节点内自主选工具、拆子任务、判断是否需要提问；中心服务负责边界和验收。</p></div>
+                <div class="requirement-card"><span class="badge" style="--badge-color: var(--blue);">05</span><b>人机协作原生</b><p>澄清、审批、权限、产物评审、阻塞都要能追踪，可由 Agent 或策略触发。</p></div>
+                <div class="requirement-card"><span class="badge" style="--badge-color: var(--violet);">06</span><b>状态与证据持久</b><p>实例、节点、事件、操作、产物、决策理由进入运行账本，支持审计、回放和交接。</p></div>
+                <div class="requirement-card"><span class="badge" style="--badge-color: var(--amber);">07</span><b>企业治理内建</b><p>权限、预算、沙箱、敏感操作确认、组织角色、审计策略必须在工作流层可见。</p></div>
+                <div class="requirement-card"><span class="badge" style="--badge-color: var(--green);">08</span><b>可运营可恢复</b><p>运行视图、取消、重试、接管、恢复、健康检查和 SLA 是平台能力；压缩只是异常恢复场景之一。</p></div>
+              </div>
+            </div>
+          </div>
+          <div class="panel" style="margin-top: 14px;">
+            <p class="callout">
+              <strong>推荐形态：</strong>中心运行器负责派活和推进，Agent 负责把节点里的具体事情做好，交互区承接问人和审批，运行账本留下可审计证据。
+              这不是现状描述，而是 AgentCenter 面向企业级 Agent 工作台应当收敛到的目标模型。
+            </p>
+            <div class="tag-row">
+              <span class="tag">控制：任务实例、规则、运行账本</span>
+              <span class="tag">执行：OpenCode / Codex / Claude 等执行器</span>
+              <span class="tag">协作：提问、审批、评审、接管</span>
+              <span class="tag">治理：权限、预算、审计、沙箱</span>
+              <span class="tag">恢复：重试、取消、继续、存档点</span>
+            </div>
+          </div>
+        </section>
+
+        <section id="agent-era-elements">
+          <div class="section-head">
+            <h2>Agent 时代工作流的要素</h2>
+            <p>目标态之后，再看通用要素。Agent workflow 不再只是传统流程工具或 prompt chain；它是一套把确定性控制、非确定性推理、人机协作和企业治理组合起来的运行模型。</p>
+          </div>
+
+          <div class="visual-card wide">
+            <h3>评价公式</h3>
+            <div class="criteria-formula">
+              <div class="formula-chip" style="--chip-bg: var(--ink-amber); --chip-border: rgba(241,166,64,0.38);">任务规则<br><span class="mono">目标 / 输入 / 验收</span></div>
+              <div class="formula-chip" style="--chip-bg: var(--ink-teal); --chip-border: rgba(32,199,179,0.38);">运行推进<br><span class="mono">派活 / 等待 / 下一步</span></div>
+              <div class="formula-chip" style="--chip-bg: var(--ink-magenta); --chip-border: rgba(217,105,168,0.38);">Agent 自主<br><span class="mono">工具 / 子任务 / 判断</span></div>
+              <div class="formula-chip" style="--chip-bg: var(--ink-blue); --chip-border: rgba(90,166,232,0.38);">人机协作<br><span class="mono">提问 / 审批 / 评审</span></div>
+              <div class="formula-chip" style="--chip-bg: var(--ink-green); --chip-border: rgba(87,199,133,0.38);">过程留痕<br><span class="mono">账本 / 存档点</span></div>
+              <div class="formula-chip" style="--chip-bg: var(--ink-violet); --chip-border: rgba(157,140,255,0.38);">企业治理<br><span class="mono">权限 / 预算 / 沙箱</span></div>
+            </div>
+          </div>
+
+          <div class="element-grid" style="margin-top: 14px;">
+            <div class="element-card"><span class="badge" style="--badge-color: var(--amber);">01</span><b>定义层</b><p>自然语言可以生成草案，但最终要沉淀成可审查、可版本化、可复跑的目标、契约和结构定义。</p></div>
+            <div class="element-card"><span class="badge" style="--badge-color: var(--teal);">02</span><b>编排层</b><p>流程引擎决定阶段、依赖、并行、等待、回滚和推进条件；不要把控制权散落在聊天上下文里。</p></div>
+            <div class="element-card"><span class="badge" style="--badge-color: var(--magenta);">03</span><b>Agent 自主层</b><p>Agent 负责节点内探索、工具选择、子任务拆分、完成声明和风险暴露；平台负责边界和验收。</p></div>
+            <div class="element-card"><span class="badge" style="--badge-color: var(--blue);">04</span><b>人机协作层</b><p>澄清、审批、权限、产物评审、人工接管都要有负责人、截止时间、恢复语义和界面展示。</p></div>
+            <div class="element-card"><span class="badge" style="--badge-color: var(--green);">05</span><b>过程留痕层</b><p>存档点、运行账本、事件记录和产物来源，让系统能应对断线、失败、重试和上下文压缩等异常。</p></div>
+            <div class="element-card"><span class="badge" style="--badge-color: var(--violet);">06</span><b>治理与运营层</b><p>权限、预算、沙箱、审计、observe、质量门禁、取消和重跑能力，决定它能否成为企业中心服务。</p></div>
+          </div>
+        </section>
+
+        <section id="visual-overview">
+          <div class="section-head">
+            <h2>先按两个问题对齐</h2>
+            <p>下面每个方案都先回答两个白话问题：任务到底按什么被定义出来？真正跑起来时，是谁在记状态、派活、等人、判断下一步？</p>
+          </div>
+
+          <div class="visual-card wide">
+            <h3>两问总览</h3>
+            <p>界面只是入口，真正要比的是“任务规则”和“运行机制”。</p>
+            <div class="comparison-lanes">
+              <div class="lane">
+                <b>CC</b>
+                <span class="lane-cell hot">任务来自一份脚本或步骤清单，里面写谁先做、谁并行做、最后怎么合并。</span>
+                <span class="lane-cell hot">跑起来像项目经理：主流程派多个后台 Agent 干活，收结果，再决定下一步。</span>
+                <span class="lane-cell">适合大任务拆分和并行检查。</span>
+              </div>
+              <div class="lane">
+                <b>AgentWeave</b>
+                <span class="lane-cell hot">任务来自我们写好的工作流脚本，也可以包装成类似 CC 的任务/子 Agent 入口。</span>
+                <span class="lane-cell hot">运行时自己记进度、等输入、重试、恢复；OpenCode 只是被它叫去干节点里的活。</span>
+                <span class="lane-cell">最像可落地的执行核。</span>
+              </div>
+              <div class="lane">
+                <b>Dify</b>
+                <span class="lane-cell warn">任务来自一组固定节点和变量规则；界面只是把这些规则展示出来。</span>
+                <span class="lane-cell">运行时按节点顺序传变量、走分支、调模型或工具，适合流程稳定的场景。</span>
+                <span class="lane-cell">适合借鉴规则表达，不适合全照搬。</span>
+              </div>
+              <div class="lane">
+                <b>AC 1026</b>
+                <span class="lane-cell">任务来自一个会话里的阶段约定，比如 PRD、HLD、LLD、验证一步步走。</span>
+                <span class="lane-cell warn">跑起来靠同一条会话继续推进，体验顺，但状态容易跟着聊天上下文漂。</span>
+                <span class="lane-cell">保留体验，补硬状态。</span>
+              </div>
+              <div class="lane">
+                <b>LangGraph</b>
+                <span class="lane-cell hot">任务来自一张状态图：每个点做什么、往哪走、什么时候暂停都写清楚。</span>
+                <span class="lane-cell hot">运行时每走一步都存档，可以暂停、恢复、重放，很适合长任务。</span>
+                <span class="lane-cell">适合借鉴可恢复机制。</span>
+              </div>
+              <div class="lane">
+                <b>OpenAI SDK</b>
+                <span class="lane-cell">任务来自应用代码里定义的 Agent、工具、交接规则和护栏。</span>
+                <span class="lane-cell">跑起来是多个 Agent 接力：一个 Agent 判断要不要交给另一个，应用负责记业务状态。</span>
+                <span class="lane-cell">适合借鉴接力和护栏。</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="visual-grid">
+            <figure class="visual-card">
+              <h3>方案定位图</h3>
+              <p>右上角才是 AgentCenter 最想要的区域：Agent 有自主判断，平台仍有硬状态闭环。</p>
+              <svg viewBox="0 0 760 460" role="img" aria-labelledby="position-title position-desc">
+                <title id="position-title">六种工作流方案的二维定位图</title>
+                <desc id="position-desc">横轴表示 Agent 自主性，纵轴表示状态确定性。</desc>
+                <defs>
+                  <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+                    <feGaussianBlur stdDeviation="7" result="blur"></feGaussianBlur>
+                    <feMerge>
+                      <feMergeNode in="blur"></feMergeNode>
+                      <feMergeNode in="SourceGraphic"></feMergeNode>
+                    </feMerge>
+                  </filter>
+                </defs>
+                <rect x="0" y="0" width="760" height="460" rx="8" fill="#0b1117"></rect>
+                <rect x="94" y="54" width="570" height="320" rx="6" fill="rgba(255,255,255,0.02)" stroke="#263645"></rect>
+                <path d="M94 374H664" stroke="#6f7e89" stroke-width="2"></path>
+                <path d="M94 374V54" stroke="#6f7e89" stroke-width="2"></path>
+                <path d="M94 294H664M94 214H664M94 134H664" stroke="rgba(255,255,255,0.06)"></path>
+                <path d="M236 54V374M379 54V374M522 54V374" stroke="rgba(255,255,255,0.06)"></path>
+                <rect x="428" y="68" width="196" height="104" rx="12" fill="rgba(32,199,179,0.10)" stroke="rgba(32,199,179,0.34)"></rect>
+                <text x="526" y="104" text-anchor="middle" fill="#20c7b3" font-size="15" font-weight="700">推荐目标区</text>
+                <text x="526" y="130" text-anchor="middle" fill="#a8b5bf" font-size="12">硬状态 + 软判断</text>
+                <text x="378" y="424" text-anchor="middle" fill="#a8b5bf" font-size="14">Agent 自主性</text>
+                <text x="24" y="218" transform="rotate(-90 24 218)" text-anchor="middle" fill="#a8b5bf" font-size="14">状态确定性</text>
+                <text x="92" y="402" fill="#6f7e89" font-size="12">低</text>
+                <text x="646" y="402" fill="#6f7e89" font-size="12">高</text>
+                <text x="58" y="370" fill="#6f7e89" font-size="12">低</text>
+                <text x="58" y="62" fill="#6f7e89" font-size="12">高</text>
+
+                <g filter="url(#softGlow)">
+                  <circle cx="545" cy="118" r="12" fill="#20c7b3"></circle>
+                  <circle cx="222" cy="118" r="12" fill="#f1a640"></circle>
+                  <circle cx="570" cy="298" r="12" fill="#d969a8"></circle>
+                  <circle cx="468" cy="94" r="12" fill="#57c785"></circle>
+                  <circle cx="612" cy="198" r="12" fill="#5aa6e8"></circle>
+                  <circle cx="540" cy="86" r="12" fill="#9d8cff"></circle>
+                </g>
+                <g font-size="13" font-weight="700">
+                  <text x="564" y="113" fill="#eef4f7">CC</text>
+                  <text x="242" y="113" fill="#eef4f7">Dify</text>
+                  <text x="590" y="293" fill="#eef4f7">AC 1026</text>
+                  <text x="488" y="89" fill="#eef4f7">LangGraph</text>
+                  <text x="632" y="193" fill="#eef4f7">OpenAI SDK</text>
+                  <text x="560" y="81" fill="#eef4f7">AgentWeave</text>
+                </g>
+              </svg>
+              <div class="legend">
+                <span style="--dot: var(--teal);"><i></i>CC</span>
+                <span style="--dot: var(--amber);"><i></i>Dify</span>
+                <span style="--dot: var(--magenta);"><i></i>AC 1026</span>
+                <span style="--dot: var(--green);"><i></i>LangGraph</span>
+                <span style="--dot: var(--blue);"><i></i>OpenAI SDK</span>
+                <span style="--dot: var(--violet);"><i></i>AgentWeave</span>
+              </div>
+            </figure>
+
+            <figure class="visual-card">
+              <h3>推荐闭环图</h3>
+              <p>异常恢复不靠“记忆好”，靠每一跳都有可重建的状态、证据和推进条件。</p>
+              <svg viewBox="0 0 620 460" role="img" aria-labelledby="loop-title loop-desc">
+                <title id="loop-title">AgentCenter 推荐状态闭环图</title>
+                <desc id="loop-desc">Bridge DB、operation ledger、recovery capsule、agent node、interaction 和 watchdog 组成闭环。</desc>
+                <defs>
+                  <marker id="arrowTeal" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+                    <path d="M0,0 L0,6 L9,3 z" fill="#20c7b3"></path>
+                  </marker>
+                </defs>
+                <rect x="0" y="0" width="620" height="460" rx="8" fill="#0b1117"></rect>
+                <circle cx="310" cy="228" r="72" fill="rgba(32,199,179,0.12)" stroke="#20c7b3" stroke-width="2"></circle>
+                <text x="310" y="218" text-anchor="middle" fill="#eef4f7" font-size="19" font-weight="800">Bridge DB</text>
+                <text x="310" y="244" text-anchor="middle" fill="#a8b5bf" font-size="12">唯一事实源</text>
+
+                <g fill="none" stroke="#20c7b3" stroke-width="2" marker-end="url(#arrowTeal)">
+                  <path d="M194 116 C118 160 104 260 168 334"></path>
+                  <path d="M242 82 C310 42 408 62 462 126"></path>
+                  <path d="M500 172 C548 252 516 344 436 380"></path>
+                  <path d="M378 398 C292 430 202 400 168 334"></path>
+                </g>
+
+                <g>
+                  <rect x="56" y="68" width="164" height="70" rx="8" fill="rgba(241,166,64,0.12)" stroke="rgba(241,166,64,0.42)"></rect>
+                  <text x="138" y="98" text-anchor="middle" fill="#eef4f7" font-size="14" font-weight="700">Task Rules</text>
+                  <text x="138" y="120" text-anchor="middle" fill="#a8b5bf" font-size="11">节点 / 门禁 / 交互策略</text>
+
+                  <rect x="384" y="68" width="174" height="70" rx="8" fill="rgba(90,166,232,0.12)" stroke="rgba(90,166,232,0.42)"></rect>
+                  <text x="471" y="98" text-anchor="middle" fill="#eef4f7" font-size="14" font-weight="700">Recovery Capsule</text>
+                  <text x="471" y="120" text-anchor="middle" fill="#a8b5bf" font-size="11">失败 / 断线 / 压缩恢复载体</text>
+
+                  <rect x="420" y="312" width="156" height="70" rx="8" fill="rgba(217,105,168,0.12)" stroke="rgba(217,105,168,0.42)"></rect>
+                  <text x="498" y="342" text-anchor="middle" fill="#eef4f7" font-size="14" font-weight="700">Agent Node</text>
+                  <text x="498" y="364" text-anchor="middle" fill="#a8b5bf" font-size="11">语义执行 / 状态声明</text>
+
+                  <rect x="52" y="312" width="180" height="70" rx="8" fill="rgba(87,199,133,0.12)" stroke="rgba(87,199,133,0.42)"></rect>
+                  <text x="142" y="342" text-anchor="middle" fill="#eef4f7" font-size="14" font-weight="700">Operation Ledger</text>
+                  <text x="142" y="364" text-anchor="middle" fill="#a8b5bf" font-size="11">工具调用 / 产物 / 事件</text>
+                </g>
+              </svg>
+            </figure>
+
+            <div class="visual-card wide">
+              <h3>六种路线的“一句话识别”</h3>
+              <div class="visual-strip">
+                <div class="snapshot">
+                  <span class="snapshot-mark" style="--bg: var(--ink-teal); --line: rgba(32,199,179,0.42);">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h7v4H5zM12 14h7v4h-7zM12 8h4v6M9 10v4h6" fill="none" stroke="#20c7b3" stroke-width="2" stroke-linecap="round"></path></svg>
+                  </span>
+                  <b>CC</b>
+                  <span>先有步骤清单，再派多个 Agent 并行干活。</span>
+                </div>
+                <div class="snapshot">
+                  <span class="snapshot-mark" style="--bg: var(--ink-amber); --line: rgba(241,166,64,0.42);">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h6v6H4zM14 5h6v6h-6zM9 17h6M7 11v6h10v-6" fill="none" stroke="#f1a640" stroke-width="2" stroke-linejoin="round"></path></svg>
+                  </span>
+                  <b>Dify</b>
+                  <span>先把固定流程和变量规则定好，再按规则跑。</span>
+                </div>
+                <div class="snapshot">
+                  <span class="snapshot-mark" style="--bg: var(--ink-magenta); --line: rgba(217,105,168,0.42);">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14M8 5v14" fill="none" stroke="#d969a8" stroke-width="2" stroke-linecap="round"></path></svg>
+                  </span>
+                  <b>AC 1026</b>
+                  <span>一条会话带着阶段往前走，顺手但容易漂。</span>
+                </div>
+                <div class="snapshot">
+                  <span class="snapshot-mark" style="--bg: var(--ink-green); --line: rgba(87,199,133,0.42);">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16M5 8h14M7 16h10M7 8l5 4 5-4" fill="none" stroke="#57c785" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                  </span>
+                  <b>LangGraph</b>
+                  <span>每一步都记账，可暂停、恢复、重放。</span>
+                </div>
+                <div class="snapshot">
+                  <span class="snapshot-mark" style="--bg: var(--ink-blue); --line: rgba(90,166,232,0.42);">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h6v6H6zM12 12l6 6M14 6h4v4M6 18h4v-4" fill="none" stroke="#5aa6e8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                  </span>
+                  <b>OpenAI SDK</b>
+                  <span>多个 Agent 在应用里接力，护栏管风险。</span>
+                </div>
+                <div class="snapshot">
+                  <span class="snapshot-mark" style="--bg: var(--ink-violet); --line: rgba(157,140,255,0.42);">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8c3-3 7-3 10 0s6 3 6 0M4 16c3 3 7 3 10 0s6-3 6 0M12 5v14" fill="none" stroke="#9d8cff" stroke-width="2" stroke-linecap="round"></path></svg>
+                  </span>
+                  <b>AgentWeave</b>
+                  <span>我们自己的脚本运行时，能等人、恢复、观察。</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="visual-card wide">
+              <h3>看运行时的三条主轴</h3>
+              <div class="comparison-lanes">
+                <div class="lane">
+                  <b>谁定任务</b>
+                  <span class="lane-cell hot">用户白话、固定规则、脚本、状态图都可以是入口</span>
+                  <span class="lane-cell hot">真正要沉淀成可复用的任务定义</span>
+                  <span class="lane-cell warn">聊天上下文只能做界面</span>
+                </div>
+                <div class="lane">
+                  <b>谁往前推</b>
+                  <span class="lane-cell hot">中心运行时：派活、等人、重试、验收</span>
+                  <span class="lane-cell hot">Agent：节点内探索、选工具、做判断</span>
+                  <span class="lane-cell">固定流程只适合稳定路径</span>
+                </div>
+                <div class="lane">
+                  <b>谁记过程</b>
+                  <span class="lane-cell hot">运行时要记节点、操作、产物、人的回复</span>
+                  <span class="lane-cell hot">Agent 的判断要变成证据，而不是只留在消息里</span>
+                  <span class="lane-cell">异常恢复：断线、重试、压缩</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="tradeoffs">
+          <div class="section-head">
+            <h2>优缺点一眼看</h2>
+            <p>这里用 Thinking Compass 的取舍矩阵来评价：先定企业级 AgentCenter 的目标尺子，再看每种方案实际带来的效果提升、状态可靠性、交互能力和实现成本。结论不按偏好站队，只按场景取舍。</p>
+          </div>
+
+          <div class="tradeoff-method">
+            <div>
+              <h3>评价尺子</h3>
+              <p>企业级场景最怕两件事：任务跑着跑着没人知道真实状态，或者 Agent 做了很多事但没有证据可接管。所以下面的优缺点不只看“能不能跑”，还看“能不能运营”。</p>
+            </div>
+            <ul class="method-list">
+              <li><strong>效果提升：</strong>是否让 Agent 更少被上下文污染，能否并行、复核、减少单次判断失误。</li>
+              <li><strong>状态可靠：</strong>中间结果、节点状态、等待项、产物是否在外部可查，而不是只在聊天里。</li>
+              <li><strong>企业协作：</strong>运行中能不能问人、审批、接管、取消、重试、追责。</li>
+              <li><strong>落地成本：</strong>是否需要整套复杂引擎，还是可以用简单表结构和运行账本先撑起来。</li>
+            </ul>
+          </div>
+
+          <div class="cc-focus">
+            <div>
+              <h3>CC 工作流的真实优势</h3>
+              <p>CC 最值得借鉴的不是“能派很多 Agent”本身，而是把主流程从聊天上下文里拿出来：计划由脚本持有，中间结果进入脚本变量和运行记录，主会话只拿必要结论。这会明显降低上下文污染，让大任务更容易做出稳定结果。</p>
+            </div>
+            <div class="cc-focus-grid">
+              <div class="cc-focus-item">
+                <b>中间结果不挤爆主上下文</b>
+                <span>子 Agent 的发现先留在脚本变量里，最终只把筛过的结论交给主会话。好处是主 Agent 不必背着全部日志继续推理。</span>
+              </div>
+              <div class="cc-focus-item">
+                <b>并行和复核提升结果质量</b>
+                <span>同一问题可以让多个 Agent 从不同角度查，再交叉验证。效果提升来自“多路独立证据”，不是单纯增加轮数。</span>
+              </div>
+              <div class="cc-focus-item">
+                <b>计划可读、可保存、可复跑</b>
+                <span>流程写成脚本后，团队能看见它到底怎么拆任务、怎么汇总，也能把稳定流程保存成命令反复用。</span>
+              </div>
+              <div class="cc-focus-item">
+                <b>但它不是企业工作流底座</b>
+                <span>它更像强执行核。运行中任意问人、跨会话长期恢复、企业审批和主数据归属，还需要 AgentCenter 自己补。</span>
+              </div>
+            </div>
+            <p class="callout">
+              <strong>关于“变量不进入上下文是否更好”：</strong>通常是更好，但前提是变量结构化、可追溯，最后汇总时只提取必要事实。如果只是把细节藏起来却没有证据链接，反而会让审计和接管更难。
+            </p>
+          </div>
+
+          <div class="matrix-wrap pros-cons-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>方案</th>
+                  <th>明显优点</th>
+                  <th>明显缺点</th>
+                  <th>最适合</th>
+                  <th>AgentCenter 取舍</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Claude Code / 脚本派活</strong></td>
+                  <td>中间结果进脚本变量，主上下文更干净；能大规模并行；能交叉验证；计划可读可复跑。</td>
+                  <td>运行中自由问人弱；成本和并发资源压力高；跨会话长期恢复有限；企业审批和主数据不在它这里。</td>
+                  <td>代码库审计、大迁移、多角度研究、需要多 Agent 互相复核的任务。</td>
+                  <td><span class="rank high">高</span><span class="takeaway">借鉴“脚本持计划、变量存中间结果、最终再汇总”，但企业状态放回 Bridge。</span></td>
+                </tr>
+                <tr>
+                  <td><strong>AgentWeave / 我们的脚本运行时</strong></td>
+                  <td>最贴近我们想验证的执行核；支持等待用户、恢复、重试、取消、观察；能包装成 CC-like 任务入口。</td>
+                  <td>还是早期原型；需要补企业权限、审计、UI、主数据归属；脚本规范和错误处理要继续收敛。</td>
+                  <td>验证 AgentCenter 的派活、等待、恢复、观察和执行器适配。</td>
+                  <td><span class="rank high">高</span><span class="takeaway">可作为轻量执行核参考，但不能让它直接成为企业事实源。</span></td>
+                </tr>
+                <tr>
+                  <td><strong>Dify / 固定流程运行时</strong></td>
+                  <td>输入输出清楚；变量传递直观；日志可看；稳定业务流程容易交付给非研发用户维护。</td>
+                  <td>动态探索弱；复杂分支会变成规则网；运行中 Agent 自主拆任务和临场判断空间有限。</td>
+                  <td>客服流、固定审批、表单处理、规则稳定的模型调用链。</td>
+                  <td><span class="rank mid">中</span><span class="takeaway">借鉴变量、节点记录和可解释配置，不照搬固定流程心智。</span></td>
+                </tr>
+                <tr>
+                  <td><strong>AgentCenter 1026 / 单会话节点</strong></td>
+                  <td>体验最顺，用户像在一条对话里持续协作；Agent 临场判断自由；早期实现成本低。</td>
+                  <td>状态容易漂；上下文压缩后容易丢事实；等待项和产物归属不清；长任务接管困难。</td>
+                  <td>早期原型、低风险探索、短任务阶段式协作。</td>
+                  <td><span class="rank low">低</span><span class="takeaway">保留“对话体验”，但运行状态必须外置，不能继续靠单会话记忆。</span></td>
+                </tr>
+                <tr>
+                  <td><strong>LangGraph / 可恢复状态机</strong></td>
+                  <td>状态、暂停、恢复、人工介入和重放能力强；长任务可靠；失败后容易定位。</td>
+                  <td>引擎化和语言栈成本高；对现有 Java Bridge/Vue 架构集成重；简单场景可能显得过重。</td>
+                  <td>长期运行、多次人工确认、复杂状态跳转和需要严格恢复的任务。</td>
+                  <td><span class="rank mid">中</span><span class="takeaway">借鉴 checkpoint、interrupt、resume，不急着引入整套引擎。</span></td>
+                </tr>
+                <tr>
+                  <td><strong>OpenAI Agents SDK / Agent 接力</strong></td>
+                  <td>Agent、工具、交接、护栏和追踪模型清楚；适合把专业 Agent 做成应用组件。</td>
+                  <td>不天然等于企业工作流引擎；业务状态、审批、产物生命周期仍要应用自己实现。</td>
+                  <td>多专业 Agent 接力、风险护栏、应用内能力编排。</td>
+                  <td><span class="rank mid">中</span><span class="takeaway">借鉴 handoff 和 guardrail，工作流实例仍由 AgentCenter 持有。</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="simple-version">
+            <div>
+              <h3>企业级场景可以先做简单版吗？</h3>
+              <p>可以，而且应该先做。企业级不等于一开始就上复杂工作流引擎。只要把“任务、节点、变量、事件、等待项”这几个硬状态抓住，很多常见流程就能跑起来；复杂图引擎可以等需求真的长出来再引入。</p>
+            </div>
+            <div class="simple-version-grid">
+              <div class="simple-step"><b>1. Work Item</b>记录业务任务、负责人、目标、验收标准和当前状态。</div>
+              <div class="simple-step"><b>2. Run Instance</b>每次运行有独立实例，知道开始、暂停、失败、完成和取消。</div>
+              <div class="simple-step"><b>3. Node Record</b>每个节点有输入、输出、状态、错误、重试次数和执行器归属。</div>
+              <div class="simple-step"><b>4. Variable & Artifact</b>中间结果放变量和产物，不塞满聊天上下文；最终只给 Agent 必要摘要。</div>
+              <div class="simple-step"><b>5. Interaction</b>问人、审批、评审都变成等待项，绑定到具体节点，可以恢复和追踪。</div>
+            </div>
+            <p class="callout">
+              <strong>最小可行结论：</strong>AgentCenter 不需要一开始支持任意复杂图。先支持顺序、并行派活、等待用户、重试、取消、恢复、节点验收和运行账本，就能覆盖大多数企业 Agent 任务；后续再把常见模式沉淀成模板或脚本。
+            </p>
+          </div>
+        </section>
+
+        <section id="runtime-logic">
+          <div class="section-head">
+            <h2>可折叠：六种工作流怎么跑</h2>
+            <p>这里按运行时视角展开：任务怎么定义、跑起来谁推进、上下文压缩或断线时怎么办，以及哪些边界场景会踩坑。</p>
+          </div>
+
+          <div class="runtime-layout">
+            <div class="visual-card wide">
+              <h3>共性和差异</h3>
+              <p>这张表不是比界面，而是比实际运行机制。</p>
+              <div class="matrix-wrap runtime-summary-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>维度</th>
+                      <th>相似之处</th>
+                      <th>关键差异</th>
+                      <th>对 AgentCenter 的含义</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><strong>任务定义</strong></td>
+                      <td>都要把用户意图变成某种可执行规则，否则 Agent 只能靠聊天记忆猜下一步。</td>
+                      <td>CC 和 AgentWeave 偏脚本；Dify 偏固定节点规则；1026 偏会话阶段；LangGraph 偏状态图；OpenAI SDK 偏 Agent 能力和交接规则。</td>
+                      <td>我们需要保存“任务规则”，但入口可以是自然语言、模板或代码生成。</td>
+                    </tr>
+                    <tr>
+                      <td><strong>运行推进</strong></td>
+                      <td>都需要一个“推进者”决定当前该做什么、是否等待、是否进入下一步。</td>
+                      <td>有的由脚本推，有的由流程引擎推，有的由会话继续推，有的由状态机推，有的由应用代码推。</td>
+                      <td>AgentCenter 应该让中心服务做推进者，Agent 做节点里的具体判断和执行。</td>
+                    </tr>
+                    <tr>
+                      <td><strong>上下文压缩</strong></td>
+                      <td>所有方案最后都要面对模型上下文不可靠的问题。</td>
+                      <td>CC、AgentWeave、LangGraph 把中间状态放到外部；Dify 放到节点运行记录；1026 如果只靠聊天最危险；OpenAI SDK 需要应用自己补状态。</td>
+                      <td>压缩不是主能力，而是异常恢复场景；核心是每一步都有数据库状态和运行账本。</td>
+                    </tr>
+                    <tr>
+                      <td><strong>边界场景</strong></td>
+                      <td>都会遇到人机输入、权限确认、失败重试、取消、部分成功、产物不合格。</td>
+                      <td>CC 运行中任意问人较弱；Dify 动态探索较弱；1026 状态容易漂；LangGraph 引擎化成本高；OpenAI SDK 业务状态要自建。</td>
+                      <td>Interaction Dock、运行账本、节点验收和恢复材料必须成为一等能力。</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="runtime-accordion">
+              <details open style="--accent: var(--teal);">
+                <summary>
+                  <span class="runtime-title"><b>Claude Code / 脚本派活</b><span>适合大任务拆成很多后台 Agent 并行处理。</span></span>
+                </summary>
+                <div class="runtime-body">
+                  <div class="runtime-flow">
+                    <div class="runtime-step"><b>定义</b>用户要求跑工作流，或选择已有命令；Claude 生成一份可读脚本。</div>
+                    <div class="runtime-step"><b>批准</b>用户先看计划和脚本，再决定是否运行、保存、取消。</div>
+                    <div class="runtime-step"><b>派活</b>脚本在后台调度多个子 Agent，中间结果留在脚本里。</div>
+                    <div class="runtime-step"><b>收束</b>主会话最终拿到汇总结果，用户可以看进度、暂停、恢复或停止。</div>
+                  </div>
+                  <div class="runtime-dimensions">
+                    <div class="runtime-dimension"><h4>怎么定义、怎么跑</h4><p>本质是“把计划写成脚本”。脚本负责循环、分支、并行和汇总，Agent 负责子任务里的具体工作。</p></div>
+                    <div class="runtime-dimension"><h4>遇到上下文压缩</h4><p>中间结果不主要塞进主聊天，而是留在脚本变量和运行记录里，所以主会话变短不会直接弄丢进度。</p></div>
+                    <div class="runtime-dimension"><h4>边界场景</h4><ul class="runtime-edge-list"><li>运行中任意问用户不是强项，更适合阶段间确认。</li><li>子 Agent 失败可以重启，已完成结果可复用。</li><li>如果本地会话退出，跨会话恢复能力有限。</li></ul></div>
+                  </div>
+                </div>
+              </details>
+
+              <details style="--accent: var(--violet);">
+                <summary>
+                  <span class="runtime-title"><b>AgentWeave / 我们的脚本运行时</b><span>适合验证 AgentCenter 自己的派活、等待、恢复、观察能力。</span></span>
+                </summary>
+                <div class="runtime-body">
+                  <div class="runtime-flow">
+                    <div class="runtime-step"><b>定义</b>任务写成工作流脚本，也可以包装成任务/子 Agent 入口。</div>
+                    <div class="runtime-step"><b>运行</b>运行时读脚本，调 OpenCode 子会话或其他执行器。</div>
+                    <div class="runtime-step"><b>等待</b>需要用户输入时进入等待状态，保存问题和当前进度。</div>
+                    <div class="runtime-step"><b>恢复</b>收到回答后继续，失败时可取消、重试、恢复或观察运行。</div>
+                  </div>
+                  <div class="runtime-dimensions">
+                    <div class="runtime-dimension"><h4>怎么定义、怎么跑</h4><p>外部看起来是“任务、子 Agent、进度、等待、结果”；内部用脚本运行时保存状态、存档点和子任务输出。</p></div>
+                    <div class="runtime-dimension"><h4>遇到上下文压缩</h4><p>父会话只拿简短结果，详细过程留在运行时存储里；恢复时用保存的运行状态，而不是要求 Agent 记住所有细节。</p></div>
+                    <div class="runtime-dimension"><h4>边界场景</h4><ul class="runtime-edge-list"><li>支持等待用户、取消、重试、恢复和观察。</li><li>子任务输出必须结构化，否则运行时可以判失败并重试。</li><li>它是执行核，不应该直接拥有企业主数据。</li></ul></div>
+                  </div>
+                </div>
+              </details>
+
+              <details style="--accent: var(--amber);">
+                <summary>
+                  <span class="runtime-title"><b>Dify / 固定流程运行时</b><span>适合规则稳定、输入输出清楚、可以一步步传变量的任务。</span></span>
+                </summary>
+                <div class="runtime-body">
+                  <div class="runtime-flow">
+                    <div class="runtime-step"><b>定义</b>先配置节点、输入输出、变量、分支和工具调用。</div>
+                    <div class="runtime-step"><b>触发</b>一次输入启动一次流程，或由对话流按轮次触发。</div>
+                    <div class="runtime-step"><b>传递</b>运行时按节点顺序传变量，满足条件就走对应分支。</div>
+                    <div class="runtime-step"><b>结束</b>到达结束节点后返回结果，日志里保留每个节点的运行记录。</div>
+                  </div>
+                  <div class="runtime-dimensions">
+                    <div class="runtime-dimension"><h4>怎么定义、怎么跑</h4><p>它不是“界面方案”，而是固定规则运行方案。界面只是把节点规则、变量流转和条件分支展示出来。</p></div>
+                    <div class="runtime-dimension"><h4>遇到上下文压缩</h4><p>状态主要在节点输入输出和运行日志里，模型上下文变短影响较小；但跨轮长期记忆仍要靠会话变量或外部存储。</p></div>
+                    <div class="runtime-dimension"><h4>边界场景</h4><ul class="runtime-edge-list"><li>流程稳定时很清楚，动态探索时比较僵。</li><li>人机输入通常要预先设计好等待点。</li><li>复杂分支太多会变成难维护的规则网。</li></ul></div>
+                  </div>
+                </div>
+              </details>
+
+              <details style="--accent: var(--magenta);">
+                <summary>
+                  <span class="runtime-title"><b>AgentCenter 1026 / 单会话节点</b><span>适合体验连贯的阶段式协作，但状态不能只靠会话记忆。</span></span>
+                </summary>
+                <div class="runtime-body">
+                  <div class="runtime-flow">
+                    <div class="runtime-step"><b>定义</b>任务按会话阶段走，例如需求、设计、实现、验证。</div>
+                    <div class="runtime-step"><b>推进</b>Agent 在同一条会话里继续下一阶段，用户随时能插话。</div>
+                    <div class="runtime-step"><b>声明</b>Agent 输出当前节点状态，中心服务决定是否推进。</div>
+                    <div class="runtime-step"><b>修复</b>需要补运行账本、当前节点、待交互归属和恢复材料。</div>
+                  </div>
+                  <div class="runtime-dimensions">
+                    <div class="runtime-dimension"><h4>怎么定义、怎么跑</h4><p>用户感觉像一直在同一条对话里推进任务；每个阶段像一个节点，但节点状态必须外置保存。</p></div>
+                    <div class="runtime-dimension"><h4>遇到上下文压缩</h4><p>这是最容易出问题的地方。压缩摘要不是事实源；必须从数据库恢复当前节点、已做操作、用户确认和产物。</p></div>
+                    <div class="runtime-dimension"><h4>边界场景</h4><ul class="runtime-edge-list"><li>直接继续会绕过恢复材料，导致状态漂移。</li><li>用户插话要绑定到具体节点，否则不知道回答的是哪个问题。</li><li>工具调用和产物必须进账本，不能只在聊天里出现。</li></ul></div>
+                  </div>
+                </div>
+              </details>
+
+              <details style="--accent: var(--green);">
+                <summary>
+                  <span class="runtime-title"><b>LangGraph / 可恢复状态机</b><span>适合长任务、人工确认、失败恢复和重放调试。</span></span>
+                </summary>
+                <div class="runtime-body">
+                  <div class="runtime-flow">
+                    <div class="runtime-step"><b>定义</b>任务变成状态图：每个节点做什么、条件满足后往哪走。</div>
+                    <div class="runtime-step"><b>执行</b>每一步读取状态，写回结果，再进入下一步。</div>
+                    <div class="runtime-step"><b>存档</b>运行时按 thread 保存每一步状态。</div>
+                    <div class="runtime-step"><b>恢复</b>可以暂停、人工更新状态、从某个存档点继续或重放。</div>
+                  </div>
+                  <div class="runtime-dimensions">
+                    <div class="runtime-dimension"><h4>怎么定义、怎么跑</h4><p>它把“跑到哪一步”变成明确状态，不靠 Agent 自己回忆。Agent 可以在节点里做判断，但跳转规则清楚。</p></div>
+                    <div class="runtime-dimension"><h4>遇到上下文压缩</h4><p>每步都有存档点，压缩或失败后可以从上一个成功状态继续；这也是它对长任务最有价值的地方。</p></div>
+                    <div class="runtime-dimension"><h4>边界场景</h4><ul class="runtime-edge-list"><li>人工审批可以通过暂停和恢复处理。</li><li>失败后可从上个成功点重跑。</li><li>引入整套引擎会增加语言栈、调试和集成成本。</li></ul></div>
+                  </div>
+                </div>
+              </details>
+
+              <details style="--accent: var(--blue);">
+                <summary>
+                  <span class="runtime-title"><b>OpenAI Agents SDK / Agent 接力</b><span>适合应用内多个专门 Agent 按能力接力处理任务。</span></span>
+                </summary>
+                <div class="runtime-body">
+                  <div class="runtime-flow">
+                    <div class="runtime-step"><b>定义</b>应用代码定义多个 Agent、工具、输出要求、交接规则和护栏。</div>
+                    <div class="runtime-step"><b>判断</b>当前 Agent 判断自己能否处理，或是否要交给别的 Agent。</div>
+                    <div class="runtime-step"><b>接力</b>交接像一次工具调用，任务进入另一个专门 Agent。</div>
+                    <div class="runtime-step"><b>护栏</b>输入输出可被规则检查，风险命中时阻断或转人工。</div>
+                  </div>
+                  <div class="runtime-dimensions">
+                    <div class="runtime-dimension"><h4>怎么定义、怎么跑</h4><p>它更像一组应用组件：Agent 负责专业能力，应用负责把业务任务、状态和界面串起来。</p></div>
+                    <div class="runtime-dimension"><h4>遇到上下文压缩</h4><p>SDK 有会话和追踪能力，但企业工作流状态仍要应用层保存；否则只知道 Agent 做过什么，不知道业务流程走到哪。</p></div>
+                    <div class="runtime-dimension"><h4>边界场景</h4><ul class="runtime-edge-list"><li>适合按专业能力接力，不天然等于完整工作流引擎。</li><li>护栏能拦风险，但待办、审批、产物生命周期要自己建。</li><li>跨 Agent 交接要控制上下文，否则容易丢业务约束。</li></ul></div>
+                  </div>
+                </div>
+              </details>
+            </div>
+          </div>
+        </section>
+
+        <section id="options">
+          <div class="section-head">
+            <h2>六种路线</h2>
+            <p>点击卡片可展开细节。评分面向上面的企业级目标态，不是通用排名。</p>
+          </div>
+          <div class="option-grid" id="optionGrid">
+            <button class="option-card active" style="--accent: var(--teal);" type="button" data-panel="cc">
+              <h3>Claude Code / 脚本派活</h3>
+              <p>任务先变成步骤清单，运行时按清单派多个后台 Agent 干活，再把结果收回来。</p>
+              <div class="visual-stamp" aria-hidden="true">
+                <svg viewBox="0 0 220 82">
+                  <rect x="4" y="10" width="58" height="36" rx="7" fill="rgba(32,199,179,0.12)" stroke="rgba(32,199,179,0.48)"></rect>
+                  <rect x="82" y="6" width="58" height="36" rx="7" fill="rgba(32,199,179,0.12)" stroke="rgba(32,199,179,0.48)"></rect>
+                  <rect x="158" y="28" width="58" height="36" rx="7" fill="rgba(32,199,179,0.12)" stroke="rgba(32,199,179,0.48)"></rect>
+                  <path d="M62 28H82M140 28h18M111 42v18H188" fill="none" stroke="#20c7b3" stroke-width="2"></path>
+                  <text x="33" y="33" fill="#eef4f7" text-anchor="middle" font-size="11">计划</text>
+                  <text x="111" y="29" fill="#eef4f7" text-anchor="middle" font-size="11">Agent</text>
+                  <text x="187" y="51" fill="#eef4f7" text-anchor="middle" font-size="11">汇总</text>
+                </svg>
+              </div>
+              <div class="score">
+                <div class="score-row"><span>规则清楚</span><div class="score-bar"><i style="--score: 86%;"></i></div></div>
+                <div class="score-row"><span>能自主</span><div class="score-bar"><i style="--score: 72%;"></i></div></div>
+                <div class="score-row"><span>可借鉴</span><div class="score-bar"><i style="--score: 82%;"></i></div></div>
+              </div>
+            </button>
+
+            <button class="option-card" style="--accent: var(--violet);" type="button" data-panel="agentweave">
+              <h3>AgentWeave / 我们的脚本运行时</h3>
+              <p>任务写成脚本，运行时自己记进度、等人输入、恢复现场，再调用 OpenCode 做节点里的活。</p>
+              <div class="visual-stamp" aria-hidden="true">
+                <svg viewBox="0 0 220 82">
+                  <rect x="8" y="10" width="52" height="34" rx="7" fill="rgba(157,140,255,0.12)" stroke="rgba(157,140,255,0.52)"></rect>
+                  <rect x="84" y="10" width="52" height="34" rx="7" fill="rgba(157,140,255,0.12)" stroke="rgba(157,140,255,0.52)"></rect>
+                  <rect x="160" y="10" width="52" height="34" rx="7" fill="rgba(157,140,255,0.12)" stroke="rgba(157,140,255,0.52)"></rect>
+                  <path d="M60 27h24M136 27h24M34 44c20 24 132 24 152 0" fill="none" stroke="#9d8cff" stroke-width="2"></path>
+                  <text x="34" y="32" fill="#eef4f7" text-anchor="middle" font-size="10">脚本</text>
+                  <text x="110" y="32" fill="#eef4f7" text-anchor="middle" font-size="10">执行</text>
+                  <text x="186" y="32" fill="#eef4f7" text-anchor="middle" font-size="10">存档</text>
+                  <text x="110" y="70" fill="#a8b5bf" text-anchor="middle" font-size="10">存 / 等 / 恢复</text>
+                </svg>
+              </div>
+              <div class="score">
+                <div class="score-row"><span>规则清楚</span><div class="score-bar"><i style="--score: 88%;"></i></div></div>
+                <div class="score-row"><span>能自主</span><div class="score-bar"><i style="--score: 76%;"></i></div></div>
+                <div class="score-row"><span>可借鉴</span><div class="score-bar"><i style="--score: 86%;"></i></div></div>
+              </div>
+            </button>
+
+            <button class="option-card" style="--accent: var(--amber);" type="button" data-panel="dify">
+              <h3>Dify / 固定流程运行时</h3>
+              <p>任务先被拆成固定节点、变量和分支规则，运行时按规则一步步传数据、调模型和工具。</p>
+              <div class="visual-stamp" aria-hidden="true">
+                <svg viewBox="0 0 220 82">
+                  <rect x="8" y="12" width="42" height="42" rx="7" fill="rgba(241,166,64,0.12)" stroke="rgba(241,166,64,0.48)"></rect>
+                  <rect x="88" y="12" width="42" height="42" rx="7" fill="rgba(241,166,64,0.12)" stroke="rgba(241,166,64,0.48)"></rect>
+                  <rect x="168" y="12" width="42" height="42" rx="7" fill="rgba(241,166,64,0.12)" stroke="rgba(241,166,64,0.48)"></rect>
+                  <path d="M50 33h38M130 33h38M109 54v16h60" fill="none" stroke="#f1a640" stroke-width="2"></path>
+                  <text x="29" y="37" fill="#eef4f7" text-anchor="middle" font-size="11">开始</text>
+                  <text x="109" y="37" fill="#eef4f7" text-anchor="middle" font-size="11">判断</text>
+                  <text x="189" y="37" fill="#eef4f7" text-anchor="middle" font-size="11">模型</text>
+                </svg>
+              </div>
+              <div class="score">
+                <div class="score-row"><span>规则清楚</span><div class="score-bar"><i style="--score: 78%;"></i></div></div>
+                <div class="score-row"><span>能自主</span><div class="score-bar"><i style="--score: 48%;"></i></div></div>
+                <div class="score-row"><span>可借鉴</span><div class="score-bar"><i style="--score: 62%;"></i></div></div>
+              </div>
+            </button>
+
+            <button class="option-card" style="--accent: var(--magenta);" type="button" data-panel="ac1026">
+              <h3>AgentCenter 1026 单会话节点</h3>
+              <p>任务按会话里的阶段往前走，Agent 在同一条聊天里继续做下一步，体验顺但状态不够硬。</p>
+              <div class="visual-stamp" aria-hidden="true">
+                <svg viewBox="0 0 220 82">
+                  <rect x="6" y="10" width="208" height="54" rx="8" fill="rgba(217,105,168,0.10)" stroke="rgba(217,105,168,0.42)"></rect>
+                  <circle cx="38" cy="37" r="9" fill="#d969a8"></circle>
+                  <circle cx="86" cy="37" r="9" fill="#d969a8"></circle>
+                  <circle cx="134" cy="37" r="9" fill="#d969a8"></circle>
+                  <circle cx="182" cy="37" r="9" fill="#ec6f72"></circle>
+                  <path d="M47 37h30M95 37h30M143 37h30" stroke="#d969a8" stroke-width="2"></path>
+                  <path d="M170 24l24 26M194 24l-24 26" stroke="#ec6f72" stroke-width="2"></path>
+                  <text x="110" y="72" fill="#a8b5bf" text-anchor="middle" font-size="10">single session timeline</text>
+                </svg>
+              </div>
+              <div class="score">
+                <div class="score-row"><span>规则清楚</span><div class="score-bar"><i style="--score: 42%;"></i></div></div>
+                <div class="score-row"><span>能自主</span><div class="score-bar"><i style="--score: 74%;"></i></div></div>
+                <div class="score-row"><span>可借鉴</span><div class="score-bar"><i style="--score: 58%;"></i></div></div>
+              </div>
+            </button>
+
+            <button class="option-card" style="--accent: var(--green);" type="button" data-panel="langgraph">
+              <h3>LangGraph / 可恢复状态机</h3>
+              <p>任务先变成一张状态图，运行时每走一步都存档，所以能暂停、恢复和重放。</p>
+              <div class="visual-stamp" aria-hidden="true">
+                <svg viewBox="0 0 220 82">
+                  <circle cx="42" cy="24" r="17" fill="rgba(87,199,133,0.12)" stroke="rgba(87,199,133,0.50)"></circle>
+                  <circle cx="116" cy="24" r="17" fill="rgba(87,199,133,0.12)" stroke="rgba(87,199,133,0.50)"></circle>
+                  <circle cx="78" cy="58" r="17" fill="rgba(87,199,133,0.12)" stroke="rgba(87,199,133,0.50)"></circle>
+                  <circle cx="166" cy="58" r="17" fill="rgba(87,199,133,0.12)" stroke="rgba(87,199,133,0.50)"></circle>
+                  <path d="M59 24h40M104 37L91 47M129 36l25 13" fill="none" stroke="#57c785" stroke-width="2"></path>
+                  <text x="42" y="28" fill="#eef4f7" text-anchor="middle" font-size="10">状态</text>
+                  <text x="116" y="28" fill="#eef4f7" text-anchor="middle" font-size="10">存档</text>
+                  <text x="78" y="62" fill="#eef4f7" text-anchor="middle" font-size="10">输入</text>
+                  <text x="166" y="62" fill="#eef4f7" text-anchor="middle" font-size="10">运行</text>
+                </svg>
+              </div>
+              <div class="score">
+                <div class="score-row"><span>规则清楚</span><div class="score-bar"><i style="--score: 84%;"></i></div></div>
+                <div class="score-row"><span>能自主</span><div class="score-bar"><i style="--score: 66%;"></i></div></div>
+                <div class="score-row"><span>可借鉴</span><div class="score-bar"><i style="--score: 70%;"></i></div></div>
+              </div>
+            </button>
+
+            <button class="option-card" style="--accent: var(--blue);" type="button" data-panel="openai">
+              <h3>OpenAI Agents SDK / Agent 接力</h3>
+              <p>任务写在应用代码里，由不同 Agent 按规则接力，护栏负责挡住不该发生的事。</p>
+              <div class="visual-stamp" aria-hidden="true">
+                <svg viewBox="0 0 220 82">
+                  <rect x="8" y="14" width="52" height="34" rx="17" fill="rgba(90,166,232,0.12)" stroke="rgba(90,166,232,0.48)"></rect>
+                  <rect x="84" y="14" width="52" height="34" rx="17" fill="rgba(90,166,232,0.12)" stroke="rgba(90,166,232,0.48)"></rect>
+                  <rect x="160" y="14" width="52" height="34" rx="17" fill="rgba(90,166,232,0.12)" stroke="rgba(90,166,232,0.48)"></rect>
+                  <path d="M60 31h24M136 31h24M35 48v14h150V48" fill="none" stroke="#5aa6e8" stroke-width="2"></path>
+                  <text x="34" y="35" fill="#eef4f7" text-anchor="middle" font-size="10">A1</text>
+                  <text x="110" y="35" fill="#eef4f7" text-anchor="middle" font-size="10">护栏</text>
+                  <text x="186" y="35" fill="#eef4f7" text-anchor="middle" font-size="10">A2</text>
+                </svg>
+              </div>
+              <div class="score">
+                <div class="score-row"><span>规则清楚</span><div class="score-bar"><i style="--score: 70%;"></i></div></div>
+                <div class="score-row"><span>能自主</span><div class="score-bar"><i style="--score: 78%;"></i></div></div>
+                <div class="score-row"><span>可借鉴</span><div class="score-bar"><i style="--score: 64%;"></i></div></div>
+              </div>
+            </button>
+
+            <div class="detail-panel open" id="panel-cc">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>任务怎么定义</h4>
+                  <p>先把大任务写成一份步骤清单：哪些事可以并行，哪些事要等结果，最后怎么合并。</p>
+                </div>
+                <div class="detail-block">
+                  <h4>跑起来怎么走</h4>
+                  <p>主流程像项目经理，把子任务分给后台 Agent，等它们交付，再汇总判断下一步。</p>
+                </div>
+                <div class="detail-block">
+                  <h4>我们怎么借鉴</h4>
+                  <p>借鉴“主流程派活、Agent 做事”的方式，但企业场景还要补上运行中问人、审批和证据留痕。</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="detail-panel" id="panel-agentweave">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>任务怎么定义</h4>
+                  <p>任务写成工作流脚本，也可以用类似 CC 的任务/子 Agent 入口包装起来。</p>
+                </div>
+                <div class="detail-block">
+                  <h4>跑起来怎么走</h4>
+                  <p>运行时读脚本、开子任务、记录事件和存档点；需要人时挂起，收到回答后继续。</p>
+                </div>
+                <div class="detail-block">
+                  <h4>我们怎么借鉴</h4>
+                  <p>它适合作为执行核试验田；AgentCenter 仍要接管企业主数据、权限、UI 和审计。</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="detail-panel" id="panel-dify">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>任务怎么定义</h4>
+                  <p>任务被定义成固定节点、输入输出、变量和分支条件；界面只是把这套规则展示出来。</p>
+                </div>
+                <div class="detail-block">
+                  <h4>跑起来怎么走</h4>
+                  <p>运行时按节点顺序传数据，遇到条件就走不同分支，节点里再调用模型、知识库或工具。</p>
+                </div>
+                <div class="detail-block">
+                  <h4>我们怎么借鉴</h4>
+                  <p>借鉴清晰的变量和节点规则；不要把 Agent 的每个判断都拆成固定节点。</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="detail-panel" id="panel-ac1026">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>任务怎么定义</h4>
+                  <p>任务按一个会话里的阶段来定义，比如先写需求，再写设计，再验证。</p>
+                </div>
+                <div class="detail-block">
+                  <h4>跑起来怎么走</h4>
+                  <p>Agent 在同一条会话里继续做下一阶段，用户感觉很连贯，也容易插话。</p>
+                </div>
+                <div class="detail-block">
+                  <h4>问题在哪里</h4>
+                  <p>如果状态主要靠会话记忆，断线、压缩或裸 continue 后就容易不知道当前到底走到哪一步。</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="detail-panel" id="panel-langgraph">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>任务怎么定义</h4>
+                  <p>任务被定义成一张状态图：每个点做什么、满足什么条件往哪走。</p>
+                </div>
+                <div class="detail-block">
+                  <h4>跑起来怎么走</h4>
+                  <p>每走一步都存档；需要人时暂停，收到输入后从同一个位置继续。</p>
+                </div>
+                <div class="detail-block">
+                  <h4>我们怎么借鉴</h4>
+                  <p>重点借鉴“每一步可恢复”；是否直接引入整套引擎要谨慎。</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="detail-panel" id="panel-openai">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>任务怎么定义</h4>
+                  <p>应用代码里定义多个 Agent：每个 Agent 会什么、能用什么工具、什么时候交给别人。</p>
+                </div>
+                <div class="detail-block">
+                  <h4>跑起来怎么走</h4>
+                  <p>当前 Agent 判断自己能不能做，不能做就交给另一个 Agent；护栏负责挡风险。</p>
+                </div>
+                <div class="detail-block">
+                  <h4>我们怎么借鉴</h4>
+                  <p>借鉴接力、护栏和追踪记录；业务工作流状态、节点界面和产物生命周期还得 AgentCenter 自己管。</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="matrix">
+          <div class="section-head">
+            <h2>对比矩阵</h2>
+            <p>这张表只看运行口径，不按界面分类。我们关心的是任务怎么定、运行时怎么跑、状态和人机协作谁来管。</p>
+          </div>
+          <figure class="visual-card wide">
+            <h3>运行时能力热力图</h3>
+            <svg viewBox="0 0 1180 410" role="img" aria-labelledby="heat-title heat-desc">
+              <title id="heat-title">六种工作流方案的热力图对比</title>
+              <desc id="heat-desc">用颜色深浅表示六种方案在任务定义、运行推进、Agent 发挥、人机协作、AgentCenter 适配上的强弱。</desc>
+              <rect width="1180" height="410" rx="8" fill="#0b1117"></rect>
+              <g font-family="Inter, Arial, sans-serif" font-size="13">
+                <text x="250" y="46" fill="#a8b5bf" text-anchor="middle">任务定义</text>
+                <text x="410" y="46" fill="#a8b5bf" text-anchor="middle">运行推进</text>
+                <text x="570" y="46" fill="#a8b5bf" text-anchor="middle">Agent 发挥</text>
+                <text x="730" y="46" fill="#a8b5bf" text-anchor="middle">人机协作</text>
+                <text x="890" y="46" fill="#a8b5bf" text-anchor="middle">AC 借鉴</text>
+
+                <g fill="#eef4f7" font-weight="700">
+                  <text x="70" y="94">CC</text>
+                  <text x="70" y="144">Dify</text>
+                  <text x="70" y="194">AC 1026</text>
+                  <text x="70" y="244">LangGraph</text>
+                  <text x="70" y="294">OpenAI SDK</text>
+                  <text x="70" y="344">AgentWeave</text>
+                </g>
+
+                <g>
+                  <rect x="195" y="72" width="110" height="32" rx="6" fill="rgba(87,199,133,0.88)"></rect>
+                  <rect x="355" y="72" width="110" height="32" rx="6" fill="rgba(32,199,179,0.72)"></rect>
+                  <rect x="515" y="72" width="110" height="32" rx="6" fill="rgba(241,166,64,0.52)"></rect>
+                  <rect x="675" y="72" width="110" height="32" rx="6" fill="rgba(90,166,232,0.58)"></rect>
+                  <rect x="835" y="72" width="110" height="32" rx="6" fill="rgba(32,199,179,0.82)"></rect>
+
+                  <rect x="195" y="122" width="110" height="32" rx="6" fill="rgba(87,199,133,0.82)"></rect>
+                  <rect x="355" y="122" width="110" height="32" rx="6" fill="rgba(241,166,64,0.42)"></rect>
+                  <rect x="515" y="122" width="110" height="32" rx="6" fill="rgba(241,166,64,0.62)"></rect>
+                  <rect x="675" y="122" width="110" height="32" rx="6" fill="rgba(87,199,133,0.92)"></rect>
+                  <rect x="835" y="122" width="110" height="32" rx="6" fill="rgba(241,166,64,0.56)"></rect>
+
+                  <rect x="195" y="172" width="110" height="32" rx="6" fill="rgba(236,111,114,0.72)"></rect>
+                  <rect x="355" y="172" width="110" height="32" rx="6" fill="rgba(32,199,179,0.76)"></rect>
+                  <rect x="515" y="172" width="110" height="32" rx="6" fill="rgba(32,199,179,0.82)"></rect>
+                  <rect x="675" y="172" width="110" height="32" rx="6" fill="rgba(241,166,64,0.48)"></rect>
+                  <rect x="835" y="172" width="110" height="32" rx="6" fill="rgba(241,166,64,0.58)"></rect>
+
+                  <rect x="195" y="222" width="110" height="32" rx="6" fill="rgba(87,199,133,0.90)"></rect>
+                  <rect x="355" y="222" width="110" height="32" rx="6" fill="rgba(32,199,179,0.64)"></rect>
+                  <rect x="515" y="222" width="110" height="32" rx="6" fill="rgba(87,199,133,0.84)"></rect>
+                  <rect x="675" y="222" width="110" height="32" rx="6" fill="rgba(241,166,64,0.48)"></rect>
+                  <rect x="835" y="222" width="110" height="32" rx="6" fill="rgba(32,199,179,0.70)"></rect>
+
+                  <rect x="195" y="272" width="110" height="32" rx="6" fill="rgba(241,166,64,0.58)"></rect>
+                  <rect x="355" y="272" width="110" height="32" rx="6" fill="rgba(32,199,179,0.78)"></rect>
+                  <rect x="515" y="272" width="110" height="32" rx="6" fill="rgba(241,166,64,0.62)"></rect>
+                  <rect x="675" y="272" width="110" height="32" rx="6" fill="rgba(236,111,114,0.48)"></rect>
+                  <rect x="835" y="272" width="110" height="32" rx="6" fill="rgba(241,166,64,0.62)"></rect>
+
+                  <rect x="195" y="322" width="110" height="32" rx="6" fill="rgba(87,199,133,0.92)"></rect>
+                  <rect x="355" y="322" width="110" height="32" rx="6" fill="rgba(32,199,179,0.76)"></rect>
+                  <rect x="515" y="322" width="110" height="32" rx="6" fill="rgba(87,199,133,0.82)"></rect>
+                  <rect x="675" y="322" width="110" height="32" rx="6" fill="rgba(90,166,232,0.70)"></rect>
+                  <rect x="835" y="322" width="110" height="32" rx="6" fill="rgba(32,199,179,0.86)"></rect>
+                </g>
+
+                <g fill="#0b1117" font-size="12" font-weight="800" text-anchor="middle">
+                  <text x="250" y="94">高</text><text x="410" y="94">中高</text><text x="570" y="94">中</text><text x="730" y="94">中</text><text x="890" y="94">高</text>
+                  <text x="250" y="144">高</text><text x="410" y="144">低</text><text x="570" y="144">中</text><text x="730" y="144">高</text><text x="890" y="144">中</text>
+                  <text x="250" y="194">低</text><text x="410" y="194">高</text><text x="570" y="194">高</text><text x="730" y="194">中</text><text x="890" y="194">中</text>
+                  <text x="250" y="244">高</text><text x="410" y="244">中</text><text x="570" y="244">高</text><text x="730" y="244">中</text><text x="890" y="244">中高</text>
+                  <text x="250" y="294">中</text><text x="410" y="294">高</text><text x="570" y="294">中</text><text x="730" y="294">低</text><text x="890" y="294">中</text>
+                  <text x="250" y="344">高</text><text x="410" y="344">高</text><text x="570" y="344">高</text><text x="730" y="344">中高</text><text x="890" y="344">高</text>
+                </g>
+
+                <text x="1015" y="106" fill="#57c785" font-size="12">深绿：强</text>
+                <text x="1015" y="134" fill="#f1a640" font-size="12">橙色：中</text>
+                <text x="1015" y="162" fill="#ec6f72" font-size="12">红色：弱点</text>
+                <text x="1015" y="218" fill="#a8b5bf" font-size="12">AgentWeave 是我们自己的</text>
+                <text x="1015" y="240" fill="#a8b5bf" font-size="12">参考 CC 思路的代码原型。</text>
+                <text x="1015" y="270" fill="#a8b5bf" font-size="12">最优不是某一行，</text>
+                <text x="1015" y="292" fill="#a8b5bf" font-size="12">而是把它的执行核、</text>
+                <text x="1015" y="314" fill="#a8b5bf" font-size="12">1026 的会话体验和</text>
+                <text x="1015" y="336" fill="#a8b5bf" font-size="12">AgentCenter DB 合起来。</text>
+              </g>
+            </svg>
+          </figure>
+          <div class="matrix-controls">
+            <button class="filter-btn active" type="button" data-focus="all">全部</button>
+            <button class="filter-btn" type="button" data-focus="state">定义与状态</button>
+            <button class="filter-btn" type="button" data-focus="interaction">运行与人</button>
+            <button class="filter-btn" type="button" data-focus="fit">AgentCenter 适配</button>
+          </div>
+          <div class="matrix-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>维度</th>
+                  <th>Claude Code 脚本派活</th>
+                  <th>AgentWeave 脚本运行时</th>
+                  <th>Dify 固定流程</th>
+                  <th>AC 1026 单会话节点</th>
+                  <th>LangGraph</th>
+                  <th>OpenAI Agent 接力</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr data-topic="fit">
+                  <td><strong>适合什么任务</strong></td>
+                  <td>一个大任务能拆成很多子任务，让多个 Agent 并行检查、迁移或汇总。</td>
+                  <td>验证我们自己的工作流内核：能派活、等待、恢复、观察，也能接 OpenCode。</td>
+                  <td>流程比较固定，输入输出清楚，比如表单处理、知识问答、稳定审批链。</td>
+                  <td>需求、设计、验证这类连贯写作任务，用户希望一直在同一条会话里跟进。</td>
+                  <td>长任务、要暂停恢复、要人工确认、要反复重放检查的任务。</td>
+                  <td>应用里多个专门 Agent 接力，比如客服转专家、代码助手转审核助手。</td>
+                </tr>
+                <tr data-topic="state">
+                  <td><strong>任务根据什么定义</strong></td>
+                  <td>根据脚本或步骤清单定义：先做什么、并行做什么、最后怎么合并。</td>
+                  <td>根据工作流脚本定义，也可以用任务/子 Agent 的形式包装。</td>
+                  <td>根据固定节点、变量和分支条件定义；界面只是把这些规则画出来。</td>
+                  <td>根据会话里的阶段约定定义，比如 PRD 到 HLD 到 LLD 到验证。</td>
+                  <td>根据状态图定义：每个状态做什么，满足条件后走到哪里。</td>
+                  <td>根据应用代码里的 Agent、工具、交接规则和护栏定义。</td>
+                </tr>
+                <tr data-topic="state">
+                  <td><strong>运行时怎么跑</strong></td>
+                  <td>主流程派活给多个后台 Agent，等结果回来，再继续下一步。</td>
+                  <td>运行时读脚本、开子任务、记事件；该等人就挂起，收到回答再继续。</td>
+                  <td>引擎按节点顺序传变量，遇到条件就分支，节点里调用模型或工具。</td>
+                  <td>同一条会话继续往下说，Agent 自己记住当前阶段并输出状态。</td>
+                  <td>每一步从状态里读数据、写回结果、存档，再决定下一跳。</td>
+                  <td>一个 Agent 先处理，觉得该转交就交给另一个，应用负责串起来。</td>
+                </tr>
+                <tr data-topic="interaction">
+                  <td><strong>过程谁来记</strong></td>
+                  <td>脚本运行时记中间结果，主会话最好只看摘要和最终结果。</td>
+                  <td>自己的存储记运行过程、事件、存档点、子任务输出和对话记录。</td>
+                  <td>引擎记节点运行日志、变量和每次运行记录。</td>
+                  <td>如果主要靠聊天记忆就不稳，必须让 Bridge DB 接管。</td>
+                  <td>每一步都存档，恢复能力最清楚。</td>
+                  <td>SDK 有追踪和会话记录，但业务状态还是要应用自己存。</td>
+                </tr>
+                <tr data-topic="interaction">
+                  <td><strong>遇到人怎么办</strong></td>
+                  <td>更擅长启动前确认和权限确认，运行中任意插入用户输入不是强项。</td>
+                  <td>可以主动发起提问，也可以在关键关卡等人；等待时其他分支还能继续。</td>
+                  <td>通常在预设输入点等人，或者用对话流每轮触发一次。</td>
+                  <td>用户随时能在会话里插话，但需要把这次插话绑定到具体节点。</td>
+                  <td>可以主动暂停，收到人的输入后继续。</td>
+                  <td>可以用护栏或接力触发人工审核，但界面和持久化要自建。</td>
+                </tr>
+                <tr data-topic="fit">
+                  <td><strong>Agent 能发挥多少</strong></td>
+                  <td>Agent 在子任务里发挥，主流程相对确定。</td>
+                  <td>Agent 在子任务里发挥，运行时负责等、记、恢复和观察。</td>
+                  <td>Agent 发挥空间较小，因为路径多数被节点和变量规则定死。</td>
+                  <td>Agent 发挥空间大，但如果没有硬状态，完成判断会漂。</td>
+                  <td>Agent 可以在图节点里发挥，但跳转规则相对清楚。</td>
+                  <td>Agent 发挥空间大，尤其适合按能力接力。</td>
+                </tr>
+                <tr data-topic="fit">
+                  <td><strong>AgentCenter 借鉴点</strong></td>
+                  <td><span class="rank high">高</span> 借鉴“中心流程派活，Agent 干具体事”。</td>
+                  <td><span class="rank high">高</span> 借鉴执行核，但企业主数据要回到 Bridge。</td>
+                  <td><span class="rank mid">中</span> 借鉴固定规则和变量传递，不按界面形态照搬。</td>
+                  <td><span class="rank mid">中</span> 保留会话体验，但用 DB 记住当前节点和证据。</td>
+                  <td><span class="rank mid">中高</span> 借鉴每一步可恢复、可暂停、可重放。</td>
+                  <td><span class="rank mid">中</span> 借鉴 Agent 接力、护栏和追踪记录。</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="decisions">
+          <div class="section-head">
+            <h2>关键决策</h2>
+            <p>下面是面向 AgentCenter 的收敛建议。</p>
+          </div>
+          <div class="decision-grid">
+            <div class="decision">
+              <span class="num">D1</span>
+              <h3>定义方式</h3>
+              <p>用户可以用白话描述流程，但保存下来时必须变成一份可审查的任务规则：有哪些步骤、每步要什么输入、产出什么、怎么判断完成、什么时候需要问人。</p>
+            </div>
+            <div class="decision">
+              <span class="num">D2</span>
+              <h3>状态事实源</h3>
+              <p>中心数据库是唯一权威。截图、摘要、运行时自己的记忆都只能辅助恢复，不能当最终事实。</p>
+            </div>
+            <div class="decision">
+              <span class="num">D3</span>
+              <h3>完成标准</h3>
+              <p>Agent 可以说“我做完了”，但中心服务要检查结构、证据、质量、风险和停止条件，确认后才推进下一步。</p>
+            </div>
+            <div class="decision">
+              <span class="num">D4</span>
+              <h3>交互策略</h3>
+              <p>任务规则先说明哪些情况可以问人、哪些必须审批；Agent 自己判断何时提问，所有待处理问题都进入统一交互区。</p>
+            </div>
+            <div class="decision">
+              <span class="num">D5</span>
+              <h3>运行时边界</h3>
+              <p>OpenCode、Codex、Claude 这些执行器只负责干活，不保存企业主数据；AgentCenter 负责派活、记账和验收。</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="detours">
+          <div class="section-head">
+            <h2>1026 弯路复盘</h2>
+            <p>1026 的价值不是“方案失败”，而是暴露了 Agent workflow 的关键故障模式。</p>
+          </div>
+          <div class="diagram large">
+            <figure>
+              <svg class="detour-svg" viewBox="0 0 1180 360" role="img" aria-labelledby="detour-title detour-desc">
+                <title id="detour-title">1026 单会话节点的故障链路图</title>
+                <desc id="detour-desc">单会话体验好，但当 continue 裸发、上下文压缩、operation 账本缺失时，节点状态会漂移。</desc>
+                <rect width="1180" height="360" rx="8" fill="#0b1117"></rect>
+                <defs>
+                  <marker id="arrowPink" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+                    <path d="M0,0 L0,6 L9,3 z" fill="#d969a8"></path>
+                  </marker>
+                </defs>
+                <g font-family="Inter, Arial, sans-serif">
+                  <rect x="42" y="90" width="160" height="86" rx="8" fill="rgba(217,105,168,0.12)" stroke="rgba(217,105,168,0.50)"></rect>
+                  <rect x="268" y="90" width="160" height="86" rx="8" fill="rgba(217,105,168,0.12)" stroke="rgba(217,105,168,0.50)"></rect>
+                  <rect x="494" y="90" width="160" height="86" rx="8" fill="rgba(236,111,114,0.14)" stroke="rgba(236,111,114,0.55)"></rect>
+                  <rect x="720" y="90" width="160" height="86" rx="8" fill="rgba(241,166,64,0.13)" stroke="rgba(241,166,64,0.50)"></rect>
+                  <rect x="946" y="90" width="190" height="86" rx="8" fill="rgba(236,111,114,0.14)" stroke="rgba(236,111,114,0.55)"></rect>
+
+                  <path d="M202 133h66M428 133h66M654 133h66M880 133h66" stroke="#d969a8" stroke-width="2" marker-end="url(#arrowPink)"></path>
+
+                  <text x="122" y="123" text-anchor="middle" fill="#eef4f7" font-size="16" font-weight="800">单会话节点</text>
+                  <text x="122" y="148" text-anchor="middle" fill="#a8b5bf" font-size="12">体验连续</text>
+
+                  <text x="348" y="123" text-anchor="middle" fill="#eef4f7" font-size="16" font-weight="800">上下文压缩</text>
+                  <text x="348" y="148" text-anchor="middle" fill="#a8b5bf" font-size="12">摘要不是事实源</text>
+
+                <text x="574" y="123" text-anchor="middle" fill="#eef4f7" font-size="16" font-weight="800">直接继续</text>
+                <text x="574" y="148" text-anchor="middle" fill="#a8b5bf" font-size="12">没带恢复材料</text>
+
+                  <text x="800" y="123" text-anchor="middle" fill="#eef4f7" font-size="16" font-weight="800">账本缺口</text>
+                <text x="800" y="148" text-anchor="middle" fill="#a8b5bf" font-size="12">工具调用没记账</text>
+
+                  <text x="1041" y="123" text-anchor="middle" fill="#eef4f7" font-size="16" font-weight="800">状态漂移</text>
+                  <text x="1041" y="148" text-anchor="middle" fill="#a8b5bf" font-size="12">UI / 节点 / 确认项不一致</text>
+
+                  <path d="M124 232h894" stroke="rgba(255,255,255,0.10)" stroke-width="12" stroke-linecap="round"></path>
+                  <path d="M124 232h190" stroke="#20c7b3" stroke-width="12" stroke-linecap="round"></path>
+                  <path d="M348 232h260" stroke="#f1a640" stroke-width="12" stroke-linecap="round"></path>
+                  <path d="M642 232h376" stroke="#ec6f72" stroke-width="12" stroke-linecap="round"></path>
+                  <text x="124" y="268" fill="#20c7b3" font-size="13">体验优势</text>
+                  <text x="348" y="268" fill="#f1a640" font-size="13">恢复不确定</text>
+                  <text x="642" y="268" fill="#ec6f72" font-size="13">需要 DB 闭环修复</text>
+
+                  <rect x="318" y="292" width="544" height="40" rx="20" fill="rgba(32,199,179,0.12)" stroke="rgba(32,199,179,0.40)"></rect>
+                <text x="590" y="318" text-anchor="middle" fill="#eef4f7" font-size="14" font-weight="700">修正方向：所有继续执行都先回到中心服务，由中心服务带状态、记账、修复</text>
+                </g>
+              </svg>
+              <figcaption class="diagram-caption">1026 不是要被推翻，而是要把“单会话体验”从“单会话记忆”里解耦出来。</figcaption>
+            </figure>
+          </div>
+          <div class="timeline">
+            <div class="timeline-item" style="--accent: var(--magenta);">
+              <span class="phase">Lesson 1</span>
+              <h3>单会话连续性很诱人</h3>
+              <p>工作项里连续推进多个节点，用户体验自然；但如果没有外部状态闭环，连续性会变成对模型记忆的依赖。</p>
+            </div>
+            <div class="timeline-item" style="--accent: var(--red);">
+              <span class="phase">Lesson 2</span>
+              <h3>continue 不能裸发</h3>
+              <p>任何“继续跑”都必须带上当前节点、上一步做了什么、正在等谁、完成标准是什么。</p>
+            </div>
+            <div class="timeline-item" style="--accent: var(--amber);">
+              <span class="phase">Lesson 3</span>
+              <h3>prompt 协议不等于账本</h3>
+              <p>Agent 汇报状态有用，但工具调用、产物、用户确认和运行事件都要进入运行账本。</p>
+            </div>
+            <div class="timeline-item" style="--accent: var(--green);">
+              <span class="phase">Lesson 4</span>
+              <h3>UI 应读状态，不读聊天</h3>
+              <p>首页卡片、节点进度、待确认和产物面板必须读中心状态，而不是解析聊天消息。</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="architecture">
+          <div class="section-head">
+            <h2>推荐架构</h2>
+            <p>这是建议的目标态切片：先把中心服务的派活、记账、验收做稳，再逐步增加自然语言生成、并行评审、循环重试和多执行器。</p>
+          </div>
+          <div class="diagram">
+            <svg class="architecture-svg" viewBox="0 0 1180 520" role="img" aria-labelledby="arch-title arch-desc">
+              <title id="arch-title">AgentCenter 推荐工作流架构图</title>
+              <desc id="arch-desc">从自然语言创建任务规则，到中心服务、执行器、状态和用户界面的完整闭环。</desc>
+              <defs>
+                <marker id="arrowBlue" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+                  <path d="M0,0 L0,6 L9,3 z" fill="#5aa6e8"></path>
+                </marker>
+              </defs>
+              <rect width="1180" height="520" rx="8" fill="#0b1117"></rect>
+              <g font-family="Inter, Arial, sans-serif">
+                <rect x="34" y="42" width="212" height="420" rx="12" fill="rgba(241,166,64,0.08)" stroke="rgba(241,166,64,0.36)"></rect>
+                <rect x="274" y="42" width="284" height="420" rx="12" fill="rgba(32,199,179,0.08)" stroke="rgba(32,199,179,0.36)"></rect>
+                <rect x="586" y="42" width="250" height="420" rx="12" fill="rgba(90,166,232,0.08)" stroke="rgba(90,166,232,0.36)"></rect>
+                <rect x="864" y="42" width="282" height="420" rx="12" fill="rgba(87,199,133,0.08)" stroke="rgba(87,199,133,0.36)"></rect>
+
+                <text x="140" y="78" text-anchor="middle" fill="#f1a640" font-size="16" font-weight="800">任务定义</text>
+                <text x="416" y="78" text-anchor="middle" fill="#20c7b3" font-size="16" font-weight="800">中心服务</text>
+                <text x="711" y="78" text-anchor="middle" fill="#5aa6e8" font-size="16" font-weight="800">执行器</text>
+                <text x="1005" y="78" text-anchor="middle" fill="#57c785" font-size="16" font-weight="800">状态 + 界面</text>
+
+                <rect x="66" y="116" width="148" height="56" rx="8" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.10)"></rect>
+                <text x="140" y="141" text-anchor="middle" fill="#eef4f7" font-size="14" font-weight="700">自然语言</text>
+                <text x="140" y="160" text-anchor="middle" fill="#a8b5bf" font-size="11">流程意图</text>
+
+                <rect x="66" y="218" width="148" height="56" rx="8" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.10)"></rect>
+                <text x="140" y="243" text-anchor="middle" fill="#eef4f7" font-size="14" font-weight="700">任务规则草稿</text>
+                <text x="140" y="262" text-anchor="middle" fill="#a8b5bf" font-size="11">节点 / 契约 / 策略</text>
+
+                <rect x="66" y="320" width="148" height="56" rx="8" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.10)"></rect>
+                <text x="140" y="345" text-anchor="middle" fill="#eef4f7" font-size="14" font-weight="700">人工确认</text>
+                <text x="140" y="364" text-anchor="middle" fill="#a8b5bf" font-size="11">保存规则</text>
+
+                <rect x="312" y="116" width="208" height="56" rx="8" fill="rgba(32,199,179,0.10)" stroke="rgba(32,199,179,0.36)"></rect>
+                <text x="416" y="141" text-anchor="middle" fill="#eef4f7" font-size="14" font-weight="700">工作流运行器</text>
+                <text x="416" y="160" text-anchor="middle" fill="#a8b5bf" font-size="11">调度 / 推进 / 守卫</text>
+
+                <rect x="312" y="218" width="208" height="56" rx="8" fill="rgba(32,199,179,0.10)" stroke="rgba(32,199,179,0.36)"></rect>
+                <text x="416" y="243" text-anchor="middle" fill="#eef4f7" font-size="14" font-weight="700">完成标准</text>
+                <text x="416" y="262" text-anchor="middle" fill="#a8b5bf" font-size="11">证据 / 质量 / 停止条件</text>
+
+                <rect x="312" y="320" width="208" height="56" rx="8" fill="rgba(32,199,179,0.10)" stroke="rgba(32,199,179,0.36)"></rect>
+                <text x="416" y="345" text-anchor="middle" fill="#eef4f7" font-size="14" font-weight="700">问人规则</text>
+                <text x="416" y="364" text-anchor="middle" fill="#a8b5bf" font-size="11">提问 / 审批 / 评审</text>
+
+                <rect x="620" y="116" width="182" height="56" rx="8" fill="rgba(90,166,232,0.10)" stroke="rgba(90,166,232,0.36)"></rect>
+                <text x="711" y="141" text-anchor="middle" fill="#eef4f7" font-size="14" font-weight="700">OpenCode</text>
+                <text x="711" y="160" text-anchor="middle" fill="#a8b5bf" font-size="11">首个执行器</text>
+
+                <rect x="620" y="218" width="182" height="56" rx="8" fill="rgba(90,166,232,0.10)" stroke="rgba(90,166,232,0.36)"></rect>
+                <text x="711" y="243" text-anchor="middle" fill="#eef4f7" font-size="14" font-weight="700">Codex / Claude</text>
+                <text x="711" y="262" text-anchor="middle" fill="#a8b5bf" font-size="11">后续适配</text>
+
+                <rect x="620" y="320" width="182" height="56" rx="8" fill="rgba(90,166,232,0.10)" stroke="rgba(90,166,232,0.36)"></rect>
+                <text x="711" y="345" text-anchor="middle" fill="#eef4f7" font-size="14" font-weight="700">恢复材料</text>
+                <text x="711" y="364" text-anchor="middle" fill="#a8b5bf" font-size="11">断线 / 重试 / 压缩恢复</text>
+
+                <rect x="902" y="104" width="206" height="48" rx="8" fill="rgba(87,199,133,0.10)" stroke="rgba(87,199,133,0.36)"></rect>
+                <text x="1005" y="134" text-anchor="middle" fill="#eef4f7" font-size="14" font-weight="700">任务实例</text>
+
+                <rect x="902" y="170" width="206" height="48" rx="8" fill="rgba(87,199,133,0.10)" stroke="rgba(87,199,133,0.36)"></rect>
+                <text x="1005" y="200" text-anchor="middle" fill="#eef4f7" font-size="14" font-weight="700">节点状态</text>
+
+                <rect x="902" y="236" width="206" height="48" rx="8" fill="rgba(87,199,133,0.10)" stroke="rgba(87,199,133,0.36)"></rect>
+                <text x="1005" y="266" text-anchor="middle" fill="#eef4f7" font-size="14" font-weight="700">运行账本</text>
+
+                <rect x="902" y="302" width="206" height="48" rx="8" fill="rgba(87,199,133,0.10)" stroke="rgba(87,199,133,0.36)"></rect>
+                <text x="1005" y="332" text-anchor="middle" fill="#eef4f7" font-size="14" font-weight="700">待用户处理</text>
+
+                <rect x="902" y="368" width="206" height="48" rx="8" fill="rgba(87,199,133,0.10)" stroke="rgba(87,199,133,0.36)"></rect>
+                <text x="1005" y="398" text-anchor="middle" fill="#eef4f7" font-size="14" font-weight="700">Timeline / Artifact UI</text>
+
+                <g fill="none" stroke="#5aa6e8" stroke-width="2" marker-end="url(#arrowBlue)">
+                  <path d="M214 246H312"></path>
+                  <path d="M520 144H620"></path>
+                  <path d="M520 246H620"></path>
+                  <path d="M802 144H902"></path>
+                  <path d="M802 348H902"></path>
+                  <path d="M1005 416V454H416V376"></path>
+                </g>
+              </g>
+            </svg>
+            <p class="diagram-caption">读法：左边把自然语言变成可审查任务规则，中间中心服务负责派活和验收，右边执行器只干活，状态和界面都从数据库派生。</p>
+            <div class="flow-map">
+              <div class="flow-column">
+                <div class="flow-box"><b>任务入口</b><span>自然语言描述流程、角色、交互偏好和验收标准。</span></div>
+                <div class="flow-arrow">↓</div>
+                <div class="flow-box"><b>任务规则草稿</b><span>Agent 整理出步骤、依赖、完成标准和问人规则。</span></div>
+                <div class="flow-arrow">↓</div>
+                <div class="flow-box"><b>人工确认</b><span>用户确认或修改后，保存成可复用任务规则。</span></div>
+              </div>
+              <div class="flow-column">
+                <div class="flow-box"><b>中心运行器</b><span>创建任务实例和节点，调度当前步骤，判断是否推进。</span></div>
+                <div class="flow-arrow">↓</div>
+                <div class="flow-box"><b>交互区</b><span>提问、审批、产物评审、权限确认等都统一承接。</span></div>
+                <div class="flow-arrow">↓</div>
+                <div class="flow-box"><b>运行账本</b><span>记录工具调用、运行事件、产物和 Agent 状态声明。</span></div>
+              </div>
+              <div class="flow-column">
+                <div class="flow-box"><b>执行器适配</b><span>OpenCode、Codex、Claude Code 等执行节点任务，不拥有主数据。</span></div>
+                <div class="flow-arrow">↓</div>
+                <div class="flow-box"><b>恢复材料</b><span>恢复时带上任务实例、当前节点、上一步操作和上下文游标，覆盖断线、重试和压缩等异常。</span></div>
+                <div class="flow-arrow">↓</div>
+                <div class="flow-box"><b>看门与修复</b><span>从数据库和快照修复卡住的节点，必要时只修状态、不重新跑任务。</span></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="roadmap">
+          <div class="section-head">
+            <h2>落地路线</h2>
+            <p>不要一上来做完整流程编辑器，也不要直接把所有逻辑交给 Agent。先做最小闭环，再扩展表达力。</p>
+          </div>
+          <div class="timeline">
+            <div class="timeline-item" style="--accent: var(--teal);">
+              <span class="phase">M1</span>
+              <h3>状态闭环</h3>
+              <p>统一所有“继续跑”的入口；每次工具调用和状态变化都记账；用 AgentWeave 验证派活、等待、恢复的执行核。</p>
+            </div>
+            <div class="timeline-item" style="--accent: var(--amber);">
+              <span class="phase">M2</span>
+              <h3>固定任务规则</h3>
+              <p>先支持一份可保存的任务规则，写清完成标准和什么时候需要问人，不急着做复杂流程编辑器。</p>
+            </div>
+            <div class="timeline-item" style="--accent: var(--green);">
+              <span class="phase">M3</span>
+              <h3>自然语言生成</h3>
+              <p>让 Agent 从用户描述生成任务规则草稿；用户在审查页确认后保存，形成可复用工作流。</p>
+            </div>
+            <div class="timeline-item" style="--accent: var(--blue);">
+              <span class="phase">M4</span>
+              <h3>高级控制节点</h3>
+              <p>再加入并行、汇合、评审团、循环直到通过、重试兜底、子流程和多执行器。</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="sources">
+          <div class="section-head">
+            <h2>资料来源</h2>
+            <p>本报告将项目内 1026/目标态文档、AgentWeave 代码参考、近期 Codex 会话摘要和官方资料合并整理。市场资料只采用官方或一手文档。</p>
+          </div>
+          <div class="source-list">
+            <a href="WORKFLOW-STATE-RETENTION-CLOSURE-1026.md"><b>AgentCenter 1026 状态保持闭环</b><span>WORKFLOW-STATE-RETENTION-CLOSURE-1026.md</span></a>
+            <a href="OPENCODE-CONTEXT-COMPRESSION-STATE-RETENTION-1026.md"><b>OpenCode 上下文压缩恢复</b><span>OPENCODE-CONTEXT-COMPRESSION-STATE-RETENTION-1026.md</span></a>
+            <a href="WORKFLOW-SKILL-ORCHESTRATION-TARGET-STATE.md"><b>Workflow Skill Orchestration 目标态</b><span>WORKFLOW-SKILL-ORCHESTRATION-TARGET-STATE.md</span></a>
+            <a href="WORKFLOW-CONVERSATION-CLOSURE-DESIGN.md"><b>工作流会话闭环设计</b><span>WORKFLOW-CONVERSATION-CLOSURE-DESIGN.md</span></a>
+            <a href="https://github.com/Hzzzzzx/agentweave/blob/main/README.md"><b>AgentWeave README</b><span>github.com/Hzzzzzx/agentweave/blob/main/README.md</span></a>
+            <a href="https://github.com/Hzzzzzx/agentweave/blob/main/docs/cc-like-agent-harness-acceptance.md"><b>AgentWeave CC-like 验收目标</b><span>github.com/Hzzzzzx/agentweave/blob/main/docs/cc-like-agent-harness-acceptance.md</span></a>
+            <a href="https://github.com/Hzzzzzx/agentweave/blob/main/docs/audit-report-2025-05-31.md"><b>AgentWeave 审计报告</b><span>github.com/Hzzzzzx/agentweave/blob/main/docs/audit-report-2025-05-31.md</span></a>
+            <a href="https://github.com/Hzzzzzx/agentweave/blob/main/docs/live-opencode-e2e.md"><b>AgentWeave OpenCode Live E2E</b><span>github.com/Hzzzzzx/agentweave/blob/main/docs/live-opencode-e2e.md</span></a>
+            <a href="https://code.claude.com/docs/en/workflows"><b>Claude Code Dynamic Workflows</b><span>code.claude.com/docs/en/workflows</span></a>
+            <a href="https://code.claude.com/docs/en/agents"><b>Claude Code Agents and Parallel Work</b><span>code.claude.com/docs/en/agents</span></a>
+            <a href="https://docs.dify.ai/en/use-dify/build/workflow-chatflow"><b>Dify Workflow & Chatflow</b><span>docs.dify.ai/en/use-dify/build/workflow-chatflow</span></a>
+            <a href="https://docs.dify.ai/en/use-dify/build/orchestrate-node"><b>Dify Orchestration Logic</b><span>docs.dify.ai/en/use-dify/build/orchestrate-node</span></a>
+            <a href="https://docs.langchain.com/oss/python/langgraph/durable-execution"><b>LangGraph Durable Execution</b><span>docs.langchain.com/oss/python/langgraph/durable-execution</span></a>
+            <a href="https://docs.langchain.com/oss/python/langgraph/persistence"><b>LangGraph Persistence</b><span>docs.langchain.com/oss/python/langgraph/persistence</span></a>
+            <a href="https://openai.github.io/openai-agents-python/agents/"><b>OpenAI Agents SDK Agents</b><span>openai.github.io/openai-agents-python/agents</span></a>
+            <a href="https://openai.github.io/openai-agents-python/handoffs/"><b>OpenAI Agents SDK Handoffs</b><span>openai.github.io/openai-agents-python/handoffs</span></a>
+            <a href="https://openai.github.io/openai-agents-python/guardrails/"><b>OpenAI Agents SDK Guardrails</b><span>openai.github.io/openai-agents-python/guardrails</span></a>
+          </div>
+          <p class="footnote">截至 2026-06-01，Claude Code 官方文档已把 Dynamic workflows 列为研究预览能力；这与早期 Codex 讨论中“能力入口仍不稳定”的观察形成时间差，说明这个方向正在快速产品化。</p>
+        </section>
+      </article>
+    </main>
+  </div>
+
+  <script>
+    const navLinks = Array.from(document.querySelectorAll(".nav a"));
+    const sections = navLinks
+      .map((link) => document.querySelector(link.getAttribute("href")))
+      .filter(Boolean);
+
+    const setActiveNav = () => {
+      const current = sections
+        .slice()
+        .reverse()
+        .find((section) => section.getBoundingClientRect().top <= 120);
+
+      navLinks.forEach((link) => {
+        link.classList.toggle("active", current && link.getAttribute("href") === `#${current.id}`);
+      });
+    };
+
+    window.addEventListener("scroll", setActiveNav, { passive: true });
+    setActiveNav();
+
+    const cards = Array.from(document.querySelectorAll(".option-card"));
+    const panels = Array.from(document.querySelectorAll(".detail-panel"));
+
+    cards.forEach((card) => {
+      card.addEventListener("click", () => {
+        const target = card.dataset.panel;
+        cards.forEach((item) => item.classList.toggle("active", item === card));
+        panels.forEach((panel) => panel.classList.toggle("open", panel.id === `panel-${target}`));
+      });
+    });
+
+    const filterButtons = Array.from(document.querySelectorAll(".filter-btn"));
+    const matrixRows = Array.from(document.querySelectorAll("tbody tr"));
+
+    filterButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const focus = button.dataset.focus;
+        filterButtons.forEach((item) => item.classList.toggle("active", item === button));
+        matrixRows.forEach((row) => {
+          const visible = focus === "all" || row.dataset.topic === focus;
+          row.style.display = visible ? "" : "none";
+        });
+      });
+    });
+  </script>
+</body>
+</html>
